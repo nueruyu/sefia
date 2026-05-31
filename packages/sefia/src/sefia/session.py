@@ -36,9 +36,7 @@ class Session:
         self._glyff_session = glyff_session
         self.session_store = session_store
         self._context_token = None
-        self.policies: list[Policy] = (
-            policies if policies is not None else [StagnationPolicy()]
-        )
+        self.policies: list[Policy] = [StagnationPolicy()] + (policies or [])
         self._tool_collector = tool_collector or DefaultToolCollector()
         self._inference_strategy = LLMInferenceStrategy(llm_client)
         self._context: InferenceContext | None = None

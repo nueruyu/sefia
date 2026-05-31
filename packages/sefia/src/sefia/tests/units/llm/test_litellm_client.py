@@ -13,7 +13,7 @@ from litellm.types.utils import (
 )
 
 from sefia.llm.litellm import LiteLLMClient
-from sefia.llm.messages import Message
+from sefia.llm.messages import LLMResponse, Message
 
 
 @pytest.fixture
@@ -48,10 +48,9 @@ class TestLiteLLMClient:
         assert call_args["model"] == "gpt-4o"
         assert call_args["messages"] == [{"role": "user", "content": "Hello"}]
         assert call_args["tools"] == tools
+        assert call_args["response_format"]["type"] == "json_schema"
+        assert call_args["response_format"]["json_schema"]["schema"] == output_schema
         assert call_args["temperature"] == 0.5
-        # LiteLLM does not have a direct output_schema param; it's usually
-        # handled via response_format or other model-specific kwargs.
-        # This test confirms other parameters are passed correctly.
 
     async def test_complete_parses_litellm_response_correctly(self, mock_acompletion):
         # Arrange
@@ -107,3 +106,39 @@ class TestLiteLLMClient:
         # Act & Assert
         with pytest.raises(RuntimeError, match="LLM returned empty choices"):
             await client.complete([])
+
+    async def test_complete_uses_streaming_when_callback_is_provided(
+        self, mock_acompletion, mocker
+    ):
+        class FakeStream:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise StopAsyncIteration
+
+        stream = FakeStream()
+
+        client = LiteLLMClient(model="gpt-4o")
+        stream_response = LLMResponse(content="streamed")
+        handle_stream = mocker.patch.object(
+            client,
+            "_handle_stream",
+            new_callable=AsyncMock,
+            return_value=stream_response,
+        )
+        callback = AsyncMock()
+        messages = [Message(role="user", content="Hello")]
+
+        mock_acompletion.return_value = stream
+
+        response = await client.complete(messages, stream_callback=callback)
+
+        assert response == stream_response
+        call_args = mock_acompletion.call_args[1]
+        assert call_args["stream"] is True
+        handle_stream.assert_awaited_once_with(
+            stream,
+            callback,
+            [{"role": "user", "content": "Hello"}],
+        )

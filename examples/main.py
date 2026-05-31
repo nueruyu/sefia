@@ -10,6 +10,26 @@ import sefia
 import sefia.stores
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from pydantic import BaseModel, Field
+from sefia.interfaces import EventHandler, Policy
+from sefia.llm.events import LLMTokenReceived
+
+
+class StreamingPrintHandler(EventHandler[LLMTokenReceived]):
+    """An event handler that prints LLM tokens to the console."""
+
+    @property
+    def event_types(self):
+        return (LLMTokenReceived,)
+
+    async def handle(self, event: LLMTokenReceived):
+        print(event.token, end="", flush=True)
+
+
+class StreamingPolicy(Policy):
+    """A policy that enables console streaming of LLM tokens."""
+
+    def create_handlers(self) -> list[EventHandler]:
+        return [StreamingPrintHandler()]
 
 
 class NewsArticle(BaseModel):
@@ -92,6 +112,9 @@ def _parse_args():
     parser.add_argument(
         "--answer", type=str, help="The user's answer to a pending question."
     )
+    parser.add_argument(
+        "--stream", action="store_true", help="Enable streaming of LLM tokens."
+    )
     args = parser.parse_args()
 
     if not args.topic and not args.session_id:
@@ -106,7 +129,7 @@ async def write_article(state: SessionState):
 
     print("> Stage 1: Researching topic...")
     sources = await researcher.research_topic(state.topic)
-    print(f"   -> Found sources: {sources}")
+    print(f"\n   -> Found sources: {sources}")
 
     print("> Stage 2: Writing article...")
     return await writer.write_article(topic=state.topic, sources=sources)
@@ -136,6 +159,12 @@ async def main():
         serializer=serializer,
     )
 
+    policies: list[Policy] = []
+    if args.stream:
+        policies.append(StreamingPolicy())
+        print("> Streaming enabled. LLM response will appear below:")
+        print("---")
+
     if args.session_id:
         print(f"> Resuming session {session_id}")
     else:
@@ -144,7 +173,10 @@ async def main():
     try:
         async with gs:
             async with sefia.Session(
-                llm_client=llm_client, glyff_session=gs, session_store=sefia_store
+                llm_client=llm_client,
+                glyff_session=gs,
+                session_store=sefia_store,
+                policies=policies,
             ) as session:
                 state_store = session.get_state_store("state", SessionState)
                 state = await state_store.get()
@@ -168,6 +200,9 @@ async def main():
 
                 article = await write_article(state)
 
+                if args.stream:
+                    print("\n---")
+
                 print("\n--- FINAL ARTICLE ---")
                 print(f"Title: {article.title}")
                 print(f"Summary: {article.summary}")
@@ -179,7 +214,7 @@ async def main():
         print("Session interrupted to wait for your input.")
         print("To resume, run the script again with the session ID and your answer:")
         print(
-            f'python examples/sefia/main.py --session-id "{session_id}" --answer "Your answer"'
+            f'python examples/main.py --session-id "{session_id}" --answer "Your answer"'
         )
         print("---")
 

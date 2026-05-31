@@ -86,10 +86,15 @@ class LLMInferenceStrategy(InferenceStrategy):
                 output_schema=output_schema,
             )
         )
+
+        async def stream_callback(token: str):
+            await publisher.publish(events.LLMTokenReceived(token=token))
+
         response = await self.llm_client.complete(
             messages=messages,
             tools=None,
             output_schema=output_schema,
+            stream_callback=stream_callback,
         )
         await publisher.publish(events.AfterLLMCall(response=response))
 
