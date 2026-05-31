@@ -40,8 +40,9 @@ class LLMInferenceStrategy(InferenceStrategy):
     making it compatible with a wide range of LLMs' JSON modes.
     """
 
-    def __init__(self, llm_client: LLMClient):
+    def __init__(self, llm_client: LLMClient, stream: bool = False):
         self.llm_client = llm_client
+        self._stream = stream
 
     def _create_decision_model(
         self, output_type: Any, tools: list[dict]
@@ -86,10 +87,19 @@ class LLMInferenceStrategy(InferenceStrategy):
                 output_schema=output_schema,
             )
         )
+
+        stream_callback = None
+        if self._stream:
+            async def on_token(token: str):
+                await publisher.publish(events.LLMTokenReceived(token=token))
+
+            stream_callback = on_token
+
         response = await self.llm_client.complete(
             messages=messages,
             tools=None,
             output_schema=output_schema,
+            stream_callback=stream_callback,
         )
         await publisher.publish(events.AfterLLMCall(response=response))
 

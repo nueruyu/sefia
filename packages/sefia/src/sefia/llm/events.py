@@ -20,3 +20,10 @@ class AfterLLMCall(Event):
     """Event fired just after a response is received from the LLM."""
 
     response: LLMResponse
+
+
+@dataclass(frozen=True)
+class LLMTokenReceived(Event):
+    """Event fired when a token is received from the LLM stream."""
+
+    token: str

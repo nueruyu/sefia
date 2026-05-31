@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any
+from typing import Any, Callable, Coroutine
 
 import glyff
 import pytest
@@ -24,12 +24,14 @@ class MockLLMClient(LLMClient):
         messages: list[Message],
         tools: list[dict] | None = None,
         output_schema: dict | None = None,
+        stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMResponse:
         self.requests.append(
             {
                 "messages": [m.model_dump(exclude_none=True) for m in messages],
                 "tools": tools,
                 "output_schema": output_schema,
+                "stream_callback": stream_callback,
             }
         )
         if not self.responses:

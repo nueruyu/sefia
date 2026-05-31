@@ -1,10 +1,13 @@
 import json
+from collections.abc import Awaitable, Callable
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import BaseModel
 
 from sefia.event_publisher import EventPublisher
+from sefia.llm.events import LLMTokenReceived
 from sefia.llm.messages import LLMResponse
 from sefia.llm.strategy import LLMInferenceStrategy
 from sefia.models import (
@@ -64,7 +67,7 @@ class TestLLMInferenceStrategy:
             {"tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}]}
         )
         mock_llm_client.complete.return_value = LLMResponse(content=tool_calls_payload)
-        strategy = LLMInferenceStrategy(llm_client=mock_llm_client)
+        strategy = LLMInferenceStrategy(llm_client=mock_llm_client, stream=True)
 
         decision = await strategy.decide_next_step(
             "do it", {}, [], [{"type": "function"}], str, MockEventPublisher()
@@ -85,16 +88,43 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content=final_answer_payload
         )
-        strategy = LLMInferenceStrategy(llm_client=mock_llm_client)
+        strategy = LLMInferenceStrategy(llm_client=mock_llm_client, stream=True)
+        publisher = MockEventPublisher()
 
         decision = await strategy.decide_next_step(
-            "do it", {}, [], [], MyOutput, MockEventPublisher()
+            "do it", {}, [], [], MyOutput, publisher
         )
 
         assert isinstance(decision, FinalAnswerDecision)
         assert isinstance(decision.answer, MyOutput)
         assert decision.answer.name == "test"
         assert decision.answer.value == 42
+
+        stream_callback_obj = mock_llm_client.complete.await_args.kwargs[
+            "stream_callback"
+        ]
+        assert callable(stream_callback_obj)
+        stream_callback = cast(Callable[[str], Awaitable[None]], stream_callback_obj)
+        await stream_callback("tok")
+        assert any(
+            isinstance(event, LLMTokenReceived) and event.token == "tok"
+            for event in publisher.events
+        )
+
+    async def test_decide_next_step_does_not_set_stream_callback_by_default(
+        self, mock_llm_client
+    ):
+        mock_llm_client.complete.return_value = LLMResponse(
+            content='{"final_answer": "done"}'
+        )
+        strategy = LLMInferenceStrategy(llm_client=mock_llm_client)
+
+        decision = await strategy.decide_next_step(
+            "do it", {}, [], [], str, MockEventPublisher()
+        )
+
+        assert isinstance(decision, FinalAnswerDecision)
+        assert mock_llm_client.complete.await_args.kwargs["stream_callback"] is None
 
     async def test_decide_next_step_raises_on_validation_error(self, mock_llm_client):
         # final_answer is missing required 'value' field — Pydantic should reject it
