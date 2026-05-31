@@ -1,10 +1,10 @@
 import json
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
-from pydantic import BaseModel
 
 from sefia.event_publisher import EventPublisher
 from sefia.llm.events import LLMTokenReceived
@@ -16,6 +16,7 @@ from sefia.models import (
     ToolCallRequest,
     ToolCallResult,
 )
+from sefia.pydantic.model_inspector import PydanticModelInspector
 
 
 class MockEventPublisher(EventPublisher):
@@ -27,7 +28,8 @@ class MockEventPublisher(EventPublisher):
         self.events.append(event)
 
 
-class MyOutput(BaseModel):
+@dataclass(frozen=True)
+class MyOutput:
     name: str
     value: int
 
@@ -41,8 +43,15 @@ DUMMY_SCHEMA: dict = {}
 
 
 class TestLLMInferenceStrategy:
+    def _strategy(self, llm_client, stream: bool = False):
+        return LLMInferenceStrategy(
+            llm_client=llm_client,
+            model_inspector=PydanticModelInspector(),
+            stream=stream,
+        )
+
     def test_build_messages_correctly(self):
-        strategy = LLMInferenceStrategy(llm_client=AsyncMock())
+        strategy = self._strategy(AsyncMock())
         history = [
             ToolCallDecision(
                 calls=[ToolCallRequest(id="1", name="search", arguments={"q": "test"})]
@@ -67,7 +76,7 @@ class TestLLMInferenceStrategy:
             {"tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}]}
         )
         mock_llm_client.complete.return_value = LLMResponse(content=tool_calls_payload)
-        strategy = LLMInferenceStrategy(llm_client=mock_llm_client, stream=True)
+        strategy = self._strategy(mock_llm_client, stream=True)
 
         decision = await strategy.decide_next_step(
             "do it", {}, [], [{"type": "function"}], str, MockEventPublisher()
@@ -88,7 +97,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content=final_answer_payload
         )
-        strategy = LLMInferenceStrategy(llm_client=mock_llm_client, stream=True)
+        strategy = self._strategy(mock_llm_client, stream=True)
         publisher = MockEventPublisher()
 
         decision = await strategy.decide_next_step(
@@ -117,7 +126,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"final_answer": "done"}'
         )
-        strategy = LLMInferenceStrategy(llm_client=mock_llm_client)
+        strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
             "do it", {}, [], [], str, MockEventPublisher()
@@ -131,7 +140,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"final_answer": {"name": "test"}}'
         )
-        strategy = LLMInferenceStrategy(llm_client=mock_llm_client)
+        strategy = self._strategy(mock_llm_client)
 
         with pytest.raises(ValueError, match="LLM output failed validation"):
             await strategy.decide_next_step(
@@ -142,7 +151,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"final_answer": "Hello, world!"}'
         )
-        strategy = LLMInferenceStrategy(llm_client=mock_llm_client)
+        strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
             "do it", {}, [], [], str, MockEventPublisher()
@@ -155,7 +164,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"final_answer": null}'
         )
-        strategy = LLMInferenceStrategy(llm_client=mock_llm_client)
+        strategy = self._strategy(mock_llm_client)
 
         with pytest.raises(ValueError, match="must contain either"):
             await strategy.decide_next_step(

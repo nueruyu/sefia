@@ -1,10 +1,10 @@
 from typing import Self, Type, TypeVar
 
 import glyff
-from pydantic import BaseModel
 
 from .context import InferenceContext, context_var
 from .interfaces import (
+    ModelInspector,
     Policy,
     ToolCollector,
 )
@@ -15,7 +15,7 @@ from .policies import StagnationPolicy
 from .state_store import StateStore
 from .tool_collectors.collector import DefaultToolCollector
 
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T")
 
 
 class Session:
@@ -31,6 +31,7 @@ class Session:
         session_store: SessionStore,
         policies: list[Policy] | None = None,
         tool_collector: ToolCollector | None = None,
+        model_inspector: ModelInspector | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
@@ -39,8 +40,18 @@ class Session:
         self._context_token = None
         extra_policies = list(policies) if policies is not None else []
         self.policies: list[Policy] = [StagnationPolicy(), *extra_policies]
-        self._tool_collector = tool_collector or DefaultToolCollector()
-        self._inference_strategy = LLMInferenceStrategy(llm_client, stream=stream)
+
+        if model_inspector is None:
+            from .pydantic.model_inspector import PydanticModelInspector
+
+            model_inspector = PydanticModelInspector()
+
+        self._tool_collector = tool_collector or DefaultToolCollector(
+            model_inspector=model_inspector
+        )
+        self._inference_strategy = LLMInferenceStrategy(
+            llm_client, model_inspector=model_inspector, stream=stream
+        )
         self._context: InferenceContext | None = None
 
     def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:

@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from typing import Generic, Type, TypeVar
 
-from pydantic import BaseModel
-
 from .interfaces.session_store import SessionStore
 
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T")
 
 
 class StateStore(Generic[T]):

@@ -4,14 +4,13 @@ from typing import Type, TypeVar
 
 from glyff import Session as GlyffSession
 from glyff.context import get_context as get_glyff_context
-from pydantic import BaseModel
 
 from .interfaces import InferenceStrategy, Policy, ToolCollector
 from .interfaces.session_store import SessionStore
 from .llm.client import LLMClient
 from .state_store import StateStore
 
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T")
 
 
 @dataclass
