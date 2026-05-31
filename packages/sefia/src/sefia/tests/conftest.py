@@ -1,15 +1,15 @@
 import asyncio
+from dataclasses import dataclass
 from typing import Any, Callable, Coroutine
 
 import glyff
 import pytest
 from glyff.interfaces import ArgsHasher, Serializer
-from pydantic import BaseModel
 
 from sefia import LLMResponse, infer, tool
 from sefia.llm.client import LLMClient
 from sefia.llm.messages import Message
-from sefia.serialization import SefiaArgsHasher, SefiaSerializer
+from sefia.pydantic.serialization import SefiaArgsHasher, SefiaSerializer
 
 
 class MockLLMClient(LLMClient):
@@ -28,7 +28,7 @@ class MockLLMClient(LLMClient):
     ) -> LLMResponse:
         self.requests.append(
             {
-                "messages": [m.model_dump(exclude_none=True) for m in messages],
+                "messages": [m.to_dict(exclude_none=True) for m in messages],
                 "tools": tools,
                 "output_schema": output_schema,
                 "stream_callback": stream_callback,
@@ -39,7 +39,8 @@ class MockLLMClient(LLMClient):
         return self.responses.pop(0)
 
 
-class SearchResult(BaseModel):
+@dataclass
+class SearchResult:
     title: str
     url: str
 
@@ -65,7 +66,8 @@ class WebToolkit:
         return "Not found."
 
 
-class Report(BaseModel):
+@dataclass
+class Report:
     topic: str
     summary: str
     sources: list[str]

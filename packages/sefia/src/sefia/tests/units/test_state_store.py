@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from pydantic import BaseModel
 
 from sefia.interfaces.session_store import SessionStore
 from sefia.state_store import StateStore
 
 
-class MyState(BaseModel):
+@dataclass
+class MyState:
     value: str = "default"
     count: int = 0
 

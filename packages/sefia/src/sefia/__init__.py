@@ -5,7 +5,7 @@ from .interfaces import EventHandler, Policy, Resource, SessionStore
 from .llm.client import LLMClient
 from .llm.messages import LLMResponse, Message, ToolCall
 from .policies import MaxRetries
-from .serialization import SefiaArgsHasher, SefiaSerializer
+from .pydantic.serialization import SefiaArgsHasher, SefiaSerializer
 from .session import Session
 from .state_store import StateStore
 from .tools import WebSearchResult, WebSearchTool

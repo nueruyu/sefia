@@ -1,17 +1,19 @@
 import uuid
+from dataclasses import dataclass
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import BaseModel
 
 from sefia.context import InferenceContext
 
 
-class StateA(BaseModel):
+@dataclass
+class StateA:
     value: str
 
 
-class StateB(BaseModel):
+@dataclass
+class StateB:
     count: int
 
 

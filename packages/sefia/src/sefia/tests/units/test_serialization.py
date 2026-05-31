@@ -1,11 +1,10 @@
 from dataclasses import dataclass
 
-from pydantic import BaseModel
-
-from sefia.serialization import SefiaArgsHasher, SefiaSerializer
+from sefia.pydantic.serialization import SefiaArgsHasher, SefiaSerializer
 
 
-class _Model(BaseModel):
+@dataclass(frozen=True)
+class _Model:
     a: int
     b: str
 
@@ -20,7 +19,7 @@ def _fn(x: int, y: str = "a") -> str:
 
 
 class TestSefiaSerializer:
-    def test_roundtrip_pydantic_model(self):
+    def test_roundtrip_dataclass_model(self):
         serializer = SefiaSerializer()
         value = _Model(a=1, b="x")
 
