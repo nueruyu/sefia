@@ -27,6 +27,7 @@ class SessionState(BaseModel):
     answer: str | None = Field(default=None)
 
 
+@glyff.identify("HumanInputTool")
 class HumanInputTool:
     def __init__(self, answer: Optional[str] = None):
         self._answer = answer
@@ -44,6 +45,7 @@ class HumanInputTool:
         raise glyff.exceptions.YieldException()
 
 
+@glyff.identify("Researcher")
 class Researcher:
     def __init__(self, web_search: sefia.WebSearchTool):
         self._web = web_search
@@ -62,6 +64,7 @@ class Researcher:
         ...
 
 
+@glyff.identify("NewsWriter")
 class NewsWriter:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
@@ -122,10 +125,9 @@ async def main():
     )
     gs = glyff.Session(
         id=session_id,
-        store=glyff_file_store.FileSessionStore(
+        store=glyff_file_store.JsonFileSessionStore(
             client=file_client,
             serializer=serializer,
-            format="json",
         ),
         hasher=PydanticArgsHasher(),
     )

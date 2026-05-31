@@ -37,6 +37,7 @@ class InteractionState(BaseModel):
 
 
 # --- Test tool with internal state management ---
+@glyff.identify("HumanInputTool")
 class HumanInputTool:
     def __init__(self, on_interrupt: Callable[[str, str], None] | None = None):
         self._on_interrupt = on_interrupt
@@ -108,6 +109,7 @@ class TestStatefulTool:
             interrupt_details["id"] = interaction_id
             interrupt_details["question"] = question
 
+        @glyff.identify("Agent")
         class Agent:
             def __init__(self, tool: HumanInputTool):
                 self._tool = tool
@@ -204,6 +206,7 @@ class TestStatefulTool:
         def on_interrupt(interaction_id, question):
             interrupts[question] = interaction_id
 
+        @glyff.identify("Agent")
         class Agent:
             def __init__(self, tool: HumanInputTool):
                 self._tool = tool

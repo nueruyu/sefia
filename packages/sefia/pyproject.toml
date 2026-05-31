@@ -7,9 +7,9 @@ dependencies = [
     "litellm>=1.40.0",
     "pydantic>=2.0",
     "ddgs",
-    "glyff>=0.3.0",
-    "glyff-file-store>=0.3.0",
-    "glyff-pydantic>=0.3.0",
+    "glyff>=0.4.0",
+    "glyff-file-store>=0.4.0",
+    "glyff-pydantic>=0.4.0",
 ]
 
 [build-system]

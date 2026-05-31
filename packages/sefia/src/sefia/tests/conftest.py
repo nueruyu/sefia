@@ -1,6 +1,7 @@
 import asyncio
 from typing import Any
 
+import glyff
 import pytest
 from glyff.interfaces import ArgsHasher, Serializer
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
@@ -41,6 +42,7 @@ class SearchResult(BaseModel):
     url: str
 
 
+@glyff.identify("WebToolkit")
 class WebToolkit:
     """A simple toolkit for web operations."""
 
@@ -67,6 +69,7 @@ class Report(BaseModel):
     sources: list[str]
 
 
+@glyff.identify("Researcher")
 class Researcher:
     """An agent that uses WebToolkit to research topics."""
 
@@ -82,6 +85,7 @@ class Researcher:
         ...
 
 
+@glyff.identify("BrokenToolkit")
 class BrokenToolkit:
     """A toolkit where tools can fail."""
 
@@ -91,6 +95,7 @@ class BrokenToolkit:
         raise ValueError(f"Failed because: {reason}")
 
 
+@glyff.identify("SimpleAgent")
 class SimpleAgent:
     """An agent that has no tools."""
 
