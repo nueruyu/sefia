@@ -4,12 +4,12 @@ from typing import Any, Callable, Coroutine
 import glyff
 import pytest
 from glyff.interfaces import ArgsHasher, Serializer
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from pydantic import BaseModel
 
 from sefia import LLMResponse, infer, tool
 from sefia.llm.client import LLMClient
 from sefia.llm.messages import Message
+from sefia.serialization import SefiaArgsHasher, SefiaSerializer
 
 
 class MockLLMClient(LLMClient):
@@ -125,9 +125,9 @@ def broken_toolkit() -> BrokenToolkit:
 
 @pytest.fixture
 def serializer() -> Serializer:
-    return PydanticSerializer()
+    return SefiaSerializer()
 
 
 @pytest.fixture
 def hasher() -> ArgsHasher:
-    return PydanticArgsHasher()
+    return SefiaArgsHasher()

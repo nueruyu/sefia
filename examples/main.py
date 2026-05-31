@@ -9,10 +9,10 @@ import glyff_file_store
 import sefia
 import sefia.stores
 import sefia_litellm
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from pydantic import BaseModel, Field
 from sefia.interfaces import EventHandler, Policy
 from sefia.llm.events import LLMTokenReceived
+from sefia.serialization import SefiaArgsHasher, SefiaSerializer
 
 
 class StreamingPrintHandler(EventHandler[LLMTokenReceived]):
@@ -142,7 +142,7 @@ async def main():
     llm_client = sefia_litellm.LiteLLMClient(model=args.model)
 
     session_id: str = args.session_id or str(uuid.uuid4())
-    serializer = PydanticSerializer()
+    serializer = SefiaSerializer()
     file_client = glyff_file_store.FileClient(
         base_dir=".local/sefia/.glyff_sessions",
         session_id=session_id,
@@ -153,7 +153,7 @@ async def main():
             client=file_client,
             serializer=serializer,
         ),
-        hasher=PydanticArgsHasher(),
+        hasher=SefiaArgsHasher(),
     )
     sefia_store = sefia.stores.FileSessionStore(
         client=file_client,
