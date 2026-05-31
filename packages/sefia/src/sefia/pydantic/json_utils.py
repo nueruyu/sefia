@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import uuid
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
@@ -19,12 +18,7 @@ def core_json_default(obj: Any) -> Any:
         return str(obj)
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
-    try:
-        return json.JSONEncoder().default(obj)
-    except TypeError as e:
-        raise TypeError(
-            f"Object of type {type(obj).__name__} is not JSON serializable"
-        ) from e
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 def pydantic_json_default(obj: Any) -> Any:
