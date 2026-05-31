@@ -1,0 +1,13 @@
+{
+  "include": [
+    "packages/sefia",
+    "examples"
+  ],
+  "ignore": {
+    "customPatterns": []
+  },
+  "output": {
+    "filePath": "./out/repomix/sefia-full.md",
+    "style": "markdown"
+  }
+}
