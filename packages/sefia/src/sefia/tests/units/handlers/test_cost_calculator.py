@@ -24,7 +24,7 @@ class TestCostCalculator:
         mock_ctx, mock_state_store = mock_context
         handler = CostCalculator()
         event = AfterLLMCall(
-            response=LLMResponse(
+            LLMResponse(
                 model="gpt-4",
                 usage={"completion_tokens": 50, "prompt_tokens": 100},
                 cost=0.0015,
@@ -40,7 +40,7 @@ class TestCostCalculator:
         mock_state_store.ensure.return_value = _CostState(cost=0.01)  # Previous cost
         handler = CostCalculator()
         event = AfterLLMCall(
-            response=LLMResponse(
+            LLMResponse(
                 model="gpt-4",
                 usage={"completion_tokens": 10, "prompt_tokens": 20},
                 cost=0.0005,
@@ -55,7 +55,7 @@ class TestCostCalculator:
     async def test_ignores_event_without_cost_info(self, mock_context):
         mock_ctx, mock_state_store = mock_context
         handler = CostCalculator()
-        event = AfterLLMCall(response=LLMResponse(model="gpt-4", cost=None))
+        event = AfterLLMCall(LLMResponse(model="gpt-4", cost=None))
 
         await handler.handle(event)
 

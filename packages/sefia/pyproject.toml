@@ -8,7 +8,6 @@ dependencies = [
     "ddgs",
     "glyff>=0.4.0",
     "glyff-file-store>=0.4.0",
-    "glyff-pydantic>=0.4.0",
 ]
 
 [build-system]

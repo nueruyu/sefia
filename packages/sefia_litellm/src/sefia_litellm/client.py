@@ -33,7 +33,7 @@ class LiteLLMClient(LLMClient):
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMResponse:
         """Sends a completion request using LiteLLM."""
-        raw_messages = [msg.model_dump(exclude_none=True) for msg in messages]
+        raw_messages = [msg.to_dict(exclude_none=True) for msg in messages]
 
         kwargs = self._kwargs.copy()
         if tools:

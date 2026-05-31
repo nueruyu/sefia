@@ -1,7 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
-
-from pydantic import BaseModel, Field
 
 
 class ToolConflictError(Exception):
@@ -45,14 +43,16 @@ class ToolRegistry:
         return [tool.schema for tool in self.tools.values()]
 
 
-class LLMToolCall(BaseModel):
+@dataclass
+class LLMToolCall:
     """A tool call requested by the LLM, before an ID is assigned."""
 
     name: str
-    arguments: dict[str, Any] = Field(default_factory=dict)
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 
-class ToolCallRequest(BaseModel):
+@dataclass
+class ToolCallRequest:
     """Represents a request to call a tool."""
 
     id: str
@@ -60,20 +60,23 @@ class ToolCallRequest(BaseModel):
     arguments: dict[str, Any]
 
 
-class ToolCallResult(BaseModel):
+@dataclass
+class ToolCallResult:
     """Represents the result of a single tool call."""
 
     tool_call_id: str
     result: Any
 
 
-class ToolCallDecision(BaseModel):
+@dataclass
+class ToolCallDecision:
     """A decision to call one or more tools."""
 
     calls: list[ToolCallRequest]
 
 
-class FinalAnswerDecision(BaseModel):
+@dataclass
+class FinalAnswerDecision:
     """A decision to return the final answer."""
 
     answer: Any
@@ -83,7 +86,8 @@ InferenceDecision = ToolCallDecision | FinalAnswerDecision
 HistoryItem = ToolCallDecision | ToolCallResult
 
 
-class InferenceHistory(BaseModel):
+@dataclass
+class InferenceHistory:
     """Represents the persisted history of an inference process."""
 
-    items: list[HistoryItem] = Field(default_factory=list)
+    items: list[HistoryItem] = field(default_factory=list)

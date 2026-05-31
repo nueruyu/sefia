@@ -1,5 +1,6 @@
 import json
 import uuid
+from dataclasses import dataclass, field
 from typing import Callable
 
 import glyff
@@ -9,7 +10,6 @@ from glyff.exceptions import YieldException
 from glyff.interfaces import ArgsHasher, Serializer
 from glyff.stores import MemoryClient
 from glyff.stores import MemorySessionStore as GlyffMemoryStore
-from pydantic import BaseModel
 
 from sefia import (
     LLMResponse,
@@ -24,16 +24,19 @@ from ..conftest import MockLLMClient, Report
 
 
 # --- State models for testing ---
-class _AskUserState(BaseModel):
+@dataclass
+class _AskUserState:
     interaction_id: str | None = None
 
 
-class Answer(BaseModel):
+@dataclass
+class Answer:
     content: str
 
 
-class InteractionState(BaseModel):
-    answers: dict[str, Answer] = {}
+@dataclass
+class InteractionState:
+    answers: dict[str, Answer] = field(default_factory=dict)
 
 
 # --- Test tool with internal state management ---

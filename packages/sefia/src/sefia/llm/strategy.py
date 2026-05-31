@@ -1,11 +1,10 @@
+import dataclasses
 import json
 import uuid
-from typing import Any, Type, Union, cast
-
-from pydantic import BaseModel, ValidationError, create_model
+from typing import Any
 
 from ..event_publisher import EventPublisher
-from ..interfaces import InferenceStrategy
+from ..interfaces import InferenceStrategy, ModelInspector
 from ..models import (
     FinalAnswerDecision,
     HistoryItem,
@@ -23,10 +22,13 @@ from .messages import Message
 def _pydantic_json_default(obj: Any) -> Any:
     if hasattr(obj, "model_dump"):
         return obj.model_dump()
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return dataclasses.asdict(obj)
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
-class _LLMDecision(BaseModel):
+@dataclasses.dataclass
+class _LLMDecision:
     """Typed stub for the dynamically created decision model."""
 
     final_answer: Any = None
@@ -40,29 +42,47 @@ class LLMInferenceStrategy(InferenceStrategy):
     making it compatible with a wide range of LLMs' JSON modes.
     """
 
-    def __init__(self, llm_client: LLMClient, stream: bool = False):
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        model_inspector: ModelInspector,
+        stream: bool = False,
+    ):
         self.llm_client = llm_client
+        self.model_inspector = model_inspector
         self._stream = stream
 
-    def _create_decision_model(
-        self, output_type: Any, tools: list[dict]
-    ) -> Type[_LLMDecision]:
+    def _build_llm_decision_schema(self, output_type: Any, tools: list[dict]) -> dict:
         """
-        Dynamically creates a Pydantic model that represents the LLM's
+        Dynamically creates a JSON Schema that represents the LLM's
         choice: either call tools or provide a final answer.
         """
-        fields: dict[str, Any] = {}
-        fields["final_answer"] = (Union[output_type, None], None)
+        properties: dict[str, Any] = {
+            "final_answer": {
+                "oneOf": [
+                    self.model_inspector.get_schema_for_type(output_type),
+                    {"type": "null"},
+                ]
+            }
+        }
 
         if tools:
-            fields["tool_calls"] = (Union[list[LLMToolCall], None], None)
+            properties["tool_calls"] = {
+                "oneOf": [
+                    {
+                        "type": "array",
+                        "items": self.model_inspector.get_schema_for_type(LLMToolCall),
+                    },
+                    {"type": "null"},
+                ]
+            }
 
-        model_type = create_model(
-            "LLMDecision",
-            **fields,
-            __doc__="The model for the LLM's decision on the next action.",
-        )
-        return cast(Type[_LLMDecision], model_type)
+        return {
+            "title": "LLMDecision",
+            "description": "The model for the LLM's decision on the next action.",
+            "type": "object",
+            "properties": properties,
+        }
 
     async def decide_next_step(
         self,
@@ -73,8 +93,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         output_type: Any,
         publisher: EventPublisher,
     ) -> InferenceDecision:
-        decision_model = self._create_decision_model(output_type, tools)
-        output_schema = decision_model.model_json_schema()
+        output_schema = self._build_llm_decision_schema(output_type, tools)
 
         messages = self._build_messages(
             instructions, arguments, history, output_schema, tools
@@ -90,6 +109,7 @@ class LLMInferenceStrategy(InferenceStrategy):
 
         stream_callback = None
         if self._stream:
+
             async def on_token(token: str):
                 await publisher.publish(events.LLMTokenReceived(token=token))
 
@@ -101,7 +121,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             output_schema=output_schema,
             stream_callback=stream_callback,
         )
-        await publisher.publish(events.AfterLLMCall(response=response))
+        await publisher.publish(events.AfterLLMCall(response))
 
         if response.content is None:
             raise ValueError("LLM did not provide a response content.")
@@ -112,28 +132,38 @@ class LLMInferenceStrategy(InferenceStrategy):
                 lines = raw.splitlines()
                 raw = "\n".join(lines[1:-1]).strip()
 
-            decision = decision_model.model_validate_json(raw)
+            decision_data = json.loads(raw)
+            decision = self.model_inspector.validate_and_create(
+                _LLMDecision, decision_data
+            )
 
-        except (ValidationError, json.JSONDecodeError, ValueError) as e:
+            tool_calls: list[LLMToolCall] | None = getattr(decision, "tool_calls", None)
+            if tool_calls:
+                validated_calls = [
+                    self.model_inspector.validate_and_create(LLMToolCall, tc)
+                    for tc in tool_calls
+                ]
+                return ToolCallDecision(
+                    calls=[
+                        ToolCallRequest(
+                            id=f"call_{uuid.uuid4().hex[:12]}",
+                            name=tc.name,
+                            arguments=tc.arguments,
+                        )
+                        for tc in validated_calls
+                    ]
+                )
+
+            if decision.final_answer is not None:
+                validated_answer = self.model_inspector.validate_and_create(
+                    output_type, decision.final_answer
+                )
+                return FinalAnswerDecision(answer=validated_answer)
+
+        except (json.JSONDecodeError, ValueError) as e:
             raise ValueError(
                 f"LLM output failed validation against the master schema: {e}, content: {response.content}"
             ) from e
-
-        tool_calls: list[LLMToolCall] | None = getattr(decision, "tool_calls", None)
-        if tool_calls:
-            return ToolCallDecision(
-                calls=[
-                    ToolCallRequest(
-                        id=f"call_{uuid.uuid4().hex[:12]}",
-                        name=tc.name,
-                        arguments=tc.arguments,
-                    )
-                    for tc in tool_calls
-                ]
-            )
-
-        if decision.final_answer is not None:
-            return FinalAnswerDecision(answer=decision.final_answer)
 
         raise ValueError(
             "LLM response must contain either 'tool_calls' or a non-null 'final_answer'."

@@ -669,19 +669,6 @@ wheels = [
 ]
 
 [[package]]
-name = "glyff-pydantic"
-version = "0.4.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "glyff" },
-    { name = "pydantic" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f1/fd/e3abde4d02f14f782d4647b3b639a604578985154a3e57c7de00e4b4519b/glyff_pydantic-0.4.0.tar.gz", hash = "sha256:3b5f43e27b88427cc4bb8d48a98d53279fe1579e190615250572ab5556659250", size = 6020, upload-time = "2026-05-31T05:29:57.134Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1b/64/8dce5d7e8a1f8a7fb9053844cbd858ea3298f9966ba650f5c4f856c79c40/glyff_pydantic-0.4.0-py3-none-any.whl", hash = "sha256:a6afc76bd3dd1471bb58b7428a3bc88a1118804407c489b132dffc1b5837d604", size = 4080, upload-time = "2026-05-31T05:29:56.08Z" },
-]
-
-[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2027,7 +2014,6 @@ dependencies = [
     { name = "ddgs" },
     { name = "glyff" },
     { name = "glyff-file-store" },
-    { name = "glyff-pydantic" },
     { name = "pydantic" },
 ]
 
@@ -2043,7 +2029,6 @@ requires-dist = [
     { name = "ddgs" },
     { name = "glyff", specifier = ">=0.4.0" },
     { name = "glyff-file-store", specifier = ">=0.4.0" },
-    { name = "glyff-pydantic", specifier = ">=0.4.0" },
     { name = "pydantic", specifier = ">=2.0" },
 ]
 

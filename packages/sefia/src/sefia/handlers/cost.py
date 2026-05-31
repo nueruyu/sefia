@@ -1,6 +1,5 @@
+from dataclasses import dataclass
 from typing import Type
-
-from pydantic import BaseModel
 
 from sefia.context import get_context
 from sefia.events import Event
@@ -8,7 +7,8 @@ from sefia.interfaces import EventHandler
 from sefia.llm.events import AfterLLMCall
 
 
-class _CostState(BaseModel, frozen=True):
+@dataclass(frozen=True)
+class _CostState:
     """Represents the immutable, persisted state of the cumulative cost."""
 
     cost: float = 0.0
