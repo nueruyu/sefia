@@ -1,0 +1,119 @@
+# =============================================================================
+# Default
+# =============================================================================
+* text=auto eol=lf
+
+# =============================================================================
+# Web / Frontend
+# =============================================================================
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.mjs       text eol=lf
+*.cjs       text eol=lf
+*.css       text eol=lf
+*.scss      text eol=lf
+*.sass      text eol=lf
+*.less      text eol=lf
+*.html      text eol=lf
+*.htm       text eol=lf
+*.svg       text eol=lf
+*.vue       text eol=lf
+*.svelte    text eol=lf
+
+# =============================================================================
+# Python / Backend
+# =============================================================================
+*.py        text eol=lf
+*.pyi       text eol=lf
+*.pyw       text eol=lf
+
+# =============================================================================
+# Data / Config
+# =============================================================================
+*.json      text eol=lf
+*.jsonc     text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.ini       text eol=lf
+*.cfg       text eol=lf
+*.env       text eol=lf
+*.xml       text eol=lf
+*.csv       text eol=lf
+*.tsv       text eol=lf
+*.graphql   text eol=lf
+*.gql       text eol=lf
+*.proto     text eol=lf
+
+# =============================================================================
+# Docs / Text
+# =============================================================================
+*.md        text eol=lf
+*.mdx       text eol=lf
+*.txt       text eol=lf
+*.rst       text eol=lf
+*.tex       text eol=lf
+*.adoc      text eol=lf
+
+# =============================================================================
+# Shell / Scripts
+# =============================================================================
+*.sh        text eol=lf
+*.bash      text eol=lf
+*.zsh       text eol=lf
+*.fish      text eol=lf
+*.ps1       text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+Makefile    text eol=lf
+Dockerfile  text eol=lf
+*.dockerfile text eol=lf
+
+# =============================================================================
+# Git / CI
+# =============================================================================
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+.editorconfig   text eol=lf
+*.lock          text eol=lf -diff
+
+# =============================================================================
+# Binary — never convert line endings
+# =============================================================================
+# Images
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.bmp   binary
+*.tiff  binary
+*.ico   binary
+*.webp  binary
+*.avif  binary
+
+# Fonts
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.eot   binary
+
+# Video / Audio
+*.mp4   binary
+*.webm  binary
+*.mp3   binary
+*.wav   binary
+*.ogg   binary
+
+# Archives
+*.zip   binary
+*.tar   binary
+*.gz    binary
+*.7z    binary
+
+# Documents
+*.pdf   binary
+*.xlsx  binary
+*.docx  binary
