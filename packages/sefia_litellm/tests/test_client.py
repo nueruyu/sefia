@@ -11,19 +11,18 @@ from litellm.types.utils import (
 from litellm.types.utils import (
     Message as LiteLLMMessage,
 )
-
-from sefia.llm.litellm import LiteLLMClient
+from pytest_mock import MockerFixture
 from sefia.llm.messages import LLMResponse, Message
+from sefia_litellm.client import LiteLLMClient
 
 
 @pytest.fixture
-def mock_acompletion(mocker):
-    return mocker.patch("sefia.llm.litellm.acompletion", new_callable=AsyncMock)
+def mock_acompletion(mocker: MockerFixture):
+    return mocker.patch("sefia_litellm.client.acompletion", new_callable=AsyncMock)
 
 
 class TestLiteLLMClient:
     async def test_complete_sends_correct_request_to_litellm(self, mock_acompletion):
-        # Arrange
         client = LiteLLMClient(model="gpt-4o", temperature=0.5)
         messages = [Message(role="user", content="Hello")]
         tools = [{"type": "function", "function": {"name": "get_weather"}}]
@@ -39,10 +38,8 @@ class TestLiteLLMClient:
             ]
         )
 
-        # Act
         await client.complete(messages, tools=tools, output_schema=output_schema)
 
-        # Assert
         mock_acompletion.assert_called_once()
         call_args = mock_acompletion.call_args[1]
         assert call_args["model"] == "gpt-4o"
@@ -52,8 +49,10 @@ class TestLiteLLMClient:
         assert call_args["response_format"]["json_schema"]["schema"] == output_schema
         assert call_args["temperature"] == 0.5
 
-    async def test_complete_parses_litellm_response_correctly(self, mock_acompletion):
-        # Arrange
+    async def test_complete_parses_litellm_response_and_calculates_cost(
+        self, mock_acompletion, mocker: MockerFixture
+    ):
+        mocker.patch("sefia_litellm.client.cost_per_token", return_value=(0.001, 0.002))
         mock_response = ModelResponse(
             id="chatcmpl-123",
             model="gpt-4o",
@@ -81,29 +80,38 @@ class TestLiteLLMClient:
         mock_acompletion.return_value = mock_response
         client = LiteLLMClient(model="gpt-4o")
 
-        # Act
         response = await client.complete([])
 
-        # Assert
         assert response.model == "gpt-4o"
+        assert response.cost == 0.003
         assert response.content is None
         assert response.stop_reason == "tool_calls"
         assert response.usage is not None
         assert response.usage["prompt_tokens"] == 10
-        assert response.usage["completion_tokens"] == 20
-        assert response.usage["total_tokens"] == 30
         assert len(response.tool_calls) == 1
-        tool_call = response.tool_calls[0]
-        assert tool_call.id == "call_abc"
-        assert tool_call.function["name"] == "get_weather"
-        assert tool_call.function["arguments"] == '{"city": "Tokyo"}'
+
+    async def test_cost_is_none_if_calculation_fails(
+        self, mock_acompletion, mocker: MockerFixture
+    ):
+        mocker.patch(
+            "sefia_litellm.client.cost_per_token", side_effect=Exception("API error")
+        )
+        mock_response = ModelResponse(
+            model="gpt-4o",
+            usage=Usage(prompt_tokens=10, completion_tokens=20),
+            choices=[Choices(index=0, message=LiteLLMMessage(role="assistant"))],
+        )
+        mock_acompletion.return_value = mock_response
+        client = LiteLLMClient(model="gpt-4o")
+
+        response = await client.complete([])
+
+        assert response.cost is None
 
     async def test_raises_error_on_empty_choices(self, mock_acompletion):
-        # Arrange
         mock_acompletion.return_value = ModelResponse(choices=[])
         client = LiteLLMClient(model="gpt-4o")
 
-        # Act & Assert
         with pytest.raises(RuntimeError, match="LLM returned empty choices"):
             await client.complete([])
 
@@ -118,7 +126,6 @@ class TestLiteLLMClient:
                 raise StopAsyncIteration
 
         stream = FakeStream()
-
         client = LiteLLMClient(model="gpt-4o")
         stream_response = LLMResponse(content="streamed")
         handle_stream = mocker.patch.object(

@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "sefia",
+    "sefia-litellm",
 ]
 
 [[package]]
@@ -2027,7 +2028,6 @@ dependencies = [
     { name = "glyff" },
     { name = "glyff-file-store" },
     { name = "glyff-pydantic" },
-    { name = "litellm" },
     { name = "pydantic" },
 ]
 
@@ -2044,8 +2044,36 @@ requires-dist = [
     { name = "glyff", specifier = ">=0.4.0" },
     { name = "glyff-file-store", specifier = ">=0.4.0" },
     { name = "glyff-pydantic", specifier = ">=0.4.0" },
-    { name = "litellm", specifier = ">=1.40.0" },
     { name = "pydantic", specifier = ">=2.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23" },
+    { name = "pytest-mock", specifier = ">=3.12.0" },
+]
+
+[[package]]
+name = "sefia-litellm"
+version = "0.1.0"
+source = { editable = "packages/sefia_litellm" }
+dependencies = [
+    { name = "litellm" },
+    { name = "sefia" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "litellm", specifier = ">=1.40.0" },
+    { name = "sefia", editable = "packages/sefia" },
 ]
 
 [package.metadata.requires-dev]
