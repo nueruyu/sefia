@@ -31,14 +31,16 @@ class Session:
         session_store: SessionStore,
         policies: list[Policy] | None = None,
         tool_collector: ToolCollector | None = None,
+        stream: bool = False,
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
         self.session_store = session_store
         self._context_token = None
-        self.policies: list[Policy] = [StagnationPolicy()] + (policies or [])
+        extra_policies = list(policies) if policies is not None else []
+        self.policies: list[Policy] = [StagnationPolicy(), *extra_policies]
         self._tool_collector = tool_collector or DefaultToolCollector()
-        self._inference_strategy = LLMInferenceStrategy(llm_client)
+        self._inference_strategy = LLMInferenceStrategy(llm_client, stream=stream)
         self._context: InferenceContext | None = None
 
     def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:

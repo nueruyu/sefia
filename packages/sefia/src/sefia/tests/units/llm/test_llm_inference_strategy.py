@@ -67,7 +67,7 @@ class TestLLMInferenceStrategy:
             {"tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}]}
         )
         mock_llm_client.complete.return_value = LLMResponse(content=tool_calls_payload)
-        strategy = LLMInferenceStrategy(llm_client=mock_llm_client)
+        strategy = LLMInferenceStrategy(llm_client=mock_llm_client, stream=True)
 
         decision = await strategy.decide_next_step(
             "do it", {}, [], [{"type": "function"}], str, MockEventPublisher()
@@ -88,7 +88,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content=final_answer_payload
         )
-        strategy = LLMInferenceStrategy(llm_client=mock_llm_client)
+        strategy = LLMInferenceStrategy(llm_client=mock_llm_client, stream=True)
         publisher = MockEventPublisher()
 
         decision = await strategy.decide_next_step(
@@ -110,6 +110,21 @@ class TestLLMInferenceStrategy:
             isinstance(event, LLMTokenReceived) and event.token == "tok"
             for event in publisher.events
         )
+
+    async def test_decide_next_step_does_not_set_stream_callback_by_default(
+        self, mock_llm_client
+    ):
+        mock_llm_client.complete.return_value = LLMResponse(
+            content='{"final_answer": "done"}'
+        )
+        strategy = LLMInferenceStrategy(llm_client=mock_llm_client)
+
+        decision = await strategy.decide_next_step(
+            "do it", {}, [], [], str, MockEventPublisher()
+        )
+
+        assert isinstance(decision, FinalAnswerDecision)
+        assert mock_llm_client.complete.await_args.kwargs["stream_callback"] is None
 
     async def test_decide_next_step_raises_on_validation_error(self, mock_llm_client):
         # final_answer is missing required 'value' field — Pydantic should reject it

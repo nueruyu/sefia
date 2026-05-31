@@ -177,6 +177,7 @@ async def main():
                 glyff_session=gs,
                 session_store=sefia_store,
                 policies=policies,
+                stream=args.stream,
             ) as session:
                 state_store = session.get_state_store("state", SessionState)
                 state = await state_store.get()
