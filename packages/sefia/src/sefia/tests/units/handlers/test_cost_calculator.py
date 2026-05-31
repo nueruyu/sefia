@@ -20,37 +20,30 @@ class TestCostCalculator:
         mocker.patch("sefia.handlers.cost.get_context", return_value=mock_ctx)
         return mock_ctx, mock_state_store
 
-    async def test_calculates_and_saves_cost(self, mock_context, mocker: MockerFixture):
+    async def test_calculates_and_saves_cost(self, mock_context):
         mock_ctx, mock_state_store = mock_context
-        mock_cost_per_token = mocker.patch(
-            "sefia.handlers.cost.cost_per_token",
-            return_value=(0.0005, 0.001),  # 0.0015
-        )
         handler = CostCalculator()
         event = AfterLLMCall(
             response=LLMResponse(
-                model="gpt-4", usage={"completion_tokens": 50, "prompt_tokens": 100}
+                model="gpt-4",
+                usage={"completion_tokens": 50, "prompt_tokens": 100},
+                cost=0.0015,
             )
         )
 
         await handler.handle(event)
 
-        mock_cost_per_token.assert_called_once_with(
-            model="gpt-4", prompt_tokens=100, completion_tokens=50
-        )
         mock_state_store.save.assert_called_once_with(_CostState(cost=0.0015))
 
-    async def test_accumulates_cost(self, mock_context, mocker: MockerFixture):
+    async def test_accumulates_cost(self, mock_context):
         mock_ctx, mock_state_store = mock_context
         mock_state_store.ensure.return_value = _CostState(cost=0.01)  # Previous cost
-        mocker.patch(
-            "sefia.handlers.cost.cost_per_token",
-            return_value=(0.0002, 0.0003),  # 0.0005
-        )
         handler = CostCalculator()
         event = AfterLLMCall(
             response=LLMResponse(
-                model="gpt-4", usage={"completion_tokens": 10, "prompt_tokens": 20}
+                model="gpt-4",
+                usage={"completion_tokens": 10, "prompt_tokens": 20},
+                cost=0.0005,
             )
         )
 
@@ -59,13 +52,10 @@ class TestCostCalculator:
         # 0.01 (previous) + 0.0005 (new)
         mock_state_store.save.assert_called_once_with(_CostState(cost=0.0105))
 
-    async def test_ignores_event_without_usage_info(
-        self, mock_context, mocker: MockerFixture
-    ):
+    async def test_ignores_event_without_cost_info(self, mock_context):
         mock_ctx, mock_state_store = mock_context
-        mocker.patch("sefia.handlers.cost.cost_per_token")
         handler = CostCalculator()
-        event = AfterLLMCall(response=LLMResponse(model="gpt-4", usage=None))
+        event = AfterLLMCall(response=LLMResponse(model="gpt-4", cost=None))
 
         await handler.handle(event)
 

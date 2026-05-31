@@ -29,3 +29,4 @@ class LLMResponse(BaseModel):
     tool_calls: list[ToolCall] = Field(default_factory=list)
     usage: dict[str, Any] | None = None
     stop_reason: str | None = None
+    cost: float | None = None

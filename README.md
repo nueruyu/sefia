@@ -6,7 +6,8 @@ Define LLM agents as plain Python classes. Let the LLM infer the implementation 
 
 ```python
 from pydantic import BaseModel
-from sefia import infer, tool, Session, LiteLLMClient
+from sefia import infer, tool, Session
+from sefia_litellm import LiteLLMClient
 
 
 class Report(BaseModel):
@@ -62,7 +63,13 @@ Most LLM agent frameworks ask you to learn a new mental model: graphs, configura
 pip install sefia
 ```
 
-sefia depends on [glyff](../glyff) for checkpointing and resumption, and on [litellm](https://github.com/BerriAI/litellm) for LLM provider abstraction.
+To use LiteLLM as an LLM provider adapter:
+
+```bash
+pip install sefia_litellm
+```
+
+sefia depends on [glyff](../glyff) for checkpointing and resumption. For LiteLLM-backed provider support, install [sefia_litellm](./packages/sefia_litellm).
 
 ## Core concepts
 

@@ -15,12 +15,12 @@ The entire workflow is orchestrated in a simple `main` function, showcasing how 
 
 ### 1. Initial Setup
 
-Ensure you have set up the development environment from the root of the repository. This will install `sefia`, `glyff`, and other dependencies like `duckduckgo-search`.
+Ensure you have set up the development environment from the root of the repository. This will install `sefia`, `sefia_litellm`, `glyff`, and other dependencies like `duckduckgo-search`.
 
 ```bash
 # Make sure you are in the root directory of the sefia monorepo
 uv venv
-uv pip install -e .
+uv pip install -e "packages/sefia" -e "packages/sefia_litellm"
 ```
 
 You also need an LLM API key. Set it as an environment variable (e.g., for OpenAI):

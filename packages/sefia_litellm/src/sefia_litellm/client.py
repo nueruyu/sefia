@@ -1,11 +1,18 @@
+import logging
 from collections.abc import AsyncIterator
 from typing import Any, Callable, Coroutine, cast
 
-from litellm import ModelResponse, Usage, acompletion, stream_chunk_builder
-
+from litellm import (
+    ModelResponse,
+    Usage,
+    acompletion,
+    cost_per_token,
+    stream_chunk_builder,
+)
 from sefia.llm.client import LLMClient
+from sefia.llm.messages import LLMResponse, Message, ToolCall
 
-from .messages import LLMResponse, Message, ToolCall
+logger = logging.getLogger(__name__)
 
 
 class LiteLLMClient(LLMClient):
@@ -81,6 +88,30 @@ class LiteLLMClient(LLMClient):
 
         return self._handle_response(response)
 
+    def _calculate_cost(self, response: ModelResponse) -> float | None:
+        """Calculates the cost of a response, if usage data is available."""
+        usage: Usage | None = response.get("usage")
+        model = response.model
+
+        if not (usage and model):
+            return None
+        try:
+            prompt_tokens = usage.prompt_tokens or 0
+            completion_tokens = usage.completion_tokens or 0
+            prompt_cost, completion_cost = cost_per_token(
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+            return prompt_cost + completion_cost
+        except Exception:
+            logger.warning(
+                "Failed to calculate cost for model %s",
+                model,
+                exc_info=True,
+            )
+            return None
+
     def _handle_response(self, response: ModelResponse) -> LLMResponse:
         """Processes a non-streaming or completed stream response."""
         if not response.choices:
@@ -101,6 +132,7 @@ class LiteLLMClient(LLMClient):
         ]
 
         usage: Usage | None = response.get("usage")
+        cost = self._calculate_cost(response)
 
         return LLMResponse(
             model=response.model,
@@ -108,4 +140,5 @@ class LiteLLMClient(LLMClient):
             tool_calls=tool_calls,
             usage=usage.model_dump() if usage else None,
             stop_reason=choice.finish_reason,
+            cost=cost,
         )

@@ -8,6 +8,7 @@ import glyff.exceptions
 import glyff_file_store
 import sefia
 import sefia.stores
+import sefia_litellm
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from pydantic import BaseModel, Field
 from sefia.interfaces import EventHandler, Policy
@@ -138,7 +139,7 @@ async def write_article(state: SessionState):
 async def main():
     args = _parse_args()
 
-    llm_client = sefia.LiteLLMClient(model=args.model)
+    llm_client = sefia_litellm.LiteLLMClient(model=args.model)
 
     session_id: str = args.session_id or str(uuid.uuid4())
     serializer = PydanticSerializer()
