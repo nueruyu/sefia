@@ -1,0 +1,365 @@
+import json
+
+import glyff
+import pytest
+from glyff.exceptions import ExecutionFailedError
+from glyff.interfaces import ArgsHasher, Serializer
+from glyff.stores import MemoryClient
+from glyff.stores import MemorySessionStore as GlyffMemoryStore
+
+from sefia import LLMResponse, Session, infer
+from sefia.stores import MemorySessionStore as SefiaMemoryStore
+
+from ..conftest import (
+    BrokenToolkit,
+    MockLLMClient,
+    Report,
+    Researcher,
+    SimpleAgent,
+    WebToolkit,
+)
+
+
+def _make_stores(serializer):
+    client = MemoryClient()
+    return (
+        GlyffMemoryStore(client=client, serializer=serializer),
+        SefiaMemoryStore(client=client, serializer=serializer),
+    )
+
+
+async def test_inference_with_tool_calls(
+    web_toolkit: WebToolkit, serializer: Serializer, hasher: ArgsHasher
+):
+    mock_responses = [
+        # 1. LLM decides to search
+        LLMResponse(
+            content=json.dumps(
+                {
+                    "tool_calls": [
+                        {
+                            "name": "WebToolkit_search",
+                            "arguments": {"query": "sefia"},
+                        }
+                    ]
+                }
+            )
+        ),
+        # 2. LLM decides to fetch content based on search result
+        LLMResponse(
+            content=json.dumps(
+                {
+                    "tool_calls": [
+                        {
+                            "name": "WebToolkit_fetch_content",
+                            "arguments": {"url": "https://example.com/sefia"},
+                        }
+                    ]
+                }
+            )
+        ),
+        # 3. LLM generates the final report
+        LLMResponse(
+            content=json.dumps(
+                {
+                    "final_answer": {
+                        "topic": "sefia",
+                        "summary": "Sefia is a framework for building LLM agents.",
+                        "sources": ["https://example.com/sefia"],
+                    }
+                }
+            )
+        ),
+    ]
+
+    mock_llm = MockLLMClient(responses=mock_responses)
+    session_id = "basic-inference-tools"
+    glyff_store, sefia_store = _make_stores(serializer)
+
+    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
+        ):
+            researcher = Researcher(web_toolkit)
+            report = await researcher.generate_report(topic="sefia")
+
+    assert isinstance(report, Report)
+    assert report.topic == "sefia"
+    assert "framework" in report.summary
+    assert report.sources == ["https://example.com/sefia"]
+
+    # LLM was called 3 times (search, fetch, final output)
+    assert len(mock_llm.requests) == 3
+
+    # 3rd call receives 6 messages: system, user, assistant(search), tool(search result),
+    # assistant(fetch), tool(fetch result)
+    final_messages = mock_llm.requests[2]["messages"]
+    assert len(final_messages) == 6
+    assert final_messages[3]["role"] == "tool"
+    assert "sefia framework" in final_messages[3]["content"]
+
+
+async def test_inference_without_tool_calls(serializer: Serializer, hasher: ArgsHasher):
+    # Scenario: The LLM can generate the output in a single step.
+    mock_response = LLMResponse(
+        content=json.dumps(
+            {
+                "final_answer": {
+                    "topic": "direct",
+                    "summary": "This is a direct answer.",
+                    "sources": [],
+                }
+            }
+        )
+    )
+    mock_llm = MockLLMClient(responses=[mock_response])
+    session_id = "basic-inference-no-tools"
+    glyff_store, sefia_store = _make_stores(serializer)
+
+    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
+        ):
+            agent = SimpleAgent()
+            report = await agent.generate_report(topic="direct")
+
+    assert isinstance(report, Report)
+    assert report.topic == "direct"
+    assert "direct answer" in report.summary
+    assert len(mock_llm.requests) == 1
+
+
+async def test_inference_with_tool_exception(
+    broken_toolkit: BrokenToolkit, serializer: Serializer, hasher: ArgsHasher
+):
+    # Scenario: A tool fails, and the error is reported back to the LLM.
+    mock_responses = [
+        LLMResponse(
+            content=json.dumps(
+                {
+                    "tool_calls": [
+                        {
+                            "name": "BrokenToolkit_always_fail",
+                            "arguments": {"reason": "test"},
+                        }
+                    ]
+                }
+            )
+        ),
+        # LLM receives the error and generates a final report about the failure.
+        LLMResponse(
+            content=json.dumps(
+                {
+                    "final_answer": {
+                        "topic": "failure",
+                        "summary": "The tool failed with a ValueError.",
+                        "sources": ["error: ValueError(Failed because: test)"],
+                    }
+                }
+            )
+        ),
+    ]
+    mock_llm = MockLLMClient(responses=mock_responses)
+    session_id = "tool-exception-test"
+    glyff_store, sefia_store = _make_stores(serializer)
+
+    class AgentWithBrokenTool:
+        def __init__(self, kit: BrokenToolkit):
+            self._kit = kit
+
+        @infer()
+        async def run_and_report(self) -> Report:
+            """Run a tool and report on the outcome."""
+            ...
+
+    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
+        ):
+            agent = AgentWithBrokenTool(broken_toolkit)
+            report = await agent.run_and_report()
+
+    assert report.topic == "failure"
+    assert "tool failed" in report.summary
+    assert len(mock_llm.requests) == 2
+    # Check that the tool error was passed to the second LLM call
+    messages = mock_llm.requests[1]["messages"]
+    assert len(messages) == 4  # system, user, assistant, tool
+    assert messages[3]["role"] == "tool"
+    assert "Error executing tool" in json.loads(messages[3]["content"])
+    assert "ValueError(Failed because: test)" in json.loads(messages[3]["content"])
+
+
+async def test_inference_with_nonexistent_tool_call(
+    web_toolkit: WebToolkit, serializer: Serializer, hasher: ArgsHasher
+):
+    # Scenario: LLM calls a tool that does not exist.
+    mock_responses = [
+        LLMResponse(
+            content=json.dumps(
+                {
+                    "tool_calls": [
+                        {
+                            "name": "NonExistent_tool",
+                            "arguments": {},
+                        }
+                    ]
+                }
+            )
+        ),
+        LLMResponse(
+            content=json.dumps(
+                {
+                    "final_answer": {
+                        "topic": "tool_not_found",
+                        "summary": "Tried to call a tool that does not exist.",
+                        "sources": [],
+                    }
+                }
+            )
+        ),
+    ]
+    mock_llm = MockLLMClient(responses=mock_responses)
+    session_id = "nonexistent-tool-test"
+    glyff_store, sefia_store = _make_stores(serializer)
+
+    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
+        ):
+            researcher = Researcher(web_toolkit)
+            await researcher.generate_report(topic="sefia")
+
+    messages = mock_llm.requests[1]["messages"]
+    assert messages[3]["role"] == "tool"
+    assert "Error: Tool 'NonExistent_tool' not found" in json.loads(
+        messages[3]["content"]
+    )
+
+
+async def test_stagnation_state_is_isolated_between_infer_calls(
+    serializer: Serializer, hasher: ArgsHasher
+):
+    # Regression: StagnationDetector was previously shared at the Session level,
+    # so the second @infer call would start with a history already partially filled
+    # by the first call. With policy-based instantiation each call gets a fresh detector.
+    repeated_call_response = LLMResponse(
+        content=json.dumps(
+            {
+                "tool_calls": [
+                    {"name": "WebToolkit_search", "arguments": {"query": "sefia"}}
+                ]
+            }
+        )
+    )
+    final_response = LLMResponse(
+        content=json.dumps(
+            {
+                "final_answer": {
+                    "topic": "sefia",
+                    "summary": "Sefia is a framework for building LLM agents.",
+                    "sources": [],
+                }
+            }
+        )
+    )
+
+    # First call: one tool call then final answer (fills stagnation history with 1 entry)
+    # Second call: same tool call repeated — with a shared detector this would raise
+    # StagnationError on the 2nd repetition (max_repeats=3 minus the 1 from call #1).
+    # With isolated detectors the second call starts fresh and completes normally.
+    mock_llm = MockLLMClient(
+        responses=[
+            repeated_call_response,
+            LLMResponse(
+                content=json.dumps(
+                    {
+                        "final_answer": {
+                            "topic": "sefia",
+                            "summary": "first call done",
+                            "sources": [],
+                        }
+                    }
+                )
+            ),
+            # Second @infer call — same tool, same args; would trip a shared detector
+            repeated_call_response,
+            repeated_call_response,
+            final_response,
+        ]
+    )
+
+    session_id = "stagnation-isolation-test"
+    glyff_store, sefia_store = _make_stores(serializer)
+
+    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
+        ):
+            toolkit = WebToolkit()
+            researcher = Researcher(toolkit)
+
+            # First call consumes 1 "search" tool call
+            report1 = await researcher.generate_report(topic="first")
+            assert report1.summary == "first call done"
+
+            # Second call repeats the same tool call 2 more times before finishing.
+            # If the detector were shared this would be 1+2=3 repeats → StagnationError.
+            report2 = await researcher.generate_report(topic="sefia")
+            result = report2 if isinstance(report2, Report) else Report(**report2)
+            assert result.topic == "sefia"
+
+
+async def test_inference_with_invalid_output_schema(
+    serializer: Serializer, hasher: ArgsHasher
+):
+    # Scenario: The LLM returns a final_answer that doesn't match the schema.
+    mock_response = LLMResponse(
+        content=json.dumps(
+            {"final_answer": {"summary": "This is missing the topic field."}}
+        )
+    )
+    mock_llm = MockLLMClient(responses=[mock_response])
+    session_id = "invalid-schema-test"
+    glyff_store, sefia_store = _make_stores(serializer)
+
+    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
+        ):
+            agent = SimpleAgent()
+            with pytest.raises(
+                ExecutionFailedError, match="LLM output failed validation"
+            ):
+                await agent.generate_report(topic="invalid")
+
+
+async def test_inference_on_standalone_function(
+    serializer: Serializer, hasher: ArgsHasher
+):
+    """Tests that @infer works correctly on a standalone function without any tools."""
+
+    @infer()
+    async def summarize_text(text: str, length: int) -> str:
+        """Summarize the given text to the specified length in sentences."""
+        ...
+
+    mock_response = LLMResponse(
+        content=json.dumps({"final_answer": "This is a summary."})
+    )
+    mock_llm = MockLLMClient(responses=[mock_response])
+    session_id = "standalone-function-test"
+    glyff_store, sefia_store = _make_stores(serializer)
+
+    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
+        ):
+            summary = await summarize_text(text="This is a long text...", length=1)
+
+    assert summary == "This is a summary."
+    assert len(mock_llm.requests) == 1
+    # Check that the schema passed to the LLM does not include the optional `tool_calls`
+    output_schema = mock_llm.requests[0].get("output_schema")
+    assert output_schema is not None
+    assert "tool_calls" not in output_schema.get("properties", {})
