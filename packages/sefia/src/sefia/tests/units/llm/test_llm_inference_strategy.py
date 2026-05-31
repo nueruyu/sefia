@@ -16,6 +16,7 @@ from sefia.models import (
     ToolCallRequest,
     ToolCallResult,
 )
+from sefia.pydantic.json_utils import pydantic_json_default
 from sefia.pydantic.model_inspector import PydanticModelInspector
 
 
@@ -47,6 +48,7 @@ class TestLLMInferenceStrategy:
         return LLMInferenceStrategy(
             llm_client=llm_client,
             model_inspector=PydanticModelInspector(),
+            json_default=pydantic_json_default,
             stream=stream,
         )
 

@@ -12,7 +12,7 @@ import sefia_litellm
 from pydantic import BaseModel, Field
 from sefia.interfaces import EventHandler, Policy
 from sefia.llm.events import LLMTokenReceived
-from sefia.pydantic.serialization import SefiaArgsHasher, SefiaSerializer
+from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 
 
 class StreamingPrintHandler(EventHandler[LLMTokenReceived]):

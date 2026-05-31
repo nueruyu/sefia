@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from typing import Any, Callable, Coroutine, cast
 
 from litellm import (
+    Choices,
     ModelResponse,
     Usage,
     acompletion,
@@ -120,7 +121,7 @@ class LiteLLMClient(LLMClient):
                 "This may indicate a content filter, provider error, or a LiteLLM bug."
             )
 
-        choice = response.choices[0]
+        choice: Choices = response.choices[0]
         message = choice.message
 
         tool_calls = [
