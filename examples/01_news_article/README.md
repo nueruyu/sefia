@@ -33,26 +33,26 @@ export EXAMPLE_DEFAULT_MODEL="gpt-4o-mini"
 
 ### 2. Start a New Workflow
 
-To start a new workflow, use the `--new` flag and provide a topic.
+To start a new workflow, use the `chat` command and provide a topic. If no session is active, a new one will be created automatically.
 
 ```bash
-python examples/01_news_article/main.py --new "The impact of generative AI on software development"
+python examples/01_news_article/main.py chat "The impact of generative AI on software development"
 ```
 
-The script will run, and if it needs your input, it will pause and display a message. The session ID is now automatically saved, so you don't need to track it.
+The script will run, and if it needs your input, it will pause and display a message. The active session ID is now automatically saved.
 
 ### 3. (Optional) Enable Streaming
 
-To see the LLM's thought process and final answer streamed token by token, add the `--stream` flag.
+To see the LLM's thought process and final answer streamed token by token, add the `--stream` flag to the `chat` command.
 
 ```bash
-python examples/01_news_article/main.py --new "The impact of generative AI on software development" --stream
+python examples/01_news_article/main.py chat "The impact of generative AI on software development" --stream
 ```
 
 **Example Output (Interruption):**
 
 ```
-> Starting new session: a1b2c3d4-...
+> No active session. Starting new session: a1b2c3d4-...
 > Stage 1: Researching topic...
    -> Found sources: ['https://...', 'https://...']
 > Stage 2: Writing article...
@@ -63,19 +63,19 @@ python examples/01_news_article/main.py --new "The impact of generative AI on so
 ---
 Session interrupted to wait for your input.
 To resume, run the script again with your answer:
-python examples/01_news_article/main.py "Your answer here"
+python examples/01_news_article/main.py chat "Your answer here"
 ---
 ```
 
 ### 4. Resume the Workflow
 
-To resume, simply run the script again with your answer as the main argument. You don't need to provide the session ID. You can also use the `--stream` flag here.
+To resume, simply use the `chat` command again with your answer. The workflow will automatically pick up the active session.
 
 ```bash
-python examples/01_news_article/main.py "Please add a section about the potential risks, like code quality and security vulnerabilities." --stream
+python examples/01_news_article/main.py chat "Please add a section about the potential risks, like code quality and security vulnerabilities." --stream
 ```
 
-The workflow will automatically pick up the last session, incorporate your feedback, and run until it either finishes or requires more input.
+The workflow will incorporate your feedback and run until it either finishes or requires more input.
 
 **Example Output (Completion):**
 
@@ -89,4 +89,13 @@ Title: The Transformative Impact of Generative AI on Software Development
 Summary: Generative AI is revolutionizing software development...
 Sources: https://..., https://...
 ---
+```
+
+### 5. Managing Sessions
+
+You can switch between different sessions if you have started multiple topics.
+
+```bash
+# Switch to a different, existing session
+python examples/01_news_article/main.py session switch <another-session-id>
 ```
