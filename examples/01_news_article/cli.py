@@ -40,11 +40,6 @@ def _set_active_session_id(session_id: str) -> None:
     _get_active_session_file().write_text(session_id)
 
 
-def _print_stream_banner() -> None:
-    console.print("[bold]> Streaming enabled. LLM response will appear below:[/bold]")
-    console.print("---")
-
-
 def _print_session_interrupted_hint() -> None:
     hint = dedent(
         """
@@ -61,7 +56,7 @@ def _resolve_session_state(
 ) -> SessionState:
     """Resolve the next session state from current state and latest user input."""
     if is_new or state is None:
-        return SessionState.model_validate({"initial_topic": input_text})
+        return SessionState(initial_topic=input_text)
 
     if pending_id := state.pending_interaction_id:
         # We are resuming a pending HumanInputTool interaction.
@@ -70,7 +65,7 @@ def _resolve_session_state(
 
     # Previous run already completed, so start a fresh topic.
     console.print("[bold]> Previous session completed. Starting a new topic.[/bold]")
-    return SessionState.model_validate({"initial_topic": input_text})
+    return state
 
 
 # --- Core workflow execution logic ---
@@ -82,8 +77,6 @@ async def _run_workflow(
     workflow_callback: WorkflowCallback,
 ):
     """Encapsulates the main logic for running the sefia workflow."""
-    _print_stream_banner()
-
     try:
         async with setup_session(
             model=model, session_id=session_id, stream=True
