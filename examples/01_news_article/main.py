@@ -86,15 +86,21 @@ async def workflow(state: SessionState) -> None:
     researcher = Researcher(sefia.tools.web.WebSearchTool())
     writer = NewsWriter(HumanInputTool())
 
-    if not state.initial_topic:
-        raise ValueError("Initial topic is not set in the session state.")
+    @glyff.engrave
+    async def research() -> list[str]:
+        console.print("[bold]> Stage 1: Researching topic...[/bold]")
+        sources = await researcher.research_topic(state.initial_topic)
+        console.print(f"[dim]   -> Found sources: {sources}[/dim]")
+        return sources
 
-    console.print("[bold]> Stage 1: Researching topic...[/bold]")
-    sources = await researcher.research_topic(state.initial_topic)
-    console.print(f"[dim]   -> Found sources: {sources}[/dim]")
+    sources = await research()
 
-    console.print("[bold]> Stage 2: Writing article...[/bold]")
-    article = await writer.write_article(topic=state.initial_topic, sources=sources)
+    @glyff.engrave
+    async def write() -> NewsArticle:
+        console.print("[bold]> Stage 2: Writing article...[/bold]")
+        return await writer.write_article(topic=state.initial_topic, sources=sources)
+
+    article = await write()
 
     console.print(
         Panel(
