@@ -4,7 +4,6 @@ import glyff
 
 from .context import InferenceContext, context_var
 from .interfaces import (
-    ModelInspector,
     Policy,
     ToolCollector,
 )
@@ -12,6 +11,8 @@ from .interfaces.session_store import SessionStore
 from .llm.client import LLMClient
 from .llm.strategy import LLMInferenceStrategy
 from .policies import StagnationPolicy
+from .pydantic.json_utils import pydantic_json_default
+from .pydantic.model_inspector import PydanticModelInspector
 from .state_store import StateStore
 from .tool_collectors.collector import DefaultToolCollector
 
@@ -31,7 +32,6 @@ class Session:
         session_store: SessionStore,
         policies: list[Policy] | None = None,
         tool_collector: ToolCollector | None = None,
-        model_inspector: ModelInspector | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
@@ -41,16 +41,16 @@ class Session:
         extra_policies = list(policies) if policies is not None else []
         self.policies: list[Policy] = [StagnationPolicy(), *extra_policies]
 
-        if model_inspector is None:
-            from .pydantic.model_inspector import PydanticModelInspector
-
-            model_inspector = PydanticModelInspector()
+        model_inspector = PydanticModelInspector()
 
         self._tool_collector = tool_collector or DefaultToolCollector(
             model_inspector=model_inspector
         )
         self._inference_strategy = LLMInferenceStrategy(
-            llm_client, model_inspector=model_inspector, stream=stream
+            llm_client,
+            model_inspector=model_inspector,
+            json_default=pydantic_json_default,
+            stream=stream,
         )
         self._context: InferenceContext | None = None
 

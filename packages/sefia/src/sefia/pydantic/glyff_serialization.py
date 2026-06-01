@@ -3,30 +3,18 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
-from dataclasses import asdict, is_dataclass
 from typing import Any, Callable
 
 from glyff.interfaces import ArgsHasher, Serializer
 from glyff.serialization import build_hashable_args
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 
-
-def _json_default(obj: Any) -> Any:
-    if isinstance(obj, BaseModel):
-        return obj.model_dump(mode="json")
-    if is_dataclass(obj) and not isinstance(obj, type):
-        return asdict(obj)
-    try:
-        return json.JSONEncoder().default(obj)
-    except TypeError as e:
-        raise TypeError(
-            f"Object of type {type(obj).__name__} is not JSON serializable"
-        ) from e
+from .json_utils import pydantic_json_default
 
 
 def _json_stable_dumps(data: Any) -> str:
     return json.dumps(
-        data, sort_keys=True, default=_json_default, separators=(",", ":")
+        data, sort_keys=True, default=pydantic_json_default, separators=(",", ":")
     )
 
 

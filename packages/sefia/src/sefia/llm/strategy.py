@@ -1,7 +1,7 @@
-import dataclasses
 import json
 import uuid
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from ..event_publisher import EventPublisher
 from ..interfaces import InferenceStrategy, ModelInspector
@@ -19,20 +19,15 @@ from .client import LLMClient
 from .messages import Message
 
 
-def _pydantic_json_default(obj: Any) -> Any:
-    if hasattr(obj, "model_dump"):
-        return obj.model_dump()
-    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-        return dataclasses.asdict(obj)
-    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-
-
-@dataclasses.dataclass
+@dataclass
 class _LLMDecision:
     """Typed stub for the dynamically created decision model."""
 
     final_answer: Any = None
     tool_calls: list[LLMToolCall] | None = None
+
+
+JsonDefault = Callable[[Any], Any]
 
 
 class LLMInferenceStrategy(InferenceStrategy):
@@ -46,10 +41,12 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         llm_client: LLMClient,
         model_inspector: ModelInspector,
+        json_default: JsonDefault,
         stream: bool = False,
     ):
         self.llm_client = llm_client
         self.model_inspector = model_inspector
+        self._json_default = json_default
         self._stream = stream
 
     def _build_llm_decision_schema(self, output_type: Any, tools: list[dict]) -> dict:
@@ -241,7 +238,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                     Message(
                         role="tool",
                         tool_call_id=item.tool_call_id,
-                        content=json.dumps(item.result, default=_pydantic_json_default),
+                        content=json.dumps(item.result, default=self._json_default),
                     )
                 )
 

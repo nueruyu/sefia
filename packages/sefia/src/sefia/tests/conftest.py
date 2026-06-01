@@ -9,7 +9,7 @@ from glyff.interfaces import ArgsHasher, Serializer
 from sefia import LLMResponse, infer, tool
 from sefia.llm.client import LLMClient
 from sefia.llm.messages import Message
-from sefia.pydantic.serialization import SefiaArgsHasher, SefiaSerializer
+from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 
 
 class MockLLMClient(LLMClient):

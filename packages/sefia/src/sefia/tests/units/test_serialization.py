@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sefia.pydantic.serialization import SefiaArgsHasher, SefiaSerializer
+from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 
 
 @dataclass(frozen=True)
