@@ -36,8 +36,9 @@ export EXAMPLE_DEFAULT_MODEL="gpt-4o-mini"
 To start a new workflow, use the `--new` flag and provide a topic.
 
 ```bash
-python examples/01_news_article/main.py --new "The impact of generative AI on software development"
+python examples/01_news_article/runner.py --new "The impact of generative AI on software development"
 ```
+
 The script will run, and if it needs your input, it will pause and display a message. The session ID is now automatically saved, so you don't need to track it.
 
 ### 3. (Optional) Enable Streaming
@@ -45,7 +46,7 @@ The script will run, and if it needs your input, it will pause and display a mes
 To see the LLM's thought process and final answer streamed token by token, add the `--stream` flag.
 
 ```bash
-python examples/01_news_article/main.py --new "The impact of generative AI on software development" --stream
+python examples/01_news_article/runner.py --new "The impact of generative AI on software development" --stream
 ```
 
 **Example Output (Interruption):**
@@ -62,7 +63,7 @@ python examples/01_news_article/main.py --new "The impact of generative AI on so
 ---
 Session interrupted to wait for your input.
 To resume, run the script again with your answer:
-python examples/01_news_article/main.py "Your answer here"
+python examples/01_news_article/runner.py "Your answer here"
 ---
 ```
 
@@ -71,7 +72,7 @@ python examples/01_news_article/main.py "Your answer here"
 To resume, simply run the script again with your answer as the main argument. You don't need to provide the session ID. You can also use the `--stream` flag here.
 
 ```bash
-python examples/01_news_article/main.py "Please add a section about the potential risks, like code quality and security vulnerabilities." --stream
+python examples/01_news_article/runner.py "Please add a section about the potential risks, like code quality and security vulnerabilities." --stream
 ```
 
 The workflow will automatically pick up the last session, incorporate your feedback, and run until it either finishes or requires more input.

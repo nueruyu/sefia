@@ -4,8 +4,6 @@ version = "0.1.0"
 description = "Usage examples for the sefia framework."
 requires-python = ">=3.11"
 dependencies = [
-    # sefia and sefia_litellm are expected to be installed
-    # in editable mode from the repository root.
     "typer[all]",
     "python-dotenv",
 ]

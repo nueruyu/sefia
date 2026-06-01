@@ -1,42 +1,9 @@
-import asyncio
-import uuid
-from pathlib import Path
 from typing import Optional
 
 import glyff
 import glyff.exceptions
-import glyff_file_store
 import sefia
-import sefia.stores
-import sefia_litellm
-import typer
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
-from sefia.interfaces import EventHandler, Policy
-from sefia.llm.events import LLMTokenReceived
-from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
-from typing_extensions import Annotated
-
-load_dotenv()
-app = typer.Typer()
-
-
-class StreamingPrintHandler(EventHandler[LLMTokenReceived]):
-    """An event handler that prints LLM tokens to the console."""
-
-    @property
-    def event_types(self):
-        return (LLMTokenReceived,)
-
-    async def handle(self, event: LLMTokenReceived):
-        print(event.token, end="", flush=True)
-
-
-class StreamingPolicy(Policy):
-    """A policy that enables console streaming of LLM tokens."""
-
-    def create_handlers(self) -> list[EventHandler]:
-        return [StreamingPrintHandler()]
 
 
 class NewsArticle(BaseModel):
@@ -109,7 +76,7 @@ class NewsWriter:
         ...
 
 
-async def write_article(state: SessionState):
+async def write_article(state: SessionState) -> tuple[NewsArticle, list[str]]:
     researcher = Researcher(sefia.WebSearchTool())
     writer = NewsWriter(HumanInputTool(answer=state.answer))
 
@@ -118,142 +85,5 @@ async def write_article(state: SessionState):
     print(f"\n   -> Found sources: {sources}")
 
     print("> Stage 2: Writing article...")
-    return await writer.write_article(topic=state.topic, sources=sources)
-
-
-@app.command()
-def run(
-    user_input: Annotated[
-        list[str],
-        typer.Argument(
-            help="Topic for a new session (with --new), or an answer to resume an existing one."
-        ),
-    ] = None,
-    model: Annotated[
-        str,
-        typer.Option(
-            help="The LLM model to use. Can also be set via EXAMPLE_DEFAULT_MODEL env var.",
-            envvar="EXAMPLE_DEFAULT_MODEL",
-        ),
-    ] = "gpt-4o",
-    session_id_override: Annotated[
-        Optional[str],
-        typer.Option(
-            "--session-id",
-            help="Explicitly specify the session ID, overriding the automatically managed one.",
-        ),
-    ] = None,
-    new_session: Annotated[
-        bool,
-        typer.Option(
-            "--new",
-            help="Force the start of a new session. The first argument will be treated as the topic.",
-        ),
-    ] = False,
-    stream: Annotated[
-        bool, typer.Option(help="Enable streaming of LLM tokens.")
-    ] = False,
-):
-    """
-    Runs the news article generation workflow with automated session management.
-    """
-    input_text = " ".join(user_input) if user_input else None
-
-    if new_session and not input_text:
-        raise typer.BadParameter(
-            "A topic is required when starting a new session with --new."
-        )
-
-    # --- Session and State Management ---
-    session_dir = Path(__file__).parent / ".local"
-    session_dir.mkdir(exist_ok=True)
-    last_session_file = session_dir / "last_session.txt"
-
-    session_id = session_id_override
-    if session_id:
-        print(f"> Using provided session ID: {session_id}")
-    elif new_session:
-        session_id = str(uuid.uuid4())
-        print(f"> Starting new session: {session_id}")
-    else:
-        if last_session_file.exists():
-            session_id = last_session_file.read_text().strip()
-            print(f"> Resuming session {session_id}")
-        else:
-            if not input_text:
-                raise typer.BadParameter(
-                    "No previous session found. Please start a new one with --new <topic>."
-                )
-            session_id = str(uuid.uuid4())
-            new_session = True
-            print(f"> No previous session found. Starting new session: {session_id}")
-
-    last_session_file.write_text(session_id)
-
-    # --- Main Application Logic ---
-    async def _main():
-        llm_client = sefia_litellm.LiteLLMClient(model=model)
-        serializer = SefiaSerializer()
-        file_client = glyff_file_store.FileClient(
-            base_dir=session_dir / "glyff_sessions",
-            session_id=session_id,
-        )
-        gs = glyff.Session(
-            id=session_id,
-            store=glyff_file_store.JsonFileSessionStore(
-                client=file_client, serializer=serializer
-            ),
-            hasher=SefiaArgsHasher(),
-        )
-        sefia_store = sefia.stores.FileSessionStore(
-            client=file_client, serializer=serializer
-        )
-
-        policies: list[Policy] = []
-        if stream:
-            policies.append(StreamingPolicy())
-            print("> Streaming enabled. LLM response will appear below:")
-            print("---")
-
-        try:
-            async with gs:
-                async with sefia.Session(
-                    llm_client=llm_client,
-                    glyff_session=gs,
-                    session_store=sefia_store,
-                    policies=policies,
-                    stream=stream,
-                ) as session:
-                    state_store = session.get_state_store("state", SessionState)
-                    state = await state_store.get()
-
-                    if new_session or state is None:
-                        state = SessionState(topic=input_text, answer=None)
-                    else:
-                        state.answer = input_text
-
-                    await state_store.save(state)
-
-                    article = await write_article(state)
-
-                    if stream:
-                        print("\n---")
-
-                    print("\n--- FINAL ARTICLE ---")
-                    print(f"Title: {article.title}")
-                    print(f"Summary: {article.summary}")
-                    print(f"Sources: {', '.join(article.sources)}")
-                    print("---")
-
-        except glyff.exceptions.YieldException:
-            print("\n---")
-            print("Session interrupted to wait for your input.")
-            print("To resume, run the script again with your answer:")
-            print('python examples/01_news_article/main.py "Your answer here"')
-            print("---")
-
-    asyncio.run(_main())
-
-
-if __name__ == "__main__":
-    app()
+    article = await writer.write_article(topic=state.topic, sources=sources)
+    return article, sources
