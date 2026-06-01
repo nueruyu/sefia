@@ -10,7 +10,7 @@ import sefia_litellm
 from sefia.interfaces import Policy
 from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 
-from examples.common.streaming import StreamingPolicy
+from ..common.streaming import StreamingPolicy
 
 
 @asynccontextmanager

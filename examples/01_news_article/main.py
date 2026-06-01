@@ -5,6 +5,8 @@ import glyff.exceptions
 import sefia
 from pydantic import BaseModel, Field
 
+from .cli import create_app
+
 
 class NewsArticle(BaseModel):
     """Represents a finalized news article."""
@@ -87,3 +89,8 @@ async def write_article(state: SessionState) -> tuple[NewsArticle, list[str]]:
     print("> Stage 2: Writing article...")
     article = await writer.write_article(topic=state.topic, sources=sources)
     return article, sources
+
+
+if __name__ == "__main__":
+    app = create_app(SessionState, write_article)
+    app()
