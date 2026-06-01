@@ -2,18 +2,20 @@ import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TypeVar
+from textwrap import dedent
 
 import glyff.exceptions
 import typer
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from rich.console import Console
+from rich.panel import Panel
 from typing_extensions import Annotated
 
+from .session import SessionState
 from .session_setup import setup_session
 
-StateT = TypeVar("StateT", bound=BaseModel)
-WriteArticleCallback = Callable[[StateT], Awaitable[tuple[BaseModel, list[str]]]]
+WorkflowCallback = Callable[[SessionState], Awaitable[None]]
+console = Console()
 
 
 # --- Helper functions for session management ---
@@ -38,58 +40,67 @@ def _set_active_session_id(session_id: str) -> None:
     _get_active_session_file().write_text(session_id)
 
 
+def _print_stream_banner() -> None:
+    console.print("[bold]> Streaming enabled. LLM response will appear below:[/bold]")
+    console.print("---")
+
+
+def _print_session_interrupted_hint() -> None:
+    hint = dedent(
+        """
+        Session interrupted to wait for your input.
+        To resume, run the script again with your answer.
+        """
+    ).strip()
+    console.print()
+    console.print(Panel(hint, title="WAITING FOR INPUT", border_style="yellow"))
+
+
+def _resolve_session_state(
+    state: SessionState | None, input_text: str, is_new: bool
+) -> SessionState:
+    """Resolve the next session state from current state and latest user input."""
+    if is_new or state is None:
+        return SessionState.model_validate({"initial_topic": input_text})
+
+    if pending_id := state.pending_interaction_id:
+        # We are resuming a pending HumanInputTool interaction.
+        state.user_inputs[pending_id] = input_text
+        return state
+
+    # Previous run already completed, so start a fresh topic.
+    console.print("[bold]> Previous session completed. Starting a new topic.[/bold]")
+    return SessionState.model_validate({"initial_topic": input_text})
+
+
 # --- Core workflow execution logic ---
 async def _run_workflow(
     session_id: str,
     input_text: str,
     is_new: bool,
     model: str,
-    stream: bool,
-    state_type: type[StateT],
-    write_article_callback: WriteArticleCallback[StateT],
+    workflow_callback: WorkflowCallback,
 ):
     """Encapsulates the main logic for running the sefia workflow."""
-    if stream:
-        print("> Streaming enabled. LLM response will appear below:")
-        print("---")
+    _print_stream_banner()
 
     try:
         async with setup_session(
-            model=model, session_id=session_id, stream=stream
+            model=model, session_id=session_id, stream=True
         ) as session:
-            state_store = session.get_state_store("state", state_type)
+            state_store = session.get_state_store("session_state", SessionState)
             state = await state_store.get()
-
-            if is_new or state is None:
-                state = state_type.model_validate({"topic": input_text, "answer": None})
-            else:
-                state = state.model_copy(update={"answer": input_text})
+            state = _resolve_session_state(state, input_text, is_new)
 
             await state_store.save(state)
-
-            article, sources = await write_article_callback(state)
-            article_data = article.model_dump()
-
-            if stream:
-                print("\n---")
-
-            print("\n--- FINAL ARTICLE ---")
-            print(f"Title: {article_data['title']}")
-            print(f"Summary: {article_data['summary']}")
-            print(f"Sources: {', '.join(sources)}")
-            print("---")
+            await workflow_callback(state)
 
     except glyff.exceptions.YieldException:
-        print("\n---")
-        print("Session interrupted to wait for your input.")
-        print("To resume, run the script again with your answer:")
-        print('python examples/01_news_article/main.py chat "Your answer here"')
-        print("---")
+        _print_session_interrupted_hint()
 
 
 def create_app(
-    state_type: type[StateT],
-    write_article_callback: WriteArticleCallback[StateT],
+    workflow_callback: WorkflowCallback,
 ) -> typer.Typer:
     """Create a CLI app that routes execution to the injected workflow callback."""
     load_dotenv()
@@ -114,9 +125,6 @@ def create_app(
                 envvar="EXAMPLE_DEFAULT_MODEL",
             ),
         ] = "gpt-4o",
-        stream: Annotated[
-            bool, typer.Option(help="Enable streaming of LLM tokens.")
-        ] = False,
     ):
         """
         Start a new topic or provide an answer to continue the current session.
@@ -130,10 +138,12 @@ def create_app(
 
         if is_new:
             session_id = str(uuid.uuid4())
-            print(f"> No active session. Starting new session: {session_id}")
+            console.print(
+                f"[bold]> No active session. Starting new session: {session_id}[/bold]"
+            )
             _set_active_session_id(session_id)
         else:
-            print(f"> Resuming session {session_id}")
+            console.print(f"[bold]> Resuming session {session_id}[/bold]")
 
         asyncio.run(
             _run_workflow(
@@ -141,9 +151,7 @@ def create_app(
                 input_text=input_text,
                 is_new=is_new,
                 model=model,
-                stream=stream,
-                state_type=state_type,
-                write_article_callback=write_article_callback,
+                workflow_callback=workflow_callback,
             )
         )
 
@@ -158,6 +166,6 @@ def create_app(
         """
         # A more robust implementation would check if the session directory exists.
         _set_active_session_id(session_id)
-        print(f"> Switched active session to: {session_id}")
+        console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 
     return app

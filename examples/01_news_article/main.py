@@ -1,11 +1,17 @@
-from typing import Optional
+from textwrap import dedent
 
 import glyff
-import glyff.exceptions
 import sefia
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
 
 from .cli import create_app
+from .session import SessionState
+from .tools import HumanInputTool
+
+console = Console()
 
 
 class NewsArticle(BaseModel):
@@ -15,35 +21,33 @@ class NewsArticle(BaseModel):
     summary: str
     sources: list[str]
 
+    def to_markdown(self):
+        return (
+            dedent(
+                """
+                ## Title
+                {title}
 
-class SessionState(BaseModel):
-    """Represents the state of our long-running application."""
+                ## Summary
+                {summary}
 
-    topic: str
-    answer: str | None = Field(default=None)
-
-
-@glyff.identify("HumanInputTool")
-class HumanInputTool:
-    def __init__(self, answer: Optional[str] = None):
-        self._answer = answer
-
-    @sefia.tool
-    async def get_human_input(self, question: str) -> str:
-        """
-        Asks the user a question and returns their answer.
-        This tool interrupts the session to wait for user input.
-        """
-        if self._answer:
-            return self._answer
-
-        print(f"\n[USER_INPUT_REQUIRED] {question}\n")
-        raise glyff.exceptions.YieldException()
+                ## Sources
+                {sources}
+                """
+            )
+            .strip()
+            .format(
+                title=self.title,
+                summary=self.summary,
+                sources="\n".join(f"- {source}" for source in self.sources)
+                or "- (none)",
+            )
+        )
 
 
 @glyff.identify("Researcher")
 class Researcher:
-    def __init__(self, web_search: sefia.WebSearchTool):
+    def __init__(self, web_search: sefia.tools.web.WebSearchTool):
         self._web = web_search
 
     @sefia.infer()
@@ -78,19 +82,29 @@ class NewsWriter:
         ...
 
 
-async def write_article(state: SessionState) -> tuple[NewsArticle, list[str]]:
-    researcher = Researcher(sefia.WebSearchTool())
-    writer = NewsWriter(HumanInputTool(answer=state.answer))
+async def workflow(state: SessionState) -> None:
+    researcher = Researcher(sefia.tools.web.WebSearchTool())
+    writer = NewsWriter(HumanInputTool())
 
-    print("> Stage 1: Researching topic...")
-    sources = await researcher.research_topic(state.topic)
-    print(f"\n   -> Found sources: {sources}")
+    if not state.initial_topic:
+        raise ValueError("Initial topic is not set in the session state.")
 
-    print("> Stage 2: Writing article...")
-    article = await writer.write_article(topic=state.topic, sources=sources)
-    return article, sources
+    console.print("[bold]> Stage 1: Researching topic...[/bold]")
+    sources = await researcher.research_topic(state.initial_topic)
+    console.print(f"[dim]   -> Found sources: {sources}[/dim]")
+
+    console.print("[bold]> Stage 2: Writing article...[/bold]")
+    article = await writer.write_article(topic=state.initial_topic, sources=sources)
+
+    console.print(
+        Panel(
+            Markdown(article.to_markdown()),
+            title="FINAL ARTICLE",
+            border_style="green",
+            expand=False,
+        )
+    )
 
 
 if __name__ == "__main__":
-    app = create_app(SessionState, write_article)
-    app()
+    create_app(workflow)()
