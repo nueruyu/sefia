@@ -56,9 +56,15 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(AsyncMock())
         history = [
             ToolCallDecision(
-                calls=[ToolCallRequest(id="1", name="search", arguments={"q": "test"})]
+                calls=[
+                    ToolCallRequest(
+                        id="1",
+                        name="search",
+                        arguments={"q": "日本語の検索クエリ"},
+                    )
+                ]
             ),
-            ToolCallResult(tool_call_id="1", result="found"),
+            ToolCallResult(tool_call_id="1", result="見つかりました"),
         ]
 
         dummy_tools = [{"function": {"name": "search"}}]
@@ -71,7 +77,15 @@ class TestLLMInferenceStrategy:
         assert messages[1].role == "user"
         assert messages[2].role == "assistant"
         assert messages[3].role == "tool"
-        assert json.loads(str(messages[3].content)) == "found"
+        tool_calls = messages[2].tool_calls
+        assert tool_calls is not None
+        tool_arguments = tool_calls[0]["function"]["arguments"]
+        assert "日本語の検索クエリ" in tool_arguments
+        assert "\\u65e5" not in tool_arguments
+        assert json.loads(tool_arguments) == {"q": "日本語の検索クエリ"}
+        assert "見つかりました" in str(messages[3].content)
+        assert "\\u898b" not in str(messages[3].content)
+        assert json.loads(str(messages[3].content)) == "見つかりました"
 
     async def test_decide_next_step_handles_tool_calls(self, mock_llm_client):
         tool_calls_payload = json.dumps(
