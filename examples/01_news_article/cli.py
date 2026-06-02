@@ -63,8 +63,8 @@ def _resolve_session_state(
         state.user_inputs[pending_id] = input_text
         return state
 
-    # Previous run already completed, so start a fresh topic.
-    console.print("[bold]> Previous session completed. Starting a new topic.[/bold]")
+    # Previous run already completed, so replay the completed session result.
+    console.print("[bold]> Previous session completed. Showing last result.[/bold]")
     return state
 
 

@@ -1,13 +1,14 @@
 # Sefia Workflow Sample: News Article Generation
 
-This example demonstrates a multi-agent workflow using `sefia` that includes real web searches, agent collaboration, and session interruption/resumption for human-in-the-loop interaction. The command-line interface is designed to be simple, automatically managing session state between runs.
+This example demonstrates a multi-agent workflow using `sefia` that includes real web searches, agent collaboration, request clarification, and session interruption/resumption for human-in-the-loop interaction. The command-line interface is designed to be simple, automatically managing session state between runs.
 
 ## Scenario
 
-The goal is to create a news article on a given topic. The process involves two agents:
+The goal is to create a news article from a clarified user request. The process involves three agents:
 
-1. A **Researcher** agent that uses a `WebSearchTool` to find relevant sources online.
-2. A **Writer** agent that drafts an article based on the research and uses a `HumanInputTool` to ask the user for feedback, interrupting the session until the user provides input.
+1. A **RequirementsClarifier** agent that organizes the user's initial request and asks follow-up questions with a `HumanInputTool` until critical ambiguities are resolved.
+2. A **Researcher** agent that uses a `WebSearchTool` to find relevant sources online.
+3. A **Writer** agent that drafts an article based on the clarified request and research, then uses a `HumanInputTool` to ask the user for feedback, interrupting the session until the user provides input.
 
 ## How to Run
 
@@ -39,7 +40,45 @@ To start a new workflow, use the `chat` command and provide a topic. If no sessi
 python examples/01_news_article/main.py chat "The impact of generative AI on software development"
 ```
 
-The script will run, and if it needs your input, it will pause and display a message. The active session ID is now automatically saved.
+The workflow first clarifies your request. If your initial topic is underspecified, it asks focused follow-up questions before research begins. If it needs your input, it pauses and saves the active session ID automatically.
+
+**Example Output (Clarification):**
+
+```text
+> No active session. Starting new session: a1b2c3d4-...
+> Stage 1: Clarifying request...
+
+[USER_INPUT_REQUIRED] Who is the target audience for this article?
+
+╭──────────────────────────── WAITING FOR INPUT ────────────────────────────╮
+│ Session interrupted to wait for your input.                               │
+│ To resume, run the script again with your answer.                         │
+╰───────────────────────────────────────────────────────────────────────────╯
+```
+
+Resume with your answer. The clarifier can ask additional questions until the request is clear enough to proceed.
+
+```bash
+python examples/01_news_article/main.py chat "Software engineering managers"
+```
+
+When the request is clear, research and writing continue:
+
+```text
+> Resuming session a1b2c3d4-...
+> Stage 1: Clarifying request...
+   -> Clarified request:
+
+Topic: The impact of generative AI on software development
+Angle: Practical impact on productivity, testing, and engineering workflows
+Audience: Software engineering managers
+Requirements:
+- Include potential risks such as code quality and security vulnerabilities.
+
+> Stage 2: Researching topic...
+   -> Found sources: ['https://...', 'https://...']
+> Stage 3: Writing article...
+```
 
 ### 3. (Optional) Enable Verbose Debugging
 
@@ -49,48 +88,36 @@ To see the exact prompts being sent to the LLM for debugging purposes, add the `
 python examples/01_news_article/main.py chat "The impact of generative AI on software development" --verbose
 ```
 
-**Example Output (Interruption):**
+**Example Output (Verbose Prompt Dump):**
 
-```
-> No active session. Starting new session: a1b2c3d4-...
-> Stage 1: Researching topic...
-┌──────────────────────────────────────────────── LLM PROMPT ────────────────────────────────────────────────┐
-│ [SYSTEM]                                                                                                   │
-│ Research the given topic to find relevant online sources.                                                  │
-│ Your goal is to return a list of high-quality URLs related to the topic.                                   │
-│ ...                                                                                                        │
-│                                                                                                            │
-│ [USER]                                                                                                     │
-│ Task arguments:                                                                                            │
-│ - topic: The impact of generative AI on software development                                               │
-└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-   -> Found sources: ['https://...', 'https://...']
-> Stage 2: Writing article...
-{"tool_calls": [{"name": "HumanInputTool_get_human_input", "arguments": {"question": "I have drafted an article on how generative AI is accelerating coding and testing. What specific aspects should I focus on for the final version?"}}]}
-
-[USER_INPUT_REQUIRED] I have drafted an article on how generative AI is accelerating coding and testing. What specific aspects should I focus on for the final version?
-
-╭────────────────────────────────────────── WAITING FOR INPUT ───────────────────────────────────────────╮
-│ Session interrupted to wait for your input.                                                            │
-│ To resume, run the script again with your answer.                                                      │
-╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```text
+┌──────────────────── LLM PROMPT ────────────────────┐
+│ [SYSTEM]                                           │
+│ Research the clarified article request to find     │
+│ relevant online sources.                           │
+│ ...                                                │
+│                                                    │
+│ [USER]                                             │
+│ Task arguments:                                    │
+│ - article_request: Topic: The impact of ...        │
+└────────────────────────────────────────────────────┘
 ```
 
 ### 4. Resume the Workflow
 
-To resume, simply use the `chat` command again with your answer. The workflow will automatically pick up the active session.
+To resume, use the `chat` command again with your answer. The workflow automatically picks up the active session.
 
 ```bash
 python examples/01_news_article/main.py chat "Please add a section about the potential risks, like code quality and security vulnerabilities."
 ```
 
-The workflow will incorporate your feedback and run until it either finishes or requires more input.
+The workflow incorporates your feedback and runs until it either finishes or requires more input.
 
 **Example Output (Completion):**
 
-```
+```text
 > Resuming session a1b2c3d4-...
-> Stage 2: Writing article...
+> Stage 3: Writing article...
 {"final_answer": {"title": "The Transformative Impact of Generative AI on Software Development", "summary": "...", "sources": ["..."]}}
 
 --- FINAL ARTICLE ---
@@ -102,7 +129,7 @@ Sources: https://..., https://...
 
 ### 5. Managing Sessions
 
-You can switch between different sessions if you have started multiple topics.
+You can create a fresh active session or switch between existing sessions if you have started multiple topics.
 
 ```bash
 # Create and switch to a new session
