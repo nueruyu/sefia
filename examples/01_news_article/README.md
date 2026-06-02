@@ -41,12 +41,12 @@ python examples/01_news_article/main.py chat "The impact of generative AI on sof
 
 The script will run, and if it needs your input, it will pause and display a message. The active session ID is now automatically saved.
 
-### 3. (Optional) Enable Streaming
+### 3. (Optional) Enable Verbose Debugging
 
-To see the LLM's thought process and final answer streamed token by token, add the `--stream` flag to the `chat` command.
+To see the exact prompts being sent to the LLM for debugging purposes, add the `--verbose` flag to the `chat` command.
 
 ```bash
-python examples/01_news_article/main.py chat "The impact of generative AI on software development" --stream
+python examples/01_news_article/main.py chat "The impact of generative AI on software development" --verbose
 ```
 
 **Example Output (Interruption):**
@@ -54,17 +54,26 @@ python examples/01_news_article/main.py chat "The impact of generative AI on sof
 ```
 > No active session. Starting new session: a1b2c3d4-...
 > Stage 1: Researching topic...
+┌──────────────────────────────────────────────── LLM PROMPT ────────────────────────────────────────────────┐
+│ [SYSTEM]                                                                                                   │
+│ Research the given topic to find relevant online sources.                                                  │
+│ Your goal is to return a list of high-quality URLs related to the topic.                                   │
+│ ...                                                                                                        │
+│                                                                                                            │
+│ [USER]                                                                                                     │
+│ Task arguments:                                                                                            │
+│ - topic: The impact of generative AI on software development                                               │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
    -> Found sources: ['https://...', 'https://...']
 > Stage 2: Writing article...
 {"tool_calls": [{"name": "HumanInputTool_get_human_input", "arguments": {"question": "I have drafted an article on how generative AI is accelerating coding and testing. What specific aspects should I focus on for the final version?"}}]}
 
 [USER_INPUT_REQUIRED] I have drafted an article on how generative AI is accelerating coding and testing. What specific aspects should I focus on for the final version?
 
----
-Session interrupted to wait for your input.
-To resume, run the script again with your answer:
-python examples/01_news_article/main.py chat "Your answer here"
----
+╭────────────────────────────────────────── WAITING FOR INPUT ───────────────────────────────────────────╮
+│ Session interrupted to wait for your input.                                                            │
+│ To resume, run the script again with your answer.                                                      │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ### 4. Resume the Workflow
@@ -72,7 +81,7 @@ python examples/01_news_article/main.py chat "Your answer here"
 To resume, simply use the `chat` command again with your answer. The workflow will automatically pick up the active session.
 
 ```bash
-python examples/01_news_article/main.py chat "Please add a section about the potential risks, like code quality and security vulnerabilities." --stream
+python examples/01_news_article/main.py chat "Please add a section about the potential risks, like code quality and security vulnerabilities."
 ```
 
 The workflow will incorporate your feedback and run until it either finishes or requires more input.

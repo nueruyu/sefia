@@ -74,12 +74,13 @@ async def _run_workflow(
     input_text: str,
     is_new: bool,
     model: str,
+    verbose: bool,
     workflow_callback: WorkflowCallback,
 ):
     """Encapsulates the main logic for running the sefia workflow."""
     try:
         async with setup_session(
-            model=model, session_id=session_id, stream=True
+            model=model, session_id=session_id, stream=True, verbose=verbose
         ) as session:
             state_store = session.get_state_store("session_state", SessionState)
             state = await state_store.get()
@@ -118,6 +119,13 @@ def create_app(
                 envvar="EXAMPLE_DEFAULT_MODEL",
             ),
         ] = "gpt-4o",
+        verbose: Annotated[
+            bool,
+            typer.Option(
+                "--verbose",
+                help="Enable verbose output for debugging, including LLM prompts.",
+            ),
+        ] = False,
     ):
         """
         Start a new topic or provide an answer to continue the current session.
@@ -144,6 +152,7 @@ def create_app(
                 input_text=input_text,
                 is_new=is_new,
                 model=model,
+                verbose=verbose,
                 workflow_callback=workflow_callback,
             )
         )

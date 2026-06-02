@@ -10,12 +10,13 @@ import sefia_litellm
 from sefia.interfaces import Policy
 from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 
+from ..common.debugging import VerbosePolicy
 from ..common.streaming import StreamingPolicy
 
 
 @asynccontextmanager
 async def setup_session(
-    model: str, session_id: str, stream: bool
+    model: str, session_id: str, stream: bool, verbose: bool
 ) -> AsyncIterator[sefia.Session]:
     """Sets up and provides a Sefia session."""
     llm_client = sefia_litellm.LiteLLMClient(model=model)
@@ -40,6 +41,8 @@ async def setup_session(
     policies: list[Policy] = []
     if stream:
         policies.append(StreamingPolicy())
+    if verbose:
+        policies.append(VerbosePolicy())
 
     async with gs:
         async with sefia.Session(
