@@ -170,4 +170,15 @@ def create_app(
         _set_active_session_id(session_id)
         console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 
+    @session_app.command("new")
+    def new_session():
+        """
+        Create a new session and make it active.
+        """
+        session_id = str(uuid.uuid4())
+        _set_active_session_id(session_id)
+        console.print(
+            f"[bold]> Created and switched to new session: {session_id}[/bold]"
+        )
+
     return app

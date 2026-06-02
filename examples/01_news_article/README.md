@@ -105,6 +105,9 @@ Sources: https://..., https://...
 You can switch between different sessions if you have started multiple topics.
 
 ```bash
+# Create and switch to a new session
+python examples/01_news_article/main.py session new
+
 # Switch to a different, existing session
 python examples/01_news_article/main.py session switch <another-session-id>
 ```
