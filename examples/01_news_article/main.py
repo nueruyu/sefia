@@ -112,6 +112,7 @@ class Researcher:
     def __init__(self, web_search: sefia.tools.web.WebSearchTool):
         self._web = web_search
 
+    @sefia.tool
     @sefia.infer()
     async def research_topic(self, article_request: ArticleRequest) -> list[str]:
         """
@@ -128,8 +129,9 @@ class Researcher:
 
 @glyff.identify("NewsWriter")
 class NewsWriter:
-    def __init__(self, human_input: HumanInputTool):
+    def __init__(self, human_input: HumanInputTool, researcher: Researcher):
         self._human_input = human_input
+        self._researcher = researcher
 
     @sefia.infer()
     async def write_article(
@@ -140,16 +142,22 @@ class NewsWriter:
         1. Briefly review the sources to understand the key points.
         2. Write a draft that follows the topic, angle, audience, and requirements.
         3. Ask the user for feedback on the draft's direction using the HumanInputTool.
-        4. Finalize the article based on the user's feedback, incorporating their suggestions.
-        5. Return the final article as a NewsArticle object.
+        4. If the user's feedback reveals missing information or requires additional
+           evidence, ask the Researcher to gather more sources before finalizing.
+        5. Finalize the article based on the user's feedback, incorporating their
+           suggestions and any additional research.
+        6. Return the final article as a NewsArticle object.
         """
         ...
 
 
+clarifier = RequirementsClarifier(HumanInputTool())
+researcher = Researcher(sefia.tools.web.WebSearchTool())
+writer = NewsWriter(HumanInputTool(), researcher)
+
+
 @glyff.engrave
 async def _clarify(initial_topic: str) -> ArticleRequest:
-    clarifier = RequirementsClarifier(HumanInputTool())
-
     console.print("[bold]> Stage 1: Clarifying request...[/bold]")
     article_request = await clarifier.clarify_request(initial_topic)
 
@@ -160,8 +168,6 @@ async def _clarify(initial_topic: str) -> ArticleRequest:
 
 @glyff.engrave
 async def _research(article_request: ArticleRequest) -> list[str]:
-    researcher = Researcher(sefia.tools.web.WebSearchTool())
-
     console.print("[bold]> Stage 2: Researching topic...[/bold]")
     sources = await researcher.research_topic(article_request)
     console.print(f"[dim]   -> Found sources: {sources}[/dim]")
@@ -170,8 +176,6 @@ async def _research(article_request: ArticleRequest) -> list[str]:
 
 @glyff.engrave
 async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArticle:
-    writer = NewsWriter(HumanInputTool())
-
     console.print("[bold]> Stage 3: Writing article...[/bold]")
     return await writer.write_article(article_request=article_request, sources=sources)
 
