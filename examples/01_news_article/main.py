@@ -11,6 +11,7 @@ from ..common.human_input import HumanInputTool
 from ..common.web_search import WebSearchTool
 from .agents import NewsWriter, RequirementsClarifier, Researcher
 from .models import ArticleRequest, NewsArticle
+from .rendering import render_article_request, render_news_article
 
 clarifier = RequirementsClarifier(HumanInputTool())
 researcher = Researcher(WebSearchTool())
@@ -26,7 +27,7 @@ async def _clarify(initial_topic: str) -> ArticleRequest:
     article_request = await clarifier.clarify_request(initial_topic)
 
     console.print("[dim]   -> Clarified request:[/dim]")
-    console.print(Markdown(article_request.to_markdown()))
+    console.print(Markdown(render_article_request(article_request)))
     return article_request
 
 
@@ -51,7 +52,7 @@ async def workflow(state: ChatSessionState) -> None:
 
     console.print(
         Panel(
-            Markdown(article.to_markdown()),
+            Markdown(render_news_article(article)),
             title="FINAL ARTICLE",
             border_style="green",
             expand=False,
