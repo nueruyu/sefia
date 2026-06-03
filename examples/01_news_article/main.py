@@ -1,11 +1,12 @@
 from textwrap import dedent
 
-import glyff
-import sefia
+from glyff import engrave, identify
 from pydantic import BaseModel
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from sefia import infer, tool
+from sefia.tools.web import WebSearchTool
 
 from .cli import create_app
 from .session import SessionState
@@ -77,12 +78,12 @@ class ArticleRequest(BaseModel):
         )
 
 
-@glyff.identify("RequirementsClarifier")
+@identify("RequirementsClarifier")
 class RequirementsClarifier:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
 
-    @sefia.infer()
+    @infer()
     async def clarify_request(self, user_request: str) -> ArticleRequest:
         """
         Clarify the user's initial request before any research or writing begins.
@@ -107,13 +108,13 @@ class RequirementsClarifier:
         ...
 
 
-@glyff.identify("Researcher")
+@identify("Researcher")
 class Researcher:
-    def __init__(self, web_search: sefia.tools.web.WebSearchTool):
+    def __init__(self, web_search: WebSearchTool):
         self._web = web_search
 
-    @sefia.tool
-    @sefia.infer()
+    @tool
+    @infer()
     async def research_topic(self, article_request: ArticleRequest) -> list[str]:
         """
         Research the clarified article request to find relevant online sources.
@@ -127,13 +128,13 @@ class Researcher:
         ...
 
 
-@glyff.identify("NewsWriter")
+@identify("NewsWriter")
 class NewsWriter:
     def __init__(self, human_input: HumanInputTool, researcher: Researcher):
         self._human_input = human_input
         self._researcher = researcher
 
-    @sefia.infer()
+    @infer()
     async def write_article(
         self, article_request: ArticleRequest, sources: list[str]
     ) -> NewsArticle:
@@ -152,11 +153,11 @@ class NewsWriter:
 
 
 clarifier = RequirementsClarifier(HumanInputTool())
-researcher = Researcher(sefia.tools.web.WebSearchTool())
+researcher = Researcher(WebSearchTool())
 writer = NewsWriter(HumanInputTool(), researcher)
 
 
-@glyff.engrave
+@engrave
 async def _clarify(initial_topic: str) -> ArticleRequest:
     console.print("[bold]> Stage 1: Clarifying request...[/bold]")
     article_request = await clarifier.clarify_request(initial_topic)
@@ -166,7 +167,7 @@ async def _clarify(initial_topic: str) -> ArticleRequest:
     return article_request
 
 
-@glyff.engrave
+@engrave
 async def _research(article_request: ArticleRequest) -> list[str]:
     console.print("[bold]> Stage 2: Researching topic...[/bold]")
     sources = await researcher.research_topic(article_request)
@@ -174,7 +175,7 @@ async def _research(article_request: ArticleRequest) -> list[str]:
     return sources
 
 
-@glyff.engrave
+@engrave
 async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArticle:
     console.print("[bold]> Stage 3: Writing article...[/bold]")
     return await writer.write_article(article_request=article_request, sources=sources)

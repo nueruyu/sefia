@@ -1,10 +1,10 @@
 import uuid
 from dataclasses import dataclass
 
-import glyff
-import glyff.exceptions
-import sefia
 import sefia.context
+from glyff import engrave, identify
+from glyff.exceptions import YieldException
+from sefia import tool
 
 from .session import SessionState
 
@@ -16,14 +16,14 @@ class _AskUserState:
     interaction_id: str | None = None
 
 
-@glyff.identify("HumanInputTool")
+@identify("HumanInputTool")
 class HumanInputTool:
     @staticmethod
     def _prompt_user_input(question: str) -> None:
         print(f"\n[USER_INPUT_REQUIRED] {question}\n")
 
-    @sefia.tool
-    @glyff.engrave
+    @tool
+    @engrave
     async def get_human_input(self, question: str) -> str:
         """
         Asks the user a question and returns their answer.
@@ -44,7 +44,7 @@ class HumanInputTool:
             await call_store.save(call_state)
             await session_store.save(session_state)
             self._prompt_user_input(question)
-            raise glyff.exceptions.YieldException()
+            raise YieldException()
 
         # Resumed call: check for the answer.
         interaction_id = call_state.interaction_id
@@ -56,4 +56,4 @@ class HumanInputTool:
 
         # No answer provided yet, interrupt again.
         self._prompt_user_input(question)
-        raise glyff.exceptions.YieldException()
+        raise YieldException()
