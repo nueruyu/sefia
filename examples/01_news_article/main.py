@@ -1,19 +1,23 @@
+from pathlib import Path
+
 from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
+from ..common.chat_cli import create_app
+from ..common.chat_session import ChatSessionState
+from ..common.human_input import HumanInputTool
+from ..common.web_search import WebSearchTool
 from .agents import NewsWriter, RequirementsClarifier, Researcher
-from .cli import create_app
 from .models import ArticleRequest, NewsArticle
-from .session import SessionState
-from .tools import HumanInputTool, WebSearchTool
 
 clarifier = RequirementsClarifier(HumanInputTool())
 researcher = Researcher(WebSearchTool())
 writer = NewsWriter(HumanInputTool(), researcher)
 
 console = Console()
+SESSION_DIR = Path(__file__).parent / ".local"
 
 
 @engrave
@@ -40,7 +44,7 @@ async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArt
     return await writer.write_article(article_request=article_request, sources=sources)
 
 
-async def workflow(state: SessionState) -> None:
+async def workflow(state: ChatSessionState) -> None:
     article_request = await _clarify(state.initial_topic)
     sources = await _research(article_request)
     article = await _write(article_request, sources)
@@ -56,4 +60,8 @@ async def workflow(state: SessionState) -> None:
 
 
 if __name__ == "__main__":
-    create_app(workflow)()
+    create_app(
+        workflow,
+        session_dir=SESSION_DIR,
+        help_text="A multi-agent workflow for generating news articles with human-in-the-loop.",
+    )()

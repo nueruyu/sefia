@@ -1,8 +1,9 @@
 from glyff import identify
 from sefia import infer, tool
 
+from ..common.human_input import HumanInputTool
+from ..common.web_search import WebSearchTool
 from .models import ArticleRequest, NewsArticle
-from .tools import HumanInputTool, WebSearchTool
 
 
 @identify("RequirementsClarifier")

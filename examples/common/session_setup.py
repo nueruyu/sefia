@@ -10,19 +10,22 @@ import sefia_litellm
 from sefia.interfaces import Policy
 from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 
-from ..common.debugging import VerbosePolicy
-from ..common.streaming import StreamingPolicy
+from .debugging import VerbosePolicy
+from .streaming import StreamingPolicy
 
 
 @asynccontextmanager
 async def setup_session(
-    model: str, session_id: str, stream: bool, verbose: bool
+    model: str,
+    session_id: str,
+    stream: bool,
+    verbose: bool,
+    session_dir: Path,
 ) -> AsyncIterator[sefia.Session]:
     """Sets up and provides a Sefia session."""
     llm_client = sefia_litellm.LiteLLMClient(model=model)
     serializer = SefiaSerializer()
 
-    session_dir = Path(__file__).parent / ".local"
     file_client = glyff_file_store.FileClient(
         base_dir=session_dir / "glyff_sessions",
         session_id=session_id,

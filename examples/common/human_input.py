@@ -1,43 +1,12 @@
-import asyncio
 import uuid
 from dataclasses import dataclass
 
 import sefia.context
-from ddgs import DDGS
 from glyff import engrave, identify
 from glyff.exceptions import YieldException
-from pydantic import BaseModel, Field
 from sefia import tool
 
-from .session import SessionState
-
-
-class WebSearchResult(BaseModel):
-    """Represents a single web search result."""
-
-    title: str = Field(description="The title of the search result page.")
-    href: str = Field(description="The URL of the search result page.")
-    body: str = Field(
-        description="A snippet of the content from the search result page."
-    )
-
-
-class WebSearchTool:
-    """A toolkit for performing web searches using DuckDuckGo."""
-
-    @tool
-    async def search(self, query: str, max_results: int = 5) -> list[WebSearchResult]:
-        """
-        Performs a web search for the given query using DuckDuckGo
-        and returns a list of search results.
-        """
-
-        def _sync_search():
-            with DDGS() as ddgs:
-                return list(ddgs.text(query, max_results=max_results))
-
-        results = await asyncio.to_thread(_sync_search)
-        return [WebSearchResult(**r) for r in results]
+from .chat_session import ChatSessionState
 
 
 @dataclass
@@ -64,7 +33,7 @@ class HumanInputTool:
         call_store = ctx.get_call_state_store("internal_state", _AskUserState)
         call_state = await call_store.ensure()
 
-        session_store = ctx.get_state_store("session_state", SessionState)
+        session_store = ctx.get_state_store("session_state", ChatSessionState)
         session_state = await session_store.ensure()
 
         if call_state.interaction_id is None:
