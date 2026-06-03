@@ -16,15 +16,23 @@ class SessionState:
     _interactions: list[Interaction] = field(default_factory=list)
     _interactions_by_id: dict[str, Interaction] = field(init=False, repr=False)
 
+    @classmethod
+    def from_initial_topic(cls, initial_topic: str) -> "SessionState":
+        """Creates a session state from the initial topic."""
+        return cls(_interactions=[Interaction(id="__initial__", answer=initial_topic)])
+
     def __post_init__(self):
         self._interactions_by_id = {i.id: i for i in self._interactions}
 
     @property
-    def initial_topic(self) -> str | None:
+    def initial_topic(self) -> str:
         """The initial topic that started the session."""
         if not self._interactions:
-            return None
-        return self._interactions[0].answer
+            raise RuntimeError("SessionState has no initial topic.")
+        initial_topic = self._interactions[0].answer
+        if initial_topic is None:
+            raise RuntimeError("Initial topic cannot be pending.")
+        return initial_topic
 
     @property
     def pending_interaction(self) -> Interaction | None:

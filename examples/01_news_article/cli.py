@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 from typing_extensions import Annotated
 
-from .session import Interaction, SessionState
+from .session import SessionState
 from .session_setup import setup_session
 
 WorkflowCallback = Callable[[SessionState], Awaitable[None]]
@@ -56,9 +56,7 @@ def _resolve_session_state(
 ) -> SessionState:
     """Resolve the next session state from current state and latest user input."""
     if is_new or state is None:
-        return SessionState(
-            _interactions=[Interaction(id="__initial__", answer=input_text)]
-        )
+        return SessionState.from_initial_topic(input_text)
 
     if state.pending_interaction:
         # We are resuming a pending HumanInputTool interaction.
