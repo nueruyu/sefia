@@ -40,7 +40,7 @@ class HumanInputTool:
             # First call: generate an ID, save it, and interrupt.
             interaction_id = str(uuid.uuid4())
             call_state.interaction_id = interaction_id
-            session_state.pending_interaction_id = interaction_id
+            session_state.add_pending_interaction(interaction_id)
             await call_store.save(call_state)
             await session_store.save(session_state)
             self._prompt_user_input(question)
@@ -48,10 +48,8 @@ class HumanInputTool:
 
         # Resumed call: check for the answer.
         interaction_id = call_state.interaction_id
-        if answer := session_state.user_inputs.get(interaction_id):
-            # Answer found. Clear the pending state and return the answer.
-            session_state.pending_interaction_id = None
-            await session_store.save(session_state)
+        answer = session_state.get_answer_by_id(interaction_id)
+        if answer is not None:
             return answer
 
         # No answer provided yet, interrupt again.
