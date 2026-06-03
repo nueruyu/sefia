@@ -158,9 +158,9 @@ The signature and docstring define the contract. The LLM:
 2. Calls available `@tool` methods when tools are reachable from `self`.
 3. Returns a value matching the declared return type.
 
-Pydantic models, primitives, and `Serializable` instances are supported. If the
-return type is a Pydantic model, Sefia requests structured output and validates
-the response.
+Dataclasses, Pydantic models, primitives, and `Serializable` instances are
+supported. Sefia generates a structured output schema from the declared return
+type and validates the response before returning it.
 
 ### `@tool`
 
