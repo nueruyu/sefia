@@ -196,13 +196,13 @@ class LLMInferenceStrategy(InferenceStrategy):
             system_content += (
                 "\n### Available Tools\n"
                 "Here is a list of tools you can call. Use their `name` in the `tool_calls` field.\n"
-                f"{json.dumps(tool_definitions, indent=2)}\n"
+                f"{json.dumps(tool_definitions, indent=2, ensure_ascii=False)}\n"
             )
 
         system_content += (
             f"\n### Response Schema\n"
             f"Your response MUST be a single, valid, raw JSON object that strictly conforms to this JSON Schema:\n"
-            f"{json.dumps(output_schema)}"
+            f"{json.dumps(output_schema, ensure_ascii=False)}"
         )
         messages.append(Message(role="system", content=system_content))
 
@@ -226,7 +226,9 @@ class LLMInferenceStrategy(InferenceStrategy):
                                 "type": "function",
                                 "function": {
                                     "name": call.name,
-                                    "arguments": json.dumps(call.arguments),
+                                    "arguments": json.dumps(
+                                        call.arguments, ensure_ascii=False
+                                    ),
                                 },
                             }
                             for call in item.calls
@@ -238,7 +240,11 @@ class LLMInferenceStrategy(InferenceStrategy):
                     Message(
                         role="tool",
                         tool_call_id=item.tool_call_id,
-                        content=json.dumps(item.result, default=self._json_default),
+                        content=json.dumps(
+                            item.result,
+                            default=self._json_default,
+                            ensure_ascii=False,
+                        ),
                     )
                 )
 

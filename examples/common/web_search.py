@@ -2,7 +2,6 @@ import asyncio
 
 from ddgs import DDGS
 from pydantic import BaseModel, Field
-
 from sefia import tool
 
 

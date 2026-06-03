@@ -1,7 +1,7 @@
 [project]
 name = "sefia_litellm"
 version = "0.1.0"
-description = "LiteLLM adapter for the sefia framework."
+description = "LiteLLM adapter for Sefia."
 requires-python = ">=3.11"
 dependencies = [
     "sefia",

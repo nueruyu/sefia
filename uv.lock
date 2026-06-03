@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "sefia",
+    "sefia-examples",
     "sefia-litellm",
 ]
 
@@ -2011,7 +2012,6 @@ name = "sefia"
 version = "0.1.0"
 source = { editable = "packages/sefia" }
 dependencies = [
-    { name = "ddgs" },
     { name = "glyff" },
     { name = "glyff-file-store" },
     { name = "pydantic" },
@@ -2026,7 +2026,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ddgs" },
     { name = "glyff", specifier = ">=0.4.0" },
     { name = "glyff-file-store", specifier = ">=0.4.0" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -2037,6 +2036,25 @@ dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
     { name = "pytest-mock", specifier = ">=3.12.0" },
+]
+
+[[package]]
+name = "sefia-examples"
+version = "0.1.0"
+source = { editable = "examples" }
+dependencies = [
+    { name = "ddgs" },
+    { name = "python-dotenv" },
+    { name = "rich" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ddgs" },
+    { name = "python-dotenv" },
+    { name = "rich" },
+    { name = "typer" },
 ]
 
 [[package]]

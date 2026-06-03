@@ -13,6 +13,7 @@
   },
   "python.analysis.diagnosticMode": "workspace",
   "python.analysis.typeCheckingMode": "basic",
+  "editor.inlineSuggest.enabled": false,
   "css.lint.unknownAtRules": "ignore",
   "files.exclude": {
     "**/.git": true,

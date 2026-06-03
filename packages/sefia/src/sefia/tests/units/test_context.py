@@ -1,8 +1,8 @@
-import uuid
 from dataclasses import dataclass
 from unittest.mock import MagicMock
 
 import pytest
+from glyff import ExecutionId
 
 from sefia.context import InferenceContext
 
@@ -37,7 +37,12 @@ def inference_context(mock_glyff_session):
 class TestInferenceContext:
     def test_get_call_state_store_creates_scoped_key(self, inference_context, mocker):
         # Arrange
-        execution_id = uuid.uuid4()
+        execution_id = ExecutionId(
+            parent_id=None,
+            name="HumanInputTool.get_human_input",
+            sequence=0,
+            args_hash="question-a",
+        )
         mock_glyff_ctx = MagicMock()
         mock_glyff_ctx.current_execution_id = execution_id
         mocker.patch("sefia.context.get_glyff_context", return_value=mock_glyff_ctx)
@@ -46,8 +51,77 @@ class TestInferenceContext:
         store = inference_context.get_call_state_store("my_state", StateA)
 
         # Assert
-        expected_key = f"call_state::{str(execution_id)}::my_state"
-        assert store._key == expected_key
+        assert store._key.startswith("call_state/")
+        assert store._key.endswith("/my_state")
+        assert str(execution_id) not in store._key
+
+    def test_get_call_state_store_includes_args_hash_in_scope(
+        self, inference_context, mocker
+    ):
+        # Arrange
+        first_execution_id = ExecutionId(
+            parent_id=None,
+            name="HumanInputTool.get_human_input",
+            sequence=0,
+            args_hash="question-a",
+        )
+        second_execution_id = ExecutionId(
+            parent_id=None,
+            name="HumanInputTool.get_human_input",
+            sequence=0,
+            args_hash="question-b",
+        )
+        mock_glyff_ctx = MagicMock()
+        mocker.patch("sefia.context.get_glyff_context", return_value=mock_glyff_ctx)
+
+        # Act
+        mock_glyff_ctx.current_execution_id = first_execution_id
+        first_store = inference_context.get_call_state_store("my_state", StateA)
+        mock_glyff_ctx.current_execution_id = second_execution_id
+        second_store = inference_context.get_call_state_store("my_state", StateA)
+
+        # Assert
+        assert first_store._key != second_store._key
+
+    def test_get_call_state_store_includes_parent_scope(
+        self, inference_context, mocker
+    ):
+        # Arrange
+        first_parent = ExecutionId(
+            parent_id=None,
+            name="RequirementsClarifier.clarify_request",
+            sequence=0,
+            args_hash="clarifier",
+        )
+        second_parent = ExecutionId(
+            parent_id=None,
+            name="NewsWriter.write_article",
+            sequence=0,
+            args_hash="writer",
+        )
+        first_execution_id = ExecutionId(
+            parent_id=first_parent,
+            name="HumanInputTool.get_human_input",
+            sequence=0,
+            args_hash="same-question",
+        )
+        second_execution_id = ExecutionId(
+            parent_id=second_parent,
+            name="HumanInputTool.get_human_input",
+            sequence=0,
+            args_hash="same-question",
+        )
+        mock_glyff_ctx = MagicMock()
+        mocker.patch("sefia.context.get_glyff_context", return_value=mock_glyff_ctx)
+
+        # Act
+        mock_glyff_ctx.current_execution_id = first_execution_id
+        first_store = inference_context.get_call_state_store("my_state", StateA)
+        mock_glyff_ctx.current_execution_id = second_execution_id
+        second_store = inference_context.get_call_state_store("my_state", StateA)
+
+        # Assert
+        assert first_store._key != second_store._key
 
     def test_get_call_state_store_raises_error_outside_engrave(
         self, inference_context, mocker
