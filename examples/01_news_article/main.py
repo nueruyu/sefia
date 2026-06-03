@@ -2,13 +2,12 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefia.tools.web import WebSearchTool
 
 from .agents import NewsWriter, RequirementsClarifier, Researcher
 from .cli import create_app
 from .models import ArticleRequest, NewsArticle
 from .session import SessionState
-from .tools import HumanInputTool
+from .tools import HumanInputTool, WebSearchTool
 
 clarifier = RequirementsClarifier(HumanInputTool())
 researcher = Researcher(WebSearchTool())
