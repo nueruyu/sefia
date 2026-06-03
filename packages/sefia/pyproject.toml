@@ -1,7 +1,7 @@
 [project]
 name = "sefia"
 version = "0.1.0"
-description = "LLM-powered inference framework built on glyff checkpointing."
+description = "Define LLM-powered steps as typed async Python functions."
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0",

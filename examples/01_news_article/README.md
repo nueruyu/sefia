@@ -1,14 +1,21 @@
-# Sefia Workflow Sample: News Article Generation
+# Sefia Example: News Article Generation
 
-This example demonstrates a multi-agent workflow using `sefia` that includes real web searches, agent collaboration, request clarification, and session interruption/resumption for human-in-the-loop interaction. The command-line interface is designed to be simple, automatically managing session state between runs.
+This example shows how to build a small LLM workflow with `sefia` using ordinary
+async Python calls. It includes request clarification, real web search, writing,
+and session interruption/resumption for human input.
 
 ## Scenario
 
-The goal is to create a news article from a clarified user request. The process involves three agents:
+The goal is to create a news article from a clarified user request. The process
+is a normal call graph with three LLM-backed steps:
 
-1. A **RequirementsClarifier** agent that organizes the user's initial request and asks follow-up questions with a `HumanInputTool` until critical ambiguities are resolved.
-2. A **Researcher** agent that uses a `WebSearchTool` to find relevant sources online.
-3. A **Writer** agent that drafts an article based on the clarified request and research, then uses a `HumanInputTool` to ask the user for feedback, interrupting the session until the user provides input.
+1. `RequirementsClarifier.clarify_request` organizes the user's initial request
+   and asks focused follow-up questions with a `HumanInputTool` until critical
+   ambiguities are resolved.
+2. `Researcher.research_topic` uses a `WebSearchTool` to find relevant sources online.
+3. `NewsWriter.write_article` drafts an article from the clarified request and
+   sources, then can ask the user for feedback and resume after input is
+   provided.
 
 ## How to Run
 
