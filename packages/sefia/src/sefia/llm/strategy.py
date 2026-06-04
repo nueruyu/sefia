@@ -30,6 +30,33 @@ class _LLMDecision:
 JsonDefault = Callable[[Any], Any]
 
 
+def _hoist_schema_defs(schema: Any, definitions: dict[str, Any]) -> Any:
+    """Move nested JSON Schema definitions into the document root."""
+    if isinstance(schema, list):
+        return [_hoist_schema_defs(item, definitions) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+
+    nested_definitions = schema.get("$defs", {})
+    result = {
+        key: _hoist_schema_defs(value, definitions)
+        for key, value in schema.items()
+        if key != "$defs"
+    }
+
+    for name, definition in nested_definitions.items():
+        normalized_definition = _hoist_schema_defs(definition, definitions)
+        existing_definition = definitions.get(name)
+        if (
+            existing_definition is not None
+            and existing_definition != normalized_definition
+        ):
+            raise ValueError(f"Conflicting JSON Schema definition: {name}")
+        definitions[name] = normalized_definition
+
+    return result
+
+
 class LLMInferenceStrategy(InferenceStrategy):
     """
     An inference strategy that uses an LLM to decide the next step.
@@ -54,32 +81,45 @@ class LLMInferenceStrategy(InferenceStrategy):
         Dynamically creates a JSON Schema that represents the LLM's
         choice: either call tools or provide a final answer.
         """
-        properties: dict[str, Any] = {
-            "final_answer": {
+        definitions: dict[str, Any] = {}
+        final_answer_schema = _hoist_schema_defs(
+            self.model_inspector.get_schema_for_type(output_type),
+            definitions,
+        )
+        properties: dict[str, Any] = {"final_answer": final_answer_schema}
+        required = ["final_answer"]
+
+        if tools:
+            properties["final_answer"] = {
                 "oneOf": [
-                    self.model_inspector.get_schema_for_type(output_type),
+                    final_answer_schema,
                     {"type": "null"},
                 ]
             }
-        }
-
-        if tools:
             properties["tool_calls"] = {
                 "oneOf": [
                     {
                         "type": "array",
-                        "items": self.model_inspector.get_schema_for_type(LLMToolCall),
+                        "items": _hoist_schema_defs(
+                            self.model_inspector.get_schema_for_type(LLMToolCall),
+                            definitions,
+                        ),
                     },
                     {"type": "null"},
                 ]
             }
+            required.append("tool_calls")
 
-        return {
+        result = {
             "title": "LLMDecision",
             "description": "The model for the LLM's decision on the next action.",
             "type": "object",
             "properties": properties,
+            "required": required,
         }
+        if definitions:
+            result["$defs"] = definitions
+        return result
 
     async def decide_next_step(
         self,
@@ -183,11 +223,17 @@ class LLMInferenceStrategy(InferenceStrategy):
                 "Your task is to decide the next step. You have two options:\n"
                 "1. Call one or more tools by populating the `tool_calls` field.\n"
                 "2. Provide the final answer by populating the `final_answer` field.\n\n"
-                "You MUST use one, and only one, of these two fields in your response. "
+                "You MUST populate both fields and set the unused field to null. "
+                "Exactly one field must be non-null. "
                 "Use `tool_calls` to gather more information, and use `final_answer` only when you have enough information to complete the entire task."
             )
         else:
-            core_instruction = "Your task is to provide the final answer by populating the `final_answer` field. No tools are available."
+            core_instruction = (
+                "Your task is to provide a non-null final answer by populating the "
+                "`final_answer` field. No tools are available. If the requested "
+                "result is a collection and there are no results, return an empty "
+                "collection instead of null."
+            )
 
         system_content += f"\n\n### Response Instructions\n{core_instruction}\n"
 

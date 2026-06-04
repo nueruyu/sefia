@@ -35,6 +35,11 @@ class MyOutput:
     value: int
 
 
+@dataclass(frozen=True)
+class MyIssue:
+    description: str
+
+
 @pytest.fixture
 def mock_llm_client():
     return AsyncMock()
@@ -86,6 +91,73 @@ class TestLLMInferenceStrategy:
         assert "見つかりました" in str(messages[3].content)
         assert "\\u898b" not in str(messages[3].content)
         assert json.loads(str(messages[3].content)) == "見つかりました"
+
+    def test_build_messages_preserves_newlines_in_nested_strings(self):
+        strategy = self._strategy(AsyncMock())
+        source = "def example():\n    return 1\n"
+
+        messages = strategy._build_messages(
+            "instructions",
+            {"file_contents": {"example.py": source}},
+            [],
+            DUMMY_SCHEMA,
+            [],
+        )
+
+        prompt = str(messages[1].content)
+        assert source in prompt
+        assert "def example():\\n    return 1" not in prompt
+
+    def test_build_decision_schema_hoists_nested_definitions(self):
+        strategy = self._strategy(AsyncMock())
+
+        schema = strategy._build_llm_decision_schema(
+            list[MyIssue],
+            [{"type": "function"}],
+        )
+
+        assert "MyIssue" in schema["$defs"]
+        final_answer_schema = schema["properties"]["final_answer"]["oneOf"][0]
+        assert "$defs" not in final_answer_schema
+        assert final_answer_schema["items"]["$ref"] == "#/$defs/MyIssue"
+        tool_call_schema = schema["properties"]["tool_calls"]["oneOf"][0]["items"]
+        assert "$defs" not in tool_call_schema
+        assert tool_call_schema["type"] == "object"
+
+    def test_build_decision_schema_requires_non_null_answer_without_tools(self):
+        strategy = self._strategy(AsyncMock())
+
+        schema = strategy._build_llm_decision_schema(list[MyIssue], [])
+
+        assert schema["required"] == ["final_answer"]
+        final_answer_schema = schema["properties"]["final_answer"]
+        assert final_answer_schema["type"] == "array"
+        assert "oneOf" not in final_answer_schema
+
+    def test_build_decision_schema_requires_nullable_fields_with_tools(self):
+        strategy = self._strategy(AsyncMock())
+
+        schema = strategy._build_llm_decision_schema(
+            list[MyIssue],
+            [{"type": "function"}],
+        )
+
+        assert schema["required"] == ["final_answer", "tool_calls"]
+        assert {"type": "null"} in schema["properties"]["final_answer"]["oneOf"]
+        assert {"type": "null"} in schema["properties"]["tool_calls"]["oneOf"]
+
+    def test_build_messages_tells_no_tool_agent_to_return_empty_collection(self):
+        strategy = self._strategy(AsyncMock())
+
+        messages = strategy._build_messages(
+            "instructions",
+            {},
+            [],
+            DUMMY_SCHEMA,
+            [],
+        )
+
+        assert "empty collection instead of null" in str(messages[0].content)
 
     async def test_decide_next_step_handles_tool_calls(self, mock_llm_client):
         tool_calls_payload = json.dumps(
