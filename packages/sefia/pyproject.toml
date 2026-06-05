@@ -5,8 +5,8 @@ description = "Define LLM-powered steps as typed async Python functions."
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0",
-    "glyff>=0.4.0",
-    "glyff-file-store>=0.4.0",
+    "glyff>=0.6.0",
+    "glyff-file-store>=0.6.0",
 ]
 
 [build-system]

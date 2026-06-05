@@ -2,7 +2,7 @@ import uuid
 from dataclasses import dataclass
 
 import sefia.context
-from glyff import engrave, identify
+from glyff import engrave
 from glyff.exceptions import YieldException
 from sefia import tool
 
@@ -16,7 +16,7 @@ class _AskUserState:
     interaction_id: str | None = None
 
 
-@identify("HumanInputTool")
+@dataclass
 class HumanInputTool:
     @staticmethod
     def _prompt_user_input(question: str) -> None:

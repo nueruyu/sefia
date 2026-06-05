@@ -1,6 +1,6 @@
+from dataclasses import dataclass
 from pathlib import Path
 
-from glyff import identify
 from sefia import TextBlock, infer
 
 from ..common.human_input import HumanInputTool
@@ -8,7 +8,7 @@ from .models import CodeIssue, ProjectScope, ProjectUnderstanding, QualityReport
 from .tools import FileTool
 
 
-@identify("ScopingAgent")
+@dataclass
 class ScopingAgent:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
@@ -26,7 +26,7 @@ class ScopingAgent:
         ...
 
 
-@identify("UnderstandingAgent")
+@dataclass
 class UnderstandingAgent:
     def __init__(self, file_tool: FileTool):
         self._file_tool = file_tool
@@ -98,7 +98,7 @@ class UnderstandingAgent:
         return updated_understanding
 
 
-@identify("ReviewScopingAgent")
+@dataclass
 class ReviewScopingAgent:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
@@ -121,7 +121,7 @@ class ReviewScopingAgent:
         ...
 
 
-@identify("CodingStyleAuditor")
+@dataclass
 class CodingStyleAuditor:
     @infer()
     async def review(
@@ -138,7 +138,7 @@ class CodingStyleAuditor:
         ...
 
 
-@identify("DesignPrincipleArchitect")
+@dataclass
 class DesignPrincipleArchitect:
     @infer()
     async def review(
@@ -154,7 +154,7 @@ class DesignPrincipleArchitect:
         ...
 
 
-@identify("MaintainabilityAssessor")
+@dataclass
 class MaintainabilityAssessor:
     @infer()
     async def review(
@@ -170,7 +170,7 @@ class MaintainabilityAssessor:
         ...
 
 
-@identify("DependencySpecialist")
+@dataclass
 class DependencySpecialist:
     @infer()
     async def review(
@@ -187,7 +187,7 @@ class DependencySpecialist:
         ...
 
 
-@identify("ReportingAgent")
+@dataclass
 class ReportingAgent:
     @infer()
     async def create_report(

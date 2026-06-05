@@ -6,7 +6,10 @@ import json
 from typing import Any, Callable
 
 from glyff.interfaces import ArgsHasher, Serializer
-from glyff.serialization import build_hashable_args
+from glyff.serialization.helpers import (
+    build_hashable_args,
+    default_to_hashable,
+)
 from pydantic import TypeAdapter
 
 from .json_utils import pydantic_json_default
@@ -43,7 +46,7 @@ class SefiaArgsHasher(ArgsHasher):
     def hash_args(
         self, func: Callable, sig: inspect.Signature, args: tuple, kwargs: dict
     ) -> str:
-        args_dict = build_hashable_args(func, sig, args, kwargs)
+        args_dict = build_hashable_args(func, sig, args, kwargs, default_to_hashable)
         stable_repr = _json_stable_dumps(args_dict)
         hasher = hashlib.sha256()
         hasher.update(stable_repr.encode("utf-8"))
