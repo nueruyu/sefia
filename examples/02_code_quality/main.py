@@ -6,6 +6,7 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from sefia import TextBlock
 
 from ..common.chat_cli import create_app
 from ..common.chat_session import ChatSessionState
@@ -48,6 +49,17 @@ review_agents = {
     ReviewPerspective.MAINTAINABILITY: MaintainabilityAssessor(),
     ReviewPerspective.DEPENDENCIES: DependencySpecialist(),
 }
+
+
+def _as_text_blocks(file_contents: dict[str, str]) -> dict[str, TextBlock | str]:
+    return {
+        path: (
+            content
+            if content.startswith("Error reading file:")
+            else TextBlock(value=content)
+        )
+        for path, content in file_contents.items()
+    }
 
 
 @engrave
@@ -103,7 +115,7 @@ async def _run_reviews(
 ) -> list[CodeIssue]:
     console.print("\n[bold]> Stage 4: Running reviews...[/bold]")
     full_paths = [str(Path(project_path) / path) for path in review_files]
-    contents = await file_tool.read_files(full_paths)
+    contents = _as_text_blocks(await file_tool.read_files(full_paths))
     all_issues: list[CodeIssue] = []
 
     for perspective, agent in review_agents.items():

@@ -17,6 +17,7 @@ from ..models import (
 from . import events
 from .client import LLMClient
 from .messages import Message
+from .prompt_formatter import PromptFormatter
 
 
 @dataclass
@@ -75,6 +76,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self.model_inspector = model_inspector
         self._json_default = json_default
         self._stream = stream
+        self._prompt_formatter = PromptFormatter(json_default)
 
     def _build_llm_decision_schema(self, output_type: Any, tools: list[dict]) -> dict:
         """
@@ -252,11 +254,15 @@ class LLMInferenceStrategy(InferenceStrategy):
         )
         messages.append(Message(role="system", content=system_content))
 
-        arg_lines = "\n".join(
-            f"- {name}: {value}" for name, value in arguments.items() if name != "self"
-        )
+        prompt_arguments = {
+            name: value for name, value in arguments.items() if name != "self"
+        }
         user_prompt = (
-            f"Task arguments:\n{arg_lines}" if arg_lines else "No arguments provided."
+            "Task arguments are XML. Values in <text_block> are wrapped in "
+            "CDATA and should be read as raw text.\n\n"
+            f"{self._prompt_formatter.format_arguments(prompt_arguments)}"
+            if prompt_arguments
+            else "No arguments provided."
         )
         messages.append(Message(role="user", content=user_prompt))
 

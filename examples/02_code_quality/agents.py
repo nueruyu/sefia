@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from glyff import identify
-from sefia import infer
+from sefia import TextBlock, infer
 
 from ..common.human_input import HumanInputTool
 from .models import CodeIssue, ProjectScope, ProjectUnderstanding, QualityReport
@@ -124,7 +124,9 @@ class ReviewScopingAgent:
 @identify("CodingStyleAuditor")
 class CodingStyleAuditor:
     @infer()
-    async def review(self, file_contents: dict[str, str]) -> list[CodeIssue]:
+    async def review(
+        self, file_contents: dict[str, TextBlock | str]
+    ) -> list[CodeIssue]:
         """
         Review the given files from a coding-style perspective.
 
@@ -139,7 +141,9 @@ class CodingStyleAuditor:
 @identify("DesignPrincipleArchitect")
 class DesignPrincipleArchitect:
     @infer()
-    async def review(self, file_contents: dict[str, str]) -> list[CodeIssue]:
+    async def review(
+        self, file_contents: dict[str, TextBlock | str]
+    ) -> list[CodeIssue]:
         """
         Review the given files from a software-design-principles perspective.
 
@@ -153,7 +157,9 @@ class DesignPrincipleArchitect:
 @identify("MaintainabilityAssessor")
 class MaintainabilityAssessor:
     @infer()
-    async def review(self, file_contents: dict[str, str]) -> list[CodeIssue]:
+    async def review(
+        self, file_contents: dict[str, TextBlock | str]
+    ) -> list[CodeIssue]:
         """
         Review the given files from a maintainability and readability perspective.
 
@@ -167,7 +173,9 @@ class MaintainabilityAssessor:
 @identify("DependencySpecialist")
 class DependencySpecialist:
     @infer()
-    async def review(self, file_contents: dict[str, str]) -> list[CodeIssue]:
+    async def review(
+        self, file_contents: dict[str, TextBlock | str]
+    ) -> list[CodeIssue]:
         """
         Review the given files from an external-dependency perspective.
 

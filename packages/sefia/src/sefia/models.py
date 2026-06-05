@@ -44,6 +44,13 @@ class ToolRegistry:
 
 
 @dataclass
+class TextBlock:
+    """A prompt argument value that should be rendered as a raw text block."""
+
+    value: str
+
+
+@dataclass
 class LLMToolCall:
     """A tool call requested by the LLM, before an ID is assigned."""
 

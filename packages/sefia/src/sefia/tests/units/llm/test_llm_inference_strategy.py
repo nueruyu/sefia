@@ -92,21 +92,21 @@ class TestLLMInferenceStrategy:
         assert "\\u898b" not in str(messages[3].content)
         assert json.loads(str(messages[3].content)) == "見つかりました"
 
-    def test_build_messages_preserves_newlines_in_nested_strings(self):
+    def test_build_messages_uses_prompt_formatter_for_arguments(self):
         strategy = self._strategy(AsyncMock())
-        source = "def example():\n    return 1\n"
 
         messages = strategy._build_messages(
             "instructions",
-            {"file_contents": {"example.py": source}},
+            {"arg": "value"},
             [],
             DUMMY_SCHEMA,
             [],
         )
 
         prompt = str(messages[1].content)
-        assert source in prompt
-        assert "def example():\\n    return 1" not in prompt
+        assert "Task arguments are XML" in prompt
+        assert '<argument name="arg">' in prompt
+        assert "<string>value</string>" in prompt
 
     def test_build_decision_schema_hoists_nested_definitions(self):
         strategy = self._strategy(AsyncMock())
