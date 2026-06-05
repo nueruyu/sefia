@@ -3,6 +3,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from pydantic import create_model
+
 from ..event_publisher import EventPublisher
 from ..interfaces import InferenceStrategy, ModelInspector
 from ..models import (
@@ -31,33 +33,6 @@ class _LLMDecision:
 JsonDefault = Callable[[Any], Any]
 
 
-def _hoist_schema_defs(schema: Any, definitions: dict[str, Any]) -> Any:
-    """Move nested JSON Schema definitions into the document root."""
-    if isinstance(schema, list):
-        return [_hoist_schema_defs(item, definitions) for item in schema]
-    if not isinstance(schema, dict):
-        return schema
-
-    nested_definitions = schema.get("$defs", {})
-    result = {
-        key: _hoist_schema_defs(value, definitions)
-        for key, value in schema.items()
-        if key != "$defs"
-    }
-
-    for name, definition in nested_definitions.items():
-        normalized_definition = _hoist_schema_defs(definition, definitions)
-        existing_definition = definitions.get(name)
-        if (
-            existing_definition is not None
-            and existing_definition != normalized_definition
-        ):
-            raise ValueError(f"Conflicting JSON Schema definition: {name}")
-        definitions[name] = normalized_definition
-
-    return result
-
-
 class LLMInferenceStrategy(InferenceStrategy):
     """
     An inference strategy that uses an LLM to decide the next step.
@@ -83,44 +58,20 @@ class LLMInferenceStrategy(InferenceStrategy):
         Dynamically creates a JSON Schema that represents the LLM's
         choice: either call tools or provide a final answer.
         """
-        definitions: dict[str, Any] = {}
-        final_answer_schema = _hoist_schema_defs(
-            self.model_inspector.get_schema_for_type(output_type),
-            definitions,
-        )
-        properties: dict[str, Any] = {"final_answer": final_answer_schema}
-        required = ["final_answer"]
-
         if tools:
-            properties["final_answer"] = {
-                "oneOf": [
-                    final_answer_schema,
-                    {"type": "null"},
-                ]
-            }
-            properties["tool_calls"] = {
-                "oneOf": [
-                    {
-                        "type": "array",
-                        "items": _hoist_schema_defs(
-                            self.model_inspector.get_schema_for_type(LLMToolCall),
-                            definitions,
-                        ),
-                    },
-                    {"type": "null"},
-                ]
-            }
-            required.append("tool_calls")
+            decision_model = create_model(
+                "LLMDecision",
+                final_answer=(output_type | None, ...),
+                tool_calls=(list[LLMToolCall] | None, ...),
+            )
+        else:
+            decision_model = create_model(
+                "LLMDecision",
+                final_answer=(output_type, ...),
+            )
 
-        result = {
-            "title": "LLMDecision",
-            "description": "The model for the LLM's decision on the next action.",
-            "type": "object",
-            "properties": properties,
-            "required": required,
-        }
-        if definitions:
-            result["$defs"] = definitions
+        result = self.model_inspector.get_schema_for_type(decision_model)
+        result["description"] = "The model for the LLM's decision on the next action."
         return result
 
     async def decide_next_step(

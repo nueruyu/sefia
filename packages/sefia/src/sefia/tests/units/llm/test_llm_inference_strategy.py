@@ -117,12 +117,12 @@ class TestLLMInferenceStrategy:
         )
 
         assert "MyIssue" in schema["$defs"]
-        final_answer_schema = schema["properties"]["final_answer"]["oneOf"][0]
+        final_answer_schema = schema["properties"]["final_answer"]["anyOf"][0]
         assert "$defs" not in final_answer_schema
         assert final_answer_schema["items"]["$ref"] == "#/$defs/MyIssue"
-        tool_call_schema = schema["properties"]["tool_calls"]["oneOf"][0]["items"]
+        tool_call_schema = schema["properties"]["tool_calls"]["anyOf"][0]["items"]
         assert "$defs" not in tool_call_schema
-        assert tool_call_schema["type"] == "object"
+        assert tool_call_schema["$ref"] == "#/$defs/LLMToolCall"
 
     def test_build_decision_schema_requires_non_null_answer_without_tools(self):
         strategy = self._strategy(AsyncMock())
@@ -143,8 +143,8 @@ class TestLLMInferenceStrategy:
         )
 
         assert schema["required"] == ["final_answer", "tool_calls"]
-        assert {"type": "null"} in schema["properties"]["final_answer"]["oneOf"]
-        assert {"type": "null"} in schema["properties"]["tool_calls"]["oneOf"]
+        assert {"type": "null"} in schema["properties"]["final_answer"]["anyOf"]
+        assert {"type": "null"} in schema["properties"]["tool_calls"]["anyOf"]
 
     def test_build_messages_tells_no_tool_agent_to_return_empty_collection(self):
         strategy = self._strategy(AsyncMock())
