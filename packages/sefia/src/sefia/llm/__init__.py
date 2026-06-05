@@ -1,3 +1,4 @@
+from .exceptions import RecoverableInferenceError
 from .messages import LLMResponse, Message, ToolCall
 
-__all__ = ["Message", "ToolCall", "LLMResponse"]
+__all__ = ["Message", "ToolCall", "LLMResponse", "RecoverableInferenceError"]

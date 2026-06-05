@@ -1,12 +1,15 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from glyff.exceptions import YieldException
 from pytest_mock import MockerFixture
 
+from sefia import events
 from sefia.event_publisher import EventPublisher
 from sefia.executor import InferenceExecutor
 from sefia.handlers.retry import RequestInferenceRetry
 from sefia.interfaces import InferenceStrategy, ToolCollector
+from sefia.llm.exceptions import RecoverableInferenceError
 from sefia.models import (
     FinalAnswerDecision,
     ToolCallDecision,
@@ -151,6 +154,39 @@ class TestInferenceExecutor:
         # Act & Assert
         with pytest.raises(RuntimeError, match="Inference did not complete"):
             await executor.run()
+
+    async def test_recoverable_inference_error_becomes_yield_exception(
+        self, executor_dependencies
+    ):
+        # A transient inference failure must surface as a YieldException so the
+        # engraved step is left resumable rather than engraved as FAILED. It must
+        # not be reported as InferenceFailed (which would trigger an in-process
+        # retry that persists the failure first).
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = RecoverableInferenceError(
+            "rate limited"
+        )
+
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        with pytest.raises(YieldException):
+            await executor.run()
+
+        published = [call.args[0] for call in mock_publisher.publish.call_args_list]
+        assert not any(isinstance(event, events.InferenceFailed) for event in published)
 
     async def test_handles_request_inference_retry(self, executor_dependencies):
         # Arrange

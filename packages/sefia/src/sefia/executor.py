@@ -1,4 +1,5 @@
 import inspect
+import logging
 from typing import Any, Callable, ParamSpec, TypeVar
 
 from glyff.exceptions import YieldException
@@ -7,6 +8,7 @@ from . import events
 from .event_publisher import EventPublisher
 from .handlers.retry import RequestInferenceRetry
 from .interfaces import InferenceStrategy, ToolCollector
+from .llm.exceptions import RecoverableInferenceError
 from .models import (
     FinalAnswerDecision,
     HistoryItem,
@@ -16,6 +18,8 @@ from .models import (
     ToolCallResult,
     ToolRegistry,
 )
+
+logger = logging.getLogger(__name__)
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -68,14 +72,30 @@ class InferenceExecutor:
             events.BeforeInferenceStep(history=history, tools=tools)
         )
 
-        decision = await self.strategy.decide_next_step(
-            instructions=self.instructions,
-            arguments=self.arguments,
-            history=history,
-            tools=tools,
-            output_type=self.return_type,
-            publisher=self.publisher,
-        )
+        try:
+            decision = await self.strategy.decide_next_step(
+                instructions=self.instructions,
+                arguments=self.arguments,
+                history=history,
+                tools=tools,
+                output_type=self.return_type,
+                publisher=self.publisher,
+            )
+        except RecoverableInferenceError as e:
+            # This method is engraved, so any exception that escapes it is
+            # persisted by glyff as a permanent FAILED record, after which the
+            # execution can never be replayed. A RecoverableInferenceError is a
+            # transient failure (timeout, rate limit, 5xx), so we convert it to a
+            # YieldException: glyff treats that as a graceful interruption, leaves
+            # the step resumable, and engraves nothing. The step re-runs from
+            # scratch when the session is resumed.
+            logger.warning(
+                "Recoverable inference failure; interrupting for resume: %s", e
+            )
+            raise YieldException(
+                f"Inference step interrupted by a recoverable error: {e}"
+            ) from e
+
         await self.publisher.publish(events.AfterInferenceStep(decision=decision))
         return decision
 

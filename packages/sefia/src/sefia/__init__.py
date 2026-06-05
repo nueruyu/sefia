@@ -3,6 +3,7 @@ from .events import Event
 from .handlers.cost import CostCalculator
 from .interfaces import EventHandler, Policy, Resource, SessionStore
 from .llm.client import LLMClient
+from .llm.exceptions import RecoverableInferenceError
 from .llm.messages import LLMResponse, Message, ToolCall
 from .policies import MaxRetries
 from .pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
@@ -18,6 +19,7 @@ __all__ = [
     "Message",
     "ToolCall",
     "LLMResponse",
+    "RecoverableInferenceError",
     "Event",
     "EventHandler",
     "Policy",

@@ -10,10 +10,32 @@ from litellm import (
     cost_per_token,
     stream_chunk_builder,
 )
+from litellm.exceptions import (
+    APIConnectionError,
+    InternalServerError,
+    RateLimitError,
+    ServiceUnavailableError,
+    Timeout,
+)
 from sefia.llm.client import LLMClient
+from sefia.llm.exceptions import RecoverableInferenceError
 from sefia.llm.messages import LLMResponse, Message, ToolCall
 
 logger = logging.getLogger(__name__)
+
+# Provider errors that are transient and safe to retry. They are mapped to
+# RecoverableInferenceError so the executor interrupts for resume instead of
+# engraving a permanent failure. Note that Timeout subclasses APIConnectionError;
+# both are listed for clarity. Errors left out (AuthenticationError,
+# BadRequestError, ContextWindowExceededError, ContentPolicyViolationError, ...)
+# are deterministic and must surface as genuine failures.
+_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    Timeout,
+    APIConnectionError,
+    RateLimitError,
+    InternalServerError,
+    ServiceUnavailableError,
+)
 
 
 class LiteLLMClient(LLMClient):
@@ -52,15 +74,22 @@ class LiteLLMClient(LLMClient):
         if stream_callback:
             kwargs["stream"] = True
 
-        response = await acompletion(
-            model=self.model,
-            messages=raw_messages,
-            **kwargs,
-        )
+        try:
+            response = await acompletion(
+                model=self.model,
+                messages=raw_messages,
+                **kwargs,
+            )
 
-        if hasattr(response, "__aiter__") and not isinstance(response, ModelResponse):
-            stream = cast(AsyncIterator[Any], response)
-            return await self._handle_stream(stream, stream_callback, raw_messages)
+            if hasattr(response, "__aiter__") and not isinstance(
+                response, ModelResponse
+            ):
+                stream = cast(AsyncIterator[Any], response)
+                return await self._handle_stream(stream, stream_callback, raw_messages)
+        except _RECOVERABLE_EXCEPTIONS as e:
+            raise RecoverableInferenceError(
+                f"Recoverable provider error ({type(e).__name__}): {e}"
+            ) from e
 
         if not isinstance(response, ModelResponse):
             raise RuntimeError("Invalid model response")
