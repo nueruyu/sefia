@@ -236,8 +236,9 @@ class MyAgent:
         ...
 ```
 
-Built-in policies include `MaxRetries`. Custom policies can be added by
-implementing the `Policy` ABC.
+Built-in policies include `MaxRetries` and `MaxTurns(count=...)`, which caps
+the number of turns in a single inference loop (default 25). Custom policies
+can be added by implementing the `Policy` ABC.
 
 ### Resumption and interruption
 

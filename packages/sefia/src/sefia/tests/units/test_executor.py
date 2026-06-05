@@ -128,8 +128,11 @@ class TestInferenceExecutor:
         assert isinstance(history[1], ToolCallResult)
         assert "Error: Tool 'nonexistent_tool' not found" in history[1].result
 
-    async def test_raises_error_if_max_turns_exceeded(self, executor_dependencies):
-        # Arrange
+    async def test_loop_runs_until_handler_stops_it(self, executor_dependencies):
+        # The executor no longer enforces a turn limit itself; a handler does
+        # (via the MaxTurnsHandler / MaxTurns policy). Here we verify the loop
+        # keeps going as long as decisions are produced and stops once a handler
+        # raises while publishing BeforeInferenceStep.
         (
             mock_strategy,
             mock_collector,
@@ -137,6 +140,19 @@ class TestInferenceExecutor:
             non_engrave,
         ) = executor_dependencies
         mock_strategy.decide_next_step.return_value = ToolCallDecision(calls=[])
+
+        call_count = 0
+
+        async def publish_side_effect(event):
+            nonlocal call_count
+            from sefia.events import BeforeInferenceStep
+
+            if isinstance(event, BeforeInferenceStep):
+                call_count += 1
+                if call_count > 3:
+                    raise RuntimeError("handler stop")
+
+        mock_publisher.publish.side_effect = publish_side_effect
 
         executor = InferenceExecutor(
             sample_func,
@@ -149,7 +165,7 @@ class TestInferenceExecutor:
         )
 
         # Act & Assert
-        with pytest.raises(RuntimeError, match="Inference did not complete"):
+        with pytest.raises(RuntimeError, match="handler stop"):
             await executor.run()
 
     async def test_handles_request_inference_retry(self, executor_dependencies):

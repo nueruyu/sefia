@@ -10,7 +10,7 @@ from .interfaces import (
 from .interfaces.session_store import SessionStore
 from .llm.client import LLMClient
 from .llm.strategy import LLMInferenceStrategy
-from .policies import StagnationPolicy
+from .policies import MaxTurns, StagnationPolicy
 from .pydantic.json_utils import pydantic_json_default
 from .pydantic.model_inspector import PydanticModelInspector
 from .state_store import StateStore
@@ -39,7 +39,11 @@ class Session:
         self.session_store = session_store
         self._context_token = None
         extra_policies = list(policies) if policies is not None else []
-        self.policies: list[Policy] = [StagnationPolicy(), *extra_policies]
+        self.policies: list[Policy] = [
+            StagnationPolicy(),
+            MaxTurns(),
+            *extra_policies,
+        ]
 
         model_inspector = PydanticModelInspector()
 
