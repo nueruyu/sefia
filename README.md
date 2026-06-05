@@ -236,9 +236,36 @@ class MyAgent:
         ...
 ```
 
-Built-in policies include `MaxRetries` and `MaxTurns(count=...)`, which caps
-the number of turns in a single inference loop (default 25). Custom policies
-can be added by implementing the `Policy` ABC.
+Built-in policies include `MaxRetries`. Custom policies can be added by
+implementing the `Policy` ABC.
+
+### Turns and the inference loop
+
+The inference loop does not iterate on its own. After a step that is not a
+final answer, the executor fires `NextTurnRequested`; a handler grants the next
+turn by raising `RequestNextTurn`, and if none does the loop stops with
+`MaxTurnsExceededError`. With no handler registered this means a single step,
+no looping.
+
+`MaxTurnsHandler` implements exactly this: it permits turns up to a limit. Pass
+handlers to the `Session` (there is no default handler):
+
+```python
+from sefia import MaxTurnsHandler, Session
+
+async with Session(
+    llm_client=llm,
+    glyff_session=gs,
+    session_store=sefia_store,
+    handlers=[MaxTurnsHandler(max_turns=25)],
+):
+    result = await agent.run(task)
+```
+
+`MaxTurnsHandler(max_turns=1)` (the default) allows a single step; pass `None`
+for no limit. Any custom `EventHandler` for `NextTurnRequested` can decide
+whether to continue — for example by inspecting progress before raising
+`RequestNextTurn`.
 
 ### Resumption and interruption
 

@@ -7,6 +7,7 @@ import glyff_file_store
 import sefia
 import sefia.stores
 import sefia_litellm
+from sefia import MaxTurnsHandler
 from sefia.interfaces import Policy
 from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 
@@ -53,6 +54,7 @@ async def setup_session(
             glyff_session=gs,
             session_store=sefia_store,
             policies=policies,
+            handlers=[MaxTurnsHandler(max_turns=25)],
             stream=stream,
         ) as session:
             yield session

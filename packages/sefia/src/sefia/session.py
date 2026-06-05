@@ -4,13 +4,14 @@ import glyff
 
 from .context import InferenceContext, context_var
 from .interfaces import (
+    EventHandler,
     Policy,
     ToolCollector,
 )
 from .interfaces.session_store import SessionStore
 from .llm.client import LLMClient
 from .llm.strategy import LLMInferenceStrategy
-from .policies import MaxTurns, StagnationPolicy
+from .policies import StagnationPolicy
 from .pydantic.json_utils import pydantic_json_default
 from .pydantic.model_inspector import PydanticModelInspector
 from .state_store import StateStore
@@ -31,6 +32,7 @@ class Session:
         glyff_session: glyff.Session,
         session_store: SessionStore,
         policies: list[Policy] | None = None,
+        handlers: list[EventHandler] | None = None,
         tool_collector: ToolCollector | None = None,
         stream: bool = False,
     ):
@@ -41,9 +43,9 @@ class Session:
         extra_policies = list(policies) if policies is not None else []
         self.policies: list[Policy] = [
             StagnationPolicy(),
-            MaxTurns(),
             *extra_policies,
         ]
+        self.handlers: list[EventHandler] = list(handlers) if handlers else []
 
         model_inspector = PydanticModelInspector()
 
@@ -76,6 +78,7 @@ class Session:
             llm_client=self.llm_client,
             inference_strategy=self._inference_strategy,
             policies=self.policies,
+            handlers=self.handlers,
             tool_collector=self._tool_collector,
         )
         self._context_token = context_var.set(self._context)

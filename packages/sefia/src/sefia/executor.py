@@ -5,6 +5,7 @@ from glyff.exceptions import YieldException
 
 from . import events
 from .event_publisher import EventPublisher
+from .handlers.max_turns import MaxTurnsExceededError, RequestNextTurn
 from .handlers.retry import RequestInferenceRetry
 from .interfaces import InferenceStrategy, ToolCollector
 from .models import (
@@ -112,6 +113,29 @@ class InferenceExecutor:
             tool_results.append(ToolCallResult(tool_call_id=call.id, result=output))
         return tool_results
 
+    async def _guard_next_turn(
+        self, completed_turns: int, history: list[HistoryItem]
+    ) -> None:
+        """
+        Asks handlers whether the loop may take another turn.
+
+        The executor never loops on its own. A handler permits the next turn by
+        raising RequestNextTurn while handling NextTurnRequested; if none does,
+        the loop ends here with MaxTurnsExceededError.
+        """
+        try:
+            await self.publisher.publish(
+                events.NextTurnRequested(
+                    completed_turns=completed_turns, history=history
+                )
+            )
+        except RequestNextTurn:
+            return
+        raise MaxTurnsExceededError(
+            f"Inference did not produce a final answer within {completed_turns} "
+            "turn(s), and no handler requested another turn."
+        )
+
     async def run(self) -> Any:
         """
         Runs the inference process, handling retries as requested by handlers.
@@ -153,9 +177,14 @@ class InferenceExecutor:
         )
 
         history: list[HistoryItem] = []
+        completed_turns = 0
 
         while True:
+            if completed_turns > 0:
+                await self._guard_next_turn(completed_turns, history)
+
             decision = await self._next_step_engraved(history, tool_schemas)
+            completed_turns += 1
 
             if isinstance(decision, FinalAnswerDecision):
                 return decision.answer

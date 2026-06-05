@@ -1,40 +1,41 @@
-from typing import Type, Union
+from typing import Type
 
-from sefia.events import AttemptStart, BeforeInferenceStep, Event
+from sefia.events import Event, NextTurnRequested
 from sefia.interfaces import EventHandler
 
 
-class MaxTurnsExceededError(Exception):
-    """Raised when the inference loop exceeds the maximum number of turns."""
+class RequestNextTurn(Exception):
+    """Signal raised by a handler to permit the inference loop to take another turn."""
 
     pass
 
 
-class MaxTurnsHandler(EventHandler[Union[AttemptStart, BeforeInferenceStep]]):
-    """
-    Enforces a limit on the number of turns within a single inference attempt.
+class MaxTurnsExceededError(Exception):
+    """Raised when another inference turn is needed but no handler permits one."""
 
-    Counts BeforeInferenceStep events to track how many turns have elapsed and
-    resets the counter on AttemptStart so each retry attempt starts fresh.
-    Raises MaxTurnsExceededError when the limit is exceeded.
+    pass
+
+
+class MaxTurnsHandler(EventHandler[NextTurnRequested]):
+    """
+    Permits the inference loop to continue up to a maximum number of turns.
+
+    The executor owns the turn counter and does not loop on its own; it fires
+    ``NextTurnRequested`` before each turn beyond the first. This handler grants
+    the next turn by raising ``RequestNextTurn`` while the limit has not been
+    reached, and otherwise stays silent so the executor stops the loop.
+
+    ``max_turns`` is the number of turns allowed within a single attempt
+    (default ``1``: a single step, no looping). Pass ``None`` for no limit.
     """
 
-    def __init__(self, max_turns: int = 25):
+    def __init__(self, max_turns: int | None = 1):
         self.max_turns = max_turns
-        self._turns_used = 0
 
     @property
     def event_types(self) -> tuple[Type[Event], ...]:
-        return (AttemptStart, BeforeInferenceStep)
+        return (NextTurnRequested,)
 
-    async def handle(
-        self, event: Union[AttemptStart, BeforeInferenceStep]
-    ) -> None:
-        if isinstance(event, AttemptStart):
-            self._turns_used = 0
-        elif isinstance(event, BeforeInferenceStep):
-            self._turns_used += 1
-            if self._turns_used > self.max_turns:
-                raise MaxTurnsExceededError(
-                    f"Inference did not complete within {self.max_turns} turns."
-                )
+    async def handle(self, event: NextTurnRequested) -> None:
+        if self.max_turns is None or event.completed_turns < self.max_turns:
+            raise RequestNextTurn()

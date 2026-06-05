@@ -8,7 +8,7 @@ from glyff import ExecutionId
 from glyff import Session as GlyffSession
 from glyff.context import get_context as get_glyff_context
 
-from .interfaces import InferenceStrategy, Policy, ToolCollector
+from .interfaces import EventHandler, InferenceStrategy, Policy, ToolCollector
 from .interfaces.session_store import SessionStore
 from .llm.client import LLMClient
 from .state_store import StateStore
@@ -44,6 +44,7 @@ class InferenceContext:
     inference_strategy: InferenceStrategy
     policies: list[Policy]
     tool_collector: ToolCollector
+    handlers: list[EventHandler] = field(default_factory=list)
     _state_stores: dict[str, StateStore] = field(default_factory=dict)
 
     def get_call_state_store(

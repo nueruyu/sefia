@@ -1,44 +1,39 @@
 import pytest
 
-from sefia.events import AttemptStart, BeforeInferenceStep
-from sefia.handlers.max_turns import MaxTurnsExceededError, MaxTurnsHandler
+from sefia.events import NextTurnRequested
+from sefia.handlers.max_turns import MaxTurnsHandler, RequestNextTurn
 
 
 class TestMaxTurnsHandler:
-    def _step(self) -> BeforeInferenceStep:
-        return BeforeInferenceStep(history=[], tools=[])
+    def _request(self, completed_turns: int) -> NextTurnRequested:
+        return NextTurnRequested(completed_turns=completed_turns, history=[])
 
-    async def test_does_not_raise_within_limit(self):
+    async def test_permits_next_turn_below_limit(self):
         handler = MaxTurnsHandler(max_turns=3)
 
-        for _ in range(3):
-            await handler.handle(self._step())  # Should not raise
+        # Turns 1 and 2 are already done; another turn is still within the limit.
+        for completed in (1, 2):
+            with pytest.raises(RequestNextTurn):
+                await handler.handle(self._request(completed))
 
-    async def test_raises_when_limit_exceeded(self):
+    async def test_stays_silent_at_limit(self):
         handler = MaxTurnsHandler(max_turns=3)
 
-        for _ in range(3):
-            await handler.handle(self._step())
+        # Three turns done: the handler must not permit a fourth.
+        await handler.handle(self._request(completed_turns=3))  # Should not raise
 
-        with pytest.raises(MaxTurnsExceededError):
-            await handler.handle(self._step())
+    async def test_default_limit_is_single_turn(self):
+        handler = MaxTurnsHandler()
 
-    async def test_attempt_start_resets_counter(self):
-        handler = MaxTurnsHandler(max_turns=2)
+        # One turn done and the default limit is 1, so no further turn is granted.
+        await handler.handle(self._request(completed_turns=1))  # Should not raise
 
-        await handler.handle(self._step())
-        await handler.handle(self._step())
+    async def test_none_means_unlimited(self):
+        handler = MaxTurnsHandler(max_turns=None)
 
-        # A new attempt resets the counter, so the limit applies again afresh.
-        await handler.handle(AttemptStart())
-
-        await handler.handle(self._step())
-        await handler.handle(self._step())  # Should not raise
-
-        with pytest.raises(MaxTurnsExceededError):
-            await handler.handle(self._step())
+        with pytest.raises(RequestNextTurn):
+            await handler.handle(self._request(completed_turns=1000))
 
     def test_event_types(self):
         handler = MaxTurnsHandler()
-        assert AttemptStart in handler.event_types
-        assert BeforeInferenceStep in handler.event_types
+        assert handler.event_types == (NextTurnRequested,)
