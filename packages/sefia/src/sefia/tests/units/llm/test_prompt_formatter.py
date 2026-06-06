@@ -1,4 +1,3 @@
-import json
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
@@ -63,10 +62,3 @@ def test_format_arguments_handles_cdata_delimiters_in_selected_text():
     string_element = ET.fromstring(prompt).find("./argument[@name='source']/string")
     assert string_element is not None
     assert string_element.text == source
-
-
-def test_format_json_preserves_unicode():
-    payload = _formatter().format_json({"q": "日本語"})
-
-    assert "\\u65e5" not in payload
-    assert json.loads(payload) == {"q": "日本語"}

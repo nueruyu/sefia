@@ -1,4 +1,3 @@
-import json
 import xml.dom.minidom as minidom
 from typing import Any, Callable
 
@@ -107,10 +106,3 @@ class PromptFormatter:
         element = document.createElement("string")
         element.appendChild(document.createTextNode(str(value)))
         parent.appendChild(element)
-
-    def format_json(self, value: Any) -> str:
-        return json.dumps(
-            value,
-            default=self._json_default,
-            ensure_ascii=False,
-        )
