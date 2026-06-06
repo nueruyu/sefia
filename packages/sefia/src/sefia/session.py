@@ -4,7 +4,6 @@ import glyff
 
 from .context import InferenceContext, context_var
 from .interfaces import (
-    EventHandler,
     Policy,
     ToolCollector,
 )
@@ -32,7 +31,6 @@ class Session:
         glyff_session: glyff.Session,
         session_store: SessionStore,
         policies: list[Policy] | None = None,
-        handlers: list[EventHandler] | None = None,
         tool_collector: ToolCollector | None = None,
         stream: bool = False,
     ):
@@ -45,7 +43,6 @@ class Session:
             StagnationPolicy(),
             *extra_policies,
         ]
-        self.handlers = handlers or []
 
         model_inspector = PydanticModelInspector()
 
@@ -78,7 +75,6 @@ class Session:
             llm_client=self.llm_client,
             inference_strategy=self._inference_strategy,
             policies=self.policies,
-            handlers=self.handlers,
             tool_collector=self._tool_collector,
         )
         self._context_token = context_var.set(self._context)

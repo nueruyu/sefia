@@ -7,7 +7,7 @@ import glyff_file_store
 import sefia
 import sefia.stores
 import sefia_litellm
-from sefia import MaxStepsHandler
+from sefia import MaxSteps
 from sefia.interfaces import Policy
 from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 
@@ -42,7 +42,7 @@ async def setup_session(
         client=file_client, serializer=serializer
     )
 
-    policies: list[Policy] = []
+    policies: list[Policy] = [MaxSteps(count=25)]
     if stream:
         policies.append(StreamingPolicy())
     if verbose:
@@ -54,7 +54,6 @@ async def setup_session(
             glyff_session=gs,
             session_store=sefia_store,
             policies=policies,
-            handlers=[MaxStepsHandler(max_steps=25)],
             stream=stream,
         ) as session:
             yield session

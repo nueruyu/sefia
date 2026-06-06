@@ -156,10 +156,10 @@ class InferenceExecutor:
         step = 0
 
         while True:
-            step += 1
             await self.publisher.publish(events.StepStarted(step=step, history=history))
 
             decision = await self._next_step_engraved(history, tool_schemas)
+            step += 1
 
             if isinstance(decision, FinalAnswerDecision):
                 return decision.answer

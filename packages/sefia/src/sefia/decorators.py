@@ -43,7 +43,6 @@ def infer(policies: list[Policy] | None = None) -> Callable:
                 for policy in all_policies
                 for handler in policy.create_handlers()
             ]
-            all_handlers += list(context.handlers)
             publisher = EventPublisher(all_handlers)
 
             executor = InferenceExecutor(

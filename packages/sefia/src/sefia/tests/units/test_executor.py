@@ -161,11 +161,11 @@ class TestInferenceExecutor:
             for call in mock_publisher.publish.call_args_list
             if isinstance(call.args[0], StepStarted)
         ]
-        assert [event.step for event in step_events] == [1, 2]
+        assert [event.step for event in step_events] == [0, 1]
 
     async def test_handler_can_stop_the_loop(self, executor_dependencies):
         # A handler that raises while handling StepStarted stops the loop. Here
-        # it refuses to go past the third step.
+        # it refuses to start a fourth step (0-based index 3).
         (
             mock_strategy,
             mock_collector,
@@ -175,7 +175,7 @@ class TestInferenceExecutor:
         mock_strategy.decide_next_step.return_value = ToolCallDecision(calls=[])
 
         async def stop_after_three(event):
-            if isinstance(event, StepStarted) and event.step > 3:
+            if isinstance(event, StepStarted) and event.step >= 3:
                 raise MaxStepsExceededError("stop")
 
         mock_publisher.publish.side_effect = stop_after_three

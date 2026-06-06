@@ -236,34 +236,33 @@ class MyAgent:
         ...
 ```
 
-Built-in policies include `MaxRetries`. Custom policies can be added by
-implementing the `Policy` ABC.
+Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
+added by implementing the `Policy` ABC.
 
 ### Steps and the inference loop
 
-The executor fires a `StepStarted` event at the start of every step (1-based),
+The executor fires a `StepStarted` event at the start of every step (0-based),
 and otherwise loops until the model produces a final answer. It does not cap
-the loop itself: to bound it, register a handler that raises while handling
-`StepStarted`. There is no default handler.
+the loop itself: to bound it, attach a policy whose handler raises while
+handling `StepStarted`. There is no default cap.
 
-`MaxStepsHandler` does exactly this — it raises `MaxStepsExceededError` once the
-step count goes past its limit. Pass handlers to the `Session`:
+`MaxSteps` does exactly this — its handler raises `MaxStepsExceededError` once
+the loop reaches the step limit:
 
 ```python
-from sefia import MaxStepsHandler, Session
+from sefia import MaxSteps, infer
 
-async with Session(
-    llm_client=llm,
-    glyff_session=gs,
-    session_store=sefia_store,
-    handlers=[MaxStepsHandler(max_steps=25)],
-):
-    result = await agent.run(task)
+
+class MyAgent:
+    @infer(policies=[MaxSteps(count=25)])
+    async def run(self, task: Task) -> Result:
+        """Work the task, capped at 25 steps."""
+        ...
 ```
 
-Pass `max_steps=None` for no limit. Any custom `EventHandler` for `StepStarted`
-can stop the loop on its own terms — for example by inspecting progress before
-raising.
+`MaxSteps` can also be passed to `Session(policies=[...])` to apply across an
+entire session. Any custom `EventHandler` for `StepStarted` can stop the loop
+on its own terms — for example by inspecting progress before raising.
 
 ### Resumption and interruption
 
