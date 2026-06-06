@@ -97,12 +97,12 @@ class PromptFormatter:
 
         try:
             normalized = self._json_default(value)
-            if normalized is not value:
-                self._append_value(document, parent, normalized)
-                return
         except TypeError:
-            pass
+            normalized = value
 
-        element = document.createElement("string")
-        element.appendChild(document.createTextNode(str(value)))
-        parent.appendChild(element)
+        if value is normalized:
+            element = document.createElement("string")
+            element.appendChild(document.createTextNode(str(value)))
+            parent.appendChild(element)
+        else:
+            self._append_value(document, parent, normalized)
