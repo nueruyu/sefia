@@ -45,13 +45,15 @@ class FileTool:
         Read multiple UTF-8 text files and return a mapping from each path to its
         content. Store an error message for files that cannot be read.
         """
-        contents: dict[str, str] = {}
-        for path_str in full_paths:
+        async def _read_single(path_str: str) -> tuple[str, str]:
             try:
-                contents[path_str] = await asyncio.to_thread(
+                content = await asyncio.to_thread(
                     Path(path_str).read_text,
                     encoding="utf-8",
                 )
+                return path_str, content
             except (OSError, UnicodeError) as exc:
-                contents[path_str] = f"Error reading file: {exc}"
-        return contents
+                return path_str, f"Error reading file: {exc}"
+
+        results = await asyncio.gather(*(_read_single(path) for path in full_paths))
+        return dict(results)

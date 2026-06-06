@@ -36,6 +36,7 @@ class PromptFormatter:
         text: str,
     ) -> None:
         if "]]>" in text:
+            # This escapes XML characters, but keeps prompt formatting simple for LLM input.
             parent.appendChild(document.createTextNode(text))
             return
         parent.appendChild(document.createCDATASection(text))

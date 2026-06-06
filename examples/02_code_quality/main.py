@@ -114,8 +114,14 @@ async def _run_reviews(
     project_path: str,
 ) -> list[CodeIssue]:
     console.print("\n[bold]> Stage 4: Running reviews...[/bold]")
-    full_paths = [str(Path(project_path) / path) for path in review_files]
-    contents = _as_text_blocks(await file_tool.read_files(full_paths))
+    full_to_relative = {str(Path(project_path) / path): path for path in review_files}
+    raw_contents = await file_tool.read_files(list(full_to_relative))
+    contents = _as_text_blocks(
+        {
+            full_to_relative[full_path]: content
+            for full_path, content in raw_contents.items()
+        }
+    )
     all_issues: list[CodeIssue] = []
 
     for perspective, agent in review_agents.items():
