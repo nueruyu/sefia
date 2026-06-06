@@ -18,24 +18,38 @@ from litellm.exceptions import (
     Timeout,
 )
 from sefia.llm.client import LLMClient
-from sefia.llm.exceptions import RecoverableInferenceError
+from sefia.llm.exceptions import (
+    ConnectionException,
+    InferenceException,
+    RateLimitException,
+    TemporarilyUnavailableException,
+    TimeoutException,
+)
 from sefia.llm.messages import LLMResponse, Message, ToolCall
 
 logger = logging.getLogger(__name__)
 
-# Provider errors that are transient and safe to retry. They are mapped to
-# RecoverableInferenceError so the executor interrupts for resume instead of
-# engraving a permanent failure. Note that Timeout subclasses APIConnectionError;
-# both are listed for clarity. Errors left out (AuthenticationError,
-# BadRequestError, ContextWindowExceededError, ContentPolicyViolationError, ...)
-# are deterministic and must surface as genuine failures.
-_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
-    Timeout,
-    APIConnectionError,
-    RateLimitError,
-    InternalServerError,
-    ServiceUnavailableError,
+# Translates provider-specific exceptions into sefia's abstract inference
+# exceptions, so callers never have to know about LiteLLM's types. Order
+# matters: Timeout subclasses APIConnectionError, so it must be checked first.
+# Errors not listed here (AuthenticationError, BadRequestError,
+# ContextWindowExceededError, ContentPolicyViolationError, ...) are deterministic
+# and propagate unchanged as genuine failures.
+_EXCEPTION_MAPPING: tuple[tuple[type[Exception], type[InferenceException]], ...] = (
+    (Timeout, TimeoutException),
+    (APIConnectionError, ConnectionException),
+    (RateLimitError, RateLimitException),
+    (InternalServerError, TemporarilyUnavailableException),
+    (ServiceUnavailableError, TemporarilyUnavailableException),
 )
+
+
+def _to_inference_exception(error: Exception) -> InferenceException | None:
+    """Maps a LiteLLM exception to a sefia InferenceException, if recognized."""
+    for provider_exc, inference_exc in _EXCEPTION_MAPPING:
+        if isinstance(error, provider_exc):
+            return inference_exc(str(error))
+    return None
 
 
 class LiteLLMClient(LLMClient):
@@ -86,10 +100,11 @@ class LiteLLMClient(LLMClient):
             ):
                 stream = cast(AsyncIterator[Any], response)
                 return await self._handle_stream(stream, stream_callback, raw_messages)
-        except _RECOVERABLE_EXCEPTIONS as e:
-            raise RecoverableInferenceError(
-                f"Recoverable provider error ({type(e).__name__}): {e}"
-            ) from e
+        except Exception as e:
+            inference_error = _to_inference_exception(e)
+            if inference_error is not None:
+                raise inference_error from e
+            raise
 
         if not isinstance(response, ModelResponse):
             raise RuntimeError("Invalid model response")

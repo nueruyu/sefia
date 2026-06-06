@@ -1,14 +1,28 @@
-class RecoverableInferenceError(Exception):
+class InferenceException(Exception):
     """
-    Signals a transient, retryable failure during an inference step.
+    Base class for errors raised by an LLM client while performing an inference
+    step.
 
-    LLM client adapters should raise this (mapping provider-specific transient
-    errors such as timeouts, rate limits, and 5xx responses) instead of letting
-    the raw provider exception propagate. The inference executor converts it into
-    a ``glyff.exceptions.YieldException`` so the engraved step is interrupted
-    gracefully and left resumable, rather than being engraved as a permanent
-    ``FAILED`` record. This prevents a momentary outage from being persisted as
-    an unrecoverable failure.
+    Client adapters translate provider-specific failures into these abstract
+    exceptions so the rest of sefia (and consumer-supplied event handlers) never
+    has to know about a particular provider's exception types. sefia itself does
+    not decide whether any of these are recoverable; an ``InferenceStepFailed``
+    event carries the exception, and a handler may choose to interrupt the
+    session (by raising ``glyff.exceptions.YieldException``) or let it propagate.
     """
 
-    pass
+
+class TimeoutException(InferenceException):
+    """The inference request did not complete within the allotted time."""
+
+
+class ConnectionException(InferenceException):
+    """The inference request could not reach the provider."""
+
+
+class RateLimitException(InferenceException):
+    """The request was rejected because a rate limit was exceeded."""
+
+
+class TemporarilyUnavailableException(InferenceException):
+    """The provider was temporarily unable to serve the request."""

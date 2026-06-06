@@ -8,8 +8,7 @@ from sefia import events
 from sefia.event_publisher import EventPublisher
 from sefia.executor import InferenceExecutor
 from sefia.handlers.retry import RequestInferenceRetry
-from sefia.interfaces import InferenceStrategy, ToolCollector
-from sefia.llm.exceptions import RecoverableInferenceError
+from sefia.interfaces import EventHandler, InferenceStrategy, ToolCollector
 from sefia.models import (
     FinalAnswerDecision,
     ToolCallDecision,
@@ -155,22 +154,20 @@ class TestInferenceExecutor:
         with pytest.raises(RuntimeError, match="Inference did not complete"):
             await executor.run()
 
-    async def test_recoverable_inference_error_becomes_yield_exception(
+    async def test_failed_step_publishes_event_and_reraises_by_default(
         self, executor_dependencies
     ):
-        # A transient inference failure must surface as a YieldException so the
-        # engraved step is left resumable rather than engraved as FAILED. It must
-        # not be reported as InferenceFailed (which would trigger an in-process
-        # retry that persists the failure first).
+        # When a step fails and no handler interrupts, the original exception
+        # must propagate (so glyff engraves the genuine failure), but only after
+        # an InferenceStepFailed event carrying the error has been published.
         (
             mock_strategy,
             mock_collector,
             mock_publisher,
             non_engrave,
         ) = executor_dependencies
-        mock_strategy.decide_next_step.side_effect = RecoverableInferenceError(
-            "rate limited"
-        )
+        error = ValueError("boom")
+        mock_strategy.decide_next_step.side_effect = error
 
         executor = InferenceExecutor(
             sample_func,
@@ -182,11 +179,46 @@ class TestInferenceExecutor:
             mock_publisher,
         )
 
-        with pytest.raises(YieldException):
+        with pytest.raises(ValueError, match="boom"):
             await executor.run()
 
         published = [call.args[0] for call in mock_publisher.publish.call_args_list]
-        assert not any(isinstance(event, events.InferenceFailed) for event in published)
+        step_failures = [
+            e for e in published if isinstance(e, events.InferenceStepFailed)
+        ]
+        assert len(step_failures) == 1
+        assert step_failures[0].error is error
+
+    async def test_handler_can_interrupt_failed_step_with_yield(
+        self, executor_dependencies
+    ):
+        # A handler may react to InferenceStepFailed by raising YieldException to
+        # interrupt gracefully (leaving the step resumable). That must propagate
+        # out of the executor instead of the original error.
+        mock_strategy, mock_collector, _, non_engrave = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = ValueError("transient")
+
+        class InterruptOnFailure(EventHandler):
+            @property
+            def event_types(self):
+                return (events.InferenceStepFailed,)
+
+            async def handle(self, event):
+                raise YieldException("interrupted for resume")
+
+        publisher = EventPublisher([InterruptOnFailure()])
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            publisher,
+        )
+
+        with pytest.raises(YieldException):
+            await executor.run()
 
     async def test_handles_request_inference_retry(self, executor_dependencies):
         # Arrange
