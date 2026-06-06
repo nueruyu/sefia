@@ -1,7 +1,7 @@
 from .decorators import infer, tool
 from .events import Event
 from .handlers.cost import CostCalculator
-from .handlers.max_turns import MaxTurnsHandler
+from .handlers.max_steps import MaxStepsHandler
 from .interfaces import EventHandler, Policy, Resource, SessionStore
 from .llm.client import LLMClient
 from .llm.messages import LLMResponse, Message, ToolCall
@@ -23,7 +23,7 @@ __all__ = [
     "EventHandler",
     "Policy",
     "MaxRetries",
-    "MaxTurnsHandler",
+    "MaxStepsHandler",
     "CostCalculator",
     "SefiaSerializer",
     "SefiaArgsHasher",

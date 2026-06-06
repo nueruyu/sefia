@@ -239,33 +239,31 @@ class MyAgent:
 Built-in policies include `MaxRetries`. Custom policies can be added by
 implementing the `Policy` ABC.
 
-### Turns and the inference loop
+### Steps and the inference loop
 
-The inference loop does not iterate on its own. After a step that is not a
-final answer, the executor fires `NextTurnRequested`; a handler grants the next
-turn by raising `RequestNextTurn`, and if none does the loop stops with
-`MaxTurnsExceededError`. With no handler registered this means a single step,
-no looping.
+The executor fires a `StepStarted` event at the start of every step (1-based),
+and otherwise loops until the model produces a final answer. It does not cap
+the loop itself: to bound it, register a handler that raises while handling
+`StepStarted`. There is no default handler.
 
-`MaxTurnsHandler` implements exactly this: it permits turns up to a limit. Pass
-handlers to the `Session` (there is no default handler):
+`MaxStepsHandler` does exactly this — it raises `MaxStepsExceededError` once the
+step count goes past its limit. Pass handlers to the `Session`:
 
 ```python
-from sefia import MaxTurnsHandler, Session
+from sefia import MaxStepsHandler, Session
 
 async with Session(
     llm_client=llm,
     glyff_session=gs,
     session_store=sefia_store,
-    handlers=[MaxTurnsHandler(max_turns=25)],
+    handlers=[MaxStepsHandler(max_steps=25)],
 ):
     result = await agent.run(task)
 ```
 
-`MaxTurnsHandler(max_turns=1)` (the default) allows a single step; pass `None`
-for no limit. Any custom `EventHandler` for `NextTurnRequested` can decide
-whether to continue — for example by inspecting progress before raising
-`RequestNextTurn`.
+Pass `max_steps=None` for no limit. Any custom `EventHandler` for `StepStarted`
+can stop the loop on its own terms — for example by inspecting progress before
+raising.
 
 ### Resumption and interruption
 

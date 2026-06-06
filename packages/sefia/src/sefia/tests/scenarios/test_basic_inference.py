@@ -7,7 +7,7 @@ from glyff.interfaces import ArgsHasher, Serializer
 from glyff.stores import MemoryClient
 from glyff.stores import MemorySessionStore as GlyffMemoryStore
 
-from sefia import LLMResponse, MaxTurnsHandler, Session, infer
+from sefia import LLMResponse, Session, infer
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
 from ..conftest import (
@@ -78,10 +78,7 @@ async def test_inference_with_tool_calls(
 
     async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
         async with Session(
-            llm_client=mock_llm,
-            glyff_session=gs,
-            session_store=sefia_store,
-            handlers=[MaxTurnsHandler(max_turns=None)],
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
             researcher = Researcher(web_toolkit)
             report = await researcher.generate_report(topic="sefia")
@@ -121,10 +118,7 @@ async def test_inference_without_tool_calls(serializer: Serializer, hasher: Args
 
     async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
         async with Session(
-            llm_client=mock_llm,
-            glyff_session=gs,
-            session_store=sefia_store,
-            handlers=[MaxTurnsHandler(max_turns=None)],
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
             agent = SimpleAgent()
             report = await agent.generate_report(topic="direct")
@@ -181,10 +175,7 @@ async def test_inference_with_tool_exception(
 
     async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
         async with Session(
-            llm_client=mock_llm,
-            glyff_session=gs,
-            session_store=sefia_store,
-            handlers=[MaxTurnsHandler(max_turns=None)],
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
             agent = AgentWithBrokenTool(broken_toolkit)
             report = await agent.run_and_report()
@@ -235,10 +226,7 @@ async def test_inference_with_nonexistent_tool_call(
 
     async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
         async with Session(
-            llm_client=mock_llm,
-            glyff_session=gs,
-            session_store=sefia_store,
-            handlers=[MaxTurnsHandler(max_turns=None)],
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
             researcher = Researcher(web_toolkit)
             await researcher.generate_report(topic="sefia")
@@ -307,10 +295,7 @@ async def test_stagnation_state_is_isolated_between_infer_calls(
 
     async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
         async with Session(
-            llm_client=mock_llm,
-            glyff_session=gs,
-            session_store=sefia_store,
-            handlers=[MaxTurnsHandler(max_turns=None)],
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
             toolkit = WebToolkit()
             researcher = Researcher(toolkit)
@@ -341,10 +326,7 @@ async def test_inference_with_invalid_output_schema(
 
     async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
         async with Session(
-            llm_client=mock_llm,
-            glyff_session=gs,
-            session_store=sefia_store,
-            handlers=[MaxTurnsHandler(max_turns=None)],
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
             agent = SimpleAgent()
             with pytest.raises(
@@ -372,10 +354,7 @@ async def test_inference_on_standalone_function(
 
     async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
         async with Session(
-            llm_client=mock_llm,
-            glyff_session=gs,
-            session_store=sefia_store,
-            handlers=[MaxTurnsHandler(max_turns=None)],
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
             summary = await summarize_text(text="This is a long text...", length=1)
 

@@ -4,9 +4,9 @@ import pytest
 from pytest_mock import MockerFixture
 
 from sefia.event_publisher import EventPublisher
-from sefia.events import NextTurnRequested
+from sefia.events import StepStarted
 from sefia.executor import InferenceExecutor
-from sefia.handlers.max_turns import MaxTurnsExceededError, RequestNextTurn
+from sefia.handlers.max_steps import MaxStepsExceededError
 from sefia.handlers.retry import RequestInferenceRetry
 from sefia.interfaces import InferenceStrategy, ToolCollector
 from sefia.models import (
@@ -26,18 +26,6 @@ def sample_func(arg1: str) -> str:
 def sample_func_with_self(self, arg1: str) -> str:
     """Sample docstring."""
     return "implemented"
-
-
-def _permit_turns_side_effect(max_turns: int | None):
-    """Mimics a MaxTurnsHandler: permits the next turn until the limit is hit."""
-
-    async def side_effect(event):
-        if isinstance(event, NextTurnRequested) and (
-            max_turns is None or event.completed_turns < max_turns
-        ):
-            raise RequestNextTurn()
-
-    return side_effect
 
 
 @pytest.fixture
@@ -88,9 +76,6 @@ class TestInferenceExecutor:
         tool_registry.add(mock_tool_func, tool_schema)
         mock_collector.collect.return_value = tool_registry
 
-        # The executor does not loop on its own; permit the follow-up turn.
-        mock_publisher.publish.side_effect = _permit_turns_side_effect(None)
-
         executor = InferenceExecutor(
             sample_func_with_self,
             (object(), "value"),
@@ -123,7 +108,6 @@ class TestInferenceExecutor:
             ),
             FinalAnswerDecision(answer="recovered"),
         ]
-        mock_publisher.publish.side_effect = _permit_turns_side_effect(None)
 
         executor = InferenceExecutor(
             sample_func_with_self,
@@ -146,20 +130,19 @@ class TestInferenceExecutor:
         assert isinstance(history[1], ToolCallResult)
         assert "Error: Tool 'nonexistent_tool' not found" in history[1].result
 
-    async def test_loop_stops_after_one_turn_without_permission(
-        self, executor_dependencies
-    ):
-        # The executor does not loop on its own. With no handler permitting a
-        # second turn, a non-final first step ends the loop with
-        # MaxTurnsExceededError.
+    async def test_fires_step_started_for_every_step(self, executor_dependencies):
+        # The executor fires StepStarted (1-based) at the start of each step,
+        # including the first, so a handler can observe the step count.
         (
             mock_strategy,
             mock_collector,
             mock_publisher,
             non_engrave,
         ) = executor_dependencies
-        mock_strategy.decide_next_step.return_value = ToolCallDecision(calls=[])
-        # Default AsyncMock publisher never raises RequestNextTurn.
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(calls=[]),
+            FinalAnswerDecision(answer="done"),
+        ]
 
         executor = InferenceExecutor(
             sample_func,
@@ -171,14 +154,18 @@ class TestInferenceExecutor:
             mock_publisher,
         )
 
-        with pytest.raises(MaxTurnsExceededError):
-            await executor.run()
+        await executor.run()
 
-        assert mock_strategy.decide_next_step.call_count == 1
+        step_events = [
+            call.args[0]
+            for call in mock_publisher.publish.call_args_list
+            if isinstance(call.args[0], StepStarted)
+        ]
+        assert [event.step for event in step_events] == [1, 2]
 
-    async def test_loop_continues_while_a_handler_permits(self, executor_dependencies):
-        # A handler permits turns until completed_turns reaches 3, after which
-        # the loop stops with MaxTurnsExceededError.
+    async def test_handler_can_stop_the_loop(self, executor_dependencies):
+        # A handler that raises while handling StepStarted stops the loop. Here
+        # it refuses to go past the third step.
         (
             mock_strategy,
             mock_collector,
@@ -186,7 +173,12 @@ class TestInferenceExecutor:
             non_engrave,
         ) = executor_dependencies
         mock_strategy.decide_next_step.return_value = ToolCallDecision(calls=[])
-        mock_publisher.publish.side_effect = _permit_turns_side_effect(3)
+
+        async def stop_after_three(event):
+            if isinstance(event, StepStarted) and event.step > 3:
+                raise MaxStepsExceededError("stop")
+
+        mock_publisher.publish.side_effect = stop_after_three
 
         executor = InferenceExecutor(
             sample_func,
@@ -198,7 +190,7 @@ class TestInferenceExecutor:
             mock_publisher,
         )
 
-        with pytest.raises(MaxTurnsExceededError):
+        with pytest.raises(MaxStepsExceededError):
             await executor.run()
 
         assert mock_strategy.decide_next_step.call_count == 3

@@ -13,7 +13,6 @@ from glyff.stores import MemorySessionStore as GlyffMemoryStore
 
 from sefia import (
     LLMResponse,
-    MaxTurnsHandler,
     Session,
     infer,
     tool,
@@ -136,10 +135,7 @@ class TestStatefulTool:
                 id=session_id, store=glyff_store, hasher=hasher
             ) as gs:
                 async with Session(
-                    llm_client=mock_llm,
-                    glyff_session=gs,
-                    session_store=sefia_store,
-                    handlers=[MaxTurnsHandler(max_turns=None)],
+                    llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
                 ) as sefia_session:
                     await agent.get_user_name()
 
@@ -149,10 +145,7 @@ class TestStatefulTool:
         # --- Second run (with answer): Should succeed ---
         async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
             async with Session(
-                llm_client=mock_llm,
-                glyff_session=gs,
-                session_store=sefia_store,
-                handlers=[MaxTurnsHandler(max_turns=None)],
+                llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
             ) as sefia_session:
                 interaction_store = sefia_session.get_state_store(
                     "interaction_state", InteractionState
@@ -239,10 +232,7 @@ class TestStatefulTool:
                 id=session_id, store=glyff_store, hasher=hasher
             ) as gs:
                 async with Session(
-                    llm_client=mock_llm,
-                    glyff_session=gs,
-                    session_store=sefia_store,
-                    handlers=[MaxTurnsHandler(max_turns=None)],
+                    llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
                 ):
                     await agent.get_profile()
         assert "Name?" in interrupts
@@ -253,10 +243,7 @@ class TestStatefulTool:
                 id=session_id, store=glyff_store, hasher=hasher
             ) as gs:
                 async with Session(
-                    llm_client=mock_llm,
-                    glyff_session=gs,
-                    session_store=sefia_store,
-                    handlers=[MaxTurnsHandler(max_turns=None)],
+                    llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
                 ) as sefia_session:
                     interaction_store = sefia_session.get_state_store(
                         "interaction_state", InteractionState
@@ -270,10 +257,7 @@ class TestStatefulTool:
         # --- 3. Provide age, should complete ---
         async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
             async with Session(
-                llm_client=mock_llm,
-                glyff_session=gs,
-                session_store=sefia_store,
-                handlers=[MaxTurnsHandler(max_turns=None)],
+                llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
             ) as sefia_session:
                 interaction_store = sefia_session.get_state_store(
                     "interaction_state", InteractionState

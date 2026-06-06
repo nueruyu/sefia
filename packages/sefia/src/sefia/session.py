@@ -45,7 +45,7 @@ class Session:
             StagnationPolicy(),
             *extra_policies,
         ]
-        self.handlers: list[EventHandler] = list(handlers) if handlers else []
+        self.handlers = handlers or []
 
         model_inspector = PydanticModelInspector()
 

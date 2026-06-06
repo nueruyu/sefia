@@ -36,18 +36,16 @@ class AfterInferenceStep(Event):
 
 
 @dataclass(frozen=True)
-class NextTurnRequested(Event):
+class StepStarted(Event):
     """
-    Event fired before the inference loop would take another turn.
+    Event fired at the start of every inference step, including the first.
 
-    The executor does not loop on its own: after a step that is not a final
-    answer, it asks whether another turn is permitted. A handler grants the
-    next turn by raising ``RequestNextTurn``; if no handler does, the loop
-    ends with ``MaxTurnsExceededError``. ``completed_turns`` is the number of
-    inference steps already taken in the current attempt.
+    ``step`` is the 1-based index of the step about to run. The executor does
+    not cap the loop on its own; a handler may raise (e.g.
+    ``MaxStepsExceededError``) while handling this event to stop it.
     """
 
-    completed_turns: int
+    step: int
     history: list[HistoryItem]
 
 
