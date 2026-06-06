@@ -62,3 +62,16 @@ def test_format_arguments_handles_cdata_delimiters_in_selected_text():
     string_element = ET.fromstring(prompt).find("./argument[@name='source']/string")
     assert string_element is not None
     assert string_element.text == source
+
+
+def test_format_arguments_falls_back_to_string_when_json_default_rejects_value():
+    def json_default(_value):
+        raise TypeError
+
+    prompt = PromptFormatter(json_default=json_default).format_arguments(
+        {"value": _CustomValue("fallback")}
+    )
+
+    value_element = ET.fromstring(prompt).find("./argument[@name='value']/string")
+    assert value_element is not None
+    assert value_element.text == "_CustomValue(value='fallback')"

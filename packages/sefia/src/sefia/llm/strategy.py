@@ -1,7 +1,7 @@
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Union
 
 from pydantic import create_model
 
@@ -62,8 +62,8 @@ class LLMInferenceStrategy(InferenceStrategy):
         if tools:
             decision_model = create_model(
                 "LLMDecision",
-                final_answer=(output_type | None, ...),
-                tool_calls=(list[LLMToolCall] | None, ...),
+                final_answer=(Union[output_type, None], ...),
+                tool_calls=(Union[list[LLMToolCall], None], ...),
             )
         else:
             decision_model = create_model(

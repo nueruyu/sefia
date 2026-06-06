@@ -1,3 +1,4 @@
+import asyncio
 import subprocess
 from pathlib import Path
 
@@ -14,7 +15,8 @@ class GitTool:
         file paths relative to the repository root.
         """
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "ls-files", "-z"],
                 cwd=path,
                 capture_output=True,
@@ -46,7 +48,10 @@ class FileTool:
         contents: dict[str, str] = {}
         for path_str in full_paths:
             try:
-                contents[path_str] = Path(path_str).read_text(encoding="utf-8")
+                contents[path_str] = await asyncio.to_thread(
+                    Path(path_str).read_text,
+                    encoding="utf-8",
+                )
             except (OSError, UnicodeError) as exc:
                 contents[path_str] = f"Error reading file: {exc}"
         return contents

@@ -75,10 +75,11 @@ class UnderstandingAgent:
         all_file_paths: list[str],
         project_root: str,
     ) -> ProjectUnderstanding:
+        read_files_set = set(current_understanding.read_files)
         unread_files = [
             path
             for path in all_file_paths
-            if path not in current_understanding.read_files
+            if path not in read_files_set
         ]
         if not unread_files:
             return current_understanding
