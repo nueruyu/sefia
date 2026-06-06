@@ -46,12 +46,13 @@ class LLMInferenceStrategy(InferenceStrategy):
         model_inspector: ModelInspector,
         json_default: JsonDefault,
         stream: bool = False,
+        text_block_selectors: dict[type, Callable[[Any], str]] | None = None,
     ):
         self.llm_client = llm_client
         self.model_inspector = model_inspector
         self._json_default = json_default
         self._stream = stream
-        self._prompt_formatter = PromptFormatter(json_default)
+        self._prompt_formatter = PromptFormatter(json_default, text_block_selectors)
 
     def _build_llm_decision_schema(self, output_type: Any, tools: list[dict]) -> dict:
         """
@@ -209,7 +210,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             name: value for name, value in arguments.items() if name != "self"
         }
         user_prompt = (
-            "Task arguments are XML. Values in <text_block> are wrapped in "
+            "Task arguments are XML. Values in <string> may be wrapped in "
             "CDATA and should be read as raw text.\n\n"
             f"{self._prompt_formatter.format_arguments(prompt_arguments)}"
             if prompt_arguments

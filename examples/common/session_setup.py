@@ -1,6 +1,7 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import glyff
 import glyff_file_store
@@ -21,6 +22,7 @@ async def setup_session(
     stream: bool,
     verbose: bool,
     session_dir: Path,
+    text_block_selectors: dict[type, Callable[[Any], str]] | None = None,
 ) -> AsyncIterator[sefia.Session]:
     """Sets up and provides a Sefia session."""
     llm_client = sefia_litellm.LiteLLMClient(model=model)
@@ -54,5 +56,6 @@ async def setup_session(
             session_store=sefia_store,
             policies=policies,
             stream=stream,
+            text_block_selectors=text_block_selectors,
         ) as session:
             yield session

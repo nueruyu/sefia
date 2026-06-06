@@ -1,4 +1,4 @@
-from typing import Self, Type, TypeVar
+from typing import Any, Callable, Self, Type, TypeVar
 
 import glyff
 
@@ -33,6 +33,7 @@ class Session:
         policies: list[Policy] | None = None,
         tool_collector: ToolCollector | None = None,
         stream: bool = False,
+        text_block_selectors: dict[type, Callable[[Any], str]] | None = None,
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
@@ -51,6 +52,7 @@ class Session:
             model_inspector=model_inspector,
             json_default=pydantic_json_default,
             stream=stream,
+            text_block_selectors=text_block_selectors,
         )
         self._context: InferenceContext | None = None
 

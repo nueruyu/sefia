@@ -6,11 +6,11 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefia import TextBlock
 
 from ..common.chat_cli import create_app
 from ..common.chat_session import ChatSessionState
 from ..common.human_input import HumanInputTool
+from ..common.text_block import TextBlock
 from .agents import (
     CodingStyleAuditor,
     DependencySpecialist,
@@ -163,4 +163,5 @@ if __name__ == "__main__":
         workflow,
         session_dir=SESSION_DIR,
         help_text="A multi-agent workflow for code quality review.",
+        text_block_selectors={TextBlock: lambda tb: tb.value},
     )()

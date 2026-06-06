@@ -2,16 +2,19 @@ import json
 import xml.dom.minidom as minidom
 from typing import Any, Callable
 
-from ..models import TextBlock
-
 JsonDefault = Callable[[Any], Any]
 
 
 class PromptFormatter:
     """Formats inference arguments for inclusion in LLM prompts."""
 
-    def __init__(self, json_default: JsonDefault):
+    def __init__(
+        self,
+        json_default: JsonDefault,
+        text_block_selectors: dict[type, Callable[[Any], str]] | None = None,
+    ):
         self._json_default = json_default
+        self._text_block_selectors = text_block_selectors
 
     def format_arguments(self, arguments: dict[str, Any]) -> str:
         """Serialize prompt arguments as indented, well-formed XML."""
@@ -44,13 +47,16 @@ class PromptFormatter:
         parent: minidom.Element,
         value: Any,
     ) -> None:
+        if self._text_block_selectors:
+            for type_key, selector in self._text_block_selectors.items():
+                if isinstance(value, type_key):
+                    element = document.createElement("string")
+                    text = selector(value)
+                    self._append_cdata(document, element, text)
+                    parent.appendChild(element)
+                    return
         if value is None:
             parent.appendChild(document.createElement("null"))
-            return
-        if isinstance(value, TextBlock):
-            text_block_element = document.createElement("text_block")
-            self._append_cdata(document, text_block_element, f"\n{value.value}\n")
-            parent.appendChild(text_block_element)
             return
         if isinstance(value, bool):
             element = document.createElement("boolean")

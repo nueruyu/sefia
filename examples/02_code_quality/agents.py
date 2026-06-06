@@ -1,10 +1,16 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from sefia import TextBlock, infer
+from sefia import infer
 
 from ..common.human_input import HumanInputTool
-from .models import CodeIssue, ProjectScope, ProjectUnderstanding, QualityReport
+from ..common.text_block import TextBlock
+from .models import (
+    CodeIssue,
+    ProjectScope,
+    ProjectUnderstanding,
+    QualityReport,
+)
 from .tools import FileTool
 
 

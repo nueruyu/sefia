@@ -3,6 +3,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 
 import glyff.exceptions
 import typer
@@ -70,6 +71,7 @@ async def _run_workflow(
     verbose: bool,
     workflow_callback: WorkflowCallback,
     session_dir: Path,
+    text_block_selectors: dict[type, Callable[[Any], str]] | None,
 ):
     """Encapsulates the main logic for running the sefia workflow."""
     try:
@@ -79,6 +81,7 @@ async def _run_workflow(
             stream=True,
             verbose=verbose,
             session_dir=session_dir,
+            text_block_selectors=text_block_selectors,
         ) as session:
             state_store = session.get_state_store("session_state", ChatSessionState)
             state = await state_store.get()
@@ -96,6 +99,7 @@ def create_app(
     *,
     session_dir: Path,
     help_text: str = "A human-in-the-loop chat workflow.",
+    text_block_selectors: dict[type, Callable[[Any], str]] | None = None,
 ) -> typer.Typer:
     """Create a CLI app that routes execution to the injected workflow callback."""
     load_dotenv()
@@ -154,6 +158,7 @@ def create_app(
                 verbose=verbose,
                 workflow_callback=workflow_callback,
                 session_dir=session_dir,
+                text_block_selectors=text_block_selectors,
             )
         )
 
