@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -110,11 +111,11 @@ def create_app(
     @app.command("chat")
     def chat(
         message: Annotated[
-            list[str],
+            list[str] | None,
             typer.Argument(
                 help="The topic for a new session, or an answer to resume an existing one."
             ),
-        ],
+        ] = None,
         model: Annotated[
             str,
             typer.Option(
@@ -133,7 +134,11 @@ def create_app(
         """
         Start a new topic or provide an answer to continue the current session.
         """
-        input_text = " ".join(message)
+        input_text = " ".join(message or []).strip()
+
+        if not input_text and not sys.stdin.isatty():
+            input_text = sys.stdin.read().strip()
+
         if not input_text:
             raise typer.BadParameter("Message cannot be empty.")
 

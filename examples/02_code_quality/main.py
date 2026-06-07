@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import sefia
@@ -124,9 +125,18 @@ async def _run_reviews(
     )
     all_issues: list[CodeIssue] = []
 
-    for perspective, agent in review_agents.items():
+    async def _review_perspective(
+        perspective: ReviewPerspective,
+    ) -> tuple[ReviewPerspective, list[CodeIssue]]:
         console.print(f"> Reviewing from perspective: {perspective.value}...")
-        issues = await agent.review(contents)
+        agent = review_agents[perspective]
+        return perspective, await agent.review(contents)
+
+    review_results = await asyncio.gather(
+        *(_review_perspective(perspective) for perspective in review_agents)
+    )
+
+    for perspective, issues in review_results:
         for issue in issues:
             issue.perspective = perspective.value
         all_issues.extend(issues)
