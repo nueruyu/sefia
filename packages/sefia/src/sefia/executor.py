@@ -153,10 +153,13 @@ class InferenceExecutor:
         )
 
         history: list[HistoryItem] = []
-        max_turns = 25
+        step = 0
 
-        for _ in range(max_turns):
+        while True:
+            await self.publisher.publish(events.StepStarted(step=step, history=history))
+
             decision = await self._next_step_engraved(history, tool_schemas)
+            step += 1
 
             if isinstance(decision, FinalAnswerDecision):
                 return decision.answer
@@ -185,5 +188,3 @@ class InferenceExecutor:
                     )
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")
-
-        raise RuntimeError(f"Inference did not complete within {max_turns} turns.")
