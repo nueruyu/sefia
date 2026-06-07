@@ -50,6 +50,7 @@ class InferenceStepFailed(Event):
     error: Exception
 
 
+@dataclass(frozen=True)
 class StepStarted(Event):
     """
     Event fired at the start of every inference step, including the first.
