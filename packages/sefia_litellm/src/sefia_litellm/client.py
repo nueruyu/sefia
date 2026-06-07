@@ -10,10 +10,46 @@ from litellm import (
     cost_per_token,
     stream_chunk_builder,
 )
+from litellm.exceptions import (
+    APIConnectionError,
+    InternalServerError,
+    RateLimitError,
+    ServiceUnavailableError,
+    Timeout,
+)
+from sefia.exceptions import (
+    ConnectionException,
+    InferenceException,
+    RateLimitException,
+    TemporarilyUnavailableException,
+    TimeoutException,
+)
 from sefia.llm.client import LLMClient
 from sefia.llm.messages import LLMResponse, Message, ToolCall
 
 logger = logging.getLogger(__name__)
+
+# Translates provider-specific exceptions into sefia's abstract inference
+# exceptions, so callers never have to know about LiteLLM's types. Order
+# matters: Timeout subclasses APIConnectionError, so it must be checked first.
+# Errors not listed here (AuthenticationError, BadRequestError,
+# ContextWindowExceededError, ContentPolicyViolationError, ...) are deterministic
+# and propagate unchanged as genuine failures.
+_EXCEPTION_MAPPING: tuple[tuple[type[Exception], type[InferenceException]], ...] = (
+    (Timeout, TimeoutException),
+    (APIConnectionError, ConnectionException),
+    (RateLimitError, RateLimitException),
+    (InternalServerError, TemporarilyUnavailableException),
+    (ServiceUnavailableError, TemporarilyUnavailableException),
+)
+
+
+def _to_inference_exception(error: Exception) -> InferenceException | None:
+    """Maps a LiteLLM exception to a sefia InferenceException, if recognized."""
+    for provider_exc, inference_exc in _EXCEPTION_MAPPING:
+        if isinstance(error, provider_exc):
+            return inference_exc(str(error))
+    return None
 
 
 class LiteLLMClient(LLMClient):
@@ -52,15 +88,23 @@ class LiteLLMClient(LLMClient):
         if stream_callback:
             kwargs["stream"] = True
 
-        response = await acompletion(
-            model=self.model,
-            messages=raw_messages,
-            **kwargs,
-        )
+        try:
+            response = await acompletion(
+                model=self.model,
+                messages=raw_messages,
+                **kwargs,
+            )
 
-        if hasattr(response, "__aiter__") and not isinstance(response, ModelResponse):
-            stream = cast(AsyncIterator[Any], response)
-            return await self._handle_stream(stream, stream_callback, raw_messages)
+            if hasattr(response, "__aiter__") and not isinstance(
+                response, ModelResponse
+            ):
+                stream = cast(AsyncIterator[Any], response)
+                return await self._handle_stream(stream, stream_callback, raw_messages)
+        except Exception as e:
+            inference_error = _to_inference_exception(e)
+            if inference_error is not None:
+                raise inference_error from e
+            raise
 
         if not isinstance(response, ModelResponse):
             raise RuntimeError("Invalid model response")

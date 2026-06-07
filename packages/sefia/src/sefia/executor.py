@@ -68,14 +68,26 @@ class InferenceExecutor:
             events.BeforeInferenceStep(history=history, tools=tools)
         )
 
-        decision = await self.strategy.decide_next_step(
-            instructions=self.instructions,
-            arguments=self.arguments,
-            history=history,
-            tools=tools,
-            output_type=self.return_type,
-            publisher=self.publisher,
-        )
+        try:
+            decision = await self.strategy.decide_next_step(
+                instructions=self.instructions,
+                arguments=self.arguments,
+                history=history,
+                tools=tools,
+                output_type=self.return_type,
+                publisher=self.publisher,
+            )
+        except Exception as e:
+            # This method is engraved, so any exception that escapes it is
+            # persisted by glyff as a permanent FAILED record. sefia does not
+            # decide whether the failure is recoverable: it publishes the error
+            # and lets a handler decide. A handler may raise YieldException to
+            # interrupt gracefully and keep the step resumable (nothing is
+            # engraved); if none does, the original exception is re-raised and
+            # engraved as a genuine failure.
+            await self.publisher.publish(events.InferenceStepFailed(error=e))
+            raise
+
         await self.publisher.publish(events.AfterInferenceStep(decision=decision))
         return decision
 
@@ -153,10 +165,13 @@ class InferenceExecutor:
         )
 
         history: list[HistoryItem] = []
-        max_turns = 25
+        step = 0
 
-        for _ in range(max_turns):
+        while True:
+            await self.publisher.publish(events.StepStarted(step=step, history=history))
+
             decision = await self._next_step_engraved(history, tool_schemas)
+            step += 1
 
             if isinstance(decision, FinalAnswerDecision):
                 return decision.answer
@@ -185,5 +200,3 @@ class InferenceExecutor:
                     )
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")
-
-        raise RuntimeError(f"Inference did not complete within {max_turns} turns.")

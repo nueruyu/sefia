@@ -36,6 +36,36 @@ class AfterInferenceStep(Event):
 
 
 @dataclass(frozen=True)
+class InferenceStepFailed(Event):
+    """
+    Event fired when a single inference step raises an exception.
+
+    The step is engraved, so by default the exception is re-raised and
+    persisted by glyff as a permanent failure. A handler may instead raise
+    ``glyff.exceptions.YieldException`` to interrupt the session gracefully and
+    leave the step resumable (nothing is persisted). sefia does not decide
+    whether the error is recoverable; that policy lives in the handler.
+    """
+
+    error: Exception
+
+
+@dataclass(frozen=True)
+class StepStarted(Event):
+    """
+    Event fired at the start of every inference step, including the first.
+
+    ``step`` is the 0-based index of the step about to run (equivalently, the
+    number of steps already completed in this attempt). The executor does not
+    cap the loop on its own; a handler may raise (e.g. ``MaxStepsExceededError``)
+    while handling this event to stop it.
+    """
+
+    step: int
+    history: list[HistoryItem]
+
+
+@dataclass(frozen=True)
 class BeforeToolCall(Event):
     """Event fired just before a tool is executed."""
 

@@ -40,7 +40,10 @@ class Session:
         self.session_store = session_store
         self._context_token = None
         extra_policies = list(policies) if policies is not None else []
-        self.policies: list[Policy] = [StagnationPolicy(), *extra_policies]
+        self.policies: list[Policy] = [
+            StagnationPolicy(),
+            *extra_policies,
+        ]
 
         model_inspector = PydanticModelInspector()
 

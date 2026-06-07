@@ -236,8 +236,33 @@ class MyAgent:
         ...
 ```
 
-Built-in policies include `MaxRetries`. Custom policies can be added by
-implementing the `Policy` ABC.
+Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
+added by implementing the `Policy` ABC.
+
+### Steps and the inference loop
+
+The executor fires a `StepStarted` event at the start of every step (0-based),
+and otherwise loops until the model produces a final answer. It does not cap
+the loop itself: to bound it, attach a policy whose handler raises while
+handling `StepStarted`. There is no default cap.
+
+`MaxSteps` does exactly this — its handler raises `MaxStepsExceededError` once
+the loop reaches the step limit:
+
+```python
+from sefia import MaxSteps, infer
+
+
+class MyAgent:
+    @infer(policies=[MaxSteps(count=25)])
+    async def run(self, task: Task) -> Result:
+        """Work the task, capped at 25 steps."""
+        ...
+```
+
+`MaxSteps` can also be passed to `Session(policies=[...])` to apply across an
+entire session. Any custom `EventHandler` for `StepStarted` can stop the loop
+on its own terms — for example by inspecting progress before raising.
 
 ### Resumption and interruption
 

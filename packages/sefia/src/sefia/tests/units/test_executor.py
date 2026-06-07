@@ -1,12 +1,16 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from glyff.exceptions import YieldException
 from pytest_mock import MockerFixture
 
+from sefia import events
 from sefia.event_publisher import EventPublisher
+from sefia.events import StepStarted
 from sefia.executor import InferenceExecutor
+from sefia.handlers.max_steps import MaxStepsExceededError
 from sefia.handlers.retry import RequestInferenceRetry
-from sefia.interfaces import InferenceStrategy, ToolCollector
+from sefia.interfaces import EventHandler, InferenceStrategy, ToolCollector
 from sefia.models import (
     FinalAnswerDecision,
     ToolCallDecision,
@@ -128,15 +132,19 @@ class TestInferenceExecutor:
         assert isinstance(history[1], ToolCallResult)
         assert "Error: Tool 'nonexistent_tool' not found" in history[1].result
 
-    async def test_raises_error_if_max_turns_exceeded(self, executor_dependencies):
-        # Arrange
+    async def test_fires_step_started_for_every_step(self, executor_dependencies):
+        # The executor fires StepStarted (1-based) at the start of each step,
+        # including the first, so a handler can observe the step count.
         (
             mock_strategy,
             mock_collector,
             mock_publisher,
             non_engrave,
         ) = executor_dependencies
-        mock_strategy.decide_next_step.return_value = ToolCallDecision(calls=[])
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(calls=[]),
+            FinalAnswerDecision(answer="done"),
+        ]
 
         executor = InferenceExecutor(
             sample_func,
@@ -148,8 +156,111 @@ class TestInferenceExecutor:
             mock_publisher,
         )
 
-        # Act & Assert
-        with pytest.raises(RuntimeError, match="Inference did not complete"):
+        await executor.run()
+
+        step_events = [
+            call.args[0]
+            for call in mock_publisher.publish.call_args_list
+            if isinstance(call.args[0], StepStarted)
+        ]
+        assert [event.step for event in step_events] == [0, 1]
+
+    async def test_handler_can_stop_the_loop(self, executor_dependencies):
+        # A handler that raises while handling StepStarted stops the loop. Here
+        # it refuses to start a fourth step (0-based index 3).
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.return_value = ToolCallDecision(calls=[])
+
+        async def stop_after_three(event):
+            if isinstance(event, StepStarted) and event.step >= 3:
+                raise MaxStepsExceededError("stop")
+
+        mock_publisher.publish.side_effect = stop_after_three
+
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        with pytest.raises(MaxStepsExceededError):
+            await executor.run()
+
+        assert mock_strategy.decide_next_step.call_count == 3
+
+    async def test_failed_step_publishes_event_and_reraises_by_default(
+        self, executor_dependencies
+    ):
+        # When a step fails and no handler interrupts, the original exception
+        # must propagate (so glyff engraves the genuine failure), but only after
+        # an InferenceStepFailed event carrying the error has been published.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        error = ValueError("boom")
+        mock_strategy.decide_next_step.side_effect = error
+
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        with pytest.raises(ValueError, match="boom"):
+            await executor.run()
+
+        published = [call.args[0] for call in mock_publisher.publish.call_args_list]
+        step_failures = [
+            e for e in published if isinstance(e, events.InferenceStepFailed)
+        ]
+        assert len(step_failures) == 1
+        assert step_failures[0].error is error
+
+    async def test_handler_can_interrupt_failed_step_with_yield(
+        self, executor_dependencies
+    ):
+        # A handler may react to InferenceStepFailed by raising YieldException to
+        # interrupt gracefully (leaving the step resumable). That must propagate
+        # out of the executor instead of the original error.
+        mock_strategy, mock_collector, _, non_engrave = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = ValueError("transient")
+
+        class InterruptOnFailure(EventHandler):
+            @property
+            def event_types(self):
+                return (events.InferenceStepFailed,)
+
+            async def handle(self, event):
+                raise YieldException("interrupted for resume")
+
+        publisher = EventPublisher([InterruptOnFailure()])
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            publisher,
+        )
+
+        with pytest.raises(YieldException):
             await executor.run()
 
     async def test_handles_request_inference_retry(self, executor_dependencies):
