@@ -18,7 +18,7 @@ from litellm.types.utils import (
     Message as LiteLLMMessage,
 )
 from pytest_mock import MockerFixture
-from sefia.llm.exceptions import (
+from sefia.exceptions import (
     RateLimitException,
     TemporarilyUnavailableException,
     TimeoutException,

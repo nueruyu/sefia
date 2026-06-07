@@ -17,14 +17,14 @@ from litellm.exceptions import (
     ServiceUnavailableError,
     Timeout,
 )
-from sefia.llm.client import LLMClient
-from sefia.llm.exceptions import (
+from sefia.exceptions import (
     ConnectionException,
     InferenceException,
     RateLimitException,
     TemporarilyUnavailableException,
     TimeoutException,
 )
+from sefia.llm.client import LLMClient
 from sefia.llm.messages import LLMResponse, Message, ToolCall
 
 logger = logging.getLogger(__name__)
