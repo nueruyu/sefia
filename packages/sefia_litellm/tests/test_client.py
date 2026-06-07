@@ -2,6 +2,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 from litellm import ModelResponse
+from litellm.exceptions import (
+    AuthenticationError,
+    InternalServerError,
+    RateLimitError,
+    Timeout,
+)
 from litellm.types.utils import (
     ChatCompletionMessageToolCall,
     Choices,
@@ -12,6 +18,11 @@ from litellm.types.utils import (
     Message as LiteLLMMessage,
 )
 from pytest_mock import MockerFixture
+from sefia.exceptions import (
+    RateLimitException,
+    TemporarilyUnavailableException,
+    TimeoutException,
+)
 from sefia.llm.messages import LLMResponse, Message
 from sefia_litellm.client import LiteLLMClient
 
@@ -113,6 +124,49 @@ class TestLiteLLMClient:
         client = LiteLLMClient(model="gpt-4o")
 
         with pytest.raises(RuntimeError, match="LLM returned empty choices"):
+            await client.complete([])
+
+    @pytest.mark.parametrize(
+        ("provider_error", "expected_exception"),
+        [
+            (
+                RateLimitError(
+                    message="rate limited", llm_provider="openai", model="gpt-4o"
+                ),
+                RateLimitException,
+            ),
+            (
+                Timeout(message="timed out", model="gpt-4o", llm_provider="openai"),
+                TimeoutException,
+            ),
+            (
+                InternalServerError(
+                    message="boom", llm_provider="openai", model="gpt-4o"
+                ),
+                TemporarilyUnavailableException,
+            ),
+        ],
+    )
+    async def test_provider_errors_map_to_inference_exceptions(
+        self, mock_acompletion, provider_error, expected_exception
+    ):
+        # The adapter translates LiteLLM's transient errors into sefia's abstract
+        # exceptions so callers never have to know about LiteLLM's types.
+        mock_acompletion.side_effect = provider_error
+        client = LiteLLMClient(model="gpt-4o")
+
+        with pytest.raises(expected_exception):
+            await client.complete([])
+
+    async def test_unmapped_provider_error_propagates_unchanged(self, mock_acompletion):
+        # A deterministic error (bad credentials) is not mapped; it surfaces as
+        # itself so it is engraved as a genuine failure.
+        mock_acompletion.side_effect = AuthenticationError(
+            message="bad key", llm_provider="openai", model="gpt-4o"
+        )
+        client = LiteLLMClient(model="gpt-4o")
+
+        with pytest.raises(AuthenticationError):
             await client.complete([])
 
     async def test_complete_uses_streaming_when_callback_is_provided(

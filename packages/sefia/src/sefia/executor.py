@@ -68,14 +68,26 @@ class InferenceExecutor:
             events.BeforeInferenceStep(history=history, tools=tools)
         )
 
-        decision = await self.strategy.decide_next_step(
-            instructions=self.instructions,
-            arguments=self.arguments,
-            history=history,
-            tools=tools,
-            output_type=self.return_type,
-            publisher=self.publisher,
-        )
+        try:
+            decision = await self.strategy.decide_next_step(
+                instructions=self.instructions,
+                arguments=self.arguments,
+                history=history,
+                tools=tools,
+                output_type=self.return_type,
+                publisher=self.publisher,
+            )
+        except Exception as e:
+            # This method is engraved, so any exception that escapes it is
+            # persisted by glyff as a permanent FAILED record. sefia does not
+            # decide whether the failure is recoverable: it publishes the error
+            # and lets a handler decide. A handler may raise YieldException to
+            # interrupt gracefully and keep the step resumable (nothing is
+            # engraved); if none does, the original exception is re-raised and
+            # engraved as a genuine failure.
+            await self.publisher.publish(events.InferenceStepFailed(error=e))
+            raise
+
         await self.publisher.publish(events.AfterInferenceStep(decision=decision))
         return decision
 
