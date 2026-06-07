@@ -650,36 +650,36 @@ wheels = [
 
 [[package]]
 name = "glyff"
-version = "0.7.0"
+version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/03/63/aad68ca6a9dc2cdeaef14863eb573e4da0179006f5aa4d1b76c7f29ed400/glyff-0.7.0.tar.gz", hash = "sha256:b22f151e24fbcc3d740f38719e6811b3e761be4871245de5b9818990794aaf92", size = 25372, upload-time = "2026-06-07T06:25:20.068Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/05/ac/0805ad2679e7fba240509ecf3affdbd26fff48f009a04f86878f7f767d33/glyff-0.8.0.tar.gz", hash = "sha256:50d0b9ddc9189fc32189419627166ff8bf8512288a8c0cd1d6725b761afc44f2", size = 23497, upload-time = "2026-06-07T10:54:59.335Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/05/cc0636367fd76180380e08e59b1ea406a16b87e9359fa4ff8a0093d25152/glyff-0.7.0-py3-none-any.whl", hash = "sha256:dc94bc0ae859cb143cb30c5d024a62adb6f17ad537695e83eedddcc18775b8e2", size = 19852, upload-time = "2026-06-07T06:25:18.656Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/4b/5fd8bd22d9da5c83d0f3e41525d283744476203190dabe43c97f71fbe2c0/glyff-0.8.0-py3-none-any.whl", hash = "sha256:acf6d981205b3c50d9e45fc9b3cdd890619e9096c408d65425d334cfd7a8d781", size = 19645, upload-time = "2026-06-07T10:54:58.186Z" },
 ]
 
 [[package]]
 name = "glyff-file-store"
-version = "0.7.0"
+version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "glyff" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/e8/17b660063d1274cdd5143dd71aca3dc480248719c094a732125a81b965a4/glyff_file_store-0.7.0.tar.gz", hash = "sha256:1b30d66799c00e2d30b7ffdb07170fe5050b02a097c58a4645bb0c52b72b35a2", size = 16558, upload-time = "2026-06-07T06:25:25.24Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/79/7d/558ba5734672d639c4c773e11a84f43015f742e54f696341d96f903b6cb8/glyff_file_store-0.8.0.tar.gz", hash = "sha256:f00f64afa831b5eda9ff9e38b265184d5a26b5d8efbd38d077320bbcaa96bbf9", size = 17079, upload-time = "2026-06-07T10:55:02.743Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/97/ad32278371886390dcd6f968840144438018093f715267b3251fae899310/glyff_file_store-0.7.0-py3-none-any.whl", hash = "sha256:5c0e613061d42f014ac8658ec386d381ddf4a5d3a800e6ea229619804d9e1804", size = 10680, upload-time = "2026-06-07T06:25:24.093Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/03/7a6c683a8a370708a7f6ab1019b1d7609df55312d404289408eb96b80a6a/glyff_file_store-0.8.0-py3-none-any.whl", hash = "sha256:87307d000b9943752b6655b77cf786db737b17da2a0c59e319065e438f48d65f", size = 10994, upload-time = "2026-06-07T10:55:01.611Z" },
 ]
 
 [[package]]
 name = "glyff-pydantic"
-version = "0.7.0"
+version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "glyff" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b2/a1/cb199187039423b6a6eb74eb5552826bea97c4fc733ac6284d561b0300f3/glyff_pydantic-0.7.0.tar.gz", hash = "sha256:b7e055ae21825926495d92091c758bd984a920340c1d6ec37220fc8281653cb4", size = 6745, upload-time = "2026-06-07T06:25:19.948Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/5d/66a7b47c7782bbd92c17eb9039f5c36fc313faf52c56c029e79c9c01eda6/glyff_pydantic-0.8.0.tar.gz", hash = "sha256:74b701fd4425e3584fe5a8aa9f1c163a1490dc6ea9ff1aecd914900fb3cbd702", size = 6469, upload-time = "2026-06-07T10:55:00.503Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/64/cba2469187a7cac2f43cba9b171a10f81c73e7d4d42351b1eea7c2f8834b/glyff_pydantic-0.7.0-py3-none-any.whl", hash = "sha256:9fc7bedde75796c6e6f93e55dd821ff21faed95f7f9977d6e32cc49258ce5884", size = 4503, upload-time = "2026-06-07T06:25:18.867Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/d7/3ac9e93ba67415c63f0bcf043452529a90c040186a7cb97bd3943b0311df/glyff_pydantic-0.8.0-py3-none-any.whl", hash = "sha256:618e139122317ba833666cece777004534cf384d5ac104387749a803b3cdf4f9", size = 4569, upload-time = "2026-06-07T10:54:59.342Z" },
 ]
 
 [[package]]
@@ -2040,9 +2040,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "glyff", specifier = ">=0.7.0" },
-    { name = "glyff-file-store", specifier = ">=0.7.0" },
-    { name = "glyff-pydantic", specifier = ">=0.7.0" },
+    { name = "glyff", specifier = ">=0.8.0" },
+    { name = "glyff-file-store", specifier = ">=0.8.0" },
+    { name = "glyff-pydantic", specifier = ">=0.8.0" },
     { name = "pydantic", specifier = ">=2.0" },
 ]
 
