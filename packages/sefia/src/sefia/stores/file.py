@@ -30,7 +30,7 @@ class FileSessionStore(SessionStore):
         path = self._key_to_path(key)
         data = await self._client.read(path)
         if data:
-            return self._serializer.deserialize(data, type_hint)
+            return await self._serializer.deserialize(data, type_hint)
         return None
 
     async def set(self, key: str, value: Any, type_hint: type) -> None:
