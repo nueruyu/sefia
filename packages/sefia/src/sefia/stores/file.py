@@ -35,7 +35,7 @@ class FileSessionStore(SessionStore):
 
     async def set(self, key: str, value: Any, type_hint: type) -> None:
         path = self._key_to_path(key)
-        data = self._serializer.serialize(value, type_hint)
+        data = await self._serializer.serialize(value, type_hint)
 
         async def _write() -> bytes:
             return data

@@ -19,23 +19,23 @@ def _fn(x: int, y: str = "a") -> str:
 
 
 class TestSefiaSerializer:
-    def test_roundtrip_dataclass_model(self):
+    async def test_roundtrip_dataclass_model(self):
         serializer = SefiaSerializer()
         value = _Model(a=1, b="x")
 
-        data = serializer.serialize(value, _Model)
-        restored = serializer.deserialize(data, _Model)
+        data = await serializer.serialize(value, _Model)
+        restored = await serializer.deserialize(data, _Model)
 
         assert isinstance(restored, _Model)
         assert restored.a == 1
         assert restored.b == "x"
 
-    def test_roundtrip_dataclass(self):
+    async def test_roundtrip_dataclass(self):
         serializer = SefiaSerializer()
         value = _D(value=7)
 
-        data = serializer.serialize(value, _D)
-        restored = serializer.deserialize(data, _D)
+        data = await serializer.serialize(value, _D)
+        restored = await serializer.deserialize(data, _D)
 
         assert isinstance(restored, _D)
         assert restored.value == 7

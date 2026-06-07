@@ -27,12 +27,12 @@ class SefiaSerializer(Serializer):
     compatibility while serializing to stable JSON bytes.
     """
 
-    def serialize(self, value: Any, type_hint: type) -> bytes:
+    async def serialize(self, value: Any, type_hint: type) -> bytes:
         adapter = TypeAdapter(type_hint)
         json_compatible = adapter.dump_python(value, mode="json")
         return _json_stable_dumps(json_compatible).encode("utf-8")
 
-    def deserialize(self, data: bytes, type_hint: type) -> Any:
+    async def deserialize(self, data: bytes, type_hint: type) -> Any:
         adapter = TypeAdapter(type_hint)
         return adapter.validate_json(data)
 

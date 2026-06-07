@@ -650,23 +650,36 @@ wheels = [
 
 [[package]]
 name = "glyff"
-version = "0.6.0"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/48/03/bcfe8b8d023c60295209a34f94c5e98ca67984c574e54ba41c41054e362f/glyff-0.6.0.tar.gz", hash = "sha256:88f63370b28a518c41ffc351701ba36e8cd45daa089183a909fa492918adfe32", size = 20896, upload-time = "2026-06-04T12:27:11.025Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/03/63/aad68ca6a9dc2cdeaef14863eb573e4da0179006f5aa4d1b76c7f29ed400/glyff-0.7.0.tar.gz", hash = "sha256:b22f151e24fbcc3d740f38719e6811b3e761be4871245de5b9818990794aaf92", size = 25372, upload-time = "2026-06-07T06:25:20.068Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ae/c4/49c20696bd8ec9518687d6742ffb76bf00aa4e26ae4277b21764715bea33/glyff-0.6.0-py3-none-any.whl", hash = "sha256:f3a0dd9107799fe4c2c118ce19287ae4d2362b1210d72d941bbc9b883b502e48", size = 17158, upload-time = "2026-06-04T12:27:09.855Z" },
+    { url = "https://files.pythonhosted.org/packages/49/05/cc0636367fd76180380e08e59b1ea406a16b87e9359fa4ff8a0093d25152/glyff-0.7.0-py3-none-any.whl", hash = "sha256:dc94bc0ae859cb143cb30c5d024a62adb6f17ad537695e83eedddcc18775b8e2", size = 19852, upload-time = "2026-06-07T06:25:18.656Z" },
 ]
 
 [[package]]
 name = "glyff-file-store"
-version = "0.6.0"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "glyff" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fb/cf/bca56154295e2ac5b3d17f5e76588b3f6bb4f0ada63df900e91375a3ec14/glyff_file_store-0.6.0.tar.gz", hash = "sha256:ebd54d5f8d41eaa056a4b112365afefae1686f4e519acc6cd825cda8c2d29269", size = 13265, upload-time = "2026-06-04T12:27:11.151Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4c/e8/17b660063d1274cdd5143dd71aca3dc480248719c094a732125a81b965a4/glyff_file_store-0.7.0.tar.gz", hash = "sha256:1b30d66799c00e2d30b7ffdb07170fe5050b02a097c58a4645bb0c52b72b35a2", size = 16558, upload-time = "2026-06-07T06:25:25.24Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ce/07/763b9cc48e5ccdc3cb86c183482fa9a3d55a2f74187e8717da0ae2e2eab0/glyff_file_store-0.6.0-py3-none-any.whl", hash = "sha256:c741e1c78f2bf94427332d8cc05affd8d1288d6bc67dfdfaf88da8681b26d142", size = 10016, upload-time = "2026-06-04T12:27:10.029Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/97/ad32278371886390dcd6f968840144438018093f715267b3251fae899310/glyff_file_store-0.7.0-py3-none-any.whl", hash = "sha256:5c0e613061d42f014ac8658ec386d381ddf4a5d3a800e6ea229619804d9e1804", size = 10680, upload-time = "2026-06-07T06:25:24.093Z" },
+]
+
+[[package]]
+name = "glyff-pydantic"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "glyff" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b2/a1/cb199187039423b6a6eb74eb5552826bea97c4fc733ac6284d561b0300f3/glyff_pydantic-0.7.0.tar.gz", hash = "sha256:b7e055ae21825926495d92091c758bd984a920340c1d6ec37220fc8281653cb4", size = 6745, upload-time = "2026-06-07T06:25:19.948Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e7/64/cba2469187a7cac2f43cba9b171a10f81c73e7d4d42351b1eea7c2f8834b/glyff_pydantic-0.7.0-py3-none-any.whl", hash = "sha256:9fc7bedde75796c6e6f93e55dd821ff21faed95f7f9977d6e32cc49258ce5884", size = 4503, upload-time = "2026-06-07T06:25:18.867Z" },
 ]
 
 [[package]]
@@ -2014,6 +2027,7 @@ source = { editable = "packages/sefia" }
 dependencies = [
     { name = "glyff" },
     { name = "glyff-file-store" },
+    { name = "glyff-pydantic" },
     { name = "pydantic" },
 ]
 
@@ -2026,8 +2040,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "glyff", specifier = ">=0.6.0" },
-    { name = "glyff-file-store", specifier = ">=0.6.0" },
+    { name = "glyff", specifier = ">=0.7.0" },
+    { name = "glyff-file-store", specifier = ">=0.7.0" },
+    { name = "glyff-pydantic", specifier = ">=0.7.0" },
     { name = "pydantic", specifier = ">=2.0" },
 ]
 

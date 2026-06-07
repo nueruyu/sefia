@@ -19,12 +19,12 @@ class MemorySessionStore(SessionStore):
     async def get(self, key: str, type_hint: type) -> Any | None:
         raw_value = await self._client.read(self._prefix(key))
         if raw_value is not None:
-            return self._serializer.deserialize(raw_value, type_hint)
+            return await self._serializer.deserialize(raw_value, type_hint)
         return None
 
     async def set(self, key: str, value: Any, type_hint: type) -> None:
         self._client.stage_write(
-            self._prefix(key), self._serializer.serialize(value, type_hint)
+            self._prefix(key), await self._serializer.serialize(value, type_hint)
         )
 
     async def delete(self, key: str) -> None:
