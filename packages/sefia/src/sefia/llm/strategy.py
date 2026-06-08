@@ -1,10 +1,12 @@
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Union
+
+from pydantic import create_model
 
 from ..event_publisher import EventPublisher
-from ..interfaces import InferenceStrategy, ModelInspector
+from ..interfaces import InferenceStrategy, ModelInspector, PromptFormatter
 from ..models import (
     FinalAnswerDecision,
     HistoryItem,
@@ -18,6 +20,8 @@ from . import events
 from .client import LLMClient
 from .messages import Message
 
+JsonDefault = Callable[[Any], Any]
+
 
 @dataclass
 class _LLMDecision:
@@ -25,9 +29,6 @@ class _LLMDecision:
 
     final_answer: Any = None
     tool_calls: list[LLMToolCall] | None = None
-
-
-JsonDefault = Callable[[Any], Any]
 
 
 class LLMInferenceStrategy(InferenceStrategy):
@@ -41,11 +42,13 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         llm_client: LLMClient,
         model_inspector: ModelInspector,
-        json_default: JsonDefault,
+        prompt_formatter: PromptFormatter,
+        json_default: JsonDefault | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
         self.model_inspector = model_inspector
+        self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
 
@@ -54,37 +57,27 @@ class LLMInferenceStrategy(InferenceStrategy):
         Dynamically creates a JSON Schema that represents the LLM's
         choice: either call tools or provide a final answer.
         """
-        properties: dict[str, Any] = {
-            "final_answer": {
-                "oneOf": [
-                    self.model_inspector.get_schema_for_type(output_type),
-                    {"type": "null"},
-                ]
-            }
-        }
-
         if tools:
-            properties["tool_calls"] = {
-                "oneOf": [
-                    {
-                        "type": "array",
-                        "items": self.model_inspector.get_schema_for_type(LLMToolCall),
-                    },
-                    {"type": "null"},
-                ]
-            }
+            decision_model = create_model(
+                "LLMDecision",
+                final_answer=(Union[output_type, None], ...),
+                tool_calls=(Union[list[LLMToolCall], None], ...),
+            )
+        else:
+            decision_model = create_model(
+                "LLMDecision",
+                final_answer=(output_type, ...),
+            )
 
-        return {
-            "title": "LLMDecision",
-            "description": "The model for the LLM's decision on the next action.",
-            "type": "object",
-            "properties": properties,
-        }
+        result = self.model_inspector.get_schema_for_type(decision_model)
+        result["description"] = "The model for the LLM's decision on the next action."
+        return result
 
     async def decide_next_step(
         self,
         instructions: str,
         arguments: dict[str, Any],
+        argument_type_hints: dict[str, Any],
         history: list[HistoryItem],
         tools: list[dict],
         output_type: Any,
@@ -93,7 +86,12 @@ class LLMInferenceStrategy(InferenceStrategy):
         output_schema = self._build_llm_decision_schema(output_type, tools)
 
         messages = self._build_messages(
-            instructions, arguments, history, output_schema, tools
+            instructions,
+            arguments,
+            argument_type_hints,
+            history,
+            output_schema,
+            tools,
         )
 
         await publisher.publish(
@@ -170,6 +168,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         instructions: str,
         arguments: dict[str, Any],
+        argument_type_hints: dict[str, Any],
         history: list[HistoryItem],
         output_schema: dict,
         tools: list[dict],
@@ -183,11 +182,17 @@ class LLMInferenceStrategy(InferenceStrategy):
                 "Your task is to decide the next step. You have two options:\n"
                 "1. Call one or more tools by populating the `tool_calls` field.\n"
                 "2. Provide the final answer by populating the `final_answer` field.\n\n"
-                "You MUST use one, and only one, of these two fields in your response. "
+                "You MUST populate both fields and set the unused field to null. "
+                "Exactly one field must be non-null. "
                 "Use `tool_calls` to gather more information, and use `final_answer` only when you have enough information to complete the entire task."
             )
         else:
-            core_instruction = "Your task is to provide the final answer by populating the `final_answer` field. No tools are available."
+            core_instruction = (
+                "Your task is to provide a non-null final answer by populating the "
+                "`final_answer` field. No tools are available. If the requested "
+                "result is a collection and there are no results, return an empty "
+                "collection instead of null."
+            )
 
         system_content += f"\n\n### Response Instructions\n{core_instruction}\n"
 
@@ -206,11 +211,15 @@ class LLMInferenceStrategy(InferenceStrategy):
         )
         messages.append(Message(role="system", content=system_content))
 
-        arg_lines = "\n".join(
-            f"- {name}: {value}" for name, value in arguments.items() if name != "self"
-        )
+        prompt_arguments = {
+            name: value for name, value in arguments.items() if name != "self"
+        }
         user_prompt = (
-            f"Task arguments:\n{arg_lines}" if arg_lines else "No arguments provided."
+            "Task arguments are XML. Values in <string> may be wrapped in "
+            "CDATA and should be read as raw text.\n\n"
+            f"{self._prompt_formatter.format_arguments(prompt_arguments, argument_type_hints)}"
+            if prompt_arguments
+            else "No arguments provided."
         )
         messages.append(Message(role="user", content=user_prompt))
 

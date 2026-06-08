@@ -7,9 +7,9 @@ import glyff_file_store
 import sefia
 import sefia.stores
 import sefia_litellm
+from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import MaxSteps
 from sefia.interfaces import Policy
-from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 
 from .debugging import VerbosePolicy
 from .streaming import StreamingPolicy
@@ -25,7 +25,7 @@ async def setup_session(
 ) -> AsyncIterator[sefia.Session]:
     """Sets up and provides a Sefia session."""
     llm_client = sefia_litellm.LiteLLMClient(model=model)
-    serializer = SefiaSerializer()
+    serializer = PydanticSerializer()
 
     file_client = glyff_file_store.FileClient(
         base_dir=session_dir / "glyff_sessions",
@@ -36,7 +36,7 @@ async def setup_session(
         store=glyff_file_store.JsonFileSessionStore(
             client=file_client, serializer=serializer
         ),
-        hasher=SefiaArgsHasher(),
+        hasher=PydanticArgsHasher(),
     )
     sefia_store = sefia.stores.FileSessionStore(
         client=file_client, serializer=serializer

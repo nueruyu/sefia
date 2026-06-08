@@ -2,14 +2,13 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine
 
-import glyff
 import pytest
 from glyff.interfaces import ArgsHasher, Serializer
+from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 
 from sefia import LLMResponse, infer, tool
 from sefia.llm.client import LLMClient
 from sefia.llm.messages import Message
-from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 
 
 class MockLLMClient(LLMClient):
@@ -45,7 +44,7 @@ class SearchResult:
     url: str
 
 
-@glyff.identify("WebToolkit")
+@dataclass
 class WebToolkit:
     """A simple toolkit for web operations."""
 
@@ -73,7 +72,7 @@ class Report:
     sources: list[str]
 
 
-@glyff.identify("Researcher")
+@dataclass
 class Researcher:
     """An agent that uses WebToolkit to research topics."""
 
@@ -89,7 +88,7 @@ class Researcher:
         ...
 
 
-@glyff.identify("BrokenToolkit")
+@dataclass
 class BrokenToolkit:
     """A toolkit where tools can fail."""
 
@@ -99,7 +98,7 @@ class BrokenToolkit:
         raise ValueError(f"Failed because: {reason}")
 
 
-@glyff.identify("SimpleAgent")
+@dataclass
 class SimpleAgent:
     """An agent that has no tools."""
 
@@ -127,9 +126,9 @@ def broken_toolkit() -> BrokenToolkit:
 
 @pytest.fixture
 def serializer() -> Serializer:
-    return SefiaSerializer()
+    return PydanticSerializer()
 
 
 @pytest.fixture
 def hasher() -> ArgsHasher:
-    return SefiaArgsHasher()
+    return PydanticArgsHasher()

@@ -10,6 +10,7 @@ from .interfaces import (
 from .interfaces.session_store import SessionStore
 from .llm.client import LLMClient
 from .llm.strategy import LLMInferenceStrategy
+from .llm.xml_prompt_formatter import XmlPromptFormatter
 from .policies import StagnationPolicy
 from .pydantic.json_utils import pydantic_json_default
 from .pydantic.model_inspector import PydanticModelInspector
@@ -49,9 +50,11 @@ class Session:
         self._tool_collector = tool_collector or DefaultToolCollector(
             model_inspector=model_inspector
         )
+        prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
         self._inference_strategy = LLMInferenceStrategy(
             llm_client,
             model_inspector=model_inspector,
+            prompt_formatter=prompt_formatter,
             json_default=pydantic_json_default,
             stream=stream,
         )

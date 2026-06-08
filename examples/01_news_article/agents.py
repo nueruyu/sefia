@@ -1,4 +1,5 @@
-from glyff import identify
+from dataclasses import dataclass
+
 from sefia import infer, tool
 
 from ..common.human_input import HumanInputTool
@@ -6,7 +7,7 @@ from ..common.web_search import WebSearchTool
 from .models import ArticleRequest, NewsArticle
 
 
-@identify("RequirementsClarifier")
+@dataclass
 class RequirementsClarifier:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
@@ -36,7 +37,7 @@ class RequirementsClarifier:
         ...
 
 
-@identify("Researcher")
+@dataclass
 class Researcher:
     def __init__(self, web_search: WebSearchTool):
         self._web = web_search
@@ -56,7 +57,7 @@ class Researcher:
         ...
 
 
-@identify("NewsWriter")
+@dataclass
 class NewsWriter:
     def __init__(self, human_input: HumanInputTool, researcher: Researcher):
         self._human_input = human_input

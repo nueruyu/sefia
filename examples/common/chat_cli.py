@@ -1,5 +1,5 @@
 import asyncio
-import uuid
+import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from textwrap import dedent
@@ -12,26 +12,11 @@ from rich.panel import Panel
 from typing_extensions import Annotated
 
 from .chat_session import ChatSessionState
+from .session_manager import SessionManager
 from .session_setup import setup_session
 
 WorkflowCallback = Callable[[ChatSessionState], Awaitable[None]]
 console = Console()
-
-
-def _get_active_session_file(session_dir: Path) -> Path:
-    session_dir.mkdir(exist_ok=True)
-    return session_dir / "active_session.txt"
-
-
-def _get_active_session_id(session_dir: Path) -> str | None:
-    session_file = _get_active_session_file(session_dir)
-    if session_file.exists():
-        return session_file.read_text(encoding="utf-8").strip()
-    return None
-
-
-def _set_active_session_id(session_dir: Path, session_id: str) -> None:
-    _get_active_session_file(session_dir).write_text(session_id, encoding="utf-8")
 
 
 def _print_session_interrupted_hint() -> None:
@@ -102,15 +87,16 @@ def create_app(
     app = typer.Typer(help=help_text)
     session_app = typer.Typer(help="Manage user sessions.")
     app.add_typer(session_app, name="session")
+    session_manager = SessionManager(session_dir)
 
     @app.command("chat")
     def chat(
         message: Annotated[
-            list[str],
+            list[str] | None,
             typer.Argument(
                 help="The topic for a new session, or an answer to resume an existing one."
             ),
-        ],
+        ] = None,
         model: Annotated[
             str,
             typer.Option(
@@ -129,19 +115,23 @@ def create_app(
         """
         Start a new topic or provide an answer to continue the current session.
         """
-        input_text = " ".join(message)
+        input_text = " ".join(message or []).strip()
+
+        if not input_text and not sys.stdin.isatty():
+            input_text = sys.stdin.read().strip()
+
         if not input_text:
             raise typer.BadParameter("Message cannot be empty.")
 
-        session_id = _get_active_session_id(session_dir)
+        session_id = session_manager.get_active_session_id()
         is_new = session_id is None
 
         if is_new:
-            session_id = str(uuid.uuid4())
+            session_id = session_manager.create_new_session_id()
             console.print(
                 f"[bold]> No active session. Starting new session: {session_id}[/bold]"
             )
-            _set_active_session_id(session_dir, session_id)
+            session_manager.set_active_session_id(session_id)
         else:
             console.print(f"[bold]> Resuming session {session_id}[/bold]")
 
@@ -167,7 +157,7 @@ def create_app(
         Switch the active session.
         """
         # A more robust implementation would check if the session directory exists.
-        _set_active_session_id(session_dir, session_id)
+        session_manager.set_active_session_id(session_id)
         console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 
     @session_app.command("new")
@@ -175,8 +165,8 @@ def create_app(
         """
         Create a new session and make it active.
         """
-        session_id = str(uuid.uuid4())
-        _set_active_session_id(session_dir, session_id)
+        session_id = session_manager.create_new_session_id()
+        session_manager.set_active_session_id(session_id)
         console.print(
             f"[bold]> Created and switched to new session: {session_id}[/bold]"
         )

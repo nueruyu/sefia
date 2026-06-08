@@ -30,12 +30,12 @@ class FileSessionStore(SessionStore):
         path = self._key_to_path(key)
         data = await self._client.read(path)
         if data:
-            return self._serializer.deserialize(data, type_hint)
+            return await self._serializer.deserialize(data, type_hint)
         return None
 
     async def set(self, key: str, value: Any, type_hint: type) -> None:
         path = self._key_to_path(key)
-        data = self._serializer.serialize(value, type_hint)
+        data = await self._serializer.serialize(value, type_hint)
 
         async def _write() -> bytes:
             return data
