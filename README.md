@@ -222,8 +222,13 @@ async with glyff.Session(id="abc-123", store=glyff_store, hasher=hasher) as gs:
 
 ### Policies
 
-Policies attach event handlers that govern how the inference loop reacts to
-errors and other events.
+A policy contributes two kinds of extension to an inference run, and may provide
+either or both:
+
+- **Observation** via `create_handlers()` — event handlers that are notified of
+  events but cannot steer the loop (see [Event handlers](#event-handlers)).
+- **Control** via `create_middleware()` — middleware that wraps the run (or each
+  step) and steers the executor's loops.
 
 ```python
 from sefia import MaxRetries, infer
@@ -241,13 +246,22 @@ added by implementing the `Policy` ABC.
 
 ### Steps and the inference loop
 
-The executor fires a `StepStarted` event at the start of every step (0-based),
-and otherwise loops until the model produces a final answer. It does not cap
-the loop itself: to bound it, attach a policy whose handler raises while
-handling `StepStarted`. There is no default cap.
+The executor owns both loops — the outer retry loop and the inner step loop —
+and wraps each unit of work with the configured middleware. A middleware never
+loops itself; it wraps a single attempt or a single step and delegates to the
+next layer, so multiple middlewares compose cleanly. To steer a loop, a
+middleware raises a typed control signal that the executor interprets.
 
-`MaxSteps` does exactly this — its handler raises `MaxStepsExceededError` once
-the loop reaches the step limit:
+Two seams are available, exposed as ABCs in `sefia.interfaces`:
+
+- `InferenceMiddleware.wrap(ctx, nxt)` wraps a whole inference run. `MaxRetries`
+  uses this: on a retryable failure it raises `RequestInferenceRetry` to ask for
+  another attempt, or `MaxRetriesExceededError` once the budget is spent.
+- `StepMiddleware.wrap(ctx, nxt)` wraps a single step. `MaxSteps` uses this to
+  cap the loop, raising `MaxStepsExceededError` once the step limit is reached.
+
+The executor does not cap the loop on its own; without a `StepMiddleware` there
+is no default cap (though `Session` registers stagnation detection by default).
 
 ```python
 from sefia import MaxSteps, infer
@@ -261,8 +275,11 @@ class MyAgent:
 ```
 
 `MaxSteps` can also be passed to `Session(policies=[...])` to apply across an
-entire session. Any custom `EventHandler` for `StepStarted` can stop the loop
-on its own terms — for example by inspecting progress before raising.
+entire session.
+
+A failing tool is never treated as a retryable failure: the executor stringifies
+the error into the history and feeds it back to the model so it can recover,
+rather than restarting the run.
 
 ### Resumption and interruption
 
@@ -293,8 +310,11 @@ calling the same workflow again when the answer arrives.
 
 ## Event handlers
 
-The inference loop emits events at each significant step. Custom handlers can
-observe or alter behavior:
+The inference loop emits events at each significant step. Handlers **observe**
+these events — they do not steer the loop. A handler's exception is logged and
+swallowed so a misbehaving observer can never break the core loop. (Control
+lives in middleware instead; see [Steps and the inference
+loop](#steps-and-the-inference-loop).)
 
 - `InferenceStart`: an `@infer` call begins
 - `AttemptStart`: a new attempt within the retry loop
@@ -326,8 +346,13 @@ class LoggingPolicy(Policy):
 
 Pass policies to `Session` or to a specific `@infer` call.
 
-The built-in `StagnationDetector` is registered by default and aborts the loop
+The built-in `StagnationMiddleware` is registered by default and aborts the loop
 if the same tool is called repeatedly with identical arguments.
+
+The one exception to handler isolation is `glyff.exceptions.YieldException`: a
+handler may raise it (for example, in response to `InferenceStepFailed`) to
+interrupt the session gracefully and leave the step resumable. That signal is
+allowed to propagate.
 
 ## Resources
 

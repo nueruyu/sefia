@@ -7,7 +7,7 @@ from glyff import engrave
 from .context import get_context
 from .event_publisher import EventPublisher
 from .executor import InferenceExecutor
-from .interfaces import Policy
+from .interfaces import InferenceMiddleware, Policy, StepMiddleware
 
 
 def tool(func: Callable) -> Callable:
@@ -43,7 +43,19 @@ def infer(policies: list[Policy] | None = None) -> Callable:
                 for policy in all_policies
                 for handler in policy.create_handlers()
             ]
+            all_middleware = [
+                middleware
+                for policy in all_policies
+                for middleware in policy.create_middleware()
+            ]
             publisher = EventPublisher(all_handlers)
+
+            inference_middlewares = [
+                m for m in all_middleware if isinstance(m, InferenceMiddleware)
+            ]
+            step_middlewares = [
+                m for m in all_middleware if isinstance(m, StepMiddleware)
+            ]
 
             executor = InferenceExecutor(
                 func=func,
@@ -53,6 +65,8 @@ def infer(policies: list[Policy] | None = None) -> Callable:
                 tool_collector=context.tool_collector,
                 engrave=engrave,
                 publisher=publisher,
+                inference_middlewares=inference_middlewares,
+                step_middlewares=step_middlewares,
             )
             return await executor.run()
 

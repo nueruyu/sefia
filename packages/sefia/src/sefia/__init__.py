@@ -1,10 +1,23 @@
 from .decorators import infer, tool
 from .events import Event
 from .handlers.cost import CostCalculator
-from .interfaces import EventHandler, Policy, Resource, SessionStore
+from .interfaces import (
+    EventHandler,
+    InferenceMiddleware,
+    Policy,
+    Resource,
+    SessionStore,
+    StepMiddleware,
+)
 from .llm.client import LLMClient
 from .llm.messages import LLMResponse, Message, ToolCall
 from .markers import AsRawText
+from .middleware.signals import (
+    InferenceControlSignal,
+    MaxRetriesExceededError,
+    MaxStepsExceededError,
+    StagnationError,
+)
 from .policies import MaxRetries, MaxSteps
 from .session import Session
 from .state_store import StateStore
@@ -22,8 +35,14 @@ __all__ = [
     "Event",
     "EventHandler",
     "Policy",
+    "InferenceMiddleware",
+    "StepMiddleware",
     "MaxRetries",
     "MaxSteps",
+    "InferenceControlSignal",
+    "MaxRetriesExceededError",
+    "MaxStepsExceededError",
+    "StagnationError",
     "CostCalculator",
     "SessionStore",
     "StateStore",

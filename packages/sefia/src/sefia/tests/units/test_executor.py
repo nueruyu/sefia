@@ -8,11 +8,18 @@ from sefia import events
 from sefia.event_publisher import EventPublisher
 from sefia.events import StepStarted
 from sefia.executor import InferenceExecutor
-from sefia.handlers.max_steps import MaxStepsExceededError
-from sefia.handlers.retry import RequestInferenceRetry
 from sefia.interfaces import EventHandler, InferenceStrategy, ToolCollector
+from sefia.interfaces.middleware import StepContext, StepMiddleware
+from sefia.middleware.max_steps import MaxStepsMiddleware
+from sefia.middleware.retry import RetryMiddleware
+from sefia.middleware.signals import (
+    MaxRetriesExceededError,
+    MaxStepsExceededError,
+    RequestInferenceRetry,
+)
 from sefia.models import (
     FinalAnswerDecision,
+    InferenceDecision,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
@@ -165,9 +172,9 @@ class TestInferenceExecutor:
         ]
         assert [event.step for event in step_events] == [0, 1]
 
-    async def test_handler_can_stop_the_loop(self, executor_dependencies):
-        # A handler that raises while handling StepStarted stops the loop. Here
-        # it refuses to start a fourth step (0-based index 3).
+    async def test_step_middleware_can_stop_the_loop(self, executor_dependencies):
+        # A step middleware that raises a control signal stops the loop. Here
+        # MaxStepsMiddleware refuses to start a fourth step (0-based index 3).
         (
             mock_strategy,
             mock_collector,
@@ -175,12 +182,6 @@ class TestInferenceExecutor:
             non_engrave,
         ) = executor_dependencies
         mock_strategy.decide_next_step.return_value = ToolCallDecision(calls=[])
-
-        async def stop_after_three(event):
-            if isinstance(event, StepStarted) and event.step >= 3:
-                raise MaxStepsExceededError("stop")
-
-        mock_publisher.publish.side_effect = stop_after_three
 
         executor = InferenceExecutor(
             sample_func,
@@ -190,11 +191,179 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
+            step_middlewares=[MaxStepsMiddleware(max_steps=3)],
         )
 
         with pytest.raises(MaxStepsExceededError):
             await executor.run()
 
+        assert mock_strategy.decide_next_step.call_count == 3
+
+    async def test_step_middlewares_compose_in_declared_order(
+        self, executor_dependencies
+    ):
+        # Multiple step middlewares wrap each step as an onion: the first in the
+        # list is the outermost layer. They run once per step, not multiplied by
+        # one another, and observe the steps in order.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(calls=[]),
+            FinalAnswerDecision(answer="done"),
+        ]
+
+        calls: list[str] = []
+
+        class Recorder(StepMiddleware):
+            def __init__(self, label: str):
+                self.label = label
+
+            async def wrap(self, ctx: StepContext, nxt) -> InferenceDecision:
+                calls.append(f"{self.label}:enter:{ctx.step}")
+                decision = await nxt()
+                calls.append(f"{self.label}:exit:{ctx.step}")
+                return decision
+
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+            step_middlewares=[Recorder("outer"), Recorder("inner")],
+        )
+
+        result = await executor.run()
+
+        assert result == "done"
+        # Two steps, each wrapped once by each middleware, outer enclosing inner.
+        assert calls == [
+            "outer:enter:0",
+            "inner:enter:0",
+            "inner:exit:0",
+            "outer:exit:0",
+            "outer:enter:1",
+            "inner:enter:1",
+            "inner:exit:1",
+            "outer:exit:1",
+        ]
+
+    async def test_tool_failure_is_not_retried_but_fed_back(
+        self, executor_dependencies
+    ):
+        # A failing tool must not trigger a retry of the whole inference. The
+        # error is stringified into the history and fed back to the model, which
+        # then recovers — the run never restarts (decide is called twice).
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(
+                calls=[ToolCallRequest(id="1", name="boom_tool", arguments={})]
+            ),
+            FinalAnswerDecision(answer="recovered"),
+        ]
+
+        tool_registry = ToolRegistry()
+        failing_tool = AsyncMock(side_effect=ValueError("kaboom"))
+        tool_registry.add(
+            failing_tool,
+            {
+                "type": "function",
+                "function": {"name": "boom_tool", "description": "", "parameters": {}},
+            },
+        )
+        mock_collector.collect.return_value = tool_registry
+
+        executor = InferenceExecutor(
+            sample_func_with_self,
+            (object(), "value"),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+            inference_middlewares=[RetryMiddleware(max_retries=3)],
+        )
+
+        result = await executor.run()
+
+        assert result == "recovered"
+        # No retry: the strategy was consulted exactly twice (tool call, then
+        # the final answer informed by the error).
+        assert mock_strategy.decide_next_step.call_count == 2
+        history = mock_strategy.decide_next_step.call_args_list[1].kwargs["history"]
+        assert isinstance(history[-1], ToolCallResult)
+        assert "Error executing tool 'boom_tool'" in history[-1].result
+        assert "ValueError(kaboom)" in history[-1].result
+
+    async def test_inference_middleware_retries_inference_failure(
+        self, executor_dependencies
+    ):
+        # An inference-call failure is retried by RetryMiddleware. The first
+        # attempt fails inside decide_next_step; the second succeeds.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ValueError("flaky inference"),
+            FinalAnswerDecision(answer="second attempt"),
+        ]
+
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+            inference_middlewares=[RetryMiddleware(max_retries=3)],
+        )
+
+        result = await executor.run()
+
+        assert result == "second attempt"
+        assert mock_strategy.decide_next_step.call_count == 2
+
+    async def test_inference_middleware_raises_after_exhausting_retries(
+        self, executor_dependencies
+    ):
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = ValueError("always flaky")
+
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+            inference_middlewares=[RetryMiddleware(max_retries=2)],
+        )
+
+        with pytest.raises(MaxRetriesExceededError):
+            await executor.run()
+
+        # initial attempt + 2 retries
         assert mock_strategy.decide_next_step.call_count == 3
 
     async def test_failed_step_publishes_event_and_reraises_by_default(

@@ -1,27 +1,24 @@
 import json
 from collections import deque
-from typing import Any, Type
+from typing import Any, Awaitable, Callable
 
-from sefia.events import BeforeToolCall, Event
-from sefia.interfaces import EventHandler
-
-
-class StagnationError(Exception):
-    """Raised when the inference process appears to be stuck in a loop."""
+from ..interfaces.middleware import StepContext, StepMiddleware
+from ..models import InferenceDecision, ToolCallDecision
+from .signals import StagnationError
 
 
-class StagnationDetector(EventHandler[BeforeToolCall]):
+class StagnationMiddleware(StepMiddleware):
     """
-    Detects if the agent is stagnating by repeating the same tool calls.
+    Detects if the agent is stagnating by repeating the same tool call.
+
+    The middleware inspects each step's decision and records its tool calls. If
+    the same call recurs ``max_repeats`` times in a row it raises
+    ``StagnationError`` before the repeated tool runs again.
     """
 
     def __init__(self, max_repeats: int = 3):
         self.max_repeats = max_repeats
         self.history: deque[str] = deque(maxlen=max_repeats)
-
-    @property
-    def event_types(self) -> tuple[Type[Event], ...]:
-        return (BeforeToolCall,)
 
     def _hash_tool_call(self, tool_name: str, tool_args: dict[str, Any]) -> str:
         serialized_args = json.dumps(tool_args, sort_keys=True, default=str)
@@ -38,6 +35,13 @@ class StagnationDetector(EventHandler[BeforeToolCall]):
                 "times with the same arguments."
             )
 
-    async def handle(self, event: BeforeToolCall) -> None:
-        tool_call = event.tool_call
-        self._record_and_check(tool_call.name, tool_call.arguments)
+    async def wrap(
+        self,
+        ctx: StepContext,
+        nxt: Callable[[], Awaitable[InferenceDecision]],
+    ) -> InferenceDecision:
+        decision = await nxt()
+        if isinstance(decision, ToolCallDecision):
+            for call in decision.calls:
+                self._record_and_check(call.name, call.arguments)
+        return decision

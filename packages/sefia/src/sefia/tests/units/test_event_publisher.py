@@ -1,6 +1,7 @@
 from typing import Type, Union
 
 import pytest
+from glyff.exceptions import YieldException
 from pytest_mock import MockerFixture
 
 from sefia.event_publisher import EventPublisher
@@ -107,3 +108,43 @@ class TestEventPublisher:
         await publisher.publish(before_tool_call_event)
 
         spy.assert_called_once_with(before_tool_call_event)
+
+    async def test_isolates_handler_exceptions(
+        self, mocker: MockerFixture, before_tool_call_event: BeforeToolCall
+    ):
+        # Observation handlers must not break the core loop: a handler that
+        # raises is logged and swallowed, and later handlers still run.
+        class RaisingHandler(EventHandler[BeforeToolCall]):
+            @property
+            def event_types(self) -> tuple[Type[Event], ...]:
+                return (BeforeToolCall,)
+
+            async def handle(self, event: BeforeToolCall) -> None:
+                raise ValueError("handler is broken")
+
+        good_handler = MyEventHandler()
+        spy = mocker.spy(good_handler, "handle")
+        publisher = EventPublisher(handlers=[RaisingHandler(), good_handler])
+
+        # Should not raise.
+        await publisher.publish(before_tool_call_event)
+
+        spy.assert_called_once_with(before_tool_call_event)
+
+    async def test_yield_exception_propagates(
+        self, before_tool_call_event: BeforeToolCall
+    ):
+        # YieldException is glyff's resumable-interrupt signal and must propagate
+        # through the publisher rather than being swallowed.
+        class YieldingHandler(EventHandler[BeforeToolCall]):
+            @property
+            def event_types(self) -> tuple[Type[Event], ...]:
+                return (BeforeToolCall,)
+
+            async def handle(self, event: BeforeToolCall) -> None:
+                raise YieldException("resume later")
+
+        publisher = EventPublisher(handlers=[YieldingHandler()])
+
+        with pytest.raises(YieldException):
+            await publisher.publish(before_tool_call_event)

@@ -1,15 +1,30 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 
 from .event_handler import EventHandler
+from .middleware import InferenceMiddleware, StepMiddleware
 
 
 class Policy(ABC):
     """
     Abstract base class for a policy that can be applied to an @infer call.
-    A policy generates one or more event handlers to enforce its rules.
+
+    A policy contributes two kinds of extension to an inference run:
+
+    - **Observation** via :meth:`create_handlers`, which returns event handlers
+      that are notified of events but cannot steer the loop (their exceptions are
+      isolated by the publisher).
+    - **Control** via :meth:`create_middleware`, which returns middleware that
+      wraps the inference run (or each step) and can steer the executor's loops
+      using typed control signals.
+
+    Both default to contributing nothing, so a policy only implements the kind it
+    needs.
     """
 
-    @abstractmethod
     def create_handlers(self) -> list[EventHandler]:
-        """Create a list of handlers that enforce this policy."""
-        ...
+        """Create observation handlers that enforce this policy (default: none)."""
+        return []
+
+    def create_middleware(self) -> list[InferenceMiddleware | StepMiddleware]:
+        """Create control middleware that enforces this policy (default: none)."""
+        return []
