@@ -238,8 +238,9 @@ class MyAgent:
 ```
 
 Per-function policies are attached with the separate `@with_policies`
-decorator, applied below `@infer`. It records them under the `"policies"` key
-of the function's `__sefia_metadata__`, where `@infer` reads them.
+decorator. It records them under the `"policies"` key of the function's
+`__sefia_metadata__`, where `@infer` reads them — the order of the two
+decorators does not matter.
 
 Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
 added by implementing the `Policy` ABC.

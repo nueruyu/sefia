@@ -8,7 +8,7 @@ from glyff.interfaces import ArgsHasher, Serializer
 from glyff.stores import MemoryClient
 from glyff.stores import MemorySessionStore as GlyffMemoryStore
 
-from sefia import LLMResponse, Session, infer
+from sefia import LLMResponse, MaxSteps, Session, infer, with_policies
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
 from ..conftest import (
@@ -365,3 +365,83 @@ async def test_inference_on_standalone_function(
     output_schema = mock_llm.requests[0].get("output_schema")
     assert output_schema is not None
     assert "tool_calls" not in output_schema.get("properties", {})
+
+
+def test_with_policies_attaches_metadata():
+    """`@with_policies` records its policies under __sefia_metadata__["policies"],
+    regardless of where it sits relative to @infer."""
+
+    @infer
+    @with_policies([MaxSteps(count=3)])
+    async def below(value: int) -> int:
+        """Policies decorator applied below @infer."""
+        ...
+
+    @with_policies([MaxSteps(count=3)])
+    @infer
+    async def above(value: int) -> int:
+        """Policies decorator applied above @infer."""
+        ...
+
+    for fn in (below, above):
+        policies = fn.__sefia_metadata__["policies"]
+        assert len(policies) == 1
+        assert isinstance(policies[0], MaxSteps)
+
+
+# Two agents that differ only in the order of @infer / @with_policies. Both keep
+# requesting a tool so the inference loop would run forever without the cap.
+@dataclass
+class CappedAgentBelow:
+    def __init__(self, kit: WebToolkit):
+        self._web = kit
+
+    @infer
+    @with_policies([MaxSteps(count=1)])
+    async def run(self, topic: str) -> Report:
+        """Research the topic using the web tools."""
+        ...
+
+
+@dataclass
+class CappedAgentAbove:
+    def __init__(self, kit: WebToolkit):
+        self._web = kit
+
+    @with_policies([MaxSteps(count=1)])
+    @infer
+    async def run(self, topic: str) -> Report:
+        """Research the topic using the web tools."""
+        ...
+
+
+@pytest.mark.parametrize("agent_cls", [CappedAgentBelow, CappedAgentAbove])
+async def test_with_policies_caps_inference_loop(
+    agent_cls, web_toolkit: WebToolkit, serializer: Serializer, hasher: ArgsHasher
+):
+    """A MaxSteps policy attached via @with_policies actually caps the loop, no
+    matter which order the two decorators are applied in."""
+    tool_call = LLMResponse(
+        content=json.dumps(
+            {
+                "tool_calls": [
+                    {"name": "WebToolkit_search", "arguments": {"query": "sefia"}}
+                ]
+            }
+        )
+    )
+    # More responses than the cap allows; the policy must stop the loop first.
+    mock_llm = MockLLMClient(responses=[tool_call, tool_call, tool_call])
+    session_id = f"with-policies-cap-{agent_cls.__name__}"
+    glyff_store, sefia_store = _make_stores(serializer)
+
+    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
+        ):
+            agent = agent_cls(web_toolkit)
+            with pytest.raises(ExecutionFailedError, match="MaxStepsExceededError"):
+                await agent.run(topic="sefia")
+
+    # count=1 permits exactly one LLM step before the loop is stopped.
+    assert len(mock_llm.requests) == 1

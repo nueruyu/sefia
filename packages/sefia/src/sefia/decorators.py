@@ -31,8 +31,8 @@ def with_policies(policies: list[Policy]) -> Callable:
     Decorator that attaches inference policies to an ``@infer`` function.
 
     The policies are stored under the ``"policies"`` key of the function's
-    ``__sefia_metadata__`` dict, where ``@infer`` reads them. Apply it below
-    ``@infer`` (closer to the function)::
+    ``__sefia_metadata__`` dict, where ``@infer`` reads them. The order relative
+    to ``@infer`` does not matter::
 
         @infer
         @with_policies([MaxRetries(count=5)])
@@ -55,17 +55,21 @@ def infer(func: Callable) -> Callable:
     Decorator that enables a function's implementation to be inferred by an LLM.
     The function body is ignored; its signature and docstring are used as a prompt.
 
-    Per-function policies can be attached with the ``@policies`` decorator, which
-    stores them under the ``"policies"`` key of ``__sefia_metadata__``.
+    Per-function policies can be attached with the ``@with_policies`` decorator,
+    which stores them under the ``"policies"`` key of ``__sefia_metadata__``.
     """
-
-    metadata = getattr(func, "__sefia_metadata__", {})
-    fn_policies = metadata.get("policies", [])
 
     @engrave
     @functools.wraps(func)
     async def _run(*args, **kwargs):
         context = get_context()
+        # Read policy metadata at runtime so decorator order does not matter:
+        # the original function carries it when @with_policies is applied below
+        # @infer, and the wrapper carries it when applied above.
+        metadata = getattr(func, "__sefia_metadata__", None)
+        if metadata is None:
+            metadata = getattr(_run, "__sefia_metadata__", {})
+        fn_policies = metadata.get("policies", [])
         all_policies = context.policies + fn_policies
         all_handlers = [
             handler
