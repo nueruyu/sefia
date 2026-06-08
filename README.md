@@ -25,7 +25,7 @@ class Summary(BaseModel):
     uncertainty: str
 
 
-@infer()
+@infer
 async def summarize(article: str) -> Summary:
     """
     Summarize the article for a technical audience.
@@ -93,7 +93,7 @@ class Researcher:
     def __init__(self, web: WebToolkit):
         self._web = web
 
-    @infer()
+    @infer
     async def generate_report(self, topic: str) -> Report:
         """Research the topic using the web tools and produce a structured report."""
         ...
@@ -146,7 +146,7 @@ resumption. For LiteLLM-backed provider support, install
 `@infer` turns a typed async function into an LLM-backed call.
 
 ```python
-@infer()
+@infer
 async def decide_next_action(state: AgentState) -> AgentDecision:
     """Decide the next action for the current state."""
     ...
@@ -226,15 +226,20 @@ Policies attach event handlers that govern how the inference loop reacts to
 errors and other events.
 
 ```python
-from sefia import MaxRetries, infer
+from sefia import MaxRetries, infer, with_policies
 
 
 class MyAgent:
-    @infer(policies=[MaxRetries(count=5)])
+    @infer
+    @with_policies([MaxRetries(count=5)])
     async def critical_task(self, request: Request) -> Result:
         """Handle the request with retry behavior."""
         ...
 ```
+
+Per-function policies are attached with the separate `@with_policies`
+decorator, applied below `@infer`. It records them under the `"policies"` key
+of the function's `__sefia_metadata__`, where `@infer` reads them.
 
 Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
 added by implementing the `Policy` ABC.
@@ -250,11 +255,12 @@ handling `StepStarted`. There is no default cap.
 the loop reaches the step limit:
 
 ```python
-from sefia import MaxSteps, infer
+from sefia import MaxSteps, infer, with_policies
 
 
 class MyAgent:
-    @infer(policies=[MaxSteps(count=25)])
+    @infer
+    @with_policies([MaxSteps(count=25)])
     async def run(self, task: Task) -> Result:
         """Work the task, capped at 25 steps."""
         ...

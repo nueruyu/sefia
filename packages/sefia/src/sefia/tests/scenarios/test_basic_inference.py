@@ -169,7 +169,7 @@ async def test_inference_with_tool_exception(
         def __init__(self, kit: BrokenToolkit):
             self._kit = kit
 
-        @infer()
+        @infer
         async def run_and_report(self) -> Report:
             """Run a tool and report on the outcome."""
             ...
@@ -341,7 +341,7 @@ async def test_inference_on_standalone_function(
 ):
     """Tests that @infer works correctly on a standalone function without any tools."""
 
-    @infer()
+    @infer
     async def summarize_text(text: str, length: int) -> str:
         """Summarize the given text to the specified length in sentences."""
         ...

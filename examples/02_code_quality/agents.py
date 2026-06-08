@@ -21,7 +21,7 @@ class ScopingAgent:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
 
-    @infer()
+    @infer
     async def define_scope(self, user_request: str) -> ProjectScope:
         """
         Clarify the user's request and define a concrete code-review scope.
@@ -39,7 +39,7 @@ class UnderstandingAgent:
     def __init__(self, file_tool: FileTool):
         self._file_tool = file_tool
 
-    @infer()
+    @infer
     async def _prioritize_files_to_read(
         self,
         current_understanding: ProjectUnderstanding,
@@ -56,7 +56,7 @@ class UnderstandingAgent:
         """
         ...
 
-    @infer()
+    @infer
     async def _update_understanding(
         self,
         current_understanding: ProjectUnderstanding,
@@ -108,7 +108,7 @@ class ReviewScopingAgent:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
 
-    @infer()
+    @infer
     async def propose_and_confirm_review_files(
         self,
         understanding: ProjectUnderstanding,
@@ -128,7 +128,7 @@ class ReviewScopingAgent:
 
 @dataclass
 class CodingStyleAuditor:
-    @infer()
+    @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Review the given files from a coding-style perspective.
@@ -143,7 +143,7 @@ class CodingStyleAuditor:
 
 @dataclass
 class DesignPrincipleArchitect:
-    @infer()
+    @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Review the given files from a software-design-principles perspective.
@@ -157,7 +157,7 @@ class DesignPrincipleArchitect:
 
 @dataclass
 class MaintainabilityAssessor:
-    @infer()
+    @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Review the given files from a maintainability and readability perspective.
@@ -171,7 +171,7 @@ class MaintainabilityAssessor:
 
 @dataclass
 class DependencySpecialist:
-    @infer()
+    @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Review the given files from an external-dependency perspective.
@@ -186,7 +186,7 @@ class DependencySpecialist:
 
 @dataclass
 class ReportingAgent:
-    @infer()
+    @infer
     async def create_report(
         self,
         all_issues: list[CodeIssue],
