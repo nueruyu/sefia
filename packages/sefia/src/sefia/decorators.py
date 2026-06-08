@@ -30,9 +30,10 @@ def with_policies(policies: list[Policy]) -> Callable:
     """
     Decorator that attaches inference policies to an ``@infer`` function.
 
-    The policies are stored under the ``"policies"`` key of the function's
+    The policies are appended under the ``"policies"`` key of the function's
     ``__sefia_metadata__`` dict, where ``@infer`` reads them. The order relative
-    to ``@infer`` does not matter::
+    to ``@infer`` does not matter, and stacking multiple ``@with_policies``
+    decorators accumulates their policies rather than overwriting::
 
         @infer
         @with_policies([MaxRetries(count=5)])
@@ -44,7 +45,7 @@ def with_policies(policies: list[Policy]) -> Callable:
         if metadata is None:
             metadata = {}
             setattr(func, "__sefia_metadata__", metadata)
-        metadata["policies"] = list(policies)
+        metadata.setdefault("policies", []).extend(policies)
         return func
 
     return decorator

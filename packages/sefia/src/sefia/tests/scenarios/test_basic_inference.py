@@ -369,7 +369,7 @@ async def test_inference_on_standalone_function(
 
 def test_with_policies_attaches_metadata():
     """`@with_policies` records its policies under __sefia_metadata__["policies"],
-    regardless of where it sits relative to @infer."""
+    regardless of where it sits relative to @infer, and stacking accumulates."""
 
     @infer
     @with_policies([MaxSteps(count=3)])
@@ -383,10 +383,22 @@ def test_with_policies_attaches_metadata():
         """Policies decorator applied above @infer."""
         ...
 
+    @with_policies([MaxSteps(count=3)])
+    @with_policies([MaxSteps(count=5)])
+    @infer
+    async def stacked(value: int) -> int:
+        """Multiple @with_policies decorators stacked."""
+        ...
+
     for fn in (below, above):
         policies = fn.__sefia_metadata__["policies"]
         assert len(policies) == 1
         assert isinstance(policies[0], MaxSteps)
+
+    # Stacked decorators preserve every policy instead of overwriting.
+    stacked_policies = stacked.__sefia_metadata__["policies"]
+    assert len(stacked_policies) == 2
+    assert {p.count for p in stacked_policies} == {3, 5}
 
 
 # Two agents that differ only in the order of @infer / @with_policies. Both keep
