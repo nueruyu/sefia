@@ -25,9 +25,11 @@ async def _step(middleware: StagnationMiddleware, name: str, args: dict, step: i
 
 
 class TestStagnationMiddleware:
-    def test_rejects_non_positive_max_repeats(self):
-        with pytest.raises(ValueError):
-            StagnationMiddleware(max_repeats=0)
+    def test_rejects_invalid_max_repeats(self):
+        # A limit of 1 would flag the first tool call, so values < 2 are invalid.
+        for invalid in (0, 1):
+            with pytest.raises(ValueError):
+                StagnationMiddleware(max_repeats=invalid)
 
     async def test_raises_error_on_repeated_calls(self):
         middleware = StagnationMiddleware(max_repeats=3)
@@ -67,7 +69,7 @@ class TestStagnationMiddleware:
         await _step(middleware, "test_tool", {"a": 1}, step=0)  # new attempt; ok
 
     async def test_ignores_final_answer_decisions(self):
-        middleware = StagnationMiddleware(max_repeats=1)
+        middleware = StagnationMiddleware(max_repeats=2)
 
         async def nxt():
             return FinalAnswerDecision(answer="done")
