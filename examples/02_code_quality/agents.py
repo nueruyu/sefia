@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
 
-from sefia import infer
+from sefia import AsRawText, infer
 
 from ..common.human_input import HumanInputTool
-from ..common.text_block import TextBlock
 from .models import (
     CodeIssue,
     ProjectScope,
@@ -12,6 +12,8 @@ from .models import (
     QualityReport,
 )
 from .tools import FileTool
+
+RawCode = Annotated[str, AsRawText]
 
 
 @dataclass
@@ -76,11 +78,7 @@ class UnderstandingAgent:
         project_root: str,
     ) -> ProjectUnderstanding:
         read_files_set = set(current_understanding.read_files)
-        unread_files = [
-            path
-            for path in all_file_paths
-            if path not in read_files_set
-        ]
+        unread_files = [path for path in all_file_paths if path not in read_files_set]
         if not unread_files:
             return current_understanding
 
@@ -131,9 +129,7 @@ class ReviewScopingAgent:
 @dataclass
 class CodingStyleAuditor:
     @infer()
-    async def review(
-        self, file_contents: dict[str, TextBlock | str]
-    ) -> list[CodeIssue]:
+    async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Review the given files from a coding-style perspective.
 
@@ -148,9 +144,7 @@ class CodingStyleAuditor:
 @dataclass
 class DesignPrincipleArchitect:
     @infer()
-    async def review(
-        self, file_contents: dict[str, TextBlock | str]
-    ) -> list[CodeIssue]:
+    async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Review the given files from a software-design-principles perspective.
 
@@ -164,9 +158,7 @@ class DesignPrincipleArchitect:
 @dataclass
 class MaintainabilityAssessor:
     @infer()
-    async def review(
-        self, file_contents: dict[str, TextBlock | str]
-    ) -> list[CodeIssue]:
+    async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Review the given files from a maintainability and readability perspective.
 
@@ -180,9 +172,7 @@ class MaintainabilityAssessor:
 @dataclass
 class DependencySpecialist:
     @infer()
-    async def review(
-        self, file_contents: dict[str, TextBlock | str]
-    ) -> list[CodeIssue]:
+    async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Review the given files from an external-dependency perspective.
 

@@ -4,6 +4,7 @@ from .handlers.cost import CostCalculator
 from .interfaces import EventHandler, Policy, Resource, SessionStore
 from .llm.client import LLMClient
 from .llm.messages import LLMResponse, Message, ToolCall
+from .markers import AsRawText
 from .policies import MaxRetries, MaxSteps
 from .session import Session
 from .state_store import StateStore
@@ -11,6 +12,7 @@ from .state_store import StateStore
 __all__ = [
     "infer",
     "tool",
+    "AsRawText",
     "Session",
     "Resource",
     "LLMClient",

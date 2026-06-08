@@ -2,7 +2,7 @@ import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -50,9 +50,12 @@ DUMMY_SCHEMA: dict = {}
 
 class TestLLMInferenceStrategy:
     def _strategy(self, llm_client, stream: bool = False):
+        mock_formatter = Mock()
+        mock_formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=llm_client,
             model_inspector=PydanticModelInspector(),
+            prompt_formatter=mock_formatter,
             json_default=pydantic_json_default,
             stream=stream,
         )
@@ -74,7 +77,7 @@ class TestLLMInferenceStrategy:
 
         dummy_tools = [{"function": {"name": "search"}}]
         messages = strategy._build_messages(
-            "instructions", {"arg": "val"}, history, DUMMY_SCHEMA, dummy_tools
+            "instructions", {"arg": "val"}, {}, history, DUMMY_SCHEMA, dummy_tools
         )
 
         assert len(messages) == 4
@@ -91,22 +94,6 @@ class TestLLMInferenceStrategy:
         assert "見つかりました" in str(messages[3].content)
         assert "\\u898b" not in str(messages[3].content)
         assert json.loads(str(messages[3].content)) == "見つかりました"
-
-    def test_build_messages_uses_prompt_formatter_for_arguments(self):
-        strategy = self._strategy(AsyncMock())
-
-        messages = strategy._build_messages(
-            "instructions",
-            {"arg": "value"},
-            [],
-            DUMMY_SCHEMA,
-            [],
-        )
-
-        prompt = str(messages[1].content)
-        assert "Task arguments are XML" in prompt
-        assert '<argument name="arg">' in prompt
-        assert "<string>value</string>" in prompt
 
     def test_build_decision_schema_hoists_nested_definitions(self):
         strategy = self._strategy(AsyncMock())
@@ -152,6 +139,7 @@ class TestLLMInferenceStrategy:
         messages = strategy._build_messages(
             "instructions",
             {},
+            {},
             [],
             DUMMY_SCHEMA,
             [],
@@ -167,7 +155,7 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client, stream=True)
 
         decision = await strategy.decide_next_step(
-            "do it", {}, [], [{"type": "function"}], str, MockEventPublisher()
+            "do it", {}, {}, [], [{"type": "function"}], str, MockEventPublisher()
         )
 
         assert isinstance(decision, ToolCallDecision)
@@ -189,7 +177,7 @@ class TestLLMInferenceStrategy:
         publisher = MockEventPublisher()
 
         decision = await strategy.decide_next_step(
-            "do it", {}, [], [], MyOutput, publisher
+            "do it", {}, {}, [], [], MyOutput, publisher
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -217,7 +205,7 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            "do it", {}, [], [], str, MockEventPublisher()
+            "do it", {}, {}, [], [], str, MockEventPublisher()
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -232,7 +220,7 @@ class TestLLMInferenceStrategy:
 
         with pytest.raises(ValueError, match="LLM output failed validation"):
             await strategy.decide_next_step(
-                "do it", {}, [], [], MyOutput, MockEventPublisher()
+                "do it", {}, {}, [], [], MyOutput, MockEventPublisher()
             )
 
     async def test_decide_next_step_handles_plain_string_output(self, mock_llm_client):
@@ -242,7 +230,7 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            "do it", {}, [], [], str, MockEventPublisher()
+            "do it", {}, {}, [], [], str, MockEventPublisher()
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -256,5 +244,5 @@ class TestLLMInferenceStrategy:
 
         with pytest.raises(ValueError, match="must contain either"):
             await strategy.decide_next_step(
-                "do it", {}, [], [], str, MockEventPublisher()
+                "do it", {}, {}, [], [], str, MockEventPublisher()
             )

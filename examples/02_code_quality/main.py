@@ -11,7 +11,6 @@ from rich.panel import Panel
 from ..common.chat_cli import create_app
 from ..common.chat_session import ChatSessionState
 from ..common.human_input import HumanInputTool
-from ..common.text_block import TextBlock
 from .agents import (
     CodingStyleAuditor,
     DependencySpecialist,
@@ -50,17 +49,6 @@ review_agents = {
     ReviewPerspective.MAINTAINABILITY: MaintainabilityAssessor(),
     ReviewPerspective.DEPENDENCIES: DependencySpecialist(),
 }
-
-
-def _as_text_blocks(file_contents: dict[str, str]) -> dict[str, TextBlock | str]:
-    return {
-        path: (
-            content
-            if content.startswith("Error reading file:")
-            else TextBlock(value=content)
-        )
-        for path, content in file_contents.items()
-    }
 
 
 @engrave
@@ -116,13 +104,7 @@ async def _run_reviews(
 ) -> list[CodeIssue]:
     console.print("\n[bold]> Stage 4: Running reviews...[/bold]")
     full_to_relative = {str(Path(project_path) / path): path for path in review_files}
-    raw_contents = await file_tool.read_files(list(full_to_relative))
-    contents = _as_text_blocks(
-        {
-            full_to_relative[full_path]: content
-            for full_path, content in raw_contents.items()
-        }
-    )
+    contents = await file_tool.read_files(list(full_to_relative))
     all_issues: list[CodeIssue] = []
 
     async def _review_perspective(
@@ -130,7 +112,10 @@ async def _run_reviews(
     ) -> tuple[ReviewPerspective, list[CodeIssue]]:
         console.print(f"> Reviewing from perspective: {perspective.value}...")
         agent = review_agents[perspective]
-        return perspective, await agent.review(contents)
+        relative_contents = {
+            full_to_relative[path]: content for path, content in contents.items()
+        }
+        return perspective, await agent.review(relative_contents)
 
     review_results = await asyncio.gather(
         *(_review_perspective(perspective) for perspective in review_agents)
@@ -179,5 +164,4 @@ if __name__ == "__main__":
         workflow,
         session_dir=SESSION_DIR,
         help_text="A multi-agent workflow for code quality review.",
-        text_block_selectors={TextBlock: lambda tb: tb.value},
     )()

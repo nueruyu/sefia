@@ -1,4 +1,4 @@
-from typing import Any, Callable, Self, Type, TypeVar
+from typing import Self, Type, TypeVar
 
 import glyff
 
@@ -10,6 +10,7 @@ from .interfaces import (
 from .interfaces.session_store import SessionStore
 from .llm.client import LLMClient
 from .llm.strategy import LLMInferenceStrategy
+from .llm.xml_prompt_formatter import XmlPromptFormatter
 from .policies import StagnationPolicy
 from .pydantic.json_utils import pydantic_json_default
 from .pydantic.model_inspector import PydanticModelInspector
@@ -33,7 +34,6 @@ class Session:
         policies: list[Policy] | None = None,
         tool_collector: ToolCollector | None = None,
         stream: bool = False,
-        text_block_selectors: dict[type, Callable[[Any], str]] | None = None,
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
@@ -50,12 +50,13 @@ class Session:
         self._tool_collector = tool_collector or DefaultToolCollector(
             model_inspector=model_inspector
         )
+        prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
         self._inference_strategy = LLMInferenceStrategy(
             llm_client,
             model_inspector=model_inspector,
+            prompt_formatter=prompt_formatter,
             json_default=pydantic_json_default,
             stream=stream,
-            text_block_selectors=text_block_selectors,
         )
         self._context: InferenceContext | None = None
 

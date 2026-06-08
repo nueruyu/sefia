@@ -6,7 +6,7 @@ from typing import Any, Callable, Union
 from pydantic import create_model
 
 from ..event_publisher import EventPublisher
-from ..interfaces import InferenceStrategy, ModelInspector
+from ..interfaces import InferenceStrategy, ModelInspector, PromptFormatter
 from ..models import (
     FinalAnswerDecision,
     HistoryItem,
@@ -19,7 +19,8 @@ from ..models import (
 from . import events
 from .client import LLMClient
 from .messages import Message
-from .prompt_formatter import PromptFormatter
+
+JsonDefault = Callable[[Any], Any]
 
 
 @dataclass
@@ -28,9 +29,6 @@ class _LLMDecision:
 
     final_answer: Any = None
     tool_calls: list[LLMToolCall] | None = None
-
-
-JsonDefault = Callable[[Any], Any]
 
 
 class LLMInferenceStrategy(InferenceStrategy):
@@ -44,15 +42,15 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         llm_client: LLMClient,
         model_inspector: ModelInspector,
-        json_default: JsonDefault,
+        prompt_formatter: PromptFormatter,
+        json_default: JsonDefault | None = None,
         stream: bool = False,
-        text_block_selectors: dict[type, Callable[[Any], str]] | None = None,
     ):
         self.llm_client = llm_client
         self.model_inspector = model_inspector
+        self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
-        self._prompt_formatter = PromptFormatter(json_default, text_block_selectors)
 
     def _build_llm_decision_schema(self, output_type: Any, tools: list[dict]) -> dict:
         """
@@ -79,6 +77,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         instructions: str,
         arguments: dict[str, Any],
+        argument_type_hints: dict[str, Any],
         history: list[HistoryItem],
         tools: list[dict],
         output_type: Any,
@@ -87,7 +86,12 @@ class LLMInferenceStrategy(InferenceStrategy):
         output_schema = self._build_llm_decision_schema(output_type, tools)
 
         messages = self._build_messages(
-            instructions, arguments, history, output_schema, tools
+            instructions,
+            arguments,
+            argument_type_hints,
+            history,
+            output_schema,
+            tools,
         )
 
         await publisher.publish(
@@ -164,6 +168,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         instructions: str,
         arguments: dict[str, Any],
+        argument_type_hints: dict[str, Any],
         history: list[HistoryItem],
         output_schema: dict,
         tools: list[dict],
@@ -212,7 +217,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         user_prompt = (
             "Task arguments are XML. Values in <string> may be wrapped in "
             "CDATA and should be read as raw text.\n\n"
-            f"{self._prompt_formatter.format_arguments(prompt_arguments)}"
+            f"{self._prompt_formatter.format_arguments(prompt_arguments, argument_type_hints)}"
             if prompt_arguments
             else "No arguments provided."
         )

@@ -2,7 +2,7 @@ import asyncio
 import subprocess
 from pathlib import Path
 
-from sefia import tool
+from sefia import exceptions, tool
 
 
 class GitTool:
@@ -29,7 +29,7 @@ class GitTool:
             OSError,
             UnicodeError,
         ) as exc:
-            raise RuntimeError(
+            raise exceptions.ToolError(
                 f"Failed to list git-tracked files in '{path}': {exc}"
             ) from exc
 
@@ -45,6 +45,7 @@ class FileTool:
         Read multiple UTF-8 text files and return a mapping from each path to its
         content. Store an error message for files that cannot be read.
         """
+
         async def _read_single(path_str: str) -> tuple[str, str]:
             try:
                 content = await asyncio.to_thread(
@@ -52,8 +53,16 @@ class FileTool:
                     encoding="utf-8",
                 )
                 return path_str, content
+            except FileNotFoundError as exc:
+                raise exceptions.FileNotFoundToolError(
+                    f"File not found: {exc}", path=path_str
+                ) from exc
+            except PermissionError as exc:
+                raise exceptions.PermissionDeniedToolError(
+                    f"Permission denied: {exc}", path=path_str
+                ) from exc
             except (OSError, UnicodeError) as exc:
-                return path_str, f"Error reading file: {exc}"
+                raise exceptions.ToolError(f"Error reading file: {exc}") from exc
 
         results = await asyncio.gather(*(_read_single(path) for path in full_paths))
         return dict(results)

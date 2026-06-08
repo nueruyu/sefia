@@ -15,6 +15,7 @@ class InferenceStrategy(ABC):
         self,
         instructions: str,
         arguments: dict[str, Any],
+        argument_type_hints: dict[str, Any],
         history: list[HistoryItem],
         tools: list[dict],
         output_type: Any,

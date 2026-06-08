@@ -1,7 +1,9 @@
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from typing import Annotated
 
-from sefia.llm.prompt_formatter import PromptFormatter
+from sefia import AsRawText
+from sefia.llm.xml_prompt_formatter import XmlPromptFormatter
 from sefia.pydantic.json_utils import pydantic_json_default
 
 
@@ -10,25 +12,19 @@ class _CustomValue:
     value: str
 
 
-@dataclass
-class _TextBlock:
-    """A test-local version of the TextBlock concept."""
-
-    value: str
-
-
-def _formatter() -> PromptFormatter:
-    return PromptFormatter(
+def _formatter() -> XmlPromptFormatter:
+    return XmlPromptFormatter(
         json_default=pydantic_json_default,
-        text_block_selectors={_TextBlock: lambda tb: tb.value},
     )
 
 
-def test_format_arguments_renders_selected_text_as_cdata_string():
+def test_format_arguments_renders_annotated_text_as_cdata_string():
     source = 'if a < b and c > d:\n    print("A & B")\n'
+    RawCode = Annotated[str, AsRawText]
 
     prompt = _formatter().format_arguments(
-        {"file_contents": {"example.py": _TextBlock(value=source)}}
+        arguments={"file_contents": {"example.py": source}},
+        type_hints={"file_contents": dict[str, RawCode]},
     )
 
     root = ET.fromstring(prompt)
@@ -38,7 +34,6 @@ def test_format_arguments_renders_selected_text_as_cdata_string():
     assert string_element is not None
     assert string_element.attrib == {}
     assert string_element.text == source
-    assert "<text_block" not in prompt
     assert "< b and c > d" in prompt
     assert "A & B" in prompt
 
@@ -46,7 +41,7 @@ def test_format_arguments_renders_selected_text_as_cdata_string():
 def test_format_arguments_escapes_xml_special_characters_in_strings():
     value = '<tag enabled="true">A & B</tag>'
 
-    prompt = _formatter().format_arguments({"value": value})
+    prompt = _formatter().format_arguments(arguments={"value": value}, type_hints={})
 
     assert '&lt;tag enabled="true"&gt;A &amp; B&lt;/tag&gt;' in prompt
     value_element = ET.fromstring(prompt).find("./argument[@name='value']/string")
@@ -54,10 +49,13 @@ def test_format_arguments_escapes_xml_special_characters_in_strings():
     assert value_element.text == value
 
 
-def test_format_arguments_handles_cdata_delimiters_in_selected_text():
+def test_format_arguments_handles_cdata_delimiters_in_annotated_text():
     source = "const marker = ']]>';\n"
+    RawCode = Annotated[str, AsRawText]
 
-    prompt = _formatter().format_arguments({"source": _TextBlock(value=source)})
+    prompt = _formatter().format_arguments(
+        arguments={"source": source}, type_hints={"source": RawCode}
+    )
 
     string_element = ET.fromstring(prompt).find("./argument[@name='source']/string")
     assert string_element is not None
@@ -68,8 +66,8 @@ def test_format_arguments_falls_back_to_string_when_json_default_rejects_value()
     def json_default(_value):
         raise TypeError
 
-    prompt = PromptFormatter(json_default=json_default).format_arguments(
-        {"value": _CustomValue("fallback")}
+    prompt = XmlPromptFormatter(json_default=json_default).format_arguments(
+        arguments={"value": _CustomValue("fallback")}, type_hints={}
     )
 
     value_element = ET.fromstring(prompt).find("./argument[@name='value']/string")

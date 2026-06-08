@@ -47,8 +47,8 @@ class InferenceExecutor:
         self.publisher = publisher
         self._tool_registry: ToolRegistry | None = None
 
-        type_hints = inspect.get_annotations(func, eval_str=True)
-        self.return_type = type_hints.get("return", Any)
+        self.type_hints = inspect.get_annotations(func, eval_str=True)
+        self.return_type = self.type_hints.get("return", Any)
         self.instructions = inspect.getdoc(func) or "Execute the requested task."
         self.func_name = func.__qualname__
 
@@ -72,6 +72,7 @@ class InferenceExecutor:
             decision = await self.strategy.decide_next_step(
                 instructions=self.instructions,
                 arguments=self.arguments,
+                argument_type_hints=self.type_hints,
                 history=history,
                 tools=tools,
                 output_type=self.return_type,

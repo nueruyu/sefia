@@ -1,10 +1,8 @@
 import asyncio
 import sys
-import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from textwrap import dedent
-from typing import Any
 
 import glyff.exceptions
 import typer
@@ -14,26 +12,11 @@ from rich.panel import Panel
 from typing_extensions import Annotated
 
 from .chat_session import ChatSessionState
+from .session_manager import SessionManager
 from .session_setup import setup_session
 
 WorkflowCallback = Callable[[ChatSessionState], Awaitable[None]]
 console = Console()
-
-
-def _get_active_session_file(session_dir: Path) -> Path:
-    session_dir.mkdir(exist_ok=True)
-    return session_dir / "active_session.txt"
-
-
-def _get_active_session_id(session_dir: Path) -> str | None:
-    session_file = _get_active_session_file(session_dir)
-    if session_file.exists():
-        return session_file.read_text(encoding="utf-8").strip()
-    return None
-
-
-def _set_active_session_id(session_dir: Path, session_id: str) -> None:
-    _get_active_session_file(session_dir).write_text(session_id, encoding="utf-8")
 
 
 def _print_session_interrupted_hint() -> None:
@@ -72,7 +55,6 @@ async def _run_workflow(
     verbose: bool,
     workflow_callback: WorkflowCallback,
     session_dir: Path,
-    text_block_selectors: dict[type, Callable[[Any], str]] | None,
 ):
     """Encapsulates the main logic for running the sefia workflow."""
     try:
@@ -82,7 +64,6 @@ async def _run_workflow(
             stream=True,
             verbose=verbose,
             session_dir=session_dir,
-            text_block_selectors=text_block_selectors,
         ) as session:
             state_store = session.get_state_store("session_state", ChatSessionState)
             state = await state_store.get()
@@ -100,13 +81,13 @@ def create_app(
     *,
     session_dir: Path,
     help_text: str = "A human-in-the-loop chat workflow.",
-    text_block_selectors: dict[type, Callable[[Any], str]] | None = None,
 ) -> typer.Typer:
     """Create a CLI app that routes execution to the injected workflow callback."""
     load_dotenv()
     app = typer.Typer(help=help_text)
     session_app = typer.Typer(help="Manage user sessions.")
     app.add_typer(session_app, name="session")
+    session_manager = SessionManager(session_dir)
 
     @app.command("chat")
     def chat(
@@ -142,15 +123,15 @@ def create_app(
         if not input_text:
             raise typer.BadParameter("Message cannot be empty.")
 
-        session_id = _get_active_session_id(session_dir)
+        session_id = session_manager.get_active_session_id()
         is_new = session_id is None
 
         if is_new:
-            session_id = str(uuid.uuid4())
+            session_id = session_manager.create_new_session_id()
             console.print(
                 f"[bold]> No active session. Starting new session: {session_id}[/bold]"
             )
-            _set_active_session_id(session_dir, session_id)
+            session_manager.set_active_session_id(session_id)
         else:
             console.print(f"[bold]> Resuming session {session_id}[/bold]")
 
@@ -163,7 +144,6 @@ def create_app(
                 verbose=verbose,
                 workflow_callback=workflow_callback,
                 session_dir=session_dir,
-                text_block_selectors=text_block_selectors,
             )
         )
 
@@ -177,7 +157,7 @@ def create_app(
         Switch the active session.
         """
         # A more robust implementation would check if the session directory exists.
-        _set_active_session_id(session_dir, session_id)
+        session_manager.set_active_session_id(session_id)
         console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 
     @session_app.command("new")
@@ -185,8 +165,8 @@ def create_app(
         """
         Create a new session and make it active.
         """
-        session_id = str(uuid.uuid4())
-        _set_active_session_id(session_dir, session_id)
+        session_id = session_manager.create_new_session_id()
+        session_manager.set_active_session_id(session_id)
         console.print(
             f"[bold]> Created and switched to new session: {session_id}[/bold]"
         )
