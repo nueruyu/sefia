@@ -16,6 +16,8 @@ class MaxStepsMiddleware(StepMiddleware):
     """
 
     def __init__(self, max_steps: int | None):
+        if max_steps is not None and max_steps < 1:
+            raise ValueError("max_steps must be at least 1 or None")
         self.max_steps = max_steps
 
     async def wrap(

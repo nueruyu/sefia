@@ -29,6 +29,8 @@ class RetryMiddleware(InferenceMiddleware):
     """
 
     def __init__(self, max_retries: int = 3):
+        if max_retries < 0:
+            raise ValueError("max_retries must be non-negative")
         self.max_retries = max_retries
         self._retries_used = 0
 

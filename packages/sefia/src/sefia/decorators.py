@@ -50,12 +50,19 @@ def infer(policies: list[Policy] | None = None) -> Callable:
             ]
             publisher = EventPublisher(all_handlers)
 
-            inference_middlewares = [
-                m for m in all_middleware if isinstance(m, InferenceMiddleware)
-            ]
-            step_middlewares = [
-                m for m in all_middleware if isinstance(m, StepMiddleware)
-            ]
+            inference_middlewares: list[InferenceMiddleware] = []
+            step_middlewares: list[StepMiddleware] = []
+            for m in all_middleware:
+                if isinstance(m, InferenceMiddleware):
+                    inference_middlewares.append(m)
+                elif isinstance(m, StepMiddleware):
+                    step_middlewares.append(m)
+                else:
+                    raise TypeError(
+                        "Policy middleware must be an instance of "
+                        "InferenceMiddleware or StepMiddleware, got "
+                        f"{type(m).__name__}"
+                    )
 
             executor = InferenceExecutor(
                 func=func,

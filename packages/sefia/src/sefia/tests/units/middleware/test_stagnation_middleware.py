@@ -25,6 +25,10 @@ async def _step(middleware: StagnationMiddleware, name: str, args: dict, step: i
 
 
 class TestStagnationMiddleware:
+    def test_rejects_non_positive_max_repeats(self):
+        with pytest.raises(ValueError):
+            StagnationMiddleware(max_repeats=0)
+
     async def test_raises_error_on_repeated_calls(self):
         middleware = StagnationMiddleware(max_repeats=3)
 

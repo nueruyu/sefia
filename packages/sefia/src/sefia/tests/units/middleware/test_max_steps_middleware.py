@@ -15,6 +15,13 @@ async def _decision():
 
 
 class TestMaxStepsMiddleware:
+    def test_rejects_non_positive_max_steps(self):
+        with pytest.raises(ValueError):
+            MaxStepsMiddleware(max_steps=0)
+
+    def test_allows_none_max_steps(self):
+        MaxStepsMiddleware(max_steps=None)  # Should not raise
+
     async def test_runs_step_within_limit(self):
         middleware = MaxStepsMiddleware(max_steps=3)
 

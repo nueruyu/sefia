@@ -23,6 +23,8 @@ class StagnationMiddleware(StepMiddleware):
     """
 
     def __init__(self, max_repeats: int = 3):
+        if max_repeats < 1:
+            raise ValueError("max_repeats must be at least 1")
         self.max_repeats = max_repeats
         self.history: deque[str] = deque(maxlen=max_repeats)
 

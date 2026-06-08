@@ -15,6 +15,10 @@ def _ctx() -> RunContext:
 
 
 class TestRetryMiddleware:
+    def test_rejects_negative_max_retries(self):
+        with pytest.raises(ValueError):
+            RetryMiddleware(max_retries=-1)
+
     async def test_returns_result_on_success(self):
         middleware = RetryMiddleware(max_retries=3)
 
