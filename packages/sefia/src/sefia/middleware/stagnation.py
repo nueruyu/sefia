@@ -40,6 +40,12 @@ class StagnationMiddleware(StepMiddleware):
         ctx: StepContext,
         nxt: Callable[[], Awaitable[InferenceDecision]],
     ) -> InferenceDecision:
+        # A new attempt starts the step count over at 0. The same middleware
+        # instance is reused across retries, so reset the rolling history here to
+        # avoid carrying tool calls from a previous (failed) attempt forward,
+        # which would otherwise trip a false-positive StagnationError.
+        if ctx.step == 0:
+            self.history.clear()
         decision = await nxt()
         if isinstance(decision, ToolCallDecision):
             for call in decision.calls:
