@@ -14,6 +14,12 @@ class StagnationMiddleware(StepMiddleware):
     The middleware inspects each step's decision and records its tool calls. If
     the same call recurs ``max_repeats`` times in a row it raises
     ``StagnationError`` before the repeated tool runs again.
+
+    The rolling history is intentionally kept on the instance. Middleware is
+    instantiated per inference run (``Policy.create_middleware`` is called once
+    per ``@infer`` invocation in ``decorators._run``), so an instance is never
+    shared across concurrent runs; its state is scoped to a single run. The
+    history is reset at ``ctx.step == 0`` so a retried attempt starts clean.
     """
 
     def __init__(self, max_repeats: int = 3):
