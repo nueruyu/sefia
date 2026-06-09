@@ -1,4 +1,4 @@
-from .decorators import infer, tool, with_policies
+from .decorators import get_metadata, infer, policy, tool
 from .events import Event
 from .handlers.cost import CostCalculator
 from .interfaces import EventHandler, Policy, Resource, SessionStore
@@ -12,8 +12,9 @@ from .state_store import StateStore
 __all__ = [
     "infer",
     "tool",
+    "policy",
+    "get_metadata",
     "AsRawText",
-    "with_policies",
     "Session",
     "Resource",
     "LLMClient",

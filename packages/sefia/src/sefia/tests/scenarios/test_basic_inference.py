@@ -1,4 +1,3 @@
-import inspect
 import json
 from dataclasses import dataclass
 
@@ -9,7 +8,7 @@ from glyff.interfaces import ArgsHasher, Serializer
 from glyff.stores import MemoryClient
 from glyff.stores import MemorySessionStore as GlyffMemoryStore
 
-from sefia import LLMResponse, MaxSteps, Session, infer, with_policies
+from sefia import LLMResponse, MaxSteps, Session, get_metadata, infer, policy
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
 from ..conftest import (
@@ -368,43 +367,31 @@ async def test_inference_on_standalone_function(
     assert "tool_calls" not in output_schema.get("properties", {})
 
 
-def test_with_policies_attaches_metadata():
-    """`@with_policies` records its policies under __sefia_metadata__["policies"],
-    regardless of where it sits relative to @infer, and stacking accumulates."""
+def test_policy_attaches_metadata():
+    """`@policy` records its policy under the metadata "policies" key, no matter
+    where it sits relative to @infer."""
 
     @infer
-    @with_policies([MaxSteps(count=3)])
+    @policy(MaxSteps(count=3))
     async def below(value: int) -> int:
-        """Policies decorator applied below @infer."""
+        """Policy applied below @infer."""
         ...
 
-    @with_policies([MaxSteps(count=3)])
+    @policy(MaxSteps(count=3))
     @infer
     async def above(value: int) -> int:
-        """Policies decorator applied above @infer."""
-        ...
-
-    @with_policies([MaxSteps(count=3)])
-    @with_policies([MaxSteps(count=5)])
-    @infer
-    async def stacked(value: int) -> int:
-        """Multiple @with_policies decorators stacked."""
+        """Policy applied above @infer."""
         ...
 
     for fn in (below, above):
-        policies = fn.__sefia_metadata__["policies"]
+        policies = get_metadata(fn)["policies"]
         assert len(policies) == 1
         assert isinstance(policies[0], MaxSteps)
 
-    # Stacked decorators preserve every policy instead of overwriting.
-    stacked_policies = stacked.__sefia_metadata__["policies"]
-    assert len(stacked_policies) == 2
-    assert {p.count for p in stacked_policies} == {3, 5}
 
-
-def test_with_policies_coexists_with_other_metadata():
-    """A non-policies entry in __sefia_metadata__ must not hide policies attached
-    above @infer — regression for the metadata-present-but-no-policies-key bug."""
+def test_policy_coexists_with_other_metadata():
+    """A non-policies entry in the metadata must not hide a policy attached above
+    @infer — regression for the metadata-present-but-no-policies-key bug."""
 
     async def fn(value: int) -> int:
         """A function whose metadata was already touched by another decorator."""
@@ -412,67 +399,9 @@ def test_with_policies_coexists_with_other_metadata():
 
     fn.__sefia_metadata__ = {"other": True}
 
-    # @with_policies sits above @infer, so policies land on the wrapper chain.
-    decorated = with_policies([MaxSteps(count=2)])(infer(fn))
+    # @policy sits above @infer, so the policy lands on the wrapper chain.
+    decorated = policy(MaxSteps(count=2))(infer(fn))
 
-    metadata = getattr(inspect.unwrap(decorated), "__sefia_metadata__", {})
+    metadata = get_metadata(decorated)
     assert metadata.get("other") is True
     assert [type(p) for p in metadata.get("policies", [])] == [MaxSteps]
-
-
-# Two agents that differ only in the order of @infer / @with_policies. Both keep
-# requesting a tool so the inference loop would run forever without the cap.
-@dataclass
-class CappedAgentBelow:
-    def __init__(self, kit: WebToolkit):
-        self._web = kit
-
-    @infer
-    @with_policies([MaxSteps(count=1)])
-    async def run(self, topic: str) -> Report:
-        """Research the topic using the web tools."""
-        ...
-
-
-@dataclass
-class CappedAgentAbove:
-    def __init__(self, kit: WebToolkit):
-        self._web = kit
-
-    @with_policies([MaxSteps(count=1)])
-    @infer
-    async def run(self, topic: str) -> Report:
-        """Research the topic using the web tools."""
-        ...
-
-
-@pytest.mark.parametrize("agent_cls", [CappedAgentBelow, CappedAgentAbove])
-async def test_with_policies_caps_inference_loop(
-    agent_cls, web_toolkit: WebToolkit, serializer: Serializer, hasher: ArgsHasher
-):
-    """A MaxSteps policy attached via @with_policies actually caps the loop, no
-    matter which order the two decorators are applied in."""
-    tool_call = LLMResponse(
-        content=json.dumps(
-            {
-                "tool_calls": [
-                    {"name": "WebToolkit_search", "arguments": {"query": "sefia"}}
-                ]
-            }
-        )
-    )
-    # More responses than the cap allows; the policy must stop the loop first.
-    mock_llm = MockLLMClient(responses=[tool_call, tool_call, tool_call])
-    session_id = f"with-policies-cap-{agent_cls.__name__}"
-    glyff_store, sefia_store = _make_stores(serializer)
-
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
-        async with Session(
-            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-        ):
-            agent = agent_cls(web_toolkit)
-            with pytest.raises(ExecutionFailedError, match="MaxStepsExceededError"):
-                await agent.run(topic="sefia")
-
-    # count=1 permits exactly one LLM step before the loop is stopped.
-    assert len(mock_llm.requests) == 1

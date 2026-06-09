@@ -226,21 +226,22 @@ Policies attach event handlers that govern how the inference loop reacts to
 errors and other events.
 
 ```python
-from sefia import MaxRetries, infer, with_policies
+from sefia import MaxRetries, infer, policy
 
 
 class MyAgent:
     @infer
-    @with_policies([MaxRetries(count=5)])
+    @policy(MaxRetries(count=5))
     async def critical_task(self, request: Request) -> Result:
         """Handle the request with retry behavior."""
         ...
 ```
 
-Per-function policies are attached with the separate `@with_policies`
-decorator. It records them under the `"policies"` key of the function's
-`__sefia_metadata__`, where `@infer` reads them — the order of the two
-decorators does not matter.
+A per-function policy is attached with the separate `@policy` decorator. It
+records the policy under the `"policies"` key of the function's
+`__sefia_metadata__`, where `@infer` reads it — the order of the two
+decorators does not matter. To apply more than one policy, merge them on the
+caller side (or stack multiple `@policy` decorators).
 
 Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
 added by implementing the `Policy` ABC.
@@ -256,12 +257,12 @@ handling `StepStarted`. There is no default cap.
 the loop reaches the step limit:
 
 ```python
-from sefia import MaxSteps, infer, with_policies
+from sefia import MaxSteps, infer, policy
 
 
 class MyAgent:
     @infer
-    @with_policies([MaxSteps(count=25)])
+    @policy(MaxSteps(count=25))
     async def run(self, task: Task) -> Result:
         """Work the task, capped at 25 steps."""
         ...
