@@ -2,12 +2,13 @@ import asyncio
 import subprocess
 from pathlib import Path
 
-from sefia import exceptions
+from sefia import exceptions, tool
 
 
 class GitTool:
     """A tool for interacting with a Git repository."""
 
+    @tool
     async def list_tracked_files(self, path: str) -> list[str]:
         """
         Execute 'git ls-files' in the specified directory and return the tracked
@@ -38,6 +39,7 @@ class GitTool:
 class FileTool:
     """A tool for file system operations."""
 
+    @tool
     async def read_files(self, full_paths: list[str]) -> dict[str, str]:
         """
         Read multiple UTF-8 text files and return a mapping from each path to its

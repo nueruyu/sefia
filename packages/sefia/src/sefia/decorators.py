@@ -9,6 +9,18 @@ from .executor import InferenceExecutor
 from .interfaces import Policy
 
 
+def tool(func: Callable) -> Callable:
+    """
+    Mark a method as a tool available to an @infer step.
+
+    This is a pure marker: the inference executor normalizes sync/async return
+    values, so the wrapped function is returned unchanged to preserve its
+    signature for schema generation.
+    """
+    setattr(func, "__sefia_tool__", True)
+    return func
+
+
 def infer(policies: list[Policy] | None = None) -> Callable:
     """
     Decorator that enables a function's implementation to be inferred by an LLM.

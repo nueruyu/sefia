@@ -6,7 +6,7 @@ import pytest
 from glyff.interfaces import ArgsHasher, Serializer
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 
-from sefia import LLMResponse, infer
+from sefia import LLMResponse, infer, tool
 from sefia.llm.client import LLMClient
 from sefia.llm.messages import Message
 
@@ -48,6 +48,7 @@ class SearchResult:
 class WebToolkit:
     """A simple toolkit for web operations."""
 
+    @tool
     async def search(self, query: str) -> list[SearchResult]:
         """Search the web for a query."""
         if query == "sefia":
@@ -56,6 +57,7 @@ class WebToolkit:
             ]
         return []
 
+    @tool
     async def fetch_content(self, url: str) -> str:
         """Fetch content from a URL."""
         if url == "https://example.com/sefia":
@@ -90,6 +92,7 @@ class Researcher:
 class BrokenToolkit:
     """A toolkit where tools can fail."""
 
+    @tool
     async def always_fail(self, reason: str) -> None:
         """This tool always raises an exception."""
         raise ValueError(f"Failed because: {reason}")

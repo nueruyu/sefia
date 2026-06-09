@@ -2,6 +2,9 @@ import asyncio
 
 from ddgs import DDGS
 from pydantic import BaseModel, Field
+from sefia import tool
+
+
 class WebSearchResult(BaseModel):
     """Represents a single web search result."""
 
@@ -15,6 +18,7 @@ class WebSearchResult(BaseModel):
 class WebSearchTool:
     """A toolkit for performing web searches using DuckDuckGo."""
 
+    @tool
     async def search(self, query: str, max_results: int = 5) -> list[WebSearchResult]:
         """
         Performs a web search for the given query using DuckDuckGo

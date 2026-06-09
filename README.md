@@ -68,7 +68,7 @@ or making an agent object the main unit of work.
 
 ```python
 from pydantic import BaseModel
-from sefia import infer
+from sefia import infer, tool
 
 
 class Report(BaseModel):
@@ -78,10 +78,12 @@ class Report(BaseModel):
 
 
 class WebToolkit:
+    @tool
     async def search(self, query: str) -> list[str]:
         """Search the web and return relevant URLs."""
         ...
 
+    @tool
     async def fetch_content(self, url: str) -> str:
         """Fetch the text content of the given URL."""
         ...
@@ -110,9 +112,10 @@ a step needs them.
 
 - **LLM steps are functions.** Use `@infer` on an async function or method. The
   signature and docstring are the contract.
-- **Tools are just methods.** No decorator required. An inferred step can call
-  the public methods of the dependencies it holds, plus its own methods. Tool
-  discovery follows reachable Python objects instead of a separate registry.
+- **Tools are opt-in methods.** Mark a method with `@tool` to make it callable
+  by an inferred step. Discovery follows the Python objects reachable from
+  `self` instead of a separate registry. For classes you cannot decorate, wrap
+  them with `toolify()`.
 - **Composition stays in Python.** Branching, loops, retries around a workflow,
   and helper functions can use normal Python control flow.
 - **Durability is lightweight.** Sefia is backed by
@@ -154,30 +157,31 @@ async def decide_next_action(state: AgentState) -> AgentDecision:
 The signature and docstring define the contract. The LLM:
 
 1. Receives the docstring as instructions and the arguments as task input.
-2. Calls available tool methods when tools are reachable from `self`.
+2. Calls `@tool` methods when tools are reachable from `self`.
 3. Returns a value matching the declared return type.
 
 Dataclasses, Pydantic models, primitives, and `Serializable` instances are
 supported. Sefia generates a structured output schema from the declared return
 type and validates the response before returning it.
 
-### Tools
+### `@tool`
 
-Tools require no decorator. When an `@infer` method runs, Sefia discovers the
-methods that are reachable from `self` and offers them to the LLM. The discovery
-rules are deliberately small and structural:
+Tools are opt-in. Mark a method with `@tool`, and when an `@infer` step runs,
+Sefia discovers the marked methods reachable from `self` and offers them to the
+LLM. The discovery rules are deliberately small:
 
-- **The instance's own methods** are exposed, including private (`_`-prefixed)
-  ones — a step can call its own helpers.
-- **`@infer` methods are not tools.** They are inference entry points, so the
-  running step never exposes itself or its siblings as a callable tool.
+- **The instance's own `@tool` methods** are exposed, including private
+  (`_`-prefixed) ones — a step can call its own marked helpers.
+- **`@infer` methods are not tools** unless you also mark them. A bare `@infer`
+  entry point never exposes itself, so the running step cannot recurse into
+  itself by accident.
 - **Dependencies held in attributes**, public or private (such as `self._web`
-  or `self.calculator`), contribute their **public** methods as tools. A
-  toolkit's own `_`-prefixed helpers stay private.
+  or `self.calculator`), contribute their `@tool` methods.
 - Name collisions raise `ToolConflictError` at runtime.
 
 ```python
 class Calculator:
+    @tool
     async def add(self, a: int, b: int) -> int:
         """Return the sum of two integers."""
         return a + b
@@ -185,7 +189,7 @@ class Calculator:
 
 class MathAgent:
     def __init__(self, calculator: Calculator):
-        self._calculator = calculator  # its public methods become tools
+        self._calculator = calculator  # its @tool methods become tools
 
     @infer()
     async def solve(self, problem: str) -> int:
@@ -193,24 +197,48 @@ class MathAgent:
         ...
 ```
 
-Because the public surface of a held object *is* its tool surface, scoping is a
-property of the object you provide. To expose only a subset of tools, hand over a
-narrower object:
+To expose an inferred step of one agent as a tool for another, stack the
+decorators — `@tool` over `@infer()`:
 
 ```python
-class FullToolkit:
-    async def read(self, path: str) -> str: ...
-    async def write(self, path: str, data: bytes) -> None: ...
-
-    def read_only(self) -> "ReadOnlyToolkit":
-        return ReadOnlyToolkit()
-
-
-class ReadOnlyToolkit:
-    async def read(self, path: str) -> str: ...
+class Researcher:
+    @tool
+    @infer()
+    async def research(self, topic: str) -> list[str]:
+        """Research the topic and return supporting URLs."""
+        ...
 ```
 
-This keeps Sefia's tool model simple: it exposes what is reachable.
+### `toolify`
+
+`@tool` works for your own classes, but you often want to expose a third-party
+client or a plain function you cannot decorate. `toolify()` bundles objects and
+functions into a `Toolset` you hold like any other dependency:
+
+```python
+from sefia import infer, toolify
+
+
+async def current_time() -> str:
+    """Return the current time as an ISO-8601 string."""
+    ...
+
+
+class Assistant:
+    def __init__(self, client: SomeExternalClient):
+        # Every public method of `client`, plus the standalone function.
+        self._tools = toolify(client, current_time)
+
+    @infer()
+    async def handle(self, request: str) -> str:
+        """Handle the request using the available tools."""
+        ...
+```
+
+`toolify()` exposes every public method of each object it is given (its
+`_`-prefixed helpers stay private) and registers any function passed directly.
+Scoping is a property of what you hand it: pass a narrower object to expose
+fewer tools.
 
 ### `Session`
 
@@ -281,9 +309,11 @@ engraved work.
 ```python
 from glyff import engrave
 from glyff.exceptions import YieldException
+from sefia import tool
 
 
 class HumanInputTool:
+    @tool
     @engrave
     async def ask_user(self, question: str) -> str:
         """Ask the user a question and resume when an answer is available."""

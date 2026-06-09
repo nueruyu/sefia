@@ -1,8 +1,9 @@
 import pytest
 
-from sefia import infer
+from sefia import infer, tool, toolify
 from sefia.models import ToolConflictError
 from sefia.tool_collectors.collector import DefaultToolCollector
+from sefia.toolify import Toolset
 
 from ..conftest import WebToolkit
 
@@ -59,6 +60,7 @@ def test_schema_builder_caches_results():
 
 
 class GreetingToolkit:
+    @tool
     async def greet(self, name: str) -> str:
         """Greet someone by name."""
         return f"Hello, {name}"
@@ -66,7 +68,7 @@ class GreetingToolkit:
 
 class MyAgent:
     def __init__(self, toolkit: WebToolkit):
-        self._toolkit = toolkit  # private member → scanned as toolkit
+        self._toolkit = toolkit  # private member → its @tool methods are scanned
         self.greeter = GreetingToolkit()  # public member → also scanned
 
 
@@ -76,10 +78,10 @@ def test_collect_tools_from_public_and_private_members():
     registry = collector.collect(agent)
 
     tool_names = set(registry.tools.keys())
-    # Held in a private attribute.
+    # Marked methods held in a private attribute.
     assert "WebToolkit_search" in tool_names
     assert "WebToolkit_fetch_content" in tool_names
-    # Held in a public attribute.
+    # Marked method held in a public attribute.
     assert "GreetingToolkit_greet" in tool_names
     assert len(tool_names) == 3
 
@@ -98,17 +100,23 @@ def test_collect_tools_with_conflict_raises_error():
 
 
 class SelfMethodAgent:
-    """Exposes its own methods, including private ones, but not @infer."""
+    """Exposes its own @tool methods, including private ones, but not @infer."""
 
     def __init__(self):
         self._note = "held primitive, not a tool provider"
 
-    async def public_helper(self, value: int) -> int:
-        """A public helper exposed as a tool."""
+    @tool
+    async def marked_public(self, value: int) -> int:
+        """A marked public helper exposed as a tool."""
         return value
 
-    async def _private_helper(self, value: int) -> int:
-        """A private helper that is still exposed for the instance itself."""
+    @tool
+    async def _marked_private(self, value: int) -> int:
+        """A marked private helper, still exposed for the instance itself."""
+        return value
+
+    async def unmarked(self, value: int) -> int:
+        """Not marked, so not a tool."""
         return value
 
     @infer()
@@ -117,33 +125,57 @@ class SelfMethodAgent:
         ...
 
 
-def test_collect_exposes_own_methods_including_private_but_not_infer():
+def test_collect_exposes_marked_methods_including_private_but_not_infer():
     collector = DefaultToolCollector()
     registry = collector.collect(SelfMethodAgent())
 
     tool_names = set(registry.tools.keys())
-    assert "SelfMethodAgent_public_helper" in tool_names
-    # The leading "." of "._private_helper" sanitizes to a second underscore.
-    assert "SelfMethodAgent__private_helper" in tool_names
-    # @infer entry points are inference calls, not tools.
+    assert "SelfMethodAgent_marked_public" in tool_names
+    # The leading "." of "._marked_private" sanitizes to a second underscore.
+    assert "SelfMethodAgent__marked_private" in tool_names
+    # Unmarked methods and @infer entry points are not tools.
+    assert not any(name.endswith("_unmarked") for name in tool_names)
     assert not any(name.endswith("_run") for name in tool_names)
     # A held primitive (str) must not leak its public methods as tools.
     assert not any("upper" in name for name in tool_names)
     assert len(tool_names) == 2
 
 
-class HeldMemberPrivacyAgent:
+class ExternalLikeClient:
+    """Simulates a third-party class we cannot decorate with @tool."""
+
+    async def fetch(self, url: str) -> str:
+        """Fetch a URL."""
+        return url
+
+    def _internal(self) -> None:
+        ...
+
+
+async def standalone_search(query: str) -> str:
+    """A standalone search function."""
+    return query
+
+
+def test_toolify_bundles_public_methods_and_functions():
+    box = toolify(ExternalLikeClient(), standalone_search)
+    assert isinstance(box, Toolset)
+    # One public method of the object plus the standalone function.
+    assert len(box.tools) == 2
+
+
+class ToolifyAgent:
     def __init__(self):
-        self._toolkit = WebToolkit()
+        self._tools = toolify(ExternalLikeClient(), standalone_search)
 
 
-def test_collect_skips_private_methods_of_held_members():
+def test_collect_registers_toolify_members():
     collector = DefaultToolCollector()
-    registry = collector.collect(HeldMemberPrivacyAgent())
+    registry = collector.collect(ToolifyAgent())
 
     tool_names = set(registry.tools.keys())
-    # Public methods of the held toolkit are exposed...
-    assert "WebToolkit_search" in tool_names
-    assert "WebToolkit_fetch_content" in tool_names
-    # ...but the agent itself contributes no tools of its own.
-    assert all(name.startswith("WebToolkit_") for name in tool_names)
+    assert "ExternalLikeClient_fetch" in tool_names
+    assert "standalone_search" in tool_names
+    # The external object's private method is not exposed.
+    assert not any("internal" in name for name in tool_names)
+    assert len(tool_names) == 2

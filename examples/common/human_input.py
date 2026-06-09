@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import sefia.context
 from glyff import engrave
 from glyff.exceptions import YieldException
+from sefia import tool
 
 from .chat_session import ChatSessionState
 
@@ -21,6 +22,7 @@ class HumanInputTool:
     def _prompt_user_input(question: str) -> None:
         print(f"\n[USER_INPUT_REQUIRED] {question}\n")
 
+    @tool
     @engrave
     async def get_human_input(self, question: str) -> str:
         """
