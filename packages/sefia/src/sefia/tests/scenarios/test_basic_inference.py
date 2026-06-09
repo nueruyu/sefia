@@ -405,3 +405,10 @@ def test_policy_coexists_with_other_metadata():
     metadata = get_metadata(decorated)
     assert metadata.get("other") is True
     assert [type(p) for p in metadata.get("policies", [])] == [MaxSteps]
+
+
+def test_policy_rejects_non_policy():
+    """@policy raises a clear error when given a non-Policy (e.g. the class
+    itself instead of an instance)."""
+    with pytest.raises(TypeError):
+        policy(MaxSteps)

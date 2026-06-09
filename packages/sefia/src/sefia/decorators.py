@@ -57,6 +57,12 @@ def policy(policy: Policy) -> Callable:
     multiple ``@policy`` decorators).
     """
 
+    if not isinstance(policy, Policy):
+        raise TypeError(
+            "@policy must be called with a Policy instance, "
+            "e.g. @policy(MaxRetries(count=5))."
+        )
+
     def decorator(func: Callable) -> Callable:
         # Attach metadata to the innermost function so it lives in one place
         # regardless of decorator order or intermediate wrappers.
