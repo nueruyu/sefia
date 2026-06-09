@@ -1,3 +1,4 @@
+import inspect
 import json
 from dataclasses import dataclass
 
@@ -399,6 +400,24 @@ def test_with_policies_attaches_metadata():
     stacked_policies = stacked.__sefia_metadata__["policies"]
     assert len(stacked_policies) == 2
     assert {p.count for p in stacked_policies} == {3, 5}
+
+
+def test_with_policies_coexists_with_other_metadata():
+    """A non-policies entry in __sefia_metadata__ must not hide policies attached
+    above @infer — regression for the metadata-present-but-no-policies-key bug."""
+
+    async def fn(value: int) -> int:
+        """A function whose metadata was already touched by another decorator."""
+        ...
+
+    fn.__sefia_metadata__ = {"other": True}
+
+    # @with_policies sits above @infer, so policies land on the wrapper chain.
+    decorated = with_policies([MaxSteps(count=2)])(infer(fn))
+
+    metadata = getattr(inspect.unwrap(decorated), "__sefia_metadata__", {})
+    assert metadata.get("other") is True
+    assert [type(p) for p in metadata.get("policies", [])] == [MaxSteps]
 
 
 # Two agents that differ only in the order of @infer / @with_policies. Both keep

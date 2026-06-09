@@ -41,11 +41,18 @@ def with_policies(policies: list[Policy]) -> Callable:
     """
 
     def decorator(func: Callable) -> Callable:
-        metadata = getattr(func, "__sefia_metadata__", None)
+        # Attach metadata to the innermost function so it lives in one place
+        # regardless of decorator order or intermediate wrappers.
+        underlying = inspect.unwrap(func)
+        metadata = getattr(underlying, "__sefia_metadata__", None)
         if metadata is None:
             metadata = {}
-            setattr(func, "__sefia_metadata__", metadata)
+            setattr(underlying, "__sefia_metadata__", metadata)
         metadata.setdefault("policies", []).extend(policies)
+        # Mirror it onto the outer object too, so the metadata is visible whether
+        # @with_policies sits above or below @infer (and to plain introspection).
+        if func is not underlying:
+            setattr(func, "__sefia_metadata__", metadata)
         return func
 
     return decorator
@@ -64,12 +71,9 @@ def infer(func: Callable) -> Callable:
     @functools.wraps(func)
     async def _run(*args, **kwargs):
         context = get_context()
-        # Read policy metadata at runtime so decorator order does not matter:
-        # the original function carries it when @with_policies is applied below
-        # @infer, and the wrapper carries it when applied above.
-        metadata = getattr(func, "__sefia_metadata__", None)
-        if metadata is None:
-            metadata = getattr(_run, "__sefia_metadata__", {})
+        # Read policy metadata from the innermost function at runtime, so the
+        # decorator order does not matter and intermediate wrappers are handled.
+        metadata = getattr(inspect.unwrap(func), "__sefia_metadata__", {})
         fn_policies = metadata.get("policies", [])
         all_policies = context.policies + fn_policies
         all_handlers = [
