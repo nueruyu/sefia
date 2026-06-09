@@ -107,7 +107,7 @@ def infer(func: Callable) -> Callable:
         publisher = EventPublisher(all_handlers)
 
         executor = InferenceExecutor(
-            func=func,
+            func=unwrapped,
             args=args,
             kwargs=kwargs,
             inference_strategy=context.inference_strategy,
