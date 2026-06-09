@@ -24,11 +24,12 @@ class InferenceException(Exception):
     step.
 
     Client adapters translate provider-specific failures into these abstract
-    exceptions so the rest of sefia (and consumer-supplied event handlers) never
-    has to know about a particular provider's exception types. sefia itself does
-    not decide whether any of these are recoverable; an ``InferenceStepFailed``
-    event carries the exception, and a handler may choose to interrupt the
-    session (by raising ``glyff.exceptions.YieldException``) or let it propagate.
+    exceptions so the rest of sefia never has to know about a particular
+    provider's exception types. sefia itself does not decide whether any of these
+    are recoverable; the failure is published as an ``InferenceStepFailed`` event
+    for observation, then engraved as a genuine failure. (Observation handlers
+    cannot turn it into a resumable interrupt — the publisher isolates their
+    exceptions — so resumability is driven by the control/execution layer.)
     """
 
 

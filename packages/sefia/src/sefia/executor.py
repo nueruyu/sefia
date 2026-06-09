@@ -118,12 +118,12 @@ class InferenceExecutor:
             )
         except Exception as e:
             # This method is engraved, so any exception that escapes it is
-            # persisted by glyff as a permanent FAILED record. sefia does not
-            # decide whether the failure is recoverable: it publishes the error
-            # and lets a handler decide. A handler may raise YieldException to
-            # interrupt gracefully and keep the step resumable (nothing is
-            # engraved); if none does, the original exception is re-raised and
-            # engraved as a genuine failure.
+            # persisted by glyff as a permanent FAILED record. The failure is
+            # published for observation (handlers cannot change the outcome — the
+            # publisher isolates their exceptions), then the original exception is
+            # re-raised and engraved as a genuine failure. Resumable interrupts
+            # come from the control/execution layer (e.g. a tool raising
+            # YieldException), not from observation handlers.
             await self.publisher.publish(events.InferenceStepFailed(error=e))
             raise
 

@@ -401,12 +401,14 @@ class TestInferenceExecutor:
         assert len(step_failures) == 1
         assert step_failures[0].error is error
 
-    async def test_handler_can_interrupt_failed_step_with_yield(
+    async def test_handler_yield_on_failed_step_is_isolated(
         self, executor_dependencies
     ):
-        # A handler may react to InferenceStepFailed by raising YieldException to
-        # interrupt gracefully (leaving the step resumable). That must propagate
-        # out of the executor instead of the original error.
+        # An observation handler cannot steer control flow: if it reacts to
+        # InferenceStepFailed by raising YieldException, the publisher isolates
+        # it, so the original error propagates and is engraved as a genuine
+        # failure. Resumable interrupts must come from the control layer (tools),
+        # not from observers.
         mock_strategy, mock_collector, _, non_engrave = executor_dependencies
         mock_strategy.decide_next_step.side_effect = ValueError("transient")
 
@@ -429,7 +431,7 @@ class TestInferenceExecutor:
             publisher,
         )
 
-        with pytest.raises(YieldException):
+        with pytest.raises(ValueError, match="transient"):
             await executor.run()
 
     async def test_handles_request_inference_retry(self, executor_dependencies):

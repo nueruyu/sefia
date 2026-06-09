@@ -131,11 +131,13 @@ class TestEventPublisher:
 
         spy.assert_called_once_with(before_tool_call_event)
 
-    async def test_yield_exception_propagates(
-        self, before_tool_call_event: BeforeToolCall
+    async def test_yield_exception_is_swallowed(
+        self, mocker: MockerFixture, before_tool_call_event: BeforeToolCall
     ):
-        # YieldException is glyff's resumable-interrupt signal and must propagate
-        # through the publisher rather than being swallowed.
+        # Observers cannot steer control flow: even a YieldException raised by a
+        # handler is logged and swallowed, never leaked out of publish(). Genuine
+        # resumable interrupts come from the control layer (e.g. tools), not
+        # observers. Later handlers still run.
         class YieldingHandler(EventHandler[BeforeToolCall]):
             @property
             def event_types(self) -> tuple[Type[Event], ...]:
@@ -144,7 +146,11 @@ class TestEventPublisher:
             async def handle(self, event: BeforeToolCall) -> None:
                 raise YieldException("resume later")
 
-        publisher = EventPublisher(handlers=[YieldingHandler()])
+        good_handler = MyEventHandler()
+        spy = mocker.spy(good_handler, "handle")
+        publisher = EventPublisher(handlers=[YieldingHandler(), good_handler])
 
-        with pytest.raises(YieldException):
-            await publisher.publish(before_tool_call_event)
+        # Should not raise.
+        await publisher.publish(before_tool_call_event)
+
+        spy.assert_called_once_with(before_tool_call_event)

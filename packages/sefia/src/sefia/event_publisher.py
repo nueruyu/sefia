@@ -1,8 +1,6 @@
 import logging
 from collections import defaultdict
 
-from glyff.exceptions import YieldException
-
 from . import events
 from .interfaces.event_handler import EventHandler
 
@@ -29,10 +27,12 @@ class EventPublisher:
         """
         Dispatches an event to all handlers registered for its type.
 
-        Event handlers are observers: a misbehaving handler must not break the
-        core inference loop, so any exception it raises is logged and swallowed.
-        The sole exception is ``YieldException`` — glyff's protocol signal for a
-        graceful, resumable interrupt — which is allowed to propagate.
+        Event handlers are pure observers: they cannot steer the inference loop.
+        Any exception a handler raises — including ``YieldException`` — is logged
+        and swallowed here, so a misbehaving observer can never affect control
+        flow. Genuine resumable interrupts are driven by the control/execution
+        layer (for example, a tool raising ``YieldException``), never by an
+        observer.
         """
         event_type = type(event)
         handlers_to_run = self._handler_map.get(event_type, []) + self._handler_map.get(
@@ -41,8 +41,6 @@ class EventPublisher:
         for handler in handlers_to_run:
             try:
                 await handler.handle(event)
-            except YieldException:
-                raise
             except Exception:
                 logger.exception(
                     "Event handler %s raised while handling %s; ignoring.",
