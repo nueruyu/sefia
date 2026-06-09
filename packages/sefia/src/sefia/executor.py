@@ -189,10 +189,14 @@ class InferenceExecutor:
         async def core() -> Any:
             return await self._attempt_inference()
 
+        # ctx and core are loop-invariant, so the chain is built once; each retry
+        # simply re-invokes it. The middleware instances (and their state, e.g.
+        # the retry counter) persist across attempts.
+        chain = _compose(self._inference_middlewares, ctx, core)
+
         while True:
             try:
                 await self.publisher.publish(events.AttemptStart())
-                chain = _compose(self._inference_middlewares, ctx, core)
                 result = await chain()
                 await self.publisher.publish(events.InferenceEnd(result=result))
                 return result
