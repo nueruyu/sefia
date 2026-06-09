@@ -171,9 +171,9 @@ rules are deliberately small and structural:
   ones — a step can call its own helpers.
 - **`@infer` methods are not tools.** They are inference entry points, so the
   running step never exposes itself or its siblings as a callable tool.
-- **Dependencies held in private attributes**, such as `self._web`, contribute
-  their **public** methods as tools. A toolkit's own `_`-prefixed helpers stay
-  private.
+- **Dependencies held in attributes**, public or private (such as `self._web`
+  or `self.calculator`), contribute their **public** methods as tools. A
+  toolkit's own `_`-prefixed helpers stay private.
 - Name collisions raise `ToolConflictError` at runtime.
 
 ```python

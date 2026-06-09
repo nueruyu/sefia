@@ -10,8 +10,9 @@ class DefaultToolCollector(ToolCollector):
 
     Tools are discovered structurally, without any marker decorator:
 
-    * Every public method of the dependencies the instance holds in its private
-      attributes (for example ``self._web``) is exposed as a tool.
+    * Every public method of the dependencies the instance holds in its
+      attributes (whether the attribute is public or private, for example
+      ``self._web`` or ``self.calculator``) is exposed as a tool.
     * Every method of the instance itself is exposed as a tool, including its
       private methods, except for ``@infer`` methods. Those are inference entry
       points rather than tools, and exposing the running one would recurse.
@@ -35,10 +36,9 @@ class DefaultToolCollector(ToolCollector):
             instance, registry, include_private=True, skip_infer=True
         )
 
-        # The public methods of each dependency held in a private attribute.
+        # The public methods of every dependency the instance holds, whether
+        # the attribute itself is public or private.
         for attr_name in getattr(instance, "__dict__", {}):
-            if not attr_name.startswith("_"):
-                continue
             member = getattr(instance, attr_name, None)
             if self._is_tool_provider(member):
                 self._collect_methods(

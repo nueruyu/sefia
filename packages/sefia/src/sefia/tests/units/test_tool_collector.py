@@ -58,21 +58,30 @@ def test_schema_builder_caches_results():
     assert schema1 is schema2
 
 
+class GreetingToolkit:
+    async def greet(self, name: str) -> str:
+        """Greet someone by name."""
+        return f"Hello, {name}"
+
+
 class MyAgent:
     def __init__(self, toolkit: WebToolkit):
-        self._toolkit = toolkit  # private → scanned as toolkit
-        self.non_exposed_toolkit = toolkit  # public → not scanned as toolkit
+        self._toolkit = toolkit  # private member → scanned as toolkit
+        self.greeter = GreetingToolkit()  # public member → also scanned
 
 
-def test_collect_tools_from_instance():
+def test_collect_tools_from_public_and_private_members():
     agent = MyAgent(WebToolkit())
     collector = DefaultToolCollector()
     registry = collector.collect(agent)
 
     tool_names = set(registry.tools.keys())
+    # Held in a private attribute.
     assert "WebToolkit_search" in tool_names
     assert "WebToolkit_fetch_content" in tool_names
-    assert len(tool_names) == 2
+    # Held in a public attribute.
+    assert "GreetingToolkit_greet" in tool_names
+    assert len(tool_names) == 3
 
 
 class ConflictingAgent:
