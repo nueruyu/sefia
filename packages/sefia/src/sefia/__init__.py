@@ -18,7 +18,7 @@ from .middleware.signals import (
     MaxStepsExceededError,
     StagnationError,
 )
-from .policies import MaxRetries, MaxSteps
+from .policies import MaxRetries, MaxSteps, StagnationPolicy
 from .session import Session
 from .state_store import StateStore
 
@@ -39,6 +39,7 @@ __all__ = [
     "StepMiddleware",
     "MaxRetries",
     "MaxSteps",
+    "StagnationPolicy",
     "InferenceControlSignal",
     "MaxRetriesExceededError",
     "MaxStepsExceededError",
