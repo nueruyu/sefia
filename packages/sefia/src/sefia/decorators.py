@@ -92,7 +92,7 @@ def infer(func: Callable) -> Callable:
         # order does not matter and intermediate wrappers are handled.
         metadata = getattr(unwrapped, METADATA_ATTR, {})
         fn_policies = metadata.get(POLICIES_KEY, [])
-        all_policies = context.policies + fn_policies
+        all_policies = list(context.policies) + list(fn_policies)
         all_handlers = [
             handler
             for p in all_policies
