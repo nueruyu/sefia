@@ -1,4 +1,4 @@
-from .decorators import infer, tool
+from .decorators import infer
 from .events import Event
 from .handlers.cost import CostCalculator
 from .interfaces import EventHandler, Policy, Resource, SessionStore
@@ -11,7 +11,6 @@ from .state_store import StateStore
 
 __all__ = [
     "infer",
-    "tool",
     "AsRawText",
     "Session",
     "Resource",

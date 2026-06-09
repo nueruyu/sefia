@@ -68,7 +68,7 @@ or making an agent object the main unit of work.
 
 ```python
 from pydantic import BaseModel
-from sefia import infer, tool
+from sefia import infer
 
 
 class Report(BaseModel):
@@ -78,12 +78,10 @@ class Report(BaseModel):
 
 
 class WebToolkit:
-    @tool
     async def search(self, query: str) -> list[str]:
         """Search the web and return relevant URLs."""
         ...
 
-    @tool
     async def fetch_content(self, url: str) -> str:
         """Fetch the text content of the given URL."""
         ...
@@ -112,8 +110,9 @@ a step needs them.
 
 - **LLM steps are functions.** Use `@infer` on an async function or method. The
   signature and docstring are the contract.
-- **Tools are methods.** Use `@tool` on methods that an inferred step may call.
-  Tool discovery follows reachable Python objects instead of a separate registry.
+- **Tools are just methods.** No decorator required. An inferred step can call
+  the public methods of the dependencies it holds, plus its own methods. Tool
+  discovery follows reachable Python objects instead of a separate registry.
 - **Composition stays in Python.** Branching, loops, retries around a workflow,
   and helper functions can use normal Python control flow.
 - **Durability is lightweight.** Sefia is backed by
@@ -155,41 +154,52 @@ async def decide_next_action(state: AgentState) -> AgentDecision:
 The signature and docstring define the contract. The LLM:
 
 1. Receives the docstring as instructions and the arguments as task input.
-2. Calls available `@tool` methods when tools are reachable from `self`.
+2. Calls available tool methods when tools are reachable from `self`.
 3. Returns a value matching the declared return type.
 
 Dataclasses, Pydantic models, primitives, and `Serializable` instances are
 supported. Sefia generates a structured output schema from the declared return
 type and validates the response before returning it.
 
-### `@tool`
+### Tools
 
-`@tool` exposes a method to inferred calls on the same object graph.
+Tools require no decorator. When an `@infer` method runs, Sefia discovers the
+methods that are reachable from `self` and offers them to the LLM. The discovery
+rules are deliberately small and structural:
+
+- **The instance's own methods** are exposed, including private (`_`-prefixed)
+  ones — a step can call its own helpers.
+- **`@infer` methods are not tools.** They are inference entry points, so the
+  running step never exposes itself or its siblings as a callable tool.
+- **Dependencies held in private attributes**, such as `self._web`, contribute
+  their **public** methods as tools. A toolkit's own `_`-prefixed helpers stay
+  private.
+- Name collisions raise `ToolConflictError` at runtime.
 
 ```python
 class Calculator:
-    @tool
     async def add(self, a: int, b: int) -> int:
         """Return the sum of two integers."""
         return a + b
+
+
+class MathAgent:
+    def __init__(self, calculator: Calculator):
+        self._calculator = calculator  # its public methods become tools
+
+    @infer()
+    async def solve(self, problem: str) -> int:
+        """Solve the problem, using the calculator when arithmetic is needed."""
+        ...
 ```
 
-Tools are automatically discovered when an `@infer` method runs. The discovery
-rules are deliberately small:
-
-- Methods of the instance itself are scanned.
-- Private attributes, such as `self._web`, are scanned recursively as toolkits.
-- Methods starting with `_` are never exposed, even if marked with `@tool`.
-- Name collisions raise `ToolConflictError` at runtime.
-
-To expose only a subset of tools, return a narrower toolkit object:
+Because the public surface of a held object *is* its tool surface, scoping is a
+property of the object you provide. To expose only a subset of tools, hand over a
+narrower object:
 
 ```python
 class FullToolkit:
-    @tool
     async def read(self, path: str) -> str: ...
-
-    @tool
     async def write(self, path: str, data: bytes) -> None: ...
 
     def read_only(self) -> "ReadOnlyToolkit":
@@ -197,12 +207,10 @@ class FullToolkit:
 
 
 class ReadOnlyToolkit:
-    @tool
     async def read(self, path: str) -> str: ...
 ```
 
-This keeps Sefia's tool model simple: it exposes what is reachable. Scoping is a
-property of the toolkit you provide.
+This keeps Sefia's tool model simple: it exposes what is reachable.
 
 ### `Session`
 
@@ -273,11 +281,9 @@ engraved work.
 ```python
 from glyff import engrave
 from glyff.exceptions import YieldException
-from sefia import tool
 
 
 class HumanInputTool:
-    @tool
     @engrave
     async def ask_user(self, question: str) -> str:
         """Ask the user a question and resume when an answer is available."""

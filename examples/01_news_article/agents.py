@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sefia import infer, tool
+from sefia import infer
 
 from ..common.human_input import HumanInputTool
 from ..common.web_search import WebSearchTool
@@ -42,7 +42,6 @@ class Researcher:
     def __init__(self, web_search: WebSearchTool):
         self._web = web_search
 
-    @tool
     @infer()
     async def research_topic(self, article_request: ArticleRequest) -> list[str]:
         """

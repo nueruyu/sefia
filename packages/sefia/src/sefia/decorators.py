@@ -1,5 +1,4 @@
 import functools
-import inspect
 from typing import Callable
 
 from glyff import engrave
@@ -8,22 +7,6 @@ from .context import get_context
 from .event_publisher import EventPublisher
 from .executor import InferenceExecutor
 from .interfaces import Policy
-
-
-def tool(func: Callable) -> Callable:
-    """
-    Decorator to mark a method as a tool available to the LLM.
-    """
-
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-        if inspect.isawaitable(result):
-            return await result
-        return result
-
-    setattr(wrapper, "__sefia_tool__", True)
-    return wrapper
 
 
 def infer(policies: list[Policy] | None = None) -> Callable:

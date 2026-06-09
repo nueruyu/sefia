@@ -108,7 +108,9 @@ class InferenceExecutor:
             else:
                 try:
                     tool_func = tool_info.function
-                    result = await tool_func(**call.arguments)
+                    result = tool_func(**call.arguments)
+                    if inspect.isawaitable(result):
+                        result = await result
                     output = result
                     await self.publisher.publish(
                         events.AfterToolCall(tool_call=call, result=result)
