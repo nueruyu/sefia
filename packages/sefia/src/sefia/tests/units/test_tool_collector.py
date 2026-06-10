@@ -235,6 +235,24 @@ def test_collect_finds_dependencies_in_slots():
     assert "WebToolkit_fetch_content" in tool_names
 
 
+def test_toolify_skips_builtin_iterables():
+    # Generators / map objects are builtins but not in any hardcoded primitive
+    # list; the dynamic builtins check must still skip them.
+    box = toolify(map(str, [1, 2]), (x for x in []))
+    assert box.tools == []
+
+
+def test_collect_terminates_on_wrapped_cycle():
+    cyclic = ExternalLikeClient()
+    cyclic.__wrapped__ = cyclic  # self-referential wrapper chain
+
+    class CyclicHost:
+        attr = cyclic
+
+    # Must not hang: the traversal's cycle guard breaks the loop.
+    DefaultToolCollector().collect(CyclicHost())
+
+
 def test_toolify_exposes_module_functions():
     # A module's type lives in "builtins" but is not a primitive — it should be
     # introspected, not skipped.

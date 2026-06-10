@@ -39,7 +39,7 @@ class DefaultToolCollector(ToolCollector):
         # __slots__ across the class hierarchy.
         attr_names = set(getattr(instance, "__dict__", {}))
         for cls in type(instance).__mro__:
-            slots = getattr(cls, "__slots__", None)
+            slots = cls.__dict__.get("__slots__", None)
             if not slots:
                 continue
             if isinstance(slots, str):
@@ -74,7 +74,9 @@ class DefaultToolCollector(ToolCollector):
         for cls in type(obj).__mro__:
             for name, value in cls.__dict__.items():
                 current = value
-                while current is not None:
+                visited: set[int] = set()
+                while current is not None and id(current) not in visited:
+                    visited.add(id(current))
                     if getattr(current, "__sefia_tool__", False) is True:
                         marked_names.add(name)
                         break
