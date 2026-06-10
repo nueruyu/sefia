@@ -1,8 +1,8 @@
 import pytest
 
 from sefia.interfaces.middleware import StepContext
-from sefia.middleware.max_steps import MaxStepsMiddleware
-from sefia.middleware.signals import MaxStepsExceededError
+from sefia.middleware.max_steps import StepLimiter
+from sefia.middleware.max_steps import MaxStepsExceededError
 from sefia.models import FinalAnswerDecision
 
 
@@ -14,16 +14,16 @@ async def _decision():
     return FinalAnswerDecision(answer="done")
 
 
-class TestMaxStepsMiddleware:
+class TestStepLimiter:
     def test_rejects_non_positive_max_steps(self):
         with pytest.raises(ValueError):
-            MaxStepsMiddleware(max_steps=0)
+            StepLimiter(max_steps=0)
 
     def test_allows_none_max_steps(self):
-        MaxStepsMiddleware(max_steps=None)  # Should not raise
+        StepLimiter(max_steps=None)  # Should not raise
 
     async def test_runs_step_within_limit(self):
-        middleware = MaxStepsMiddleware(max_steps=3)
+        middleware = StepLimiter(max_steps=3)
 
         # Steps 0, 1, 2 are the three permitted steps.
         for step in (0, 1, 2):
@@ -31,14 +31,14 @@ class TestMaxStepsMiddleware:
             assert isinstance(decision, FinalAnswerDecision)
 
     async def test_raises_once_limit_is_reached(self):
-        middleware = MaxStepsMiddleware(max_steps=3)
+        middleware = StepLimiter(max_steps=3)
 
         # Step index 3 would be the fourth step, past the limit of 3.
         with pytest.raises(MaxStepsExceededError):
             await middleware.wrap(_ctx(3), _decision)
 
     async def test_does_not_call_next_when_over_limit(self):
-        middleware = MaxStepsMiddleware(max_steps=1)
+        middleware = StepLimiter(max_steps=1)
         called = False
 
         async def nxt():
@@ -51,7 +51,7 @@ class TestMaxStepsMiddleware:
         assert called is False
 
     async def test_none_means_unlimited(self):
-        middleware = MaxStepsMiddleware(max_steps=None)
+        middleware = StepLimiter(max_steps=None)
 
         decision = await middleware.wrap(_ctx(1000), _decision)
         assert isinstance(decision, FinalAnswerDecision)

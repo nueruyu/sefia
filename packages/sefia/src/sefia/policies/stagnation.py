@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sefia.interfaces import InferenceMiddleware, Policy, StepMiddleware
-from sefia.middleware.stagnation import StagnationMiddleware
+from sefia.middleware.stagnation import StagnationDetector
 
 
 @dataclass
@@ -14,5 +14,5 @@ class StagnationPolicy(Policy):
     max_repeats: int = 3
 
     def create_middleware(self) -> list[InferenceMiddleware | StepMiddleware]:
-        """Creates a new StagnationMiddleware instance."""
-        return [StagnationMiddleware(max_repeats=self.max_repeats)]
+        """Creates a new StagnationDetector instance."""
+        return [StagnationDetector(max_repeats=self.max_repeats)]

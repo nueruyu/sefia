@@ -47,3 +47,18 @@ class RateLimitException(InferenceException):
 
 class TemporarilyUnavailableException(InferenceException):
     """The provider was temporarily unable to serve the request."""
+
+
+class InferenceControlSignal(Exception):
+    """
+    Base class for the typed control signals that steer the executor's loops.
+
+    These are not failures to be retried; they are deliberate instructions (or
+    terminal limits) that a middleware raises to communicate with the executor's
+    loops, which interpret them directly. Concrete terminal signals live next to
+    the middleware that raises them.
+    """
+
+
+class RequestInferenceRetry(InferenceControlSignal):
+    """Signal asking the executor to discard the current run and start over."""

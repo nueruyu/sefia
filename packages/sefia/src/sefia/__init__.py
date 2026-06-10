@@ -12,8 +12,8 @@ from .interfaces import (
 from .llm.client import LLMClient
 from .llm.messages import LLMResponse, Message, ToolCall
 from .markers import AsRawText
-from .middleware.signals import (
-    InferenceControlSignal,
+from .exceptions import InferenceControlSignal
+from .middleware import (
     MaxRetriesExceededError,
     MaxStepsExceededError,
     StagnationError,

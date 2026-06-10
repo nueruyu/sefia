@@ -37,7 +37,8 @@ class InferenceMiddleware(ABC):
     Unlike an :class:`~sefia.interfaces.EventHandler` (which observes), a
     middleware *controls*: it may run the wrapped inference, inspect the
     outcome, and steer the executor's retry loop by raising a typed control
-    signal (see ``sefia.middleware.signals``). The executor owns the loop;
+    signal (e.g. ``RequestInferenceRetry``, ``MaxStepsExceededError``). The
+    executor owns the loop;
     middleware never loops on its own, so multiple middlewares compose cleanly.
     """
 

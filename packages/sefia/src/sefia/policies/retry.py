@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sefia.interfaces import InferenceMiddleware, Policy, StepMiddleware
-from sefia.middleware.retry import RetryMiddleware
+from sefia.middleware.retry import Retrier
 
 
 @dataclass
@@ -11,4 +11,4 @@ class MaxRetries(Policy):
     count: int
 
     def create_middleware(self) -> list[InferenceMiddleware | StepMiddleware]:
-        return [RetryMiddleware(max_retries=self.count)]
+        return [Retrier(max_retries=self.count)]

@@ -12,7 +12,7 @@ from .interfaces.middleware import (
     StepContext,
     StepMiddleware,
 )
-from .middleware.signals import RequestInferenceRetry
+from .exceptions import RequestInferenceRetry
 from .models import (
     FinalAnswerDecision,
     HistoryItem,

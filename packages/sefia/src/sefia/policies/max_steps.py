@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sefia.interfaces import InferenceMiddleware, Policy, StepMiddleware
-from sefia.middleware.max_steps import MaxStepsMiddleware
+from sefia.middleware.max_steps import StepLimiter
 
 
 @dataclass
@@ -11,4 +11,4 @@ class MaxSteps(Policy):
     count: int = 25
 
     def create_middleware(self) -> list[InferenceMiddleware | StepMiddleware]:
-        return [MaxStepsMiddleware(max_steps=self.count)]
+        return [StepLimiter(max_steps=self.count)]

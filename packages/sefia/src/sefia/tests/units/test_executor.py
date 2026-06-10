@@ -9,14 +9,10 @@ from sefia.event_publisher import EventPublisher
 from sefia.events import StepStarted
 from sefia.executor import InferenceExecutor
 from sefia.interfaces import EventHandler, InferenceStrategy, ToolCollector
+from sefia.exceptions import RequestInferenceRetry
 from sefia.interfaces.middleware import StepContext, StepMiddleware
-from sefia.middleware.max_steps import MaxStepsMiddleware
-from sefia.middleware.retry import RetryMiddleware
-from sefia.middleware.signals import (
-    MaxRetriesExceededError,
-    MaxStepsExceededError,
-    RequestInferenceRetry,
-)
+from sefia.middleware.max_steps import MaxStepsExceededError, StepLimiter
+from sefia.middleware.retry import MaxRetriesExceededError, Retrier
 from sefia.models import (
     FinalAnswerDecision,
     InferenceDecision,
@@ -174,7 +170,7 @@ class TestInferenceExecutor:
 
     async def test_step_middleware_can_stop_the_loop(self, executor_dependencies):
         # A step middleware that raises a control signal stops the loop. Here
-        # MaxStepsMiddleware refuses to start a fourth step (0-based index 3).
+        # StepLimiter refuses to start a fourth step (0-based index 3).
         (
             mock_strategy,
             mock_collector,
@@ -191,7 +187,7 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            step_middlewares=[MaxStepsMiddleware(max_steps=3)],
+            step_middlewares=[StepLimiter(max_steps=3)],
         )
 
         with pytest.raises(MaxStepsExceededError):
@@ -292,7 +288,7 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            inference_middlewares=[RetryMiddleware(max_retries=3)],
+            inference_middlewares=[Retrier(max_retries=3)],
         )
 
         result = await executor.run()
@@ -309,7 +305,7 @@ class TestInferenceExecutor:
     async def test_inference_middleware_retries_inference_failure(
         self, executor_dependencies
     ):
-        # An inference-call failure is retried by RetryMiddleware. The first
+        # An inference-call failure is retried by Retrier. The first
         # attempt fails inside decide_next_step; the second succeeds.
         (
             mock_strategy,
@@ -330,7 +326,7 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            inference_middlewares=[RetryMiddleware(max_retries=3)],
+            inference_middlewares=[Retrier(max_retries=3)],
         )
 
         result = await executor.run()
@@ -357,7 +353,7 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            inference_middlewares=[RetryMiddleware(max_retries=2)],
+            inference_middlewares=[Retrier(max_retries=2)],
         )
 
         with pytest.raises(MaxRetriesExceededError):

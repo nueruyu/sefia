@@ -1,11 +1,15 @@
 from typing import Awaitable, Callable
 
+from ..exceptions import InferenceControlSignal
 from ..interfaces.middleware import StepContext, StepMiddleware
 from ..models import InferenceDecision
-from .signals import MaxStepsExceededError
 
 
-class MaxStepsMiddleware(StepMiddleware):
+class MaxStepsExceededError(InferenceControlSignal):
+    """Raised when an inference run exceeds its maximum number of steps."""
+
+
+class StepLimiter(StepMiddleware):
     """
     Stops the inference loop once it would exceed a maximum number of steps.
 

@@ -1,26 +1,23 @@
 import pytest
 from glyff.exceptions import YieldException
 
+from sefia.exceptions import RequestInferenceRetry
 from sefia.interfaces.middleware import RunContext
-from sefia.middleware.retry import RetryMiddleware
-from sefia.middleware.signals import (
-    MaxRetriesExceededError,
-    MaxStepsExceededError,
-    RequestInferenceRetry,
-)
+from sefia.middleware.max_steps import MaxStepsExceededError
+from sefia.middleware.retry import MaxRetriesExceededError, Retrier
 
 
 def _ctx() -> RunContext:
     return RunContext(func_name="f", args=(), kwargs={})
 
 
-class TestRetryMiddleware:
+class TestRetrier:
     def test_rejects_negative_max_retries(self):
         with pytest.raises(ValueError):
-            RetryMiddleware(max_retries=-1)
+            Retrier(max_retries=-1)
 
     async def test_returns_result_on_success(self):
-        middleware = RetryMiddleware(max_retries=3)
+        middleware = Retrier(max_retries=3)
 
         async def nxt():
             return "ok"
@@ -28,7 +25,7 @@ class TestRetryMiddleware:
         assert await middleware.wrap(_ctx(), nxt) == "ok"
 
     async def test_requests_retry_within_limits(self):
-        middleware = RetryMiddleware(max_retries=3)
+        middleware = Retrier(max_retries=3)
 
         async def failing():
             raise ValueError("boom")
@@ -38,7 +35,7 @@ class TestRetryMiddleware:
                 await middleware.wrap(_ctx(), failing)
 
     async def test_raises_error_when_retries_exceeded(self):
-        middleware = RetryMiddleware(max_retries=2)
+        middleware = Retrier(max_retries=2)
 
         async def failing():
             raise ValueError("boom")
@@ -51,7 +48,7 @@ class TestRetryMiddleware:
             await middleware.wrap(_ctx(), failing)
 
     async def test_preserves_original_error_as_cause(self):
-        middleware = RetryMiddleware(max_retries=0)
+        middleware = Retrier(max_retries=0)
         original = ValueError("boom")
 
         async def failing():
@@ -63,7 +60,7 @@ class TestRetryMiddleware:
 
     async def test_does_not_retry_terminal_control_signals(self):
         # Terminal limits (e.g. max steps) must not be retried away.
-        middleware = RetryMiddleware(max_retries=3)
+        middleware = Retrier(max_retries=3)
 
         async def hit_limit():
             raise MaxStepsExceededError("stop")
@@ -73,7 +70,7 @@ class TestRetryMiddleware:
 
     async def test_does_not_retry_yield_exception(self):
         # YieldException is a graceful, resumable interrupt and must propagate.
-        middleware = RetryMiddleware(max_retries=3)
+        middleware = Retrier(max_retries=3)
 
         async def interrupt():
             raise YieldException("resume later")

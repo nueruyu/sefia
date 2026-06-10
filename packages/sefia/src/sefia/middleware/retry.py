@@ -2,15 +2,15 @@ from typing import Any, Awaitable, Callable
 
 from glyff.exceptions import YieldException
 
+from ..exceptions import InferenceControlSignal, RequestInferenceRetry
 from ..interfaces.middleware import InferenceMiddleware, RunContext
-from .signals import (
-    InferenceControlSignal,
-    MaxRetriesExceededError,
-    RequestInferenceRetry,
-)
 
 
-class RetryMiddleware(InferenceMiddleware):
+class MaxRetriesExceededError(InferenceControlSignal):
+    """Raised when the configured number of retries has been exhausted."""
+
+
+class Retrier(InferenceMiddleware):
     """
     Restarts the inference run when an inference attempt fails.
 

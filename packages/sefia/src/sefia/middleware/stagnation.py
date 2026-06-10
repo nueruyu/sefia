@@ -2,12 +2,16 @@ import json
 from collections import deque
 from typing import Any, Awaitable, Callable
 
+from ..exceptions import InferenceControlSignal
 from ..interfaces.middleware import StepContext, StepMiddleware
 from ..models import InferenceDecision, ToolCallDecision
-from .signals import StagnationError
 
 
-class StagnationMiddleware(StepMiddleware):
+class StagnationError(InferenceControlSignal):
+    """Raised when the inference run appears stuck repeating the same tool call."""
+
+
+class StagnationDetector(StepMiddleware):
     """
     Detects if the agent is stagnating by repeating the same tool call.
 

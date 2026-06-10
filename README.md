@@ -346,7 +346,7 @@ class LoggingPolicy(Policy):
 
 Pass policies to `Session` or to a specific `@infer` call.
 
-The built-in `StagnationMiddleware` is registered by default and aborts the loop
+The built-in `StagnationDetector` is registered by default and aborts the loop
 if the same tool is called repeatedly with identical arguments.
 
 The one exception to handler isolation is `glyff.exceptions.YieldException`: a
