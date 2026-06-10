@@ -1,6 +1,5 @@
 import functools
-import inspect
-from typing import Callable
+from typing import Callable, TypeVar
 
 from glyff import engrave
 
@@ -9,11 +8,13 @@ from .event_publisher import EventPublisher
 from .executor import InferenceExecutor
 from .interfaces import Policy
 
+
+T = TypeVar("T")
+
 # Attribute that holds sefia's per-function metadata dict, and the key under
 # which inference policies live inside it.
 METADATA_ATTR = "__sefia_metadata__"
 POLICIES_KEY = "policies"
-
 
 def get_metadata(func: Callable) -> dict:
     """
@@ -25,20 +26,19 @@ def get_metadata(func: Callable) -> dict:
     return getattr(inspect.unwrap(func), METADATA_ATTR, {})
 
 
-def tool(func: Callable) -> Callable:
+def tool(func: T) -> T:
     """
-    Decorator to mark a method as a tool available to the LLM.
+    Mark a method as a tool available to an @infer step.
+
+    This is a pure marker: the inference executor normalizes sync/async return
+    values, so the wrapped function is returned unchanged to preserve its
+    signature for schema generation.
     """
-
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-        if inspect.isawaitable(result):
-            return await result
-        return result
-
-    setattr(wrapper, "__sefia_tool__", True)
-    return wrapper
+    # When @tool is applied over @classmethod/@staticmethod, mark the underlying
+    # function — those descriptor objects may reject attribute assignment.
+    target = func.__func__ if isinstance(func, (classmethod, staticmethod)) else func
+    setattr(target, "__sefia_tool__", True)
+    return func
 
 
 def policy(policy: Policy) -> Callable:
