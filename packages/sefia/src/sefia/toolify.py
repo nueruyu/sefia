@@ -44,6 +44,6 @@ def toolify(*items: object) -> Toolset:
                 member = getattr(item, name)
             except Exception:
                 continue
-            if callable(member):
+            if callable(member) and not inspect.isclass(member):
                 tools.append(member)
     return Toolset(tools)

@@ -146,6 +146,9 @@ def test_collect_exposes_marked_methods_including_private_but_not_infer():
 class ExternalLikeClient:
     """Simulates a third-party class we cannot decorate with @tool."""
 
+    class Error(Exception):
+        """A nested class attribute — callable, but not a tool."""
+
     async def fetch(self, url: str) -> str:
         """Fetch a URL."""
         return url

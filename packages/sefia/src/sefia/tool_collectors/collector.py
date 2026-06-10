@@ -63,7 +63,7 @@ class DefaultToolCollector(ToolCollector):
                 continue
             if not callable(method):
                 continue
-            if not getattr(method, "__sefia_tool__", False):
+            if getattr(method, "__sefia_tool__", False) is not True:
                 continue
             self._add(method, registry)
 
