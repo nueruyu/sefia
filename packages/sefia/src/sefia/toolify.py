@@ -1,6 +1,26 @@
 import inspect
 from typing import Any, Callable
 
+# Builtin primitive/container types whose instances should never be scanned for
+# tools. A precise check (rather than ``type(item).__module__ == "builtins"``)
+# avoids false positives such as modules, whose type is also defined in builtins.
+_PRIMITIVE_TYPES = (
+    str,
+    bytes,
+    bytearray,
+    bool,
+    int,
+    float,
+    complex,
+    list,
+    tuple,
+    dict,
+    set,
+    frozenset,
+    range,
+    type(None),
+)
+
 
 class Toolset:
     """A bundle of tool callables produced by :func:`toolify`."""
@@ -31,9 +51,9 @@ def toolify(*items: object) -> Toolset:
         if callable(item) and not inspect.isclass(item):
             tools.append(item)
             continue
-        # Skip builtin instances (str, list, ...) so their public methods do not
-        # leak in as tools.
-        if type(item).__module__ == "builtins":
+        # Skip builtin primitive/container instances so their public methods do
+        # not leak in as tools. Modules and other user objects pass through.
+        if isinstance(item, _PRIMITIVE_TYPES):
             continue
         # Otherwise treat the object as a tool provider and expose its public
         # methods.

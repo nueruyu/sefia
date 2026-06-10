@@ -35,8 +35,19 @@ class DefaultToolCollector(ToolCollector):
         self._collect_marked_methods(instance, registry)
 
         # Each dependency the instance holds, whether the attribute is public or
-        # private.
-        for attr_name in getattr(instance, "__dict__", {}):
+        # private. Slotted classes have no __dict__, so also gather names from
+        # __slots__ across the class hierarchy.
+        attr_names = set(getattr(instance, "__dict__", {}))
+        for cls in type(instance).__mro__:
+            slots = getattr(cls, "__slots__", None)
+            if not slots:
+                continue
+            if isinstance(slots, str):
+                attr_names.add(slots)
+            else:
+                attr_names.update(slots)
+
+        for attr_name in attr_names:
             member = getattr(instance, attr_name, None)
             if isinstance(member, Toolset):
                 for func in member.tools:
@@ -54,18 +65,35 @@ class DefaultToolCollector(ToolCollector):
         return type(member).__module__ != "builtins"
 
     def _collect_marked_methods(self, obj: object, registry: ToolRegistry) -> None:
-        for name in dir(obj):
+        # Find @tool-marked method names from the class hierarchy first, then
+        # getattr only those. Scanning every name from dir() and calling getattr
+        # on each could trigger lazy properties or other side effects on
+        # third-party objects. Traversing __wrapped__/__func__ also makes the
+        # marker robust to decorator ordering (e.g. @tool under @infer).
+        marked_names: set[str] = set()
+        for cls in type(obj).__mro__:
+            for name, value in cls.__dict__.items():
+                current = value
+                while current is not None:
+                    if getattr(current, "__sefia_tool__", False) is True:
+                        marked_names.add(name)
+                        break
+                    if hasattr(current, "__wrapped__"):
+                        current = current.__wrapped__
+                    elif hasattr(current, "__func__"):
+                        current = current.__func__
+                    else:
+                        current = None
+
+        for name in marked_names:
             if name.startswith("__"):
                 continue
             try:
                 method = getattr(obj, name)
             except Exception:
                 continue
-            if not callable(method):
-                continue
-            if getattr(method, "__sefia_tool__", False) is not True:
-                continue
-            self._add(method, registry)
+            if callable(method):
+                self._add(method, registry)
 
     def _add(self, func: Callable[..., Any], registry: ToolRegistry) -> None:
         try:

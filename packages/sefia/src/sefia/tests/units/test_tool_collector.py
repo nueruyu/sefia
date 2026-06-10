@@ -1,4 +1,5 @@
 import functools
+import types
 
 import pytest
 
@@ -215,3 +216,34 @@ def test_tool_marks_static_and_class_methods():
     tool_names = set(registry.tools.keys())
     assert any(name.endswith("static_tool") for name in tool_names)
     assert any(name.endswith("class_tool") for name in tool_names)
+
+
+class SlottedAgent:
+    __slots__ = ("_toolkit",)
+
+    def __init__(self, toolkit: WebToolkit):
+        self._toolkit = toolkit
+
+
+def test_collect_finds_dependencies_in_slots():
+    # A slotted agent has no __dict__; its dependency must still be found.
+    agent = SlottedAgent(WebToolkit())
+    registry = DefaultToolCollector().collect(agent)
+
+    tool_names = set(registry.tools.keys())
+    assert "WebToolkit_search" in tool_names
+    assert "WebToolkit_fetch_content" in tool_names
+
+
+def test_toolify_exposes_module_functions():
+    # A module's type lives in "builtins" but is not a primitive — it should be
+    # introspected, not skipped.
+    module = types.ModuleType("fake_tools")
+
+    async def do_thing(value: int) -> int:
+        """Do a thing."""
+        return value
+
+    module.do_thing = do_thing
+    box = toolify(module)
+    assert do_thing in box.tools
