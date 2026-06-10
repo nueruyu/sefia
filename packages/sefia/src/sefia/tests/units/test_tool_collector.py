@@ -235,6 +235,12 @@ def test_collect_finds_dependencies_in_slots():
     assert "WebToolkit_fetch_content" in tool_names
 
 
+def test_toolify_skips_class_objects():
+    # A class (not an instance) would otherwise register unbound methods.
+    box = toolify(ExternalLikeClient)
+    assert box.tools == []
+
+
 def test_toolify_skips_builtin_iterables():
     # Generators / map objects are builtins but not in any hardcoded primitive
     # list; the dynamic builtins check must still skip them.

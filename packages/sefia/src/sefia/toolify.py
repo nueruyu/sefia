@@ -26,10 +26,14 @@ def toolify(*items: object) -> Toolset:
     """
     tools: list[Callable[..., Any]] = []
     for item in items:
+        # A class object exposes only unbound methods, which would fail when
+        # called; skip it (callers pass instances, not classes).
+        if inspect.isclass(item):
+            continue
         # Any callable — function, async function, bound method,
         # functools.partial, or an object with __call__ — is exposed directly
         # as a single tool, so a partial keeps its bound arguments.
-        if callable(item) and not inspect.isclass(item):
+        if callable(item):
             tools.append(item)
             continue
         # Skip builtin primitive/container instances (str, list, generators,
