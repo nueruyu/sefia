@@ -1,6 +1,5 @@
 import functools
-import inspect
-from typing import Callable
+from typing import Callable, TypeVar
 
 from glyff import engrave
 
@@ -9,21 +8,22 @@ from .event_publisher import EventPublisher
 from .executor import InferenceExecutor
 from .interfaces import Policy
 
+T = TypeVar("T")
 
-def tool(func: Callable) -> Callable:
+
+def tool(func: T) -> T:
     """
-    Decorator to mark a method as a tool available to the LLM.
+    Mark a method as a tool available to an @infer step.
+
+    This is a pure marker: the inference executor normalizes sync/async return
+    values, so the wrapped function is returned unchanged to preserve its
+    signature for schema generation.
     """
-
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-        if inspect.isawaitable(result):
-            return await result
-        return result
-
-    setattr(wrapper, "__sefia_tool__", True)
-    return wrapper
+    # When @tool is applied over @classmethod/@staticmethod, mark the underlying
+    # function — those descriptor objects may reject attribute assignment.
+    target = func.__func__ if isinstance(func, (classmethod, staticmethod)) else func
+    setattr(target, "__sefia_tool__", True)
+    return func
 
 
 def infer(policies: list[Policy] | None = None) -> Callable:

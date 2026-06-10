@@ -8,10 +8,13 @@ from .markers import AsRawText
 from .policies import MaxRetries, MaxSteps
 from .session import Session
 from .state_store import StateStore
+from .toolify import Toolset, toolify
 
 __all__ = [
     "infer",
     "tool",
+    "toolify",
+    "Toolset",
     "AsRawText",
     "Session",
     "Resource",
