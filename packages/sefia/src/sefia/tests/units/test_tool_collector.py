@@ -1,3 +1,5 @@
+import functools
+
 import pytest
 
 from sefia import infer, tool, toolify
@@ -179,3 +181,34 @@ def test_collect_registers_toolify_members():
     # The external object's private method is not exposed.
     assert not any("internal" in name for name in tool_names)
     assert len(tool_names) == 2
+
+
+def test_toolify_keeps_partial_and_skips_builtins():
+    bound = functools.partial(standalone_search, "fixed")
+    # A str/list are builtin instances and must not leak their methods.
+    box = toolify(bound, "a string", [1, 2])
+    # Only the partial is registered, with its bound argument intact.
+    assert box.tools == [bound]
+
+
+class StaticToolHost:
+    @tool
+    @staticmethod
+    async def static_tool(value: int) -> int:
+        """A static tool."""
+        return value
+
+    @tool
+    @classmethod
+    async def class_tool(cls, value: int) -> int:
+        """A class tool."""
+        return value
+
+
+def test_tool_marks_static_and_class_methods():
+    collector = DefaultToolCollector()
+    registry = collector.collect(StaticToolHost())
+
+    tool_names = set(registry.tools.keys())
+    assert any(name.endswith("static_tool") for name in tool_names)
+    assert any(name.endswith("class_tool") for name in tool_names)

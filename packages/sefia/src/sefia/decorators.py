@@ -17,7 +17,10 @@ def tool(func: Callable) -> Callable:
     values, so the wrapped function is returned unchanged to preserve its
     signature for schema generation.
     """
-    setattr(func, "__sefia_tool__", True)
+    # When @tool is applied over @classmethod/@staticmethod, mark the underlying
+    # function — those descriptor objects may reject attribute assignment.
+    target = func.__func__ if isinstance(func, (classmethod, staticmethod)) else func
+    setattr(target, "__sefia_tool__", True)
     return func
 
 

@@ -25,12 +25,18 @@ def toolify(*items: object) -> Toolset:
     """
     tools: list[Callable[..., Any]] = []
     for item in items:
-        if inspect.isroutine(item):
+        # Any callable — function, async function, bound method,
+        # functools.partial, or an object with __call__ — is exposed directly
+        # as a single tool, so a partial keeps its bound arguments.
+        if callable(item) and not inspect.isclass(item):
             tools.append(item)
             continue
-        # Treat anything else as a tool provider and expose its public methods.
-        # (functools.partial / callable instances are not routines and so fall
-        # here; they are introspected as providers.)
+        # Skip builtin instances (str, list, ...) so their public methods do not
+        # leak in as tools.
+        if type(item).__module__ == "builtins":
+            continue
+        # Otherwise treat the object as a tool provider and expose its public
+        # methods.
         for name in dir(item):
             if name.startswith("_"):
                 continue
