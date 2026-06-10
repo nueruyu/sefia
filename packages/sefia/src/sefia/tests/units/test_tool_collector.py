@@ -154,13 +154,17 @@ class ExternalLikeClient:
         """Fetch a URL."""
         return url
 
-    def _internal(self) -> None:
-        ...
+    def _internal(self) -> None: ...
 
 
 async def standalone_search(query: str) -> str:
     """A standalone search function."""
     return query
+
+
+async def prefixed_search(prefix: str, query: str) -> str:
+    """Search with a fixed prefix."""
+    return f"{prefix}:{query}"
 
 
 def test_toolify_bundles_public_methods_and_functions():
@@ -193,6 +197,77 @@ def test_toolify_keeps_partial_and_skips_builtins():
     box = toolify(bound, "a string", [1, 2])
     # Only the partial is registered, with its bound argument intact.
     assert box.tools == [bound]
+
+
+class PartialToolifyAgent:
+    def __init__(self):
+        self._tools = toolify(functools.partial(prefixed_search, "fixed"))
+
+
+def test_collect_registers_partial_tool():
+    registry = DefaultToolCollector().collect(PartialToolifyAgent())
+
+    assert "partial_prefixed_search" in registry.tools
+    tool_schema = registry.tools["partial_prefixed_search"].schema
+    params = tool_schema["function"]["parameters"]
+    assert set(params["properties"]) == {"query"}
+    assert len(registry.tools) == 1
+
+
+class CallableSearch:
+    async def __call__(self, query: str) -> str:
+        """Search by query."""
+        return query
+
+
+class CallableToolifyAgent:
+    def __init__(self):
+        self._tools = toolify(CallableSearch())
+
+
+def test_collect_registers_callable_object_tool():
+    registry = DefaultToolCollector().collect(CallableToolifyAgent())
+
+    assert "CallableSearch" in registry.tools
+    tool_schema = registry.tools["CallableSearch"].schema
+    assert tool_schema["function"]["description"] == "Search by query."
+    assert len(registry.tools) == 1
+
+
+class BadCallable:
+    def __call__(self, value):
+        return value
+
+
+class BadToolifyAgent:
+    def __init__(self):
+        self._tools = toolify(BadCallable())
+
+
+def test_collect_raises_when_tool_schema_cannot_be_built():
+    with pytest.raises(ValueError, match="must have a type annotation"):
+        DefaultToolCollector().collect(BadToolifyAgent())
+
+
+class CallableToolkit:
+    def __call__(self):
+        return None
+
+    @tool
+    async def search(self, query: str) -> str:
+        """Search."""
+        return query
+
+
+class CallableToolkitAgent:
+    def __init__(self):
+        self._toolkit = CallableToolkit()
+
+
+def test_collect_marked_methods_from_callable_dependency():
+    registry = DefaultToolCollector().collect(CallableToolkitAgent())
+
+    assert any(name.endswith("search") for name in registry.tools)
 
 
 class StaticToolHost:

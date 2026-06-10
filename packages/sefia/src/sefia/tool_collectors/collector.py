@@ -1,7 +1,7 @@
 from typing import Any, Callable
 
 from ..interfaces import ModelInspector, ToolCollector
-from ..models import ToolConflictError, ToolRegistry
+from ..models import ToolRegistry
 from ..toolify import Toolset
 
 
@@ -60,7 +60,7 @@ class DefaultToolCollector(ToolCollector):
     @staticmethod
     def _is_tool_provider(member: object) -> bool:
         """A held member can contribute tools only if it is a user-defined object."""
-        if member is None or callable(member):
+        if member is None:
             return False
         return type(member).__module__ != "builtins"
 
@@ -98,13 +98,8 @@ class DefaultToolCollector(ToolCollector):
                 self._add(method, registry)
 
     def _add(self, func: Callable[..., Any], registry: ToolRegistry) -> None:
-        try:
-            schema = self._build_schema(func)
-            registry.add(func, schema)
-        except ToolConflictError:
-            raise
-        except Exception:
-            return
+        schema = self._build_schema(func)
+        registry.add(func, schema)
 
     def _build_schema(self, func: Callable[..., Any]) -> dict:
         """

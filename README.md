@@ -235,10 +235,11 @@ class Assistant:
         ...
 ```
 
-`toolify()` exposes every public method of each object it is given (its
-`_`-prefixed helpers stay private) and registers any function passed directly.
-Scoping is a property of what you hand it: pass a narrower object to expose
-fewer tools.
+`toolify(obj)` exposes every public callable method of `obj` (its `_`-prefixed
+helpers stay private) and registers any function passed directly. This is
+convenient, but broad external clients can contain methods you do not want the
+LLM to call. For production use, prefer a narrow adapter object and
+`toolify(adapter)`, or pass only the specific functions you intend to expose.
 
 ### `Session`
 
