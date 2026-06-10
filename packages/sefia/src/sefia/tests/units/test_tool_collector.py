@@ -319,7 +319,7 @@ def test_toolify_skips_builtin_iterables():
 
 def test_collect_terminates_on_wrapped_cycle():
     cyclic = ExternalLikeClient()
-    cyclic.__wrapped__ = cyclic  # self-referential wrapper chain
+    setattr(cyclic, "__wrapped__", cyclic)  # self-referential wrapper chain
 
     class CyclicHost:
         attr = cyclic
@@ -337,6 +337,6 @@ def test_toolify_exposes_module_functions():
         """Do a thing."""
         return value
 
-    module.do_thing = do_thing
+    setattr(module, "do_thing", do_thing)
     box = toolify(module)
     assert do_thing in box.tools

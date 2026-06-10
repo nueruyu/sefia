@@ -1,5 +1,5 @@
 import functools
-from typing import Callable
+from typing import Callable, TypeVar
 
 from glyff import engrave
 
@@ -8,8 +8,10 @@ from .event_publisher import EventPublisher
 from .executor import InferenceExecutor
 from .interfaces import Policy
 
+T = TypeVar("T")
 
-def tool(func: Callable) -> Callable:
+
+def tool(func: T) -> T:
     """
     Mark a method as a tool available to an @infer step.
 
