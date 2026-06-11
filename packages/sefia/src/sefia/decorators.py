@@ -55,6 +55,16 @@ def policy(policy: Policy) -> Callable:
 
     To apply more than one policy, merge them on the caller side (or stack
     multiple ``@policy`` decorators).
+
+    Two constraints follow from storing the policy on the innermost function:
+
+    - Any decorator placed between ``@policy`` and ``@infer`` must preserve the
+      ``__wrapped__`` chain (i.e. use ``functools.wraps``); otherwise the policy
+      is attached to a different object than ``@infer`` reads, and is silently
+      ignored.
+    - The policy is recorded on the function object itself, so the same function
+      object cannot be reused to build variants with different policies — every
+      decoration shares one policy list.
     """
 
     if not isinstance(policy, Policy):
@@ -83,7 +93,9 @@ def infer(func: Callable) -> Callable:
     The function body is ignored; its signature and docstring are used as a prompt.
 
     A per-function policy can be attached with the ``@policy`` decorator, which
-    stores it under the ``"policies"`` key of ``__sefia_metadata__``.
+    stores it under the ``"policies"`` key of ``__sefia_metadata__``. Any
+    decorator stacked between ``@infer`` and ``@policy`` must preserve the
+    ``__wrapped__`` chain (``functools.wraps``) for the policy to be found.
     """
 
     # The decorator hierarchy is static after decoration, so resolve the
