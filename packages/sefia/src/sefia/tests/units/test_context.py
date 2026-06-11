@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from glyff import ExecutionId
 
-from sefia.context import InferenceContext
+from sefia.context import SessionContext
 
 
 @dataclass
@@ -24,7 +24,7 @@ def mock_glyff_session():
 
 @pytest.fixture
 def inference_context(mock_glyff_session):
-    return InferenceContext(
+    return SessionContext(
         glyff_session=mock_glyff_session,
         session_store=MagicMock(),
         llm_client=MagicMock(),
@@ -34,7 +34,7 @@ def inference_context(mock_glyff_session):
     )
 
 
-class TestInferenceContext:
+class TestSessionContext:
     def test_get_call_state_store_creates_scoped_key(self, inference_context, mocker):
         # Arrange
         execution_id = ExecutionId(

@@ -1,7 +1,10 @@
+import logging
 from collections import defaultdict
 
 from . import events
 from .interfaces.event_handler import EventHandler
+
+logger = logging.getLogger(__name__)
 
 
 class EventPublisher:
@@ -21,10 +24,26 @@ class EventPublisher:
         return handler_map
 
     async def publish(self, event: events.Event) -> None:
-        """Dispatches an event to all handlers registered for its type."""
+        """
+        Dispatches an event to all handlers registered for its type.
+
+        Event handlers are pure observers: they cannot steer the inference loop.
+        Any exception a handler raises — including ``YieldException`` — is logged
+        and swallowed here, so a misbehaving observer can never affect control
+        flow. Genuine resumable interrupts are driven by the control/execution
+        layer (for example, a tool raising ``YieldException``), never by an
+        observer.
+        """
         event_type = type(event)
         handlers_to_run = self._handler_map.get(event_type, []) + self._handler_map.get(
             events.Event, []
         )
         for handler in handlers_to_run:
-            await handler.handle(event)
+            try:
+                await handler.handle(event)
+            except Exception:
+                logger.exception(
+                    "Event handler %s raised while handling %s; ignoring.",
+                    type(handler).__name__,
+                    event_type.__name__,
+                )

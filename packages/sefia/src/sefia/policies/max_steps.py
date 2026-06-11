@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from sefia.handlers.max_steps import MaxStepsHandler
-from sefia.interfaces import EventHandler, Policy
+from sefia.interfaces import InferenceMiddleware, Policy, StepMiddleware
+from sefia.middleware.max_steps import StepLimiter
 
 
 @dataclass
@@ -10,5 +10,5 @@ class MaxSteps(Policy):
 
     count: int = 25
 
-    def create_handlers(self) -> list[EventHandler]:
-        return [MaxStepsHandler(max_steps=self.count)]
+    def create_middleware(self) -> list[InferenceMiddleware | StepMiddleware]:
+        return [StepLimiter(max_steps=self.count)]

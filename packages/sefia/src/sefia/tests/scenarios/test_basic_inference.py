@@ -411,4 +411,4 @@ def test_policy_rejects_non_policy():
     """@policy raises a clear error when given a non-Policy (e.g. the class
     itself instead of an instance)."""
     with pytest.raises(TypeError):
-        policy(MaxSteps)
+        policy(MaxSteps)  # type: ignore
