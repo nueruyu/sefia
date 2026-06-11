@@ -13,15 +13,15 @@ from .interfaces.middleware import (
     StepMiddleware,
 )
 from .exceptions import RequestInferenceRetry
-from .models import (
+from .inference import (
     FinalAnswerDecision,
     HistoryItem,
     InferenceDecision,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
-    ToolRegistry,
 )
+from .models import ToolRegistry
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
