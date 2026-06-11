@@ -79,7 +79,7 @@ class Researcher:
     def __init__(self, web: WebToolkit):
         self._web = web
 
-    @infer()
+    @infer
     async def generate_report(self, topic: str) -> Report:
         """
         Generate a report on the given topic by searching the web,
@@ -105,7 +105,7 @@ class SimpleAgent:
     def __init__(self):
         pass
 
-    @infer()
+    @infer
     async def generate_report(self, topic: str) -> Report:
         """
         Generate a report on the given topic.

@@ -12,7 +12,7 @@ class RequirementsClarifier:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
 
-    @infer()
+    @infer
     async def clarify_request(self, user_request: str) -> ArticleRequest:
         """
         Clarify the user's initial request before any research or writing begins.
@@ -43,7 +43,7 @@ class Researcher:
         self._web = web_search
 
     @tool
-    @infer()
+    @infer
     async def research_topic(self, article_request: ArticleRequest) -> list[str]:
         """
         Research the clarified article request to find relevant online sources.
@@ -63,7 +63,7 @@ class NewsWriter:
         self._human_input = human_input
         self._researcher = researcher
 
-    @infer()
+    @infer
     async def write_article(
         self, article_request: ArticleRequest, sources: list[str]
     ) -> NewsArticle:

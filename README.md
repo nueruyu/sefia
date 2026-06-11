@@ -25,7 +25,7 @@ class Summary(BaseModel):
     uncertainty: str
 
 
-@infer()
+@infer
 async def summarize(article: str) -> Summary:
     """
     Summarize the article for a technical audience.
@@ -93,7 +93,7 @@ class Researcher:
     def __init__(self, web: WebToolkit):
         self._web = web
 
-    @infer()
+    @infer
     async def generate_report(self, topic: str) -> Report:
         """Research the topic using the web tools and produce a structured report."""
         ...
@@ -112,8 +112,10 @@ a step needs them.
 
 - **LLM steps are functions.** Use `@infer` on an async function or method. The
   signature and docstring are the contract.
-- **Tools are methods.** Use `@tool` on methods that an inferred step may call.
-  Tool discovery follows reachable Python objects instead of a separate registry.
+- **Tools are opt-in methods.** Mark a method with `@tool` to make it callable
+  by an inferred step. Discovery follows the Python objects reachable from
+  `self` instead of a separate registry. For classes you cannot decorate, wrap
+  them with `toolify()`.
 - **Composition stays in Python.** Branching, loops, retries around a workflow,
   and helper functions can use normal Python control flow.
 - **Durability is lightweight.** Sefia is backed by
@@ -146,7 +148,7 @@ resumption. For LiteLLM-backed provider support, install
 `@infer` turns a typed async function into an LLM-backed call.
 
 ```python
-@infer()
+@infer
 async def decide_next_action(state: AgentState) -> AgentDecision:
     """Decide the next action for the current state."""
     ...
@@ -155,7 +157,7 @@ async def decide_next_action(state: AgentState) -> AgentDecision:
 The signature and docstring define the contract. The LLM:
 
 1. Receives the docstring as instructions and the arguments as task input.
-2. Calls available `@tool` methods when tools are reachable from `self`.
+2. Calls `@tool` methods when tools are reachable from `self`.
 3. Returns a value matching the declared return type.
 
 Dataclasses, Pydantic models, primitives, and `Serializable` instances are
@@ -164,7 +166,18 @@ type and validates the response before returning it.
 
 ### `@tool`
 
-`@tool` exposes a method to inferred calls on the same object graph.
+Tools are opt-in. Mark a method with `@tool`, and when an `@infer` step runs,
+Sefia discovers the marked methods reachable from `self` and offers them to the
+LLM. The discovery rules are deliberately small:
+
+- **The instance's own `@tool` methods** are exposed, including private
+  (`_`-prefixed) ones — a step can call its own marked helpers.
+- **`@infer` methods are not tools** unless you also mark them. A bare `@infer`
+  entry point never exposes itself, so the running step cannot recurse into
+  itself by accident.
+- **Dependencies held in attributes**, public or private (such as `self._web`
+  or `self.calculator`), contribute their `@tool` methods.
+- Name collisions raise `ToolConflictError` at runtime.
 
 ```python
 class Calculator:
@@ -172,37 +185,61 @@ class Calculator:
     async def add(self, a: int, b: int) -> int:
         """Return the sum of two integers."""
         return a + b
+
+
+class MathAgent:
+    def __init__(self, calculator: Calculator):
+        self._calculator = calculator  # its @tool methods become tools
+
+    @infer
+    async def solve(self, problem: str) -> int:
+        """Solve the problem, using the calculator when arithmetic is needed."""
+        ...
 ```
 
-Tools are automatically discovered when an `@infer` method runs. The discovery
-rules are deliberately small:
-
-- Methods of the instance itself are scanned.
-- Private attributes, such as `self._web`, are scanned recursively as toolkits.
-- Methods starting with `_` are never exposed, even if marked with `@tool`.
-- Name collisions raise `ToolConflictError` at runtime.
-
-To expose only a subset of tools, return a narrower toolkit object:
+To expose an inferred step of one agent as a tool for another, stack the
+decorators — `@tool` over `@infer`:
 
 ```python
-class FullToolkit:
+class Researcher:
     @tool
-    async def read(self, path: str) -> str: ...
-
-    @tool
-    async def write(self, path: str, data: bytes) -> None: ...
-
-    def read_only(self) -> "ReadOnlyToolkit":
-        return ReadOnlyToolkit()
-
-
-class ReadOnlyToolkit:
-    @tool
-    async def read(self, path: str) -> str: ...
+    @infer
+    async def research(self, topic: str) -> list[str]:
+        """Research the topic and return supporting URLs."""
+        ...
 ```
 
-This keeps Sefia's tool model simple: it exposes what is reachable. Scoping is a
-property of the toolkit you provide.
+### `toolify`
+
+`@tool` works for your own classes, but you often want to expose a third-party
+client or a plain function you cannot decorate. `toolify()` bundles objects and
+functions into a `Toolset` you hold like any other dependency:
+
+```python
+from sefia import infer, toolify
+
+
+async def current_time() -> str:
+    """Return the current time as an ISO-8601 string."""
+    ...
+
+
+class Assistant:
+    def __init__(self, client: SomeExternalClient):
+        # Every public method of `client`, plus the standalone function.
+        self._tools = toolify(client, current_time)
+
+    @infer
+    async def handle(self, request: str) -> str:
+        """Handle the request using the available tools."""
+        ...
+```
+
+`toolify(obj)` exposes every public callable method of `obj` (its `_`-prefixed
+helpers stay private) and registers any function passed directly. This is
+convenient, but broad external clients can contain methods you do not want the
+LLM to call. For production use, prefer a narrow adapter object and
+`toolify(adapter)`, or pass only the specific functions you intend to expose.
 
 ### `Session`
 
@@ -231,15 +268,22 @@ either or both:
   step) and steers the executor's loops.
 
 ```python
-from sefia import MaxRetries, infer
+from sefia import MaxRetries, infer, policy
 
 
 class MyAgent:
-    @infer(policies=[MaxRetries(count=5)])
+    @infer
+    @policy(MaxRetries(count=5))
     async def critical_task(self, request: Request) -> Result:
         """Handle the request with retry behavior."""
         ...
 ```
+
+A per-function policy is attached with the separate `@policy` decorator. It
+records the policy under the `"policies"` key of the function's
+`__sefia_metadata__`, where `@infer` reads it — the order of the two
+decorators does not matter. To apply more than one policy, merge them on the
+caller side (or stack multiple `@policy` decorators).
 
 Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
 added by implementing the `Policy` ABC.
@@ -264,11 +308,12 @@ The executor does not cap the loop on its own; without a `StepMiddleware` there
 is no default cap (though `Session` registers stagnation detection by default).
 
 ```python
-from sefia import MaxSteps, infer
+from sefia import MaxSteps, infer, policy
 
 
 class MyAgent:
-    @infer(policies=[MaxSteps(count=25)])
+    @infer
+    @policy(MaxSteps(count=25))
     async def run(self, task: Task) -> Result:
         """Work the task, capped at 25 steps."""
         ...
