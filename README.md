@@ -25,7 +25,7 @@ class Summary(BaseModel):
     uncertainty: str
 
 
-@infer()
+@infer
 async def summarize(article: str) -> Summary:
     """
     Summarize the article for a technical audience.
@@ -93,7 +93,7 @@ class Researcher:
     def __init__(self, web: WebToolkit):
         self._web = web
 
-    @infer()
+    @infer
     async def generate_report(self, topic: str) -> Report:
         """Research the topic using the web tools and produce a structured report."""
         ...
@@ -148,7 +148,7 @@ resumption. For LiteLLM-backed provider support, install
 `@infer` turns a typed async function into an LLM-backed call.
 
 ```python
-@infer()
+@infer
 async def decide_next_action(state: AgentState) -> AgentDecision:
     """Decide the next action for the current state."""
     ...
@@ -191,19 +191,19 @@ class MathAgent:
     def __init__(self, calculator: Calculator):
         self._calculator = calculator  # its @tool methods become tools
 
-    @infer()
+    @infer
     async def solve(self, problem: str) -> int:
         """Solve the problem, using the calculator when arithmetic is needed."""
         ...
 ```
 
 To expose an inferred step of one agent as a tool for another, stack the
-decorators — `@tool` over `@infer()`:
+decorators — `@tool` over `@infer`:
 
 ```python
 class Researcher:
     @tool
-    @infer()
+    @infer
     async def research(self, topic: str) -> list[str]:
         """Research the topic and return supporting URLs."""
         ...
@@ -229,7 +229,7 @@ class Assistant:
         # Every public method of `client`, plus the standalone function.
         self._tools = toolify(client, current_time)
 
-    @infer()
+    @infer
     async def handle(self, request: str) -> str:
         """Handle the request using the available tools."""
         ...
@@ -263,15 +263,22 @@ Policies attach event handlers that govern how the inference loop reacts to
 errors and other events.
 
 ```python
-from sefia import MaxRetries, infer
+from sefia import MaxRetries, infer, policy
 
 
 class MyAgent:
-    @infer(policies=[MaxRetries(count=5)])
+    @infer
+    @policy(MaxRetries(count=5))
     async def critical_task(self, request: Request) -> Result:
         """Handle the request with retry behavior."""
         ...
 ```
+
+A per-function policy is attached with the separate `@policy` decorator. It
+records the policy under the `"policies"` key of the function's
+`__sefia_metadata__`, where `@infer` reads it — the order of the two
+decorators does not matter. To apply more than one policy, merge them on the
+caller side (or stack multiple `@policy` decorators).
 
 Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
 added by implementing the `Policy` ABC.
@@ -287,11 +294,12 @@ handling `StepStarted`. There is no default cap.
 the loop reaches the step limit:
 
 ```python
-from sefia import MaxSteps, infer
+from sefia import MaxSteps, infer, policy
 
 
 class MyAgent:
-    @infer(policies=[MaxSteps(count=25)])
+    @infer
+    @policy(MaxSteps(count=25))
     async def run(self, task: Task) -> Result:
         """Work the task, capped at 25 steps."""
         ...

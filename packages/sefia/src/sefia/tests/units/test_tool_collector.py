@@ -122,7 +122,7 @@ class SelfMethodAgent:
         """Not marked, so not a tool."""
         return value
 
-    @infer()
+    @infer
     async def run(self, task: str) -> str:
         """An inference entry point, not a tool."""
         ...

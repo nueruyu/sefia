@@ -1,4 +1,5 @@
 import functools
+import inspect
 from typing import Callable, TypeVar
 
 from glyff import engrave
@@ -8,7 +9,22 @@ from .event_publisher import EventPublisher
 from .executor import InferenceExecutor
 from .interfaces import Policy
 
+
 T = TypeVar("T")
+
+# Attribute that holds sefia's per-function metadata dict, and the key under
+# which inference policies live inside it.
+METADATA_ATTR = "__sefia_metadata__"
+POLICIES_KEY = "policies"
+
+def get_metadata(func: Callable) -> dict:
+    """
+    Return the sefia metadata dict attached to ``func`` (empty if there is none).
+
+    The lookup unwraps ``functools.wraps`` layers, so it works on a function
+    regardless of which decorators wrap it.
+    """
+    return getattr(inspect.unwrap(func), METADATA_ATTR, {})
 
 
 def tool(func: T) -> T:
@@ -26,37 +42,92 @@ def tool(func: T) -> T:
     return func
 
 
-def infer(policies: list[Policy] | None = None) -> Callable:
+def policy(policy: Policy) -> Callable:
+    """
+    Decorator that attaches an inference policy to an ``@infer`` function.
+
+    The policy is recorded under the ``"policies"`` key of the function's
+    ``__sefia_metadata__`` dict, where ``@infer`` reads it. The order relative
+    to ``@infer`` does not matter::
+
+        @infer
+        @policy(MaxRetries(count=5))
+        async def step(...): ...
+
+    To apply more than one policy, merge them on the caller side (or stack
+    multiple ``@policy`` decorators).
+
+    Two constraints follow from storing the policy on the innermost function:
+
+    - Any decorator placed between ``@policy`` and ``@infer`` must preserve the
+      ``__wrapped__`` chain (i.e. use ``functools.wraps``); otherwise the policy
+      is attached to a different object than ``@infer`` reads, and is silently
+      ignored.
+    - The policy is recorded on the function object itself, so the same function
+      object cannot be reused to build variants with different policies — every
+      decoration shares one policy list.
+    """
+
+    if not isinstance(policy, Policy):
+        raise TypeError(
+            "@policy must be called with a Policy instance, "
+            "e.g. @policy(MaxRetries(count=5))."
+        )
+
+    def decorator(func: Callable) -> Callable:
+        # Attach metadata to the innermost function so it lives in one place
+        # regardless of decorator order or intermediate wrappers.
+        underlying = inspect.unwrap(func)
+        metadata = getattr(underlying, METADATA_ATTR, None)
+        if metadata is None:
+            metadata = {}
+            setattr(underlying, METADATA_ATTR, metadata)
+        metadata.setdefault(POLICIES_KEY, []).append(policy)
+        return func
+
+    return decorator
+
+
+def infer(func: Callable) -> Callable:
     """
     Decorator that enables a function's implementation to be inferred by an LLM.
     The function body is ignored; its signature and docstring are used as a prompt.
+
+    A per-function policy can be attached with the ``@policy`` decorator, which
+    stores it under the ``"policies"`` key of ``__sefia_metadata__``. Any
+    decorator stacked between ``@infer`` and ``@policy`` must preserve the
+    ``__wrapped__`` chain (``functools.wraps``) for the policy to be found.
     """
 
-    def decorator(func: Callable) -> Callable:
-        @engrave
-        @functools.wraps(func)
-        async def _run(*args, **kwargs):
-            context = get_context()
-            all_policies = context.policies + (policies or [])
-            all_handlers = [
-                handler
-                for policy in all_policies
-                for handler in policy.create_handlers()
-            ]
-            publisher = EventPublisher(all_handlers)
+    # The decorator hierarchy is static after decoration, so resolve the
+    # innermost function once here rather than on every invocation.
+    unwrapped = inspect.unwrap(func)
 
-            executor = InferenceExecutor(
-                func=func,
-                args=args,
-                kwargs=kwargs,
-                inference_strategy=context.inference_strategy,
-                tool_collector=context.tool_collector,
-                engrave=engrave,
-                publisher=publisher,
-            )
-            return await executor.run()
+    @engrave
+    @functools.wraps(func)
+    async def _run(*args, **kwargs):
+        context = get_context()
+        # Read policy metadata from the innermost function so the decorator
+        # order does not matter and intermediate wrappers are handled.
+        metadata = getattr(unwrapped, METADATA_ATTR, {})
+        fn_policies = metadata.get(POLICIES_KEY, [])
+        all_policies = list(context.policies) + fn_policies
+        all_handlers = [
+            handler
+            for p in all_policies
+            for handler in p.create_handlers()
+        ]
+        publisher = EventPublisher(all_handlers)
 
-        setattr(_run, "__sefia_infer__", True)
-        return _run
+        executor = InferenceExecutor(
+            func=unwrapped,
+            args=args,
+            kwargs=kwargs,
+            inference_strategy=context.inference_strategy,
+            tool_collector=context.tool_collector,
+            engrave=engrave,
+            publisher=publisher,
+        )
+        return await executor.run()
 
-    return decorator
+    return _run

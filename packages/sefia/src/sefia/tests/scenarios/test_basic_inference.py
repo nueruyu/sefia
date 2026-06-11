@@ -8,7 +8,7 @@ from glyff.interfaces import ArgsHasher, Serializer
 from glyff.stores import MemoryClient
 from glyff.stores import MemorySessionStore as GlyffMemoryStore
 
-from sefia import LLMResponse, Session, infer
+from sefia import LLMResponse, MaxSteps, Session, get_metadata, infer, policy
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
 from ..conftest import (
@@ -169,7 +169,7 @@ async def test_inference_with_tool_exception(
         def __init__(self, kit: BrokenToolkit):
             self._kit = kit
 
-        @infer()
+        @infer
         async def run_and_report(self) -> Report:
             """Run a tool and report on the outcome."""
             ...
@@ -341,7 +341,7 @@ async def test_inference_on_standalone_function(
 ):
     """Tests that @infer works correctly on a standalone function without any tools."""
 
-    @infer()
+    @infer
     async def summarize_text(text: str, length: int) -> str:
         """Summarize the given text to the specified length in sentences."""
         ...
@@ -365,3 +365,50 @@ async def test_inference_on_standalone_function(
     output_schema = mock_llm.requests[0].get("output_schema")
     assert output_schema is not None
     assert "tool_calls" not in output_schema.get("properties", {})
+
+
+def test_policy_attaches_metadata():
+    """`@policy` records its policy under the metadata "policies" key, no matter
+    where it sits relative to @infer."""
+
+    @infer
+    @policy(MaxSteps(count=3))
+    async def below(value: int) -> int:
+        """Policy applied below @infer."""
+        ...
+
+    @policy(MaxSteps(count=3))
+    @infer
+    async def above(value: int) -> int:
+        """Policy applied above @infer."""
+        ...
+
+    for fn in (below, above):
+        policies = get_metadata(fn)["policies"]
+        assert len(policies) == 1
+        assert isinstance(policies[0], MaxSteps)
+
+
+def test_policy_coexists_with_other_metadata():
+    """A non-policies entry in the metadata must not hide a policy attached above
+    @infer — regression for the metadata-present-but-no-policies-key bug."""
+
+    async def fn(value: int) -> int:
+        """A function whose metadata was already touched by another decorator."""
+        ...
+
+    fn.__sefia_metadata__ = {"other": True}
+
+    # @policy sits above @infer, so the policy lands on the wrapper chain.
+    decorated = policy(MaxSteps(count=2))(infer(fn))
+
+    metadata = get_metadata(decorated)
+    assert metadata.get("other") is True
+    assert [type(p) for p in metadata.get("policies", [])] == [MaxSteps]
+
+
+def test_policy_rejects_non_policy():
+    """@policy raises a clear error when given a non-Policy (e.g. the class
+    itself instead of an instance)."""
+    with pytest.raises(TypeError):
+        policy(MaxSteps)

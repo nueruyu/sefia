@@ -1,4 +1,4 @@
-from .decorators import infer, tool
+from .decorators import get_metadata, infer, policy, tool
 from .events import Event
 from .handlers.cost import CostCalculator
 from .interfaces import EventHandler, Policy, Resource, SessionStore
@@ -13,6 +13,8 @@ from .toolify import Toolset, toolify
 __all__ = [
     "infer",
     "tool",
+    "policy",
+    "get_metadata",
     "toolify",
     "Toolset",
     "AsRawText",

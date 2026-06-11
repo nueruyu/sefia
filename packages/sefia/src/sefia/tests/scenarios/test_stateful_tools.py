@@ -117,7 +117,7 @@ class TestStatefulTool:
             def __init__(self, tool: HumanInputTool):
                 self._tool = tool
 
-            @infer()
+            @infer
             async def get_user_name(self) -> Report:
                 """Ask the user for their name and create a report."""
                 ...
@@ -214,7 +214,7 @@ class TestStatefulTool:
             def __init__(self, tool: HumanInputTool):
                 self._tool = tool
 
-            @infer()
+            @infer
             async def get_profile(self) -> Report:
                 """Ask for name, then age, then report."""
                 ...
