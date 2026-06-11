@@ -1,4 +1,5 @@
 import functools
+import inspect
 from typing import Callable, TypeVar
 
 from glyff import engrave

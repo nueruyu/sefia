@@ -191,19 +191,19 @@ class MathAgent:
     def __init__(self, calculator: Calculator):
         self._calculator = calculator  # its @tool methods become tools
 
-    @infer()
+    @infer
     async def solve(self, problem: str) -> int:
         """Solve the problem, using the calculator when arithmetic is needed."""
         ...
 ```
 
 To expose an inferred step of one agent as a tool for another, stack the
-decorators — `@tool` over `@infer()`:
+decorators — `@tool` over `@infer`:
 
 ```python
 class Researcher:
     @tool
-    @infer()
+    @infer
     async def research(self, topic: str) -> list[str]:
         """Research the topic and return supporting URLs."""
         ...
@@ -229,7 +229,7 @@ class Assistant:
         # Every public method of `client`, plus the standalone function.
         self._tools = toolify(client, current_time)
 
-    @infer()
+    @infer
     async def handle(self, request: str) -> str:
         """Handle the request using the available tools."""
         ...
