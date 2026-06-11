@@ -2,6 +2,10 @@ class ToolError(Exception):
     """Base class for errors raised by a tool."""
 
 
+class ToolConflictError(ToolError):
+    """Raised when two tools with the same name are found."""
+
+
 class FileOperationToolError(ToolError):
     """Base for file-related tool errors."""
 
