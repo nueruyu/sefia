@@ -56,9 +56,10 @@ class StepStarted(Event):
     Event fired at the start of every inference step, including the first.
 
     ``step`` is the 0-based index of the step about to run (equivalently, the
-    number of steps already completed in this attempt). The executor does not
-    cap the loop on its own; a handler may raise (e.g. ``MaxStepsExceededError``)
-    while handling this event to stop it.
+    number of steps already completed in this attempt). This event is for
+    observation only; handlers cannot stop the loop, because the publisher
+    isolates their exceptions. The loop is bounded by a step middleware (e.g.
+    ``StepLimiter``), not by a handler.
     """
 
     step: int

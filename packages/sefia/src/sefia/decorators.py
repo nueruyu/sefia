@@ -26,6 +26,25 @@ def tool(func: Callable) -> Callable:
     return wrapper
 
 
+def _partition_middleware(
+    middleware: list,
+) -> tuple[list[InferenceMiddleware], list[StepMiddleware]]:
+    """Split policy-supplied middleware into the inference and step seams."""
+    inference_middlewares: list[InferenceMiddleware] = []
+    step_middlewares: list[StepMiddleware] = []
+    for m in middleware:
+        if isinstance(m, InferenceMiddleware):
+            inference_middlewares.append(m)
+        elif isinstance(m, StepMiddleware):
+            step_middlewares.append(m)
+        else:
+            raise TypeError(
+                "Policy middleware must be an instance of InferenceMiddleware "
+                f"or StepMiddleware, got {type(m).__name__}"
+            )
+    return inference_middlewares, step_middlewares
+
+
 def infer(policies: list[Policy] | None = None) -> Callable:
     """
     Decorator that enables a function's implementation to be inferred by an LLM.
@@ -33,7 +52,6 @@ def infer(policies: list[Policy] | None = None) -> Callable:
     """
 
     def decorator(func: Callable) -> Callable:
-        @engrave
         @functools.wraps(func)
         async def _run(*args, **kwargs):
             context = get_context()
@@ -49,20 +67,9 @@ def infer(policies: list[Policy] | None = None) -> Callable:
                 for middleware in policy.create_middleware()
             ]
             publisher = EventPublisher(all_handlers)
-
-            inference_middlewares: list[InferenceMiddleware] = []
-            step_middlewares: list[StepMiddleware] = []
-            for m in all_middleware:
-                if isinstance(m, InferenceMiddleware):
-                    inference_middlewares.append(m)
-                elif isinstance(m, StepMiddleware):
-                    step_middlewares.append(m)
-                else:
-                    raise TypeError(
-                        "Policy middleware must be an instance of "
-                        "InferenceMiddleware or StepMiddleware, got "
-                        f"{type(m).__name__}"
-                    )
+            inference_middlewares, step_middlewares = _partition_middleware(
+                all_middleware
+            )
 
             executor = InferenceExecutor(
                 func=func,
@@ -75,7 +82,19 @@ def infer(policies: list[Policy] | None = None) -> Callable:
                 inference_middlewares=inference_middlewares,
                 step_middlewares=step_middlewares,
             )
-            return await executor.run()
+
+            # Only the inference itself is engraved, so glyff can replay it. The
+            # setup above (resolving policies and partitioning middleware) runs
+            # outside the engrave boundary, so a misconfigured policy surfaces as
+            # an ordinary error instead of an engraved, replay-forever failure.
+            # The engraved call takes the user's args so glyff keys the record on
+            # them, exactly as before; the executor is captured by closure.
+            @engrave
+            @functools.wraps(func)
+            async def _engraved_run(*_args, **_kwargs):
+                return await executor.run()
+
+            return await _engraved_run(*args, **kwargs)
 
         setattr(_run, "__sefia_infer__", True)
         return _run
