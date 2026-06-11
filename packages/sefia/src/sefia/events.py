@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .models import HistoryItem, InferenceDecision, ToolCallRequest
+from .inference import HistoryItem, InferenceDecision, ToolCallRequest
 
 
 @dataclass(frozen=True)
