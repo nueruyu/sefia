@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from ..event_publisher import EventPublisher
-from ..models import HistoryItem, InferenceDecision
+from ..inference import HistoryItem, InferenceDecision
 
 
 class InferenceStrategy(ABC):
