@@ -6,7 +6,7 @@ from ..models import HistoryItem, InferenceDecision
 
 
 @dataclass
-class RunContext:
+class InferenceContext:
     """
     Context handed to an :class:`InferenceMiddleware` wrapping a whole inference
     run (one execution of the step loop).
@@ -43,7 +43,7 @@ class InferenceMiddleware(ABC):
     """
 
     @abstractmethod
-    async def wrap(self, ctx: RunContext, nxt: Callable[[], Awaitable[Any]]) -> Any:
+    async def wrap(self, ctx: InferenceContext, nxt: Callable[[], Awaitable[Any]]) -> Any:
         """Run the wrapped inference (via ``nxt``) and return its result."""
         ...
 

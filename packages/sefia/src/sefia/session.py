@@ -2,7 +2,7 @@ from typing import Self, Type, TypeVar
 
 import glyff
 
-from .context import InferenceContext, context_var
+from .context import SessionContext, context_var
 from .interfaces import (
     Policy,
     ToolCollector,
@@ -23,7 +23,7 @@ T = TypeVar("T")
 class Session:
     """
     Manages the lifecycle of an inference execution.
-    Wraps a glyff.Session and sets up the sefia InferenceContext.
+    Wraps a glyff.Session and sets up the sefia SessionContext.
     """
 
     def __init__(
@@ -58,7 +58,7 @@ class Session:
             json_default=pydantic_json_default,
             stream=stream,
         )
-        self._context: InferenceContext | None = None
+        self._context: SessionContext | None = None
 
     def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:
         """
@@ -72,7 +72,7 @@ class Session:
         return self._context.get_state_store(key, state_type)
 
     async def __aenter__(self) -> Self:
-        self._context = InferenceContext(
+        self._context = SessionContext(
             glyff_session=self._glyff_session,
             session_store=self.session_store,
             llm_client=self.llm_client,

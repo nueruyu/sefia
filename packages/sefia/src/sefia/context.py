@@ -33,7 +33,7 @@ def _execution_id_scope_key(execution_id: ExecutionId) -> str:
 
 
 @dataclass
-class InferenceContext:
+class SessionContext:
     """
     Holds the context for an ongoing sefia inference session.
     """
@@ -87,10 +87,10 @@ class InferenceContext:
         return store
 
 
-context_var = contextvars.ContextVar[InferenceContext]("sefia_context")
+context_var = contextvars.ContextVar[SessionContext]("sefia_context")
 
 
-def get_context() -> InferenceContext:
+def get_context() -> SessionContext:
     """Retrieves the current inference context."""
     try:
         return context_var.get()

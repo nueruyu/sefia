@@ -3,7 +3,7 @@ from typing import Any, Awaitable, Callable
 from glyff.exceptions import YieldException
 
 from ..exceptions import InferenceControlSignal, RequestInferenceRetry
-from ..interfaces.middleware import InferenceMiddleware, RunContext
+from ..interfaces.middleware import InferenceMiddleware, InferenceContext
 
 
 class MaxRetriesExceededError(InferenceControlSignal):
@@ -34,7 +34,7 @@ class Retrier(InferenceMiddleware):
         self.max_retries = max_retries
         self._retries_used = 0
 
-    async def wrap(self, ctx: RunContext, nxt: Callable[[], Awaitable[Any]]) -> Any:
+    async def wrap(self, ctx: InferenceContext, nxt: Callable[[], Awaitable[Any]]) -> Any:
         try:
             return await nxt()
         except (InferenceControlSignal, YieldException):

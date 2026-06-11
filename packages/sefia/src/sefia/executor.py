@@ -8,7 +8,7 @@ from .event_publisher import EventPublisher
 from .interfaces import InferenceStrategy, ToolCollector
 from .interfaces.middleware import (
     InferenceMiddleware,
-    RunContext,
+    InferenceContext,
     StepContext,
     StepMiddleware,
 )
@@ -184,7 +184,7 @@ class InferenceExecutor:
             )
         )
 
-        ctx = RunContext(
+        ctx = InferenceContext(
             func_name=self.func_name, args=self.args, kwargs=self.kwargs
         )
 

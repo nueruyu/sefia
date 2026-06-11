@@ -2,7 +2,7 @@ from .event_handler import EventHandler
 from .inference_strategy import InferenceStrategy
 from .middleware import (
     InferenceMiddleware,
-    RunContext,
+    InferenceContext,
     StepContext,
     StepMiddleware,
 )
@@ -18,7 +18,7 @@ __all__ = [
     "InferenceStrategy",
     "InferenceMiddleware",
     "StepMiddleware",
-    "RunContext",
+    "InferenceContext",
     "StepContext",
     "ModelInspector",
     "Policy",

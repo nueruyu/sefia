@@ -2,13 +2,13 @@ import pytest
 from glyff.exceptions import YieldException
 
 from sefia.exceptions import RequestInferenceRetry
-from sefia.interfaces.middleware import RunContext
+from sefia.interfaces.middleware import InferenceContext
 from sefia.middleware.max_steps import MaxStepsExceededError
 from sefia.middleware.retry import MaxRetriesExceededError, Retrier
 
 
-def _ctx() -> RunContext:
-    return RunContext(func_name="f", args=(), kwargs={})
+def _ctx() -> InferenceContext:
+    return InferenceContext(func_name="f", args=(), kwargs={})
 
 
 class TestRetrier:
