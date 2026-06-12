@@ -5,7 +5,7 @@ from typing import Any, Callable, Type, cast
 
 from pydantic import TypeAdapter, ValidationError, create_model
 
-from ..interfaces.model_inspector import ModelInspector
+from .._interfaces.model_inspector import ModelInspector
 
 
 class PydanticModelInspector(ModelInspector):
