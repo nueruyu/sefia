@@ -6,8 +6,7 @@ from typing import Any, Callable, Union
 from pydantic import create_model
 
 from ..event_publisher import EventPublisher
-from ..interfaces import InferenceStrategy, ModelInspector, PromptFormatter
-from ..models import (
+from ..inference import (
     FinalAnswerDecision,
     HistoryItem,
     InferenceDecision,
@@ -16,6 +15,7 @@ from ..models import (
     ToolCallRequest,
     ToolCallResult,
 )
+from ..interfaces import InferenceStrategy, ModelInspector, PromptFormatter
 from . import events
 from .client import LLMClient
 from .messages import Message
