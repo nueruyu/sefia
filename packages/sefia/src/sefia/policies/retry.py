@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sefia.interfaces import InferenceMiddleware, Policy, StepMiddleware
+from sefia import InferenceMiddleware, Policy, StepMiddleware
 from sefia.middleware.retry import Retrier
 
 
