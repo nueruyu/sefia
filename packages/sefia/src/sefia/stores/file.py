@@ -7,10 +7,12 @@ from glyff_file_store import FileClient
 
 from .._interfaces.session_store import SessionStore
 
-_UNSAFE = re.compile(r'[<>:"\\|?*%\x00-\x1f]')
+_UNSAFE = re.compile(r'[<>:"\\|?*%' + r'\x00-\x1f]')
 
 
 class FileSessionStore(SessionStore):
+    """A file-based metadata store backed by glyff's FileClient."""
+
     def __init__(self, client: FileClient, serializer: Serializer):
         self._client = client
         self._serializer = serializer
