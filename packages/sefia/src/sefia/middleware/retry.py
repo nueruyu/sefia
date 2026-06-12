@@ -11,7 +11,22 @@ class MaxRetriesExceededError(InferenceControlSignal):
 
 
 class Retrier(InferenceMiddleware):
-    """Retries an inference run up to the configured limit."""
+    """
+    Restarts the inference run when an inference attempt fails.
+
+    Only failures arising from the inference process itself are retried. Terminal
+    control signals (max steps, stagnation, an already-exhausted retry budget) and
+    graceful interrupts (``YieldException``) are allowed to propagate untouched,
+    so retries are never wasted on a deterministic limit. Tool failures are not
+    retried either: the executor stringifies them into the history and feeds them
+    back to the model, so they never surface here as exceptions.
+
+    The retry counter is intentionally kept on the instance and persists across
+    the attempts of a single run. Middleware is instantiated per inference run
+    (``Policy.create_middleware`` is called once per ``@infer`` invocation in
+    ``decorators._run``), so an instance is never shared across concurrent runs;
+    its state is scoped to a single run.
+    """
 
     def __init__(self, max_retries: int = 3):
         if max_retries < 0:
