@@ -1,4 +1,3 @@
-from .collector import ToolCollector
 from .event_handler import EventHandler
 from .inference_strategy import InferenceStrategy
 from .middleware import (
@@ -25,5 +24,4 @@ __all__ = [
     "PromptFormatter",
     "Resource",
     "SessionStore",
-    "ToolCollector",
 ]
