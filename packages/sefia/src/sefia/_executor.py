@@ -4,15 +4,14 @@ from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 from glyff.exceptions import YieldException
 
 from . import events
-from ._event_publisher import EventPublisher
-from ._interfaces import InferenceStrategy, ToolCollector
+from ._interfaces import InferenceStrategy
 from ._interfaces.middleware import (
     InferenceMiddleware,
     InferenceContext,
     StepContext,
     StepMiddleware,
 )
-from ._tool_registry import ToolRegistry
+from .event_system import EventPublisher
 from .exceptions import RequestInferenceRetry
 from .inference import (
     FinalAnswerDecision,
@@ -22,6 +21,7 @@ from .inference import (
     ToolCallRequest,
     ToolCallResult,
 )
+from .tools import ToolCollector, ToolRegistry
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -117,13 +117,6 @@ class InferenceExecutor:
                 publisher=self.publisher,
             )
         except Exception as e:
-            # This method is engraved, so any exception that escapes it is
-            # persisted by glyff as a permanent FAILED record. The failure is
-            # published for observation (handlers cannot change the outcome — the
-            # publisher isolates their exceptions), then the original exception is
-            # re-raised and engraved as a genuine failure. Resumable interrupts
-            # come from the control/execution layer (e.g. a tool raising
-            # YieldException), not from observation handlers.
             await self.publisher.publish(events.InferenceStepFailed(error=e))
             raise
 
@@ -156,9 +149,6 @@ class InferenceExecutor:
                 except YieldException:
                     raise
                 except Exception as e:
-                    # A tool failure is never a retryable inference failure: we
-                    # stringify it into the history and feed it back to the model
-                    # so it can recover, then keep going.
                     await self.publisher.publish(
                         events.ToolExecutionFailed(tool_call=call, error=e)
                     )
@@ -169,13 +159,6 @@ class InferenceExecutor:
         return tool_results
 
     async def run(self) -> Any:
-        """
-        Runs the inference process, owning the retry loop.
-
-        Inference middleware wraps each attempt. A middleware may raise
-        ``RequestInferenceRetry`` to ask for another attempt; any other control
-        signal (or genuine failure) propagates out.
-        """
         await self.publisher.publish(
             events.InferenceStart(
                 func_name=self.func_name,
@@ -191,9 +174,6 @@ class InferenceExecutor:
         async def core() -> Any:
             return await self._attempt_inference()
 
-        # ctx and core are loop-invariant, so the chain is built once; each retry
-        # simply re-invokes it. The middleware instances (and their state, e.g.
-        # the retry counter) persist across attempts.
         chain = _compose(self._inference_middlewares, ctx, core)
 
         while True:
@@ -211,8 +191,6 @@ class InferenceExecutor:
                 raise
 
     async def _attempt_inference(self) -> Any:
-        """Executes a single attempt of the inference loop, owning the step loop."""
-
         instance = self.arguments.get("self")
         self._tool_registry = (
             self.tool_collector.collect(instance) if instance is not None else None
