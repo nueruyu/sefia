@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generic, Type, TypeVar
 
-from ..events import Event
+from ..event_system import Event
 
 E = TypeVar("E", bound=Event)
 
