@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ._interfaces.event_handler import EventHandler
+from typing import Generic, Type, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +12,26 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class Event:
     """Base class for all events."""
+
+
+E = TypeVar("E", bound=Event)
+
+
+class EventHandler(ABC, Generic[E]):
+    """
+    Abstract base class for a handler that processes a specific type of event.
+    """
+
+    @property
+    @abstractmethod
+    def event_types(self) -> tuple[Type[Event], ...]:
+        """Returns a tuple of event types that this handler can process."""
+        ...
+
+    @abstractmethod
+    async def handle(self, event: E) -> None:
+        """Process a specific inference event."""
+        ...
 
 
 class EventPublisher:
@@ -58,4 +76,4 @@ class EventPublisher:
                 )
 
 
-__all__ = ["Event", "EventPublisher"]
+__all__ = ["Event", "EventPublisher", "EventHandler"]

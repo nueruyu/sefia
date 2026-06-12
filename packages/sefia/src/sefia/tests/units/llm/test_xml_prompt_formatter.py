@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from sefia import AsRawText
-from sefia.llm.xml_prompt_formatter import XmlPromptFormatter
+from sefia.llm import XmlPromptFormatter
 from sefia.pydantic.json_utils import pydantic_json_default
 
 

@@ -23,13 +23,13 @@ from sefia.exceptions import (
     TemporarilyUnavailableException,
     TimeoutException,
 )
-from sefia.llm.messages import LLMResponse, Message
-from sefia_litellm.client import LiteLLMClient
+from sefia.llm._messages import LLMResponse, Message
+from sefia_litellm._client import LiteLLMClient
 
 
 @pytest.fixture
 def mock_acompletion(mocker: MockerFixture):
-    return mocker.patch("sefia_litellm.client.acompletion", new_callable=AsyncMock)
+    return mocker.patch("sefia_litellm._client.acompletion", new_callable=AsyncMock)
 
 
 class TestLiteLLMClient:
@@ -63,7 +63,9 @@ class TestLiteLLMClient:
     async def test_complete_parses_litellm_response_and_calculates_cost(
         self, mock_acompletion, mocker: MockerFixture
     ):
-        mocker.patch("sefia_litellm.client.cost_per_token", return_value=(0.001, 0.002))
+        mocker.patch(
+            "sefia_litellm._client.cost_per_token", return_value=(0.001, 0.002)
+        )
         mock_response = ModelResponse(
             id="chatcmpl-123",
             model="gpt-4o",
@@ -105,7 +107,7 @@ class TestLiteLLMClient:
         self, mock_acompletion, mocker: MockerFixture
     ):
         mocker.patch(
-            "sefia_litellm.client.cost_per_token", side_effect=Exception("API error")
+            "sefia_litellm._client.cost_per_token", side_effect=Exception("API error")
         )
         mock_response = ModelResponse(
             model="gpt-4o",

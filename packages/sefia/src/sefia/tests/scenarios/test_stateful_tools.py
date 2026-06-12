@@ -17,7 +17,7 @@ from sefia import (
     tool,
 )
 from sefia._context import get_context
-from sefia.llm.messages import LLMResponse
+from sefia.llm._messages import LLMResponse
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
 from ..conftest import MockLLMClient, Report

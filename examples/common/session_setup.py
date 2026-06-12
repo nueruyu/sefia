@@ -38,7 +38,7 @@ async def setup_session(
         ),
         hasher=PydanticArgsHasher(),
     )
-    sefia_store = sefia.stores.FileSessionStore(
+    session_store = sefia.stores.FileSessionStore(
         client=file_client, serializer=serializer
     )
 
@@ -52,7 +52,7 @@ async def setup_session(
         async with sefia.Session(
             llm_client=llm_client,
             glyff_session=gs,
-            session_store=sefia_store,
+            session_store=session_store,
             policies=policies,
             stream=stream,
         ) as session:

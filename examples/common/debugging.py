@@ -1,9 +1,10 @@
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
-from sefia._interfaces import EventHandler, Policy
+from sefia._interfaces import Policy
+from sefia.event_system import EventHandler
+from sefia.llm._messages import Message
 from sefia.llm.events import BeforeLLMCall
-from sefia.llm.messages import Message
 
 console = Console()
 

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from sefia.pydantic.model_inspector import PydanticModelInspector
+from sefia.pydantic import PydanticModelInspector
 
 
 @dataclass(frozen=True)

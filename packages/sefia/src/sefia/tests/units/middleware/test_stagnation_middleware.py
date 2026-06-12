@@ -4,8 +4,7 @@ import pytest
 
 from sefia._interfaces.middleware import StepContext
 from sefia.inference import FinalAnswerDecision, ToolCallDecision, ToolCallRequest
-from sefia.middleware.stagnation import StagnationError
-from sefia.middleware.stagnation import StagnationDetector
+from sefia.middleware import StagnationDetector, StagnationError
 
 
 async def _step(middleware: StagnationDetector, name: str, args: dict, step: int = 0):

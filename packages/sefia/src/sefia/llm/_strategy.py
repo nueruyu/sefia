@@ -5,7 +5,7 @@ from typing import Any, Callable, Union
 
 from pydantic import create_model
 
-from .._interfaces import InferenceStrategy, ModelInspector, PromptFormatter
+from .._interfaces import InferenceStrategy, ModelInspector
 from ..event_system import EventPublisher
 from ..inference import (
     FinalAnswerDecision,
@@ -17,8 +17,9 @@ from ..inference import (
     ToolCallResult,
 )
 from . import events
-from .client import LLMClient
-from .messages import Message
+from ._client import LLMClient
+from ._messages import Message
+from ._prompt_formatter import PromptFormatter
 
 JsonDefault = Callable[[Any], Any]
 

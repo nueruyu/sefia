@@ -1,6 +1,6 @@
 from abc import ABC
 
-from .event_handler import EventHandler
+from ..event_system import EventHandler
 from .middleware import InferenceMiddleware, StepMiddleware
 
 

@@ -6,7 +6,7 @@ import pytest
 from sefia import infer, tool, toolify
 from sefia._toolify import Toolset
 from sefia.exceptions import ToolConflictError
-from sefia.tool_collectors.collector import DefaultToolCollector
+from sefia.tool_collectors._collector import DefaultToolCollector
 
 from ..conftest import WebToolkit
 

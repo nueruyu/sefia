@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..event_system import Event
-from .messages import LLMResponse, Message
+from ._messages import LLMResponse, Message
 
 
 @dataclass(frozen=True)

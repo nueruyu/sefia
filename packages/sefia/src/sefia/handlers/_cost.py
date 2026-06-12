@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 from typing import Type
 
-from sefia import EventHandler
 from sefia._context import get_context
-from sefia.event_system import Event
+from sefia.event_system import Event, EventHandler
 from sefia.llm.events import AfterLLMCall
 
 

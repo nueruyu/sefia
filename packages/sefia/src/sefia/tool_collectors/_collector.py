@@ -23,7 +23,7 @@ class DefaultToolCollector(ToolCollector):
 
     def __init__(self, model_inspector: ModelInspector | None = None):
         if model_inspector is None:
-            from ..pydantic.model_inspector import PydanticModelInspector
+            from ..pydantic._model_inspector import PydanticModelInspector
 
             model_inspector = PydanticModelInspector()
         self._model_inspector = model_inspector

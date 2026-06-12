@@ -1,11 +1,10 @@
 from ._decorators import infer, policy, tool
 from ._interfaces import (
-    EventHandler,
     InferenceContext,
     InferenceMiddleware,
     InferenceStrategy,
+    ModelInspector,
     Policy,
-    Resource,
     SessionStore,
     StepContext,
     StepMiddleware,
@@ -24,8 +23,6 @@ __all__ = [
     "Toolset",
     "AsRawText",
     "Session",
-    "Resource",
-    "EventHandler",
     "Policy",
     "InferenceStrategy",
     "InferenceMiddleware",
@@ -35,4 +32,5 @@ __all__ = [
     "SessionStore",
     "StateStore",
     "ToolCollector",
+    "ModelInspector",
 ]

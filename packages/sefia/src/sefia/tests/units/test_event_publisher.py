@@ -4,8 +4,7 @@ import pytest
 from glyff.exceptions import YieldException
 from pytest_mock import MockerFixture
 
-from sefia._interfaces import EventHandler
-from sefia.event_system import EventPublisher
+from sefia.event_system import EventHandler, EventPublisher
 from sefia.events import AfterToolCall, BeforeToolCall, Event, ToolExecutionFailed
 from sefia.inference import ToolCallRequest
 

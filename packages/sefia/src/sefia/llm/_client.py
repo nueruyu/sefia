@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Coroutine
 
-from sefia.llm.messages import LLMResponse, Message
+from sefia.llm._messages import LLMResponse, Message
 
 
 class LLMClient(ABC):

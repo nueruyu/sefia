@@ -2,8 +2,8 @@ import typing
 import xml.dom.minidom as minidom
 from typing import Any, Callable
 
-from .._interfaces import PromptFormatter
 from .._markers import AsRawText
+from ._prompt_formatter import PromptFormatter
 
 JsonDefault = Callable[[Any], Any]
 
