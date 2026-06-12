@@ -5,14 +5,12 @@ from typing import Any
 from glyff.interfaces import Serializer
 from glyff_file_store import FileClient
 
-from ..interfaces.session_store import SessionStore
+from .._interfaces.session_store import SessionStore
 
 _UNSAFE = re.compile(r'[<>:"\\|?*%\x00-\x1f]')
 
 
 class FileSessionStore(SessionStore):
-    """A file-based metadata store backed by glyff's FileClient."""
-
     def __init__(self, client: FileClient, serializer: Serializer):
         self._client = client
         self._serializer = serializer
