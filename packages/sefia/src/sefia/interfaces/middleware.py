@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-from ..models import HistoryItem, InferenceDecision
+from ..inference import HistoryItem, InferenceDecision
 
 
 @dataclass
@@ -34,12 +34,12 @@ class InferenceMiddleware(ABC):
     """
     Wraps a full inference run.
 
-    Unlike an :class:`~sefia.interfaces.EventHandler` (which observes), a
-    middleware *controls*: it may run the wrapped inference, inspect the
-    outcome, and steer the executor's retry loop by raising a typed control
-    signal (e.g. ``RequestInferenceRetry``, ``MaxStepsExceededError``). The
-    executor owns the loop;
-    middleware never loops on its own, so multiple middlewares compose cleanly.
+    Unlike an :class:`~sefia.EventHandler` (which observes), a middleware
+    *controls*: it may run the wrapped inference, inspect the outcome, and steer
+    the executor's retry loop by raising a typed control signal (e.g.
+    ``RequestInferenceRetry``, ``MaxStepsExceededError``). The executor owns the
+    loop; middleware never loops on its own, so multiple middlewares compose
+    cleanly.
     """
 
     @abstractmethod
