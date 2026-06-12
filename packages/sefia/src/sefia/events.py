@@ -3,12 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .event_system import Event
 from .inference import HistoryItem, InferenceDecision, ToolCallRequest
-
-
-@dataclass(frozen=True)
-class Event:
-    """Base class for all events."""
 
 
 @dataclass(frozen=True)
