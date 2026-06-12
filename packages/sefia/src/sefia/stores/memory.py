@@ -3,12 +3,10 @@ from typing import Any
 from glyff.interfaces import Serializer
 from glyff.stores import MemoryClient
 
-from ..interfaces.session_store import SessionStore
+from .._interfaces.session_store import SessionStore
 
 
 class MemorySessionStore(SessionStore):
-    """An in-memory metadata store backed by glyff's MemoryClient."""
-
     def __init__(self, client: MemoryClient, serializer: Serializer):
         self._client = client
         self._serializer = serializer
