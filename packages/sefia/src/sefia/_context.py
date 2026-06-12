@@ -8,10 +8,11 @@ from glyff import ExecutionId
 from glyff import Session as GlyffSession
 from glyff.context import get_context as get_glyff_context
 
-from ._interfaces import InferenceStrategy, Policy, ToolCollector
+from ._interfaces import InferenceStrategy, Policy
 from ._interfaces.session_store import SessionStore
 from ._state_store import StateStore
 from .llm.client import LLMClient
+from .tools import ToolCollector
 
 T = TypeVar("T")
 
@@ -34,10 +35,6 @@ def _execution_id_scope_key(execution_id: ExecutionId) -> str:
 
 @dataclass
 class SessionContext:
-    """
-    Holds the context for an ongoing sefia inference session.
-    """
-
     glyff_session: GlyffSession
     session_store: SessionStore
     llm_client: LLMClient
@@ -49,11 +46,6 @@ class SessionContext:
     def get_call_state_store(
         self, key_suffix: str, state_type: Type[T]
     ) -> StateStore[T]:
-        """
-        Gets a StateStore scoped to the current engraved function call.
-        This provides a private, persistent state for a single invocation
-        of an engraved tool.
-        """
         try:
             glyff_ctx = get_glyff_context()
             current_execution_id = glyff_ctx.current_execution_id
@@ -70,9 +62,6 @@ class SessionContext:
         return self.get_state_store(scoped_key, state_type)
 
     def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:
-        """
-        Gets a StateStore for the given key and type, creating one if it doesn't exist.
-        """
         if key not in self._state_stores:
             self._state_stores[key] = StateStore(
                 store=self.session_store,
@@ -91,7 +80,6 @@ context_var = contextvars.ContextVar[SessionContext]("sefia_context")
 
 
 def get_context() -> SessionContext:
-    """Retrieves the current inference context."""
     try:
         return context_var.get()
     except LookupError:
