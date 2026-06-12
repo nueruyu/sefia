@@ -14,6 +14,7 @@ from ._markers import AsRawText
 from ._session import Session
 from ._state_store import StateStore
 from ._toolify import Toolset, toolify
+from .tools import ToolCollector
 
 __all__ = [
     "infer",
@@ -33,4 +34,5 @@ __all__ = [
     "StepContext",
     "SessionStore",
     "StateStore",
+    "ToolCollector",
 ]
