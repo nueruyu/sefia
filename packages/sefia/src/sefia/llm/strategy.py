@@ -25,11 +25,19 @@ JsonDefault = Callable[[Any], Any]
 
 @dataclass
 class _LLMDecision:
+    """Typed stub for the dynamically created decision model."""
+
     final_answer: Any = None
     tool_calls: list[LLMToolCall] | None = None
 
 
 class LLMInferenceStrategy(InferenceStrategy):
+    """
+    An inference strategy that uses an LLM to decide the next step.
+    It unifies tool calls and final answers into a single structured output schema,
+    making it compatible with a wide range of LLMs' JSON modes.
+    """
+
     def __init__(
         self,
         llm_client: LLMClient,
@@ -45,6 +53,10 @@ class LLMInferenceStrategy(InferenceStrategy):
         self._stream = stream
 
     def _build_llm_decision_schema(self, output_type: Any, tools: list[dict]) -> dict:
+        """
+        Dynamically creates a JSON Schema that represents the LLM's
+        choice: either call tools or provide a final answer.
+        """
         if tools:
             decision_model = create_model(
                 "LLMDecision",
@@ -72,6 +84,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         publisher: EventPublisher,
     ) -> InferenceDecision:
         output_schema = self._build_llm_decision_schema(output_type, tools)
+
         messages = self._build_messages(
             instructions,
             arguments,
@@ -141,6 +154,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                     output_type, decision.final_answer
                 )
                 return FinalAnswerDecision(answer=validated_answer)
+
         except (json.JSONDecodeError, ValueError) as e:
             raise ValueError(
                 f"LLM output failed validation against the master schema: {e}, content: {response.content}"
@@ -160,6 +174,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         tools: list[dict],
     ) -> list[Message]:
         messages: list[Message] = []
+
         system_content = instructions
 
         if tools:
@@ -167,8 +182,8 @@ class LLMInferenceStrategy(InferenceStrategy):
                 "Your task is to decide the next step. You have two options:\n"
                 "1. Call one or more tools by populating the `tool_calls` field.\n"
                 "2. Provide the final answer by populating the `final_answer` field.\n\n"
-                "Populate both fields and set the unused field to null. "
-                "Exactly one field should be non-null. "
+                "You MUST populate both fields and set the unused field to null. "
+                "Exactly one field must be non-null. "
                 "Use `tool_calls` to gather more information, and use `final_answer` only when you have enough information to complete the entire task."
             )
         else:
@@ -190,8 +205,8 @@ class LLMInferenceStrategy(InferenceStrategy):
             )
 
         system_content += (
-            "\n### Response Schema\n"
-            "Your response should be a single, valid, raw JSON object that conforms to this JSON Schema:\n"
+            f"\n### Response Schema\n"
+            f"Your response MUST be a single, valid, raw JSON object that strictly conforms to this JSON Schema:\n"
             f"{json.dumps(output_schema, ensure_ascii=False)}"
         )
         messages.append(Message(role="system", content=system_content))
