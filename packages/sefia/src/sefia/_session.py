@@ -19,6 +19,11 @@ T = TypeVar("T")
 
 
 class Session:
+    """
+    Manages the lifecycle of an inference execution.
+    Wraps a glyff.Session and sets up the sefia SessionContext.
+    """
+
     def __init__(
         self,
         llm_client: LLMClient,
@@ -54,6 +59,10 @@ class Session:
         self._context: SessionContext | None = None
 
     def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:
+        """
+        Gets a StateStore for the given key and type, which can be used to
+        manage persistent state within the session.
+        """
         if self._context is None:
             raise RuntimeError(
                 "Cannot get a state store before the session is entered."
