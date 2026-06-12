@@ -1,5 +1,4 @@
-from sefia.interfaces import EventHandler
-
+from .._interfaces import EventHandler
 from .cost import CostCalculator
 
 __all__ = [

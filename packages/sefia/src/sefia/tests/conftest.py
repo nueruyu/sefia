@@ -6,9 +6,9 @@ import pytest
 from glyff.interfaces import ArgsHasher, Serializer
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 
-from sefia import LLMResponse, infer, tool
+from sefia import infer, tool
 from sefia.llm.client import LLMClient
-from sefia.llm.messages import Message
+from sefia.llm.messages import LLMResponse, Message
 
 
 class MockLLMClient(LLMClient):

@@ -1,4 +1,4 @@
-from sefia.interfaces import EventHandler, Policy
+from sefia._interfaces import EventHandler, Policy
 from sefia.llm.events import LLMTokenReceived
 
 

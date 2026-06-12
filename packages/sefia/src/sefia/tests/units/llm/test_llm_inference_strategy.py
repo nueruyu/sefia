@@ -6,16 +6,16 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from sefia.event_publisher import EventPublisher
-from sefia.llm.events import LLMTokenReceived
-from sefia.llm.messages import LLMResponse
-from sefia.llm.strategy import LLMInferenceStrategy
-from sefia.models import (
+from sefia.event_system import EventPublisher
+from sefia.inference import (
     FinalAnswerDecision,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
 )
+from sefia.llm.events import LLMTokenReceived
+from sefia.llm.messages import LLMResponse
+from sefia.llm.strategy import LLMInferenceStrategy
 from sefia.pydantic.json_utils import pydantic_json_default
 from sefia.pydantic.model_inspector import PydanticModelInspector
 

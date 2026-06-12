@@ -5,22 +5,22 @@ from glyff.exceptions import YieldException
 from pytest_mock import MockerFixture
 
 from sefia import events
-from sefia.event_publisher import EventPublisher
+from sefia._executor import InferenceExecutor
+from sefia._interfaces import EventHandler, InferenceStrategy
+from sefia._interfaces.middleware import StepContext, StepMiddleware
+from sefia.event_system import EventPublisher
 from sefia.events import StepStarted
-from sefia.executor import InferenceExecutor
-from sefia.interfaces import EventHandler, InferenceStrategy, ToolCollector
 from sefia.exceptions import RequestInferenceRetry
-from sefia.interfaces.middleware import StepContext, StepMiddleware
-from sefia.middleware.max_steps import MaxStepsExceededError, StepLimiter
-from sefia.middleware.retry import MaxRetriesExceededError, Retrier
-from sefia.models import (
+from sefia.inference import (
     FinalAnswerDecision,
     InferenceDecision,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
-    ToolRegistry,
 )
+from sefia.middleware.max_steps import MaxStepsExceededError, StepLimiter
+from sefia.middleware.retry import MaxRetriesExceededError, Retrier
+from sefia.tools import ToolCollector, ToolRegistry
 
 
 def sample_func(arg1: str) -> str:

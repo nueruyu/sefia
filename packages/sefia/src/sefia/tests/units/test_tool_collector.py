@@ -4,9 +4,9 @@ import types
 import pytest
 
 from sefia import infer, tool, toolify
-from sefia.models import ToolConflictError
+from sefia._toolify import Toolset
+from sefia.exceptions import ToolConflictError
 from sefia.tool_collectors.collector import DefaultToolCollector
-from sefia.toolify import Toolset
 
 from ..conftest import WebToolkit
 

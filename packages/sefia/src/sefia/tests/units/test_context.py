@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from glyff import ExecutionId
 
-from sefia.context import SessionContext
+from sefia._context import SessionContext
 
 
 @dataclass
@@ -45,7 +45,7 @@ class TestSessionContext:
         )
         mock_glyff_ctx = MagicMock()
         mock_glyff_ctx.current_execution_id = execution_id
-        mocker.patch("sefia.context.get_glyff_context", return_value=mock_glyff_ctx)
+        mocker.patch("sefia._context.get_glyff_context", return_value=mock_glyff_ctx)
 
         # Act
         store = inference_context.get_call_state_store("my_state", StateA)
@@ -72,7 +72,7 @@ class TestSessionContext:
             args_hash="question-b",
         )
         mock_glyff_ctx = MagicMock()
-        mocker.patch("sefia.context.get_glyff_context", return_value=mock_glyff_ctx)
+        mocker.patch("sefia._context.get_glyff_context", return_value=mock_glyff_ctx)
 
         # Act
         mock_glyff_ctx.current_execution_id = first_execution_id
@@ -112,7 +112,7 @@ class TestSessionContext:
             args_hash="same-question",
         )
         mock_glyff_ctx = MagicMock()
-        mocker.patch("sefia.context.get_glyff_context", return_value=mock_glyff_ctx)
+        mocker.patch("sefia._context.get_glyff_context", return_value=mock_glyff_ctx)
 
         # Act
         mock_glyff_ctx.current_execution_id = first_execution_id
@@ -130,7 +130,7 @@ class TestSessionContext:
         # Simulate being outside an engraved function by making current_execution_id None
         mock_glyff_ctx = MagicMock()
         mock_glyff_ctx.current_execution_id = None
-        mocker.patch("sefia.context.get_glyff_context", return_value=mock_glyff_ctx)
+        mocker.patch("sefia._context.get_glyff_context", return_value=mock_glyff_ctx)
 
         # Act & Assert
         with pytest.raises(RuntimeError, match="can only be used inside"):

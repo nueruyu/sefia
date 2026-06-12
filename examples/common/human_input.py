@@ -1,10 +1,10 @@
 import uuid
 from dataclasses import dataclass
 
-import sefia.context
 from glyff import engrave
 from glyff.exceptions import YieldException
 from sefia import tool
+from sefia._context import get_context
 
 from .chat_session import ChatSessionState
 
@@ -29,7 +29,7 @@ class HumanInputTool:
         Asks the user a question and returns their answer.
         This tool interrupts the session to wait for user input.
         """
-        ctx = sefia.context.get_context()
+        ctx = get_context()
         call_store = ctx.get_call_state_store("internal_state", _AskUserState)
         call_state = await call_store.ensure()
 

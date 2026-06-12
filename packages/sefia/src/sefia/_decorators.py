@@ -132,19 +132,13 @@ def infer(func: Callable) -> Callable:
         fn_policies = metadata.get(POLICIES_KEY, [])
         all_policies = list(context.policies) + fn_policies
         all_handlers = [
-            handler
-            for p in all_policies
-            for handler in p.create_handlers()
+            handler for p in all_policies for handler in p.create_handlers()
         ]
         all_middleware = [
-            middleware
-            for p in all_policies
-            for middleware in p.create_middleware()
+            middleware for p in all_policies for middleware in p.create_middleware()
         ]
         publisher = EventPublisher(all_handlers)
-        inference_middlewares, step_middlewares = _partition_middleware(
-            all_middleware
-        )
+        inference_middlewares, step_middlewares = _partition_middleware(all_middleware)
 
         executor = InferenceExecutor(
             func=unwrapped,

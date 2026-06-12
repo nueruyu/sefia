@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from sefia.interfaces.session_store import SessionStore
-from sefia.state_store import StateStore
+from sefia._interfaces.session_store import SessionStore
+from sefia._state_store import StateStore
 
 
 @dataclass

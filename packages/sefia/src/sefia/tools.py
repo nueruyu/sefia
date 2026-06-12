@@ -38,8 +38,7 @@ class ToolCollector(ABC):
     """Builds a registry of tools for an object."""
 
     @abstractmethod
-    def collect(self, instance: object) -> ToolRegistry:
-        ...
+    def collect(self, instance: object) -> ToolRegistry: ...
 
 
 __all__ = ["Tool", "ToolRegistry", "ToolCollector"]

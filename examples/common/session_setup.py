@@ -8,8 +8,8 @@ import sefia
 import sefia.stores
 import sefia_litellm
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import MaxSteps
-from sefia.interfaces import Policy
+from sefia._interfaces import Policy
+from sefia.policies import MaxSteps
 
 from .debugging import VerbosePolicy
 from .streaming import StreamingPolicy

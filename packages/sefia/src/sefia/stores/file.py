@@ -7,7 +7,7 @@ from glyff_file_store import FileClient
 
 from .._interfaces.session_store import SessionStore
 
-_UNSAFE = re.compile(r'[<>:"\\|?*%' + r'\x00-\x1f]')
+_UNSAFE = re.compile(r'[<>:"\\|?*%' + r"\x00-\x1f]")
 
 
 class FileSessionStore(SessionStore):
