@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .._event_publisher import EventPublisher
+from ..event_system import EventPublisher
 from ..inference import HistoryItem, InferenceDecision
 
 
