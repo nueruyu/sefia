@@ -164,13 +164,19 @@ class LLMInferenceStrategy(InferenceStrategy):
 
         if tools:
             core_instruction = (
-                "Decide the next step. Return either tool_calls or final_answer. "
-                "Set the unused field to null and use final_answer only when the task is complete."
+                "Your task is to decide the next step. You have two options:\n"
+                "1. Call one or more tools by populating the `tool_calls` field.\n"
+                "2. Provide the final answer by populating the `final_answer` field.\n\n"
+                "Populate both fields and set the unused field to null. "
+                "Exactly one field should be non-null. "
+                "Use `tool_calls` to gather more information, and use `final_answer` only when you have enough information to complete the entire task."
             )
         else:
             core_instruction = (
-                "Return a non-null final_answer. No tools are available. "
-                "Use an empty collection instead of null when the result is empty."
+                "Your task is to provide a non-null final answer by populating the "
+                "`final_answer` field. No tools are available. If the requested "
+                "result is a collection and there are no results, return an empty "
+                "collection instead of null."
             )
 
         system_content += f"\n\n### Response Instructions\n{core_instruction}\n"
@@ -179,13 +185,13 @@ class LLMInferenceStrategy(InferenceStrategy):
             tool_definitions = [t.get("function", {}) for t in tools]
             system_content += (
                 "\n### Available Tools\n"
-                "Use these tool names in tool_calls when needed.\n"
+                "Here is a list of tools you can call. Use their `name` in the `tool_calls` field.\n"
                 f"{json.dumps(tool_definitions, indent=2, ensure_ascii=False)}\n"
             )
 
         system_content += (
             "\n### Response Schema\n"
-            "Return a single valid raw JSON object matching this schema:\n"
+            "Your response should be a single, valid, raw JSON object that conforms to this JSON Schema:\n"
             f"{json.dumps(output_schema, ensure_ascii=False)}"
         )
         messages.append(Message(role="system", content=system_content))
