@@ -1,8 +1,8 @@
 from typing import Any, Callable
 
-from ..interfaces import ModelInspector, ToolCollector
-from ..models import ToolRegistry
-from ..toolify import Toolset
+from .._interfaces import ModelInspector, ToolCollector
+from .._tool_registry import ToolRegistry
+from .._toolify import Toolset
 
 
 class DefaultToolCollector(ToolCollector):
