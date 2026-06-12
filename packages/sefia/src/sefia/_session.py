@@ -3,10 +3,7 @@ from typing import Self, Type, TypeVar
 import glyff
 
 from ._context import SessionContext, context_var
-from ._interfaces import (
-    Policy,
-    ToolCollector,
-)
+from ._interfaces import Policy
 from ._interfaces.session_store import SessionStore
 from ._state_store import StateStore
 from .llm.client import LLMClient
@@ -16,16 +13,12 @@ from .policies import StagnationPolicy
 from .pydantic.json_utils import pydantic_json_default
 from .pydantic.model_inspector import PydanticModelInspector
 from .tool_collectors.collector import DefaultToolCollector
+from .tools import ToolCollector
 
 T = TypeVar("T")
 
 
 class Session:
-    """
-    Manages the lifecycle of an inference execution.
-    Wraps a glyff.Session and sets up the sefia SessionContext.
-    """
-
     def __init__(
         self,
         llm_client: LLMClient,
@@ -61,10 +54,6 @@ class Session:
         self._context: SessionContext | None = None
 
     def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:
-        """
-        Gets a StateStore for the given key and type, which can be used to
-        manage persistent state within the session.
-        """
         if self._context is None:
             raise RuntimeError(
                 "Cannot get a state store before the session is entered."
