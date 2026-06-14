@@ -8,7 +8,7 @@ import sefia
 import sefia.stores
 import sefia_litellm
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia._interfaces import Policy
+from sefia import Policy
 from sefia.policies import MaxSteps
 
 from .debugging import VerbosePolicy

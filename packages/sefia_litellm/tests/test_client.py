@@ -23,7 +23,7 @@ from sefia.exceptions import (
     TemporarilyUnavailableException,
     TimeoutException,
 )
-from sefia.llm._messages import LLMResponse, Message
+from sefia.llm import LLMResponse, Message
 from sefia_litellm._client import LiteLLMClient
 
 

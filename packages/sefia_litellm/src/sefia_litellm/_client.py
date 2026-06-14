@@ -24,8 +24,8 @@ from sefia.exceptions import (
     TemporarilyUnavailableException,
     TimeoutException,
 )
-from sefia.llm._client import LLMClient
-from sefia.llm._messages import LLMResponse, Message, ToolCall
+from sefia.llm import LLMClient
+from sefia.llm import LLMResponse, Message, ToolCall
 
 logger = logging.getLogger(__name__)
 

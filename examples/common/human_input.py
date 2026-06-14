@@ -3,8 +3,7 @@ from dataclasses import dataclass
 
 from glyff import engrave
 from glyff.exceptions import YieldException
-from sefia import tool
-from sefia._context import get_context
+from sefia import get_context, tool
 
 from .chat_session import ChatSessionState
 

@@ -1,3 +1,4 @@
+from ._context import SessionContext, get_context
 from ._decorators import infer, policy, tool
 from ._interfaces import (
     InferenceContext,
@@ -33,4 +34,6 @@ __all__ = [
     "StateStore",
     "ToolCollector",
     "ModelInspector",
+    "SessionContext",
+    "get_context",
 ]

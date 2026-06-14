@@ -14,6 +14,7 @@ from .policies import StagnationPolicy
 from .pydantic._model_inspector import PydanticModelInspector
 from .pydantic.json_utils import pydantic_json_default
 from .tool_collectors import DefaultToolCollector
+from .tools import ToolCollector
 
 T = TypeVar("T")
 
@@ -30,6 +31,7 @@ class Session:
         glyff_session: glyff.Session,
         session_store: SessionStore,
         policies: list[Policy] | None = None,
+        tool_collector: ToolCollector | None = None,
         model_inspector: ModelInspector | None = None,
         stream: bool = False,
     ):
@@ -45,7 +47,9 @@ class Session:
 
         model_inspector = model_inspector or PydanticModelInspector()
 
-        self._tool_collector = DefaultToolCollector(model_inspector=model_inspector)
+        self._tool_collector = tool_collector or DefaultToolCollector(
+            model_inspector=model_inspector
+        )
         prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
         self._inference_strategy = LLMInferenceStrategy(
             llm_client,
