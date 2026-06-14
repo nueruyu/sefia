@@ -3,7 +3,8 @@ from unittest.mock import AsyncMock
 import pytest
 from pytest_mock import MockerFixture
 
-from sefia.handlers._cost import CostCalculator, _CostState
+from sefia.handlers import CostCalculator
+from sefia.handlers._cost import _CostState
 from sefia.llm import LLMResponse
 from sefia.llm.events import AfterLLMCall
 

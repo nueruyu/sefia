@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from glyff import ExecutionId
 
-from sefia._context import SessionContext
+from sefia import SessionContext
 
 
 @dataclass

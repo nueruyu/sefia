@@ -17,21 +17,24 @@ class ToolRegistry:
     """Stores and provides access to registered tools."""
 
     def __init__(self):
-        self.tools: dict[str, Tool] = {}
+        self._tools: dict[str, Tool] = {}
 
     def add(self, func: Callable[..., Any], schema: dict[str, Any]) -> None:
         tool_name = schema["function"]["name"]
-        if tool_name in self.tools:
+        if tool_name in self._tools:
             raise ToolConflictError(
                 f"A tool with the name '{tool_name}' already exists."
             )
-        self.tools[tool_name] = Tool(function=func, schema=schema)
+        self._tools[tool_name] = Tool(function=func, schema=schema)
 
     def get(self, name: str) -> Tool | None:
-        return self.tools.get(name)
+        return self._tools.get(name)
 
     def get_all(self) -> list[Tool]:
-        return list(self.tools.values())
+        return list(self._tools.values())
+
+    def get_names(self) -> list[str]:
+        return list(self._tools.keys())
 
 
 class ToolCollector(ABC):

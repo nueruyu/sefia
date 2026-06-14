@@ -1,6 +1,6 @@
 import pytest
 
-from sefia._interfaces.middleware import StepContext
+from sefia import StepContext
 from sefia.inference import FinalAnswerDecision
 from sefia.middleware import MaxStepsExceededError, StepLimiter
 

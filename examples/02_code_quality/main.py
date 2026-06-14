@@ -5,7 +5,7 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefia._context import get_context
+from sefia import get_context
 
 from ..common.chat_cli import create_app
 from ..common.chat_session import ChatSessionState

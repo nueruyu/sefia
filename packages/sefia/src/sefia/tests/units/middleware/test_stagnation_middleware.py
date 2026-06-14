@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-from sefia._interfaces.middleware import StepContext
+from sefia import StepContext
 from sefia.inference import FinalAnswerDecision, ToolCallDecision, ToolCallRequest
 from sefia.middleware import StagnationDetector, StagnationError
 

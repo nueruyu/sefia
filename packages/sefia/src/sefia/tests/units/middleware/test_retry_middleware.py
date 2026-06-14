@@ -1,7 +1,7 @@
 import pytest
 from glyff.exceptions import YieldException
 
-from sefia._interfaces.middleware import InferenceContext
+from sefia import InferenceContext
 from sefia.exceptions import RequestInferenceRetry
 from sefia.middleware import MaxRetriesExceededError, MaxStepsExceededError, Retrier
 
