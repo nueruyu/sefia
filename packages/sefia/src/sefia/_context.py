@@ -11,7 +11,6 @@ from glyff.context import get_context as get_glyff_context
 from ._interfaces import InferenceStrategy, Policy
 from ._interfaces.session_store import SessionStore
 from ._state_store import StateStore
-from .llm._client import LLMClient
 from .tools import ToolCollector
 
 T = TypeVar("T")
@@ -33,17 +32,18 @@ def _execution_id_scope_key(execution_id: ExecutionId) -> str:
     return hashlib.sha256(stable_repr.encode("utf-8")).hexdigest()
 
 
-@dataclass
+@dataclass(frozen=True)
 class SessionContext:
     """Holds the context for an ongoing sefia inference session."""
 
     glyff_session: GlyffSession
     session_store: SessionStore
-    llm_client: LLMClient
     inference_strategy: InferenceStrategy
-    policies: list[Policy]
+    policies: tuple[Policy, ...]
     tool_collector: ToolCollector
-    _state_stores: dict[str, StateStore] = field(default_factory=dict)
+    _state_stores: dict[str, StateStore] = field(
+        default_factory=dict, init=False, repr=False
+    )
 
     def get_call_state_store(
         self, key_suffix: str, state_type: Type[T]

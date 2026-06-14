@@ -9,7 +9,6 @@ from ._executor import InferenceExecutor
 from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from .event_system import EventPublisher
 
-
 T = TypeVar("T")
 
 # Attribute that holds sefia's per-function metadata dict, and the key under

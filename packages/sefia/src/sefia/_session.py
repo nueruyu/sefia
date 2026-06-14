@@ -39,10 +39,9 @@ class Session:
         self._glyff_session = glyff_session
         self.session_store = session_store
         self._context_token = None
-        extra_policies = list(policies) if policies is not None else []
-        self.policies: list[Policy] = [
+        self._policies: list[Policy] = [
             StagnationPolicy(),
-            *extra_policies,
+            *(policies if policies is not None else []),
         ]
 
         model_inspector = model_inspector or PydanticModelInspector()
@@ -75,9 +74,8 @@ class Session:
         self._context = SessionContext(
             glyff_session=self._glyff_session,
             session_store=self.session_store,
-            llm_client=self.llm_client,
             inference_strategy=self._inference_strategy,
-            policies=self.policies,
+            policies=tuple(self._policies),
             tool_collector=self._tool_collector,
         )
         self._context_token = context_var.set(self._context)

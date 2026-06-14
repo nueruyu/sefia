@@ -27,9 +27,8 @@ def inference_context(mock_glyff_session):
     return SessionContext(
         glyff_session=mock_glyff_session,
         session_store=MagicMock(),
-        llm_client=MagicMock(),
         inference_strategy=MagicMock(),
-        policies=[],
+        policies=(),
         tool_collector=MagicMock(),
     )
 
