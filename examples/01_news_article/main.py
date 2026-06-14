@@ -4,11 +4,10 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from sefios.cli import create_app
+from sefios.sessioning import WorkflowState
+from sefios.tools import HumanInputTool, WebSearchTool
 
-from ..common.chat_cli import create_app
-from ..common.chat_session import ChatSessionState
-from ..common.human_input import HumanInputTool
-from ..common.web_search import WebSearchTool
 from .agents import NewsWriter, RequirementsClarifier, Researcher
 from .models import ArticleRequest, NewsArticle
 from .rendering import render_article_request, render_news_article
@@ -22,9 +21,9 @@ SESSION_DIR = Path(__file__).parent / ".local"
 
 
 @engrave
-async def _clarify(initial_topic: str) -> ArticleRequest:
+async def _clarify(initial_input: str) -> ArticleRequest:
     console.print("[bold]> Stage 1: Clarifying request...[/bold]")
-    article_request = await clarifier.clarify_request(initial_topic)
+    article_request = await clarifier.clarify_request(initial_input)
 
     console.print("[dim]   -> Clarified request:[/dim]")
     console.print(Markdown(render_article_request(article_request)))
@@ -45,8 +44,8 @@ async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArt
     return await writer.write_article(article_request=article_request, sources=sources)
 
 
-async def workflow(state: ChatSessionState) -> None:
-    article_request = await _clarify(state.initial_topic)
+async def workflow(state: WorkflowState) -> None:
+    article_request = await _clarify(state.initial_input)
     sources = await _research(article_request)
     article = await _write(article_request, sources)
 

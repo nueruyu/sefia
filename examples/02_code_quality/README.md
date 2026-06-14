@@ -9,7 +9,7 @@ perspectives, and produces a final quality report.
 ## Commands
 
 Run these commands from the repository root. See the [examples README](../README.md)
-for common setup.
+for setup.
 
 ### Start or Resume Chat
 

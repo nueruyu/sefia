@@ -6,17 +6,15 @@ import glyff
 import glyff_file_store
 import sefia
 import sefia.stores
-import sefia_litellm
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Policy
 from sefia.policies import MaxSteps
 
-from .debugging import VerbosePolicy
-from .streaming import StreamingPolicy
+from .policies import StreamingPolicy, VerbosePolicy
 
 
 @asynccontextmanager
-async def setup_session(
+async def create_session(
     model: str,
     session_id: str,
     stream: bool,
@@ -24,6 +22,14 @@ async def setup_session(
     session_dir: Path,
 ) -> AsyncIterator[sefia.Session]:
     """Sets up and provides a Sefia session."""
+    try:
+        import sefia_litellm
+    except ImportError as e:
+        raise ImportError(
+            "The 'litellm' extra is required to use the default session setup. "
+            "Please install it with: pip install 'sefios[litellm]'"
+        ) from e
+
     llm_client = sefia_litellm.LiteLLMClient(model=model)
     serializer = PydanticSerializer()
 

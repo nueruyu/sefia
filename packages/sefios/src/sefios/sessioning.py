@@ -1,4 +1,6 @@
+import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -10,29 +12,29 @@ class Interaction:
 
 
 @dataclass
-class ChatSessionState:
-    """Represents the state of a long-running chat session."""
+class WorkflowState:
+    """Represents the state of a long-running workflow."""
 
     interactions: list[Interaction] = field(default_factory=list)
     _interactions_by_id: dict[str, Interaction] = field(init=False, repr=False)
 
     @classmethod
-    def from_initial_topic(cls, initial_topic: str) -> "ChatSessionState":
-        """Creates a session state from the initial topic."""
-        return cls(interactions=[Interaction(id="__initial__", answer=initial_topic)])
+    def from_initial_input(cls, initial_input: str) -> "WorkflowState":
+        """Creates a session state from the initial input."""
+        return cls(interactions=[Interaction(id="__initial__", answer=initial_input)])
 
     def __post_init__(self):
         self._interactions_by_id = {i.id: i for i in self.interactions}
 
     @property
-    def initial_topic(self) -> str:
-        """The initial topic that started the session."""
+    def initial_input(self) -> str:
+        """The initial input that started the session."""
         if not self.interactions:
-            raise RuntimeError("ChatSessionState has no initial topic.")
-        initial_topic = self.interactions[0].answer
-        if initial_topic is None:
-            raise RuntimeError("Initial topic cannot be pending.")
-        return initial_topic
+            raise RuntimeError("WorkflowState has no initial input.")
+        initial_input = self.interactions[0].answer
+        if initial_input is None:
+            raise RuntimeError("Initial input cannot be pending.")
+        return initial_input
 
     @property
     def pending_interaction(self) -> Interaction | None:
@@ -62,3 +64,26 @@ class ChatSessionState:
         """Gets an answer for a completed interaction by its ID."""
         interaction = self._interactions_by_id.get(interaction_id)
         return interaction.answer if interaction else None
+
+
+class Manager:
+    """Manages the lifecycle of user chat sessions, including the active session ID."""
+
+    def __init__(self, session_dir: Path):
+        self._session_dir = session_dir
+        self._active_session_file = self._session_dir / "active_session.txt"
+        self._session_dir.mkdir(exist_ok=True)
+
+    def get_active_session_id(self) -> str | None:
+        """Gets the ID of the currently active session, if one exists."""
+        if self._active_session_file.exists():
+            return self._active_session_file.read_text(encoding="utf-8").strip()
+        return None
+
+    def set_active_session_id(self, session_id: str) -> None:
+        """Sets the active session ID."""
+        self._active_session_file.write_text(session_id, encoding="utf-8")
+
+    def create_new_session_id(self) -> str:
+        """Generates a new unique session ID."""
+        return str(uuid.uuid4())

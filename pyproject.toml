@@ -2,8 +2,14 @@
 members = [
     "packages/sefia",
     "packages/sefia_litellm",
+    "packages/sefios",
     "examples"
 ]
+
+[tool.uv.sources]
+sefia = { workspace = true }
+sefia-litellm = { workspace = true }
+sefios = { workspace = true }
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]

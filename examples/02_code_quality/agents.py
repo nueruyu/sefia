@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Annotated
 
 from sefia import AsRawText, infer
+from sefios.tools import HumanInputTool
 
-from ..common.human_input import HumanInputTool
 from .models import (
     CodeIssue,
     ProjectScope,

@@ -11,11 +11,10 @@ from rich.console import Console
 from rich.panel import Panel
 from typing_extensions import Annotated
 
-from .chat_session import ChatSessionState
-from .session_manager import SessionManager
-from .session_setup import setup_session
+from .session import create_session
+from .sessioning import Manager, WorkflowState
 
-WorkflowCallback = Callable[[ChatSessionState], Awaitable[None]]
+WorkflowCallback = Callable[[WorkflowState], Awaitable[None]]
 console = Console()
 
 
@@ -31,11 +30,11 @@ def _print_session_interrupted_hint() -> None:
 
 
 def _resolve_session_state(
-    state: ChatSessionState | None, input_text: str, is_new: bool
-) -> ChatSessionState:
+    state: WorkflowState | None, input_text: str, is_new: bool
+) -> WorkflowState:
     """Resolve the next session state from current state and latest user input."""
     if is_new or state is None:
-        return ChatSessionState.from_initial_topic(input_text)
+        return WorkflowState.from_initial_input(input_text)
 
     if state.pending_interaction:
         # We are resuming a pending HumanInputTool interaction.
@@ -58,14 +57,14 @@ async def _run_workflow(
 ):
     """Encapsulates the main logic for running the sefia workflow."""
     try:
-        async with setup_session(
+        async with create_session(
             model=model,
             session_id=session_id,
             stream=True,
             verbose=verbose,
             session_dir=session_dir,
         ) as session:
-            state_store = session.get_state_store("session_state", ChatSessionState)
+            state_store = session.get_state_store("session_state", WorkflowState)
             state = await state_store.get()
             state = _resolve_session_state(state, input_text, is_new)
 
@@ -87,14 +86,14 @@ def create_app(
     app = typer.Typer(help=help_text)
     session_app = typer.Typer(help="Manage user sessions.")
     app.add_typer(session_app, name="session")
-    session_manager = SessionManager(session_dir)
+    session_manager = Manager(session_dir)
 
     @app.command("chat")
     def chat(
         message: Annotated[
             list[str] | None,
             typer.Argument(
-                help="The topic for a new session, or an answer to resume an existing one."
+                help="The input for a new session, or an answer to resume an existing one."
             ),
         ] = None,
         model: Annotated[
@@ -113,7 +112,7 @@ def create_app(
         ] = False,
     ):
         """
-        Start a new topic or provide an answer to continue the current session.
+        Start a new workflow or provide an answer to continue the current session.
         """
         input_text = " ".join(message or []).strip()
 
@@ -156,7 +155,6 @@ def create_app(
         """
         Switch the active session.
         """
-        # A more robust implementation would check if the session directory exists.
         session_manager.set_active_session_id(session_id)
         console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 

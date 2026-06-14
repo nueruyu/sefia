@@ -5,7 +5,7 @@ from glyff import engrave
 from glyff.exceptions import YieldException
 from sefia import get_context, tool
 
-from .chat_session import ChatSessionState
+from ..sessioning import WorkflowState
 
 
 @dataclass
@@ -32,7 +32,7 @@ class HumanInputTool:
         call_store = ctx.get_call_state_store("internal_state", _AskUserState)
         call_state = await call_store.ensure()
 
-        session_store = ctx.get_state_store("session_state", ChatSessionState)
+        session_store = ctx.get_state_store("session_state", WorkflowState)
         session_state = await session_store.ensure()
 
         if call_state.interaction_id is None:

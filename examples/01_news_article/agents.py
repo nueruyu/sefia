@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 
 from sefia import infer, tool
+from sefios.tools import HumanInputTool, WebSearchTool
 
-from ..common.human_input import HumanInputTool
-from ..common.web_search import WebSearchTool
 from .models import ArticleRequest, NewsArticle
 
 

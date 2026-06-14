@@ -6,10 +6,10 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from sefia import get_context
+from sefios.cli import create_app
+from sefios.sessioning import WorkflowState
+from sefios.tools import HumanInputTool
 
-from ..common.chat_cli import create_app
-from ..common.chat_session import ChatSessionState
-from ..common.human_input import HumanInputTool
 from .agents import (
     CodingStyleAuditor,
     DependencySpecialist,
@@ -137,8 +137,8 @@ async def _create_report(
     return await reporting_agent.create_report(issues, understanding)
 
 
-async def workflow(state: ChatSessionState) -> None:
-    scope = await _define_scope(state.initial_topic)
+async def workflow(state: WorkflowState) -> None:
+    scope = await _define_scope(state.initial_input)
     understanding = await _understand_project(scope)
     review_files = await _confirm_review_files(scope, understanding)
 

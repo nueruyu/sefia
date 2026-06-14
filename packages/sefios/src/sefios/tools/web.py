@@ -1,8 +1,15 @@
 import asyncio
 
-from ddgs import DDGS
 from pydantic import BaseModel, Field
 from sefia import tool
+
+try:
+    from ddgs import DDGS
+except ImportError as e:
+    raise ImportError(
+        "The 'web' extra is required to use the WebSearchTool. "
+        "Please install it with: pip install 'sefios[web]'"
+    ) from e
 
 
 class WebSearchResult(BaseModel):
