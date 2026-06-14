@@ -4,11 +4,10 @@ from typing import Callable, TypeVar
 
 from glyff import engrave
 
-from .context import get_context
-from .event_publisher import EventPublisher
-from .executor import InferenceExecutor
-from .interfaces import InferenceMiddleware, Policy, StepMiddleware
-
+from ._context import get_context
+from ._executor import InferenceExecutor
+from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
+from .event_system import EventPublisher
 
 T = TypeVar("T")
 
@@ -16,6 +15,7 @@ T = TypeVar("T")
 # which inference policies live inside it.
 METADATA_ATTR = "__sefia_metadata__"
 POLICIES_KEY = "policies"
+
 
 def get_metadata(func: Callable) -> dict:
     """
@@ -131,19 +131,13 @@ def infer(func: Callable) -> Callable:
         fn_policies = metadata.get(POLICIES_KEY, [])
         all_policies = list(context.policies) + fn_policies
         all_handlers = [
-            handler
-            for p in all_policies
-            for handler in p.create_handlers()
+            handler for p in all_policies for handler in p.create_handlers()
         ]
         all_middleware = [
-            middleware
-            for p in all_policies
-            for middleware in p.create_middleware()
+            middleware for p in all_policies for middleware in p.create_middleware()
         ]
         publisher = EventPublisher(all_handlers)
-        inference_middlewares, step_middlewares = _partition_middleware(
-            all_middleware
-        )
+        inference_middlewares, step_middlewares = _partition_middleware(all_middleware)
 
         executor = InferenceExecutor(
             func=unwrapped,

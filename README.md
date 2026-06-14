@@ -177,7 +177,7 @@ LLM. The discovery rules are deliberately small:
   itself by accident.
 - **Dependencies held in attributes**, public or private (such as `self._web`
   or `self.calculator`), contribute their `@tool` methods.
-- Name collisions raise `ToolConflictError` at runtime.
+- Name collisions raise `ToolConflictError` from `sefia.exceptions` at runtime.
 
 ```python
 class Calculator:
@@ -268,7 +268,8 @@ either or both:
   step) and steers the executor's loops.
 
 ```python
-from sefia import MaxRetries, infer, policy
+from sefia import infer, policy
+from sefia.policies import MaxRetries
 
 
 class MyAgent:
@@ -296,7 +297,7 @@ loops itself; it wraps a single attempt or a single step and delegates to the
 next layer, so multiple middlewares compose cleanly. To steer a loop, a
 middleware raises a typed control signal that the executor interprets.
 
-Two seams are available, exposed as ABCs in `sefia.interfaces`:
+Two seams are available, exposed as ABCs from `sefia`:
 
 - `InferenceMiddleware.wrap(ctx, nxt)` wraps a whole inference run. `MaxRetries`
   uses this: on a retryable failure it raises `RequestInferenceRetry` to ask for
@@ -308,7 +309,8 @@ The executor does not cap the loop on its own; without a `StepMiddleware` there
 is no default cap (though `Session` registers stagnation detection by default).
 
 ```python
-from sefia import MaxSteps, infer, policy
+from sefia import infer, policy
+from sefia.policies import MaxSteps
 
 
 class MyAgent:
@@ -393,11 +395,6 @@ Pass policies to `Session` or to a specific `@infer` call.
 
 The built-in `StagnationDetector` is registered by default and aborts the loop
 if the same tool is called repeatedly with identical arguments.
-
-The one exception to handler isolation is `glyff.exceptions.YieldException`: a
-handler may raise it (for example, in response to `InferenceStepFailed`) to
-interrupt the session gracefully and leave the step resumable. That signal is
-allowed to propagate.
 
 ## Resources
 

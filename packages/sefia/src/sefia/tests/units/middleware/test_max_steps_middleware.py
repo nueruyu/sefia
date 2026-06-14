@@ -1,9 +1,8 @@
 import pytest
 
-from sefia.interfaces.middleware import StepContext
-from sefia.middleware.max_steps import StepLimiter
-from sefia.middleware.max_steps import MaxStepsExceededError
-from sefia.models import FinalAnswerDecision
+from sefia import StepContext
+from sefia.inference import FinalAnswerDecision
+from sefia.middleware import MaxStepsExceededError, StepLimiter
 
 
 def _ctx(step: int) -> StepContext:

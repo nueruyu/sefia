@@ -12,12 +12,12 @@ from glyff.stores import MemoryClient
 from glyff.stores import MemorySessionStore as GlyffMemoryStore
 
 from sefia import (
-    LLMResponse,
     Session,
+    get_context,
     infer,
     tool,
 )
-from sefia.context import get_context
+from sefia.llm import LLMResponse
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
 from ..conftest import MockLLMClient, Report

@@ -2,8 +2,8 @@ import typing
 import xml.dom.minidom as minidom
 from typing import Any, Callable
 
-from ..interfaces import PromptFormatter
-from ..markers import AsRawText
+from .._markers import AsRawText
+from ._prompt_formatter import PromptFormatter
 
 JsonDefault = Callable[[Any], Any]
 
@@ -40,7 +40,8 @@ class XmlPromptFormatter(PromptFormatter):
         parent: minidom.Element,
         text: str,
     ) -> None:
-        if "]]>" in text:
+        cdata_end = "]]" + ">"
+        if cdata_end in text:
             # This escapes XML characters, but keeps prompt formatting simple for LLM input.
             parent.appendChild(document.createTextNode(text))
             return

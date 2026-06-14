@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Generic, Type, TypeVar
 
-from .interfaces.session_store import SessionStore
+from ._interfaces.session_store import SessionStore
 
 T = TypeVar("T")
 

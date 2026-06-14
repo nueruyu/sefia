@@ -1,26 +1,34 @@
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Union
 
 from pydantic import create_model
 
-from ..event_publisher import EventPublisher
-from ..interfaces import InferenceStrategy, ModelInspector, PromptFormatter
-from ..models import (
+from .._interfaces import InferenceStrategy, ModelInspector
+from ..event_system import EventPublisher
+from ..inference import (
     FinalAnswerDecision,
     HistoryItem,
     InferenceDecision,
-    LLMToolCall,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
 )
 from . import events
-from .client import LLMClient
-from .messages import Message
+from ._client import LLMClient
+from ._messages import Message
+from ._prompt_formatter import PromptFormatter
 
 JsonDefault = Callable[[Any], Any]
+
+
+@dataclass
+class LLMToolCall:
+    """A tool call requested by the inference strategy before an ID is assigned."""
+
+    name: str
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -128,16 +136,12 @@ class LLMInferenceStrategy(InferenceStrategy):
                 raw = "\n".join(lines[1:-1]).strip()
 
             decision_data = json.loads(raw)
-            decision = self.model_inspector.validate_and_create(
+            decision: _LLMDecision = self.model_inspector.validate_and_create(
                 _LLMDecision, decision_data
             )
 
-            tool_calls: list[LLMToolCall] | None = getattr(decision, "tool_calls", None)
+            tool_calls = decision.tool_calls
             if tool_calls:
-                validated_calls = [
-                    self.model_inspector.validate_and_create(LLMToolCall, tc)
-                    for tc in tool_calls
-                ]
                 return ToolCallDecision(
                     calls=[
                         ToolCallRequest(
@@ -145,7 +149,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                             name=tc.name,
                             arguments=tc.arguments,
                         )
-                        for tc in validated_calls
+                        for tc in tool_calls
                     ]
                 )
 

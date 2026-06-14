@@ -1,8 +1,8 @@
 from typing import Any, Callable
 
-from ..interfaces import ModelInspector, ToolCollector
-from ..models import ToolRegistry
-from ..toolify import Toolset
+from .._interfaces import ModelInspector
+from .._tool_system import ToolCollector, ToolRegistry
+from .._toolify import Toolset
 
 
 class DefaultToolCollector(ToolCollector):
@@ -23,7 +23,7 @@ class DefaultToolCollector(ToolCollector):
 
     def __init__(self, model_inspector: ModelInspector | None = None):
         if model_inspector is None:
-            from ..pydantic.model_inspector import PydanticModelInspector
+            from ..pydantic._model_inspector import PydanticModelInspector
 
             model_inspector = PydanticModelInspector()
         self._model_inspector = model_inspector

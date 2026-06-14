@@ -4,23 +4,23 @@ from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 from glyff.exceptions import YieldException
 
 from . import events
-from .event_publisher import EventPublisher
-from .interfaces import InferenceStrategy, ToolCollector
-from .interfaces.middleware import (
-    InferenceMiddleware,
+from ._interfaces import InferenceStrategy
+from ._interfaces.middleware import (
     InferenceContext,
+    InferenceMiddleware,
     StepContext,
     StepMiddleware,
 )
+from ._tool_system import ToolCollector, ToolRegistry
+from .event_system import EventPublisher
 from .exceptions import RequestInferenceRetry
-from .models import (
+from .inference import (
     FinalAnswerDecision,
     HistoryItem,
     InferenceDecision,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
-    ToolRegistry,
 )
 
 _P = ParamSpec("_P")
@@ -218,7 +218,9 @@ class InferenceExecutor:
             self.tool_collector.collect(instance) if instance is not None else None
         )
         tool_schemas = (
-            self._tool_registry.get_all_schemas() if self._tool_registry else []
+            [t.schema for t in self._tool_registry.get_all()]
+            if self._tool_registry
+            else []
         )
 
         history: list[HistoryItem] = []

@@ -3,10 +3,9 @@ import types
 
 import pytest
 
-from sefia import infer, tool, toolify
-from sefia.models import ToolConflictError
-from sefia.tool_collectors.collector import DefaultToolCollector
-from sefia.toolify import Toolset
+from sefia import Toolset, infer, tool, toolify
+from sefia.exceptions import ToolConflictError
+from sefia.tool_collectors import DefaultToolCollector
 
 from ..conftest import WebToolkit
 
@@ -80,7 +79,7 @@ def test_collect_tools_from_public_and_private_members():
     collector = DefaultToolCollector()
     registry = collector.collect(agent)
 
-    tool_names = set(registry.tools.keys())
+    tool_names = set(registry.get_names())
     # Marked methods held in a private attribute.
     assert "WebToolkit_search" in tool_names
     assert "WebToolkit_fetch_content" in tool_names
@@ -132,7 +131,7 @@ def test_collect_exposes_marked_methods_including_private_but_not_infer():
     collector = DefaultToolCollector()
     registry = collector.collect(SelfMethodAgent())
 
-    tool_names = set(registry.tools.keys())
+    tool_names = set(registry.get_names())
     assert "SelfMethodAgent_marked_public" in tool_names
     # The leading "." of "._marked_private" sanitizes to a second underscore.
     assert "SelfMethodAgent__marked_private" in tool_names
@@ -183,7 +182,7 @@ def test_collect_registers_toolify_members():
     collector = DefaultToolCollector()
     registry = collector.collect(ToolifyAgent())
 
-    tool_names = set(registry.tools.keys())
+    tool_names = set(registry.get_names())
     assert "ExternalLikeClient_fetch" in tool_names
     assert "standalone_search" in tool_names
     # The external object's private method is not exposed.
@@ -207,11 +206,12 @@ class PartialToolifyAgent:
 def test_collect_registers_partial_tool():
     registry = DefaultToolCollector().collect(PartialToolifyAgent())
 
-    assert "partial_prefixed_search" in registry.tools
-    tool_schema = registry.tools["partial_prefixed_search"].schema
+    tool_info = registry.get("partial_prefixed_search")
+    assert tool_info is not None
+    tool_schema = tool_info.schema
     params = tool_schema["function"]["parameters"]
     assert set(params["properties"]) == {"query"}
-    assert len(registry.tools) == 1
+    assert len(registry.get_all()) == 1
 
 
 class CallableSearch:
@@ -228,10 +228,11 @@ class CallableToolifyAgent:
 def test_collect_registers_callable_object_tool():
     registry = DefaultToolCollector().collect(CallableToolifyAgent())
 
-    assert "CallableSearch" in registry.tools
-    tool_schema = registry.tools["CallableSearch"].schema
+    tool_info = registry.get("CallableSearch")
+    assert tool_info is not None
+    tool_schema = tool_info.schema
     assert tool_schema["function"]["description"] == "Search by query."
-    assert len(registry.tools) == 1
+    assert len(registry.get_all()) == 1
 
 
 class BadCallable:
@@ -267,7 +268,7 @@ class CallableToolkitAgent:
 def test_collect_marked_methods_from_callable_dependency():
     registry = DefaultToolCollector().collect(CallableToolkitAgent())
 
-    assert any(name.endswith("search") for name in registry.tools)
+    assert any(name.endswith("search") for name in registry.get_names())
 
 
 class StaticToolHost:
@@ -288,7 +289,7 @@ def test_tool_marks_static_and_class_methods():
     collector = DefaultToolCollector()
     registry = collector.collect(StaticToolHost())
 
-    tool_names = set(registry.tools.keys())
+    tool_names = set(registry.get_names())
     assert any(name.endswith("static_tool") for name in tool_names)
     assert any(name.endswith("class_tool") for name in tool_names)
 
@@ -305,7 +306,7 @@ def test_collect_finds_dependencies_in_slots():
     agent = SlottedAgent(WebToolkit())
     registry = DefaultToolCollector().collect(agent)
 
-    tool_names = set(registry.tools.keys())
+    tool_names = set(registry.get_names())
     assert "WebToolkit_search" in tool_names
     assert "WebToolkit_fetch_content" in tool_names
 

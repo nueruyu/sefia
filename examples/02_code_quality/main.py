@@ -1,12 +1,11 @@
 import asyncio
 from pathlib import Path
 
-import sefia
-import sefia.context
 from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from sefia import get_context
 
 from ..common.chat_cli import create_app
 from ..common.chat_session import ChatSessionState
@@ -60,7 +59,7 @@ async def _define_scope(user_request: str) -> ProjectScope:
 async def _understand_project(scope: ProjectScope) -> ProjectUnderstanding:
     console.print("\n[bold]> Stage 2: Understanding project...[/bold]")
     file_paths = await git_tool.list_tracked_files(scope.project_path)
-    understanding_store = sefia.context.get_context().get_state_store(
+    understanding_store = get_context().get_state_store(
         "project_understanding", ProjectUnderstanding
     )
     understanding = await understanding_store.ensure()

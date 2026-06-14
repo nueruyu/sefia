@@ -2,20 +2,19 @@ from typing import Self, Type, TypeVar
 
 import glyff
 
-from .context import SessionContext, context_var
-from .interfaces import (
-    Policy,
-    ToolCollector,
-)
-from .interfaces.session_store import SessionStore
-from .llm.client import LLMClient
-from .llm.strategy import LLMInferenceStrategy
-from .llm.xml_prompt_formatter import XmlPromptFormatter
+from ._context import SessionContext, context_var
+from ._interfaces import Policy
+from ._interfaces.model_inspector import ModelInspector
+from ._interfaces.session_store import SessionStore
+from ._state_store import StateStore
+from ._tool_system import ToolCollector
+from .llm._client import LLMClient
+from .llm._strategy import LLMInferenceStrategy
+from .llm._xml_prompt_formatter import XmlPromptFormatter
 from .policies import StagnationPolicy
+from .pydantic._model_inspector import PydanticModelInspector
 from .pydantic.json_utils import pydantic_json_default
-from .pydantic.model_inspector import PydanticModelInspector
-from .state_store import StateStore
-from .tool_collectors.collector import DefaultToolCollector
+from .tool_collectors import DefaultToolCollector
 
 T = TypeVar("T")
 
@@ -33,19 +32,19 @@ class Session:
         session_store: SessionStore,
         policies: list[Policy] | None = None,
         tool_collector: ToolCollector | None = None,
+        model_inspector: ModelInspector | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
         self.session_store = session_store
         self._context_token = None
-        extra_policies = list(policies) if policies is not None else []
-        self.policies: list[Policy] = [
+        self._policies: list[Policy] = [
             StagnationPolicy(),
-            *extra_policies,
+            *(policies if policies is not None else []),
         ]
 
-        model_inspector = PydanticModelInspector()
+        model_inspector = model_inspector or PydanticModelInspector()
 
         self._tool_collector = tool_collector or DefaultToolCollector(
             model_inspector=model_inspector
@@ -75,9 +74,8 @@ class Session:
         self._context = SessionContext(
             glyff_session=self._glyff_session,
             session_store=self.session_store,
-            llm_client=self.llm_client,
             inference_strategy=self._inference_strategy,
-            policies=self.policies,
+            policies=tuple(self._policies),
             tool_collector=self._tool_collector,
         )
         self._context_token = context_var.set(self._context)

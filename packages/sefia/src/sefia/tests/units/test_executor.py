@@ -4,22 +4,30 @@ import pytest
 from glyff.exceptions import YieldException
 from pytest_mock import MockerFixture
 
-from sefia import events
-from sefia.event_publisher import EventPublisher
+from sefia import (
+    InferenceStrategy,
+    StepContext,
+    StepMiddleware,
+    ToolCollector,
+    ToolRegistry,
+    events,
+)
+from sefia._executor import InferenceExecutor
+from sefia.event_system import EventHandler, EventPublisher
 from sefia.events import StepStarted
-from sefia.executor import InferenceExecutor
-from sefia.interfaces import EventHandler, InferenceStrategy, ToolCollector
 from sefia.exceptions import RequestInferenceRetry
-from sefia.interfaces.middleware import StepContext, StepMiddleware
-from sefia.middleware.max_steps import MaxStepsExceededError, StepLimiter
-from sefia.middleware.retry import MaxRetriesExceededError, Retrier
-from sefia.models import (
+from sefia.inference import (
     FinalAnswerDecision,
     InferenceDecision,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
-    ToolRegistry,
+)
+from sefia.middleware import (
+    MaxRetriesExceededError,
+    MaxStepsExceededError,
+    Retrier,
+    StepLimiter,
 )
 
 

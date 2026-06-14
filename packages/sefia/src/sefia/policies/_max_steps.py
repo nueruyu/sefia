@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from sefia.interfaces import InferenceMiddleware, Policy, StepMiddleware
-from sefia.middleware.max_steps import StepLimiter
+from sefia._interfaces import InferenceMiddleware, Policy, StepMiddleware
+from sefia.middleware._max_steps import StepLimiter
 
 
 @dataclass

@@ -2,9 +2,9 @@ import json
 from collections import deque
 from typing import Any, Awaitable, Callable
 
+from .._interfaces.middleware import StepContext, StepMiddleware
 from ..exceptions import InferenceControlSignal
-from ..interfaces.middleware import StepContext, StepMiddleware
-from ..models import InferenceDecision, ToolCallDecision
+from ..inference import InferenceDecision, ToolCallDecision
 
 
 class StagnationError(InferenceControlSignal):

@@ -4,8 +4,7 @@ from typing import Any
 
 class PromptFormatter(ABC):
     """
-    Abstract interface for a strategy that formats inference arguments for inclusion
-    in LLM prompts.
+    Abstract interface for formatting inference arguments for LLM prompts.
     """
 
     @abstractmethod

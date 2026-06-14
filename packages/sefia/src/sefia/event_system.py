@@ -1,10 +1,37 @@
-import logging
-from collections import defaultdict
+from __future__ import annotations
 
-from . import events
-from .interfaces.event_handler import EventHandler
+import logging
+from abc import ABC, abstractmethod
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Generic, Type, TypeVar
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Event:
+    """Base class for all events."""
+
+
+E = TypeVar("E", bound=Event)
+
+
+class EventHandler(ABC, Generic[E]):
+    """
+    Abstract base class for a handler that processes a specific type of event.
+    """
+
+    @property
+    @abstractmethod
+    def event_types(self) -> tuple[Type[Event], ...]:
+        """Returns a tuple of event types that this handler can process."""
+        ...
+
+    @abstractmethod
+    async def handle(self, event: E) -> None:
+        """Process a specific inference event."""
+        ...
 
 
 class EventPublisher:
@@ -15,15 +42,15 @@ class EventPublisher:
 
     def _resolve_handler_map(
         self, handlers: list[EventHandler]
-    ) -> dict[type[events.Event], list[EventHandler]]:
+    ) -> dict[type[Event], list[EventHandler]]:
         """Inspects handlers to map event types to the handlers that process them."""
-        handler_map: dict[type[events.Event], list[EventHandler]] = defaultdict(list)
+        handler_map: dict[type[Event], list[EventHandler]] = defaultdict(list)
         for handler in handlers:
             for event_type in handler.event_types:
                 handler_map[event_type].append(handler)
         return handler_map
 
-    async def publish(self, event: events.Event) -> None:
+    async def publish(self, event: Event) -> None:
         """
         Dispatches an event to all handlers registered for its type.
 
@@ -36,7 +63,7 @@ class EventPublisher:
         """
         event_type = type(event)
         handlers_to_run = self._handler_map.get(event_type, []) + self._handler_map.get(
-            events.Event, []
+            Event, []
         )
         for handler in handlers_to_run:
             try:
@@ -47,3 +74,6 @@ class EventPublisher:
                     type(handler).__name__,
                     event_type.__name__,
                 )
+
+
+__all__ = ["Event", "EventPublisher", "EventHandler"]

@@ -1,8 +1,8 @@
 from typing import Awaitable, Callable
 
+from .._interfaces.middleware import StepContext, StepMiddleware
 from ..exceptions import InferenceControlSignal
-from ..interfaces.middleware import StepContext, StepMiddleware
-from ..models import InferenceDecision
+from ..inference import InferenceDecision
 
 
 class MaxStepsExceededError(InferenceControlSignal):

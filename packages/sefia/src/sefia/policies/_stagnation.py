@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from sefia.interfaces import InferenceMiddleware, Policy, StepMiddleware
-from sefia.middleware.stagnation import StagnationDetector
+from sefia._interfaces import InferenceMiddleware, Policy, StepMiddleware
+from sefia.middleware._stagnation import StagnationDetector
 
 
 @dataclass

@@ -8,10 +8,10 @@ from glyff import ExecutionId
 from glyff import Session as GlyffSession
 from glyff.context import get_context as get_glyff_context
 
-from .interfaces import InferenceStrategy, Policy, ToolCollector
-from .interfaces.session_store import SessionStore
-from .llm.client import LLMClient
-from .state_store import StateStore
+from ._interfaces import InferenceStrategy, Policy
+from ._interfaces.session_store import SessionStore
+from ._state_store import StateStore
+from ._tool_system import ToolCollector
 
 T = TypeVar("T")
 
@@ -32,27 +32,25 @@ def _execution_id_scope_key(execution_id: ExecutionId) -> str:
     return hashlib.sha256(stable_repr.encode("utf-8")).hexdigest()
 
 
-@dataclass
+@dataclass(frozen=True)
 class SessionContext:
-    """
-    Holds the context for an ongoing sefia inference session.
-    """
+    """Holds the context for an ongoing sefia inference session."""
 
     glyff_session: GlyffSession
     session_store: SessionStore
-    llm_client: LLMClient
     inference_strategy: InferenceStrategy
-    policies: list[Policy]
+    policies: tuple[Policy, ...]
     tool_collector: ToolCollector
-    _state_stores: dict[str, StateStore] = field(default_factory=dict)
+    _state_stores: dict[str, StateStore] = field(
+        default_factory=dict, init=False, repr=False
+    )
 
     def get_call_state_store(
         self, key_suffix: str, state_type: Type[T]
     ) -> StateStore[T]:
         """
         Gets a StateStore scoped to the current engraved function call.
-        This provides a private, persistent state for a single invocation
-        of an engraved tool.
+        This provides call-local state for a single invocation of an engraved tool.
         """
         try:
             glyff_ctx = get_glyff_context()
@@ -62,7 +60,7 @@ class SessionContext:
 
         if current_execution_id is None:
             raise RuntimeError(
-                "get_call_state_store can only be used inside a @glyff.engrave function."
+                "get_call_state_store can only be used inside an engraved function."
             )
 
         scope_key = _execution_id_scope_key(current_execution_id)
@@ -70,9 +68,7 @@ class SessionContext:
         return self.get_state_store(scoped_key, state_type)
 
     def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:
-        """
-        Gets a StateStore for the given key and type, creating one if it doesn't exist.
-        """
+        """Gets a StateStore for the given key and type, creating one if needed."""
         if key not in self._state_stores:
             self._state_stores[key] = StateStore(
                 store=self.session_store,

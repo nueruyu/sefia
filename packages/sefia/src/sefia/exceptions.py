@@ -18,6 +18,10 @@ class PermissionDeniedToolError(FileOperationToolError):
     """Raised when a file cannot be accessed."""
 
 
+class ToolConflictError(Exception):
+    """Raised when two tools with the same name are found."""
+
+
 class InferenceException(Exception):
     """
     Base class for errors raised by an LLM client while performing an inference
