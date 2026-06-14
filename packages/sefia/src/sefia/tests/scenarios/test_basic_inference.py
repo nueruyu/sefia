@@ -7,12 +7,12 @@ from glyff.exceptions import ExecutionFailedError
 from glyff.interfaces import ArgsHasher, Serializer
 from glyff.stores import MemoryClient
 from glyff.stores import MemorySessionStore as GlyffMemoryStore
+from sefios.core.policies import MaxSteps
 
 from sefia import Session, infer, policy
 from sefia._decorators import get_metadata
 from sefia.llm import LLMResponse
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
-from sefios.policies import MaxSteps
 
 from ..conftest import (
     BrokenToolkit,

@@ -1,7 +1,7 @@
 [project]
 name = "sefios"
 version = "0.1.0"
-description = "Utilities for building applications with the Sefia framework."
+description = "Official Stack for building applications with the Sefia framework."
 requires-python = ">=3.11"
 dependencies = [
     "sefia",

@@ -5,8 +5,8 @@ from pytest_mock import MockerFixture
 
 from sefia.llm import LLMResponse
 from sefia.llm.events import AfterLLMCall
-from sefios.handlers import CostCalculator
-from sefios.handlers._cost import _CostState
+from sefios.core.handlers import CostCalculator
+from sefios.core.handlers._cost import _CostState
 
 
 class TestCostCalculator:
@@ -18,7 +18,7 @@ class TestCostCalculator:
 
         mock_ctx = mocker.Mock()
         mock_ctx.get_state_store.return_value = mock_state_store
-        mocker.patch("sefios.handlers._cost.get_context", return_value=mock_ctx)
+        mocker.patch("sefios.core.handlers._cost.get_context", return_value=mock_ctx)
         return mock_ctx, mock_state_store
 
     async def test_calculates_and_saves_cost(self, mock_context):

@@ -4,10 +4,11 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefios.cli import create_app
-from sefios.sessioning import WorkflowState
+from sefia import get_context
+from sefios.scaffolding.cli.runner import create_app
 from sefios.tools import HumanInputTool, WebSearchTool
 
+from .._common.workflow import WorkflowState
 from .agents import NewsWriter, RequirementsClarifier, Researcher
 from .models import ArticleRequest, NewsArticle
 from .rendering import render_article_request, render_news_article
@@ -44,7 +45,20 @@ async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArt
     return await writer.write_article(article_request=article_request, sources=sources)
 
 
-async def workflow(state: WorkflowState) -> None:
+async def initialize_workflow(initial_input: str) -> None:
+    """Initializes the workflow state for a new session."""
+    session = get_context()
+    state_store = session.get_state_store("workflow_state", WorkflowState)
+    state = WorkflowState.from_initial_input(initial_input)
+    await state_store.save(state)
+
+
+async def workflow() -> None:
+    """Runs the main application logic."""
+    session = get_context()
+    state_store = session.get_state_store("workflow_state", WorkflowState)
+    state = await state_store.ensure()
+
     article_request = await _clarify(state.initial_input)
     sources = await _research(article_request)
     article = await _write(article_request, sources)
@@ -61,7 +75,8 @@ async def workflow(state: WorkflowState) -> None:
 
 if __name__ == "__main__":
     create_app(
-        workflow,
+        init_callback=initialize_workflow,
+        workflow_callback=workflow,
         session_dir=SESSION_DIR,
         help_text="A multi-agent workflow for generating news articles with human-in-the-loop.",
     )()

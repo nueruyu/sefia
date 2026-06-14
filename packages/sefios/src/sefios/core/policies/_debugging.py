@@ -6,7 +6,7 @@ from sefia.event_system import EventHandler
 from sefia.llm import Message
 from sefia.llm.events import BeforeLLMCall
 
-console = Console()
+_console = Console()
 
 
 class PromptDumpHandler(EventHandler[BeforeLLMCall]):
@@ -41,7 +41,7 @@ class PromptDumpHandler(EventHandler[BeforeLLMCall]):
                 formatted_messages.append("\n\n")
             formatted_messages.append_text(self._format_message(msg))
 
-        console.print(
+        _console.print(
             Panel(
                 formatted_messages,
                 title="LLM PROMPT",

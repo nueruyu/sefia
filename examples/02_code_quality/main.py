@@ -6,10 +6,10 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from sefia import get_context
-from sefios.cli import create_app
-from sefios.sessioning import WorkflowState
+from sefios.scaffolding.cli.runner import create_app
 from sefios.tools import HumanInputTool
 
+from .._common.workflow import WorkflowState
 from .agents import (
     CodingStyleAuditor,
     DependencySpecialist,
@@ -137,7 +137,20 @@ async def _create_report(
     return await reporting_agent.create_report(issues, understanding)
 
 
-async def workflow(state: WorkflowState) -> None:
+async def initialize_workflow(initial_input: str) -> None:
+    """Initializes the workflow state for a new session."""
+    session = get_context()
+    state_store = session.get_state_store("workflow_state", WorkflowState)
+    state = WorkflowState.from_initial_input(initial_input)
+    await state_store.save(state)
+
+
+async def workflow() -> None:
+    """Runs the main application logic."""
+    session = get_context()
+    state_store = session.get_state_store("workflow_state", WorkflowState)
+    state = await state_store.ensure()
+
     scope = await _define_scope(state.initial_input)
     understanding = await _understand_project(scope)
     review_files = await _confirm_review_files(scope, understanding)
@@ -160,7 +173,8 @@ async def workflow(state: WorkflowState) -> None:
 
 if __name__ == "__main__":
     create_app(
-        workflow,
+        init_callback=initialize_workflow,
+        workflow_callback=workflow,
         session_dir=SESSION_DIR,
         help_text="A multi-agent workflow for code quality review.",
     )()

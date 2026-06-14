@@ -1,1 +1,1 @@
-# This file remains intentionally blank
+"""Official stack for building applications with the Sefia framework."""

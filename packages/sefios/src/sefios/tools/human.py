@@ -5,8 +5,6 @@ from glyff import engrave
 from glyff.exceptions import YieldException
 from sefia import get_context, tool
 
-from ..sessioning import WorkflowState
-
 
 @dataclass
 class _AskUserState:
@@ -31,26 +29,32 @@ class HumanInputTool:
         ctx = get_context()
         call_store = ctx.get_call_state_store("internal_state", _AskUserState)
         call_state = await call_store.ensure()
-
-        session_store = ctx.get_state_store("session_state", WorkflowState)
-        session_state = await session_store.ensure()
+        session_store = ctx.session_store
 
         if call_state.interaction_id is None:
-            # First call: generate an ID, save it, and interrupt.
+            # First call: generate an ID, save it to call-local state, and interrupt.
             interaction_id = str(uuid.uuid4())
             call_state.interaction_id = interaction_id
-            session_state.add_pending_interaction(interaction_id)
             await call_store.save(call_state)
-            await session_store.save(session_state)
+
+            # Signal to the runner that we are waiting for input for this interaction.
+            interaction_details = {"id": interaction_id, "question": question}
+            await session_store.set(
+                "pending_human_interaction", interaction_details, dict
+            )
             self._prompt_user_input(question)
             raise YieldException()
 
-        # Resumed call: check for the answer.
+        # Resumed call: check for the answer provided by the runner.
         interaction_id = call_state.interaction_id
-        answer = session_state.get_answer_by_id(interaction_id)
+        answer_key = f"human_input__{interaction_id}"
+        answer = await session_store.get(answer_key, str)
+
         if answer is not None:
+            await session_store.delete(answer_key)
+            await session_store.delete("pending_human_interaction")
             return answer
 
-        # No answer provided yet, interrupt again.
+        # No answer provided yet, prompt again and re-yield.
         self._prompt_user_input(question)
         raise YieldException()

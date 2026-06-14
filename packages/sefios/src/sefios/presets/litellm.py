@@ -9,18 +9,18 @@ import sefia.stores
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Policy
 
-from .policies import MaxSteps, StreamingPolicy, VerbosePolicy
+from ..core.policies import MaxSteps, StreamingPolicy, VerbosePolicy
 
 
 @asynccontextmanager
-async def create_session(
+async def create_litellm_session(
     model: str,
     session_id: str,
     stream: bool,
     verbose: bool,
     session_dir: Path,
 ) -> AsyncIterator[sefia.Session]:
-    """Sets up and provides a Sefia session."""
+    """Sets up and provides a Sefia session using LiteLLM."""
     try:
         import sefia_litellm
     except ImportError as e:

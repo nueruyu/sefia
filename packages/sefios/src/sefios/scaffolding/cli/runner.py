@@ -3,6 +3,7 @@ import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from textwrap import dedent
+from typing import NoReturn
 
 import glyff.exceptions
 import typer
@@ -11,11 +12,17 @@ from rich.console import Console
 from rich.panel import Panel
 from typing_extensions import Annotated
 
-from .session import create_session
-from .sessioning import Manager, WorkflowState
+from ...presets.litellm import create_litellm_session
+from .session_manager import SessionManager
 
-WorkflowCallback = Callable[[WorkflowState], Awaitable[None]]
+WorkflowCallback = Callable[[], Awaitable[None]]
+InitCallback = Callable[[str], Awaitable[None]]
 console = Console()
+
+
+def _exit_with_error(message: str) -> NoReturn:
+    console.print(f"[bold red]Error:[/bold red] {message}")
+    raise typer.Exit(code=1)
 
 
 def _print_session_interrupted_hint() -> None:
@@ -29,53 +36,43 @@ def _print_session_interrupted_hint() -> None:
     console.print(Panel(hint, title="WAITING FOR INPUT", border_style="yellow"))
 
 
-def _resolve_session_state(
-    state: WorkflowState | None, input_text: str, is_new: bool
-) -> WorkflowState:
-    """Resolve the next session state from current state and latest user input."""
-    if is_new or state is None:
-        return WorkflowState.from_initial_input(input_text)
-
-    if state.pending_interaction:
-        # We are resuming a pending HumanInputTool interaction.
-        state.update_pending_answer(input_text)
-        return state
-
-    # Previous run already completed, so replay the completed session result.
-    console.print("[bold]> Previous session completed. Showing last result.[/bold]")
-    return state
-
-
 async def _run_workflow(
     session_id: str,
     input_text: str,
     is_new: bool,
     model: str,
     verbose: bool,
+    init_callback: InitCallback,
     workflow_callback: WorkflowCallback,
     session_dir: Path,
 ):
     """Encapsulates the main logic for running the sefia workflow."""
     try:
-        async with create_session(
+        async with create_litellm_session(
             model=model,
             session_id=session_id,
             stream=True,
             verbose=verbose,
             session_dir=session_dir,
         ) as session:
-            state_store = session.get_state_store("session_state", WorkflowState)
-            state = await state_store.get()
-            state = _resolve_session_state(state, input_text, is_new)
+            pending = await session.session_store.get("pending_human_interaction", dict)
+            if pending and not is_new:
+                interaction_id = pending["id"]
+                await session.session_store.set(
+                    f"human_input__{interaction_id}", input_text, str
+                )
 
-            await state_store.save(state)
-            await workflow_callback(state)
+            if is_new:
+                await init_callback(input_text)
+
+            await workflow_callback()
 
     except glyff.exceptions.YieldException:
         _print_session_interrupted_hint()
 
 
 def create_app(
+    init_callback: InitCallback,
     workflow_callback: WorkflowCallback,
     *,
     session_dir: Path,
@@ -86,7 +83,7 @@ def create_app(
     app = typer.Typer(help=help_text)
     session_app = typer.Typer(help="Manage user sessions.")
     app.add_typer(session_app, name="session")
-    session_manager = Manager(session_dir)
+    session_manager = SessionManager(session_dir)
 
     @app.command("chat")
     def chat(
@@ -120,7 +117,7 @@ def create_app(
             input_text = sys.stdin.read().strip()
 
         if not input_text:
-            raise typer.BadParameter("Message cannot be empty.")
+            _exit_with_error("Message cannot be empty.")
 
         session_id = session_manager.get_active_session_id()
         is_new = session_id is None
@@ -141,6 +138,7 @@ def create_app(
                 is_new=is_new,
                 model=model,
                 verbose=verbose,
+                init_callback=init_callback,
                 workflow_callback=workflow_callback,
                 session_dir=session_dir,
             )
