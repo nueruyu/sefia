@@ -4,7 +4,7 @@ import pytest
 
 from sefia import StepContext
 from sefia.inference import FinalAnswerDecision, ToolCallDecision, ToolCallRequest
-from sefia.middleware import StagnationDetector, StagnationError
+from sefios.middleware import StagnationDetector, StagnationError
 
 
 async def _step(middleware: StagnationDetector, name: str, args: dict, step: int = 0):
@@ -21,7 +21,6 @@ async def _step(middleware: StagnationDetector, name: str, args: dict, step: int
 
 class TestStagnationDetector:
     def test_rejects_invalid_max_repeats(self):
-        # A limit of 1 would flag the first tool call, so values < 2 are invalid.
         for invalid in (0, 1):
             with pytest.raises(ValueError):
                 StagnationDetector(max_repeats=invalid)
@@ -39,29 +38,26 @@ class TestStagnationDetector:
         middleware = StagnationDetector(max_repeats=2)
 
         await _step(middleware, "test_tool", {"a": 1}, step=0)
-        await _step(middleware, "test_tool", {"a": 2}, step=1)  # Should not raise
+        await _step(middleware, "test_tool", {"a": 2}, step=1)
 
     async def test_history_resets_after_different_call(self):
         middleware = StagnationDetector(max_repeats=2)
 
         await _step(middleware, "tool1", {"a": 1}, step=0)
         await _step(middleware, "tool2", {"b": 2}, step=1)
-        await _step(middleware, "tool1", {"a": 1}, step=2)  # history broken by tool2
+        await _step(middleware, "tool1", {"a": 1}, step=2)
 
     async def test_does_not_raise_if_limit_not_reached(self):
         middleware = StagnationDetector(max_repeats=3)
 
         await _step(middleware, "test_tool", {"a": 1}, step=0)
-        await _step(middleware, "test_tool", {"a": 1}, step=1)  # Should not raise
+        await _step(middleware, "test_tool", {"a": 1}, step=1)
 
     async def test_history_clears_on_new_attempt(self):
-        # The same middleware instance is reused across retried attempts. A new
-        # attempt restarts at step 0 and must not inherit the previous attempt's
-        # tool-call history, or it would raise a false-positive StagnationError.
         middleware = StagnationDetector(max_repeats=2)
 
-        await _step(middleware, "test_tool", {"a": 1}, step=0)  # first attempt
-        await _step(middleware, "test_tool", {"a": 1}, step=0)  # new attempt; ok
+        await _step(middleware, "test_tool", {"a": 1}, step=0)
+        await _step(middleware, "test_tool", {"a": 1}, step=0)
 
     async def test_ignores_final_answer_decisions(self):
         middleware = StagnationDetector(max_repeats=2)

@@ -8,9 +8,8 @@ import sefia
 import sefia.stores
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Policy
-from sefia.policies import MaxSteps
 
-from .policies import StreamingPolicy, VerbosePolicy
+from .policies import MaxSteps, StreamingPolicy, VerbosePolicy
 
 
 @asynccontextmanager

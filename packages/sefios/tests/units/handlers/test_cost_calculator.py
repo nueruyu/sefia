@@ -3,10 +3,10 @@ from unittest.mock import AsyncMock
 import pytest
 from pytest_mock import MockerFixture
 
-from sefia.handlers import CostCalculator
-from sefia.handlers._cost import _CostState
 from sefia.llm import LLMResponse
 from sefia.llm.events import AfterLLMCall
+from sefios.handlers import CostCalculator
+from sefios.handlers._cost import _CostState
 
 
 class TestCostCalculator:
@@ -18,7 +18,7 @@ class TestCostCalculator:
 
         mock_ctx = mocker.Mock()
         mock_ctx.get_state_store.return_value = mock_state_store
-        mocker.patch("sefia.handlers._cost.get_context", return_value=mock_ctx)
+        mocker.patch("sefios.handlers._cost.get_context", return_value=mock_ctx)
         return mock_ctx, mock_state_store
 
     async def test_calculates_and_saves_cost(self, mock_context):
@@ -38,7 +38,7 @@ class TestCostCalculator:
 
     async def test_accumulates_cost(self, mock_context):
         mock_ctx, mock_state_store = mock_context
-        mock_state_store.ensure.return_value = _CostState(cost=0.01)  # Previous cost
+        mock_state_store.ensure.return_value = _CostState(cost=0.01)
         handler = CostCalculator()
         event = AfterLLMCall(
             LLMResponse(
@@ -50,7 +50,6 @@ class TestCostCalculator:
 
         await handler.handle(event)
 
-        # 0.01 (previous) + 0.0005 (new)
         mock_state_store.save.assert_called_once_with(_CostState(cost=0.0105))
 
     async def test_ignores_event_without_cost_info(self, mock_context):

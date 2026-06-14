@@ -269,7 +269,7 @@ either or both:
 
 ```python
 from sefia import infer, policy
-from sefia.policies import MaxRetries
+from sefios.policies import MaxRetries
 
 
 class MyAgent:
@@ -310,7 +310,7 @@ is no default cap (though `Session` registers stagnation detection by default).
 
 ```python
 from sefia import infer, policy
-from sefia.policies import MaxSteps
+from sefios.policies import MaxSteps
 
 
 class MyAgent:
@@ -393,8 +393,8 @@ class LoggingPolicy(Policy):
 
 Pass policies to `Session` or to a specific `@infer` call.
 
-The built-in `StagnationDetector` is registered by default and aborts the loop
-if the same tool is called repeatedly with identical arguments.
+Use `sefios.policies.StagnationPolicy` when you want to abort the loop if the
+same tool is called repeatedly with identical arguments.
 
 ## Resources
 

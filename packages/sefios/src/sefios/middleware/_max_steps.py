@@ -1,8 +1,8 @@
 from typing import Awaitable, Callable
 
-from .._interfaces.middleware import StepContext, StepMiddleware
-from ..exceptions import InferenceControlSignal
-from ..inference import InferenceDecision
+from sefia._interfaces.middleware import StepContext, StepMiddleware
+from sefia.exceptions import InferenceControlSignal
+from sefia.inference import InferenceDecision
 
 
 class MaxStepsExceededError(InferenceControlSignal):

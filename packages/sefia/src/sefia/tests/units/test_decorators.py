@@ -1,7 +1,7 @@
 import pytest
 
 from sefia._decorators import _partition_middleware
-from sefia.middleware import Retrier, StagnationDetector, StepLimiter
+from sefios.middleware import Retrier, StagnationDetector, StepLimiter
 
 
 class TestPartitionMiddleware:

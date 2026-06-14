@@ -23,7 +23,7 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.middleware import (
+from sefios.middleware import (
     MaxRetriesExceededError,
     MaxStepsExceededError,
     Retrier,

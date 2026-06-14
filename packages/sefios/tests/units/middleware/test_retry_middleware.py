@@ -3,7 +3,7 @@ from glyff.exceptions import YieldException
 
 from sefia import InferenceContext
 from sefia.exceptions import RequestInferenceRetry
-from sefia.middleware import MaxRetriesExceededError, MaxStepsExceededError, Retrier
+from sefios.middleware import MaxRetriesExceededError, MaxStepsExceededError, Retrier
 
 
 def _ctx() -> InferenceContext:
@@ -58,7 +58,6 @@ class TestRetrier:
         assert exc_info.value.__cause__ is original
 
     async def test_does_not_retry_terminal_control_signals(self):
-        # Terminal limits (e.g. max steps) must not be retried away.
         middleware = Retrier(max_retries=3)
 
         async def hit_limit():
@@ -68,7 +67,6 @@ class TestRetrier:
             await middleware.wrap(_ctx(), hit_limit)
 
     async def test_does_not_retry_yield_exception(self):
-        # YieldException is a graceful, resumable interrupt and must propagate.
         middleware = Retrier(max_retries=3)
 
         async def interrupt():

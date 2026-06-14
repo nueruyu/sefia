@@ -2,7 +2,7 @@ import pytest
 
 from sefia import StepContext
 from sefia.inference import FinalAnswerDecision
-from sefia.middleware import MaxStepsExceededError, StepLimiter
+from sefios.middleware import MaxStepsExceededError, StepLimiter
 
 
 def _ctx(step: int) -> StepContext:
@@ -19,12 +19,11 @@ class TestStepLimiter:
             StepLimiter(max_steps=0)
 
     def test_allows_none_max_steps(self):
-        StepLimiter(max_steps=None)  # Should not raise
+        StepLimiter(max_steps=None)
 
     async def test_runs_step_within_limit(self):
         middleware = StepLimiter(max_steps=3)
 
-        # Steps 0, 1, 2 are the three permitted steps.
         for step in (0, 1, 2):
             decision = await middleware.wrap(_ctx(step), _decision)
             assert isinstance(decision, FinalAnswerDecision)
@@ -32,7 +31,6 @@ class TestStepLimiter:
     async def test_raises_once_limit_is_reached(self):
         middleware = StepLimiter(max_steps=3)
 
-        # Step index 3 would be the fourth step, past the limit of 3.
         with pytest.raises(MaxStepsExceededError):
             await middleware.wrap(_ctx(3), _decision)
 

@@ -2,8 +2,8 @@ from typing import Any, Awaitable, Callable
 
 from glyff.exceptions import YieldException
 
-from .._interfaces.middleware import InferenceMiddleware, InferenceContext
-from ..exceptions import InferenceControlSignal, RequestInferenceRetry
+from sefia._interfaces.middleware import InferenceContext, InferenceMiddleware
+from sefia.exceptions import InferenceControlSignal, RequestInferenceRetry
 
 
 class MaxRetriesExceededError(InferenceControlSignal):

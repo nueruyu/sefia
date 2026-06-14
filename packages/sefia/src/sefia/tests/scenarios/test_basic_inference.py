@@ -11,8 +11,8 @@ from glyff.stores import MemorySessionStore as GlyffMemoryStore
 from sefia import Session, infer, policy
 from sefia._decorators import get_metadata
 from sefia.llm import LLMResponse
-from sefia.policies import MaxSteps
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
+from sefios.policies import MaxSteps
 
 from ..conftest import (
     BrokenToolkit,

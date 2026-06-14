@@ -2,9 +2,9 @@ import json
 from collections import deque
 from typing import Any, Awaitable, Callable
 
-from .._interfaces.middleware import StepContext, StepMiddleware
-from ..exceptions import InferenceControlSignal
-from ..inference import InferenceDecision, ToolCallDecision
+from sefia._interfaces.middleware import StepContext, StepMiddleware
+from sefia.exceptions import InferenceControlSignal
+from sefia.inference import InferenceDecision, ToolCallDecision
 
 
 class StagnationError(InferenceControlSignal):
