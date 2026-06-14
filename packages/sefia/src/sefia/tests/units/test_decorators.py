@@ -1,19 +1,32 @@
 import pytest
-from sefios.core.middleware import Retrier, StagnationDetector, StepLimiter
 
+from sefia import InferenceContext, InferenceMiddleware, StepContext, StepMiddleware
 from sefia._decorators import _partition_middleware
+from sefia.inference import InferenceDecision
+
+
+class _InferenceMiddlewareFixture(InferenceMiddleware):
+    async def wrap(self, ctx: InferenceContext, nxt):
+        return await nxt()
+
+
+class _StepMiddlewareFixture(StepMiddleware):
+    async def wrap(self, ctx: StepContext, nxt) -> InferenceDecision:
+        return await nxt()
 
 
 class TestPartitionMiddleware:
     def test_splits_by_seam(self):
-        retrier = Retrier(max_retries=1)
-        limiter = StepLimiter(max_steps=5)
-        detector = StagnationDetector(max_repeats=2)
+        inference_middleware = _InferenceMiddlewareFixture()
+        step_middleware_1 = _StepMiddlewareFixture()
+        step_middleware_2 = _StepMiddlewareFixture()
 
-        inference, step = _partition_middleware([retrier, limiter, detector])
+        inference, step = _partition_middleware(
+            [inference_middleware, step_middleware_1, step_middleware_2]
+        )
 
-        assert inference == [retrier]
-        assert step == [limiter, detector]
+        assert inference == [inference_middleware]
+        assert step == [step_middleware_1, step_middleware_2]
 
     def test_empty(self):
         assert _partition_middleware([]) == ([], [])

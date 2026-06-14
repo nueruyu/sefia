@@ -3,14 +3,10 @@ from unittest.mock import AsyncMock
 import pytest
 from glyff.exceptions import YieldException
 from pytest_mock import MockerFixture
-from sefios.core.middleware import (
-    MaxRetriesExceededError,
-    MaxStepsExceededError,
-    Retrier,
-    StepLimiter,
-)
 
 from sefia import (
+    InferenceContext,
+    InferenceMiddleware,
     InferenceStrategy,
     StepContext,
     StepMiddleware,
@@ -21,7 +17,7 @@ from sefia import (
 from sefia._executor import InferenceExecutor
 from sefia.event_system import EventHandler, EventPublisher
 from sefia.events import StepStarted
-from sefia.exceptions import RequestInferenceRetry
+from sefia.exceptions import InferenceControlSignal, RequestInferenceRetry
 from sefia.inference import (
     FinalAnswerDecision,
     InferenceDecision,
@@ -29,6 +25,41 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
+
+
+class _MaxStepsExceededError(InferenceControlSignal):
+    pass
+
+
+class _MaxRetriesExceededError(InferenceControlSignal):
+    pass
+
+
+class _StepLimiter(StepMiddleware):
+    def __init__(self, max_steps: int):
+        self.max_steps = max_steps
+
+    async def wrap(self, ctx: StepContext, nxt) -> InferenceDecision:
+        if ctx.step >= self.max_steps:
+            raise _MaxStepsExceededError()
+        return await nxt()
+
+
+class _Retrier(InferenceMiddleware):
+    def __init__(self, max_retries: int):
+        self.max_retries = max_retries
+        self._retries_used = 0
+
+    async def wrap(self, ctx: InferenceContext, nxt):
+        try:
+            return await nxt()
+        except InferenceControlSignal:
+            raise
+        except Exception as e:
+            if self._retries_used < self.max_retries:
+                self._retries_used += 1
+                raise RequestInferenceRetry() from e
+            raise _MaxRetriesExceededError() from e
 
 
 def sample_func(arg1: str) -> str:
@@ -195,10 +226,10 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            step_middlewares=[StepLimiter(max_steps=3)],
+            step_middlewares=[_StepLimiter(max_steps=3)],
         )
 
-        with pytest.raises(MaxStepsExceededError):
+        with pytest.raises(_MaxStepsExceededError):
             await executor.run()
 
         assert mock_strategy.decide_next_step.call_count == 3
@@ -296,7 +327,7 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            inference_middlewares=[Retrier(max_retries=3)],
+            inference_middlewares=[_Retrier(max_retries=3)],
         )
 
         result = await executor.run()
@@ -334,7 +365,7 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            inference_middlewares=[Retrier(max_retries=3)],
+            inference_middlewares=[_Retrier(max_retries=3)],
         )
 
         result = await executor.run()
@@ -361,10 +392,10 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            inference_middlewares=[Retrier(max_retries=2)],
+            inference_middlewares=[_Retrier(max_retries=2)],
         )
 
-        with pytest.raises(MaxRetriesExceededError):
+        with pytest.raises(_MaxRetriesExceededError):
             await executor.run()
 
         # initial attempt + 2 retries
