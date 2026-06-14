@@ -218,7 +218,9 @@ class InferenceExecutor:
             self.tool_collector.collect(instance) if instance is not None else None
         )
         tool_schemas = (
-            self._tool_registry.get_all_schemas() if self._tool_registry else []
+            [t.schema for t in self._tool_registry.get_all()]
+            if self._tool_registry
+            else []
         )
 
         history: list[HistoryItem] = []

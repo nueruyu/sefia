@@ -19,7 +19,7 @@ class ToolRegistry:
     def __init__(self):
         self.tools: dict[str, Tool] = {}
 
-    def add(self, func: Callable[..., Any], schema: dict) -> None:
+    def add(self, func: Callable[..., Any], schema: dict[str, Any]) -> None:
         tool_name = schema["function"]["name"]
         if tool_name in self.tools:
             raise ToolConflictError(
@@ -30,8 +30,8 @@ class ToolRegistry:
     def get(self, name: str) -> Tool | None:
         return self.tools.get(name)
 
-    def get_all_schemas(self) -> list[dict]:
-        return [tool.schema for tool in self.tools.values()]
+    def get_all(self) -> list[Tool]:
+        return list(self.tools.values())
 
 
 class ToolCollector(ABC):
