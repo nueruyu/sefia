@@ -7,6 +7,7 @@ from ._interfaces import Policy
 from ._interfaces.model_inspector import ModelInspector
 from ._interfaces.session_store import SessionStore
 from ._state_store import StateStore
+from ._tool_system import ToolCollector
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
 from .llm._xml_prompt_formatter import XmlPromptFormatter
@@ -14,7 +15,6 @@ from .policies import StagnationPolicy
 from .pydantic._model_inspector import PydanticModelInspector
 from .pydantic.json_utils import pydantic_json_default
 from .tool_collectors import DefaultToolCollector
-from .tools import ToolCollector
 
 T = TypeVar("T")
 

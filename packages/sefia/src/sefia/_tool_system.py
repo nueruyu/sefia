@@ -39,6 +39,3 @@ class ToolCollector(ABC):
 
     @abstractmethod
     def collect(self, instance: object) -> ToolRegistry: ...
-
-
-__all__ = ["Tool", "ToolRegistry", "ToolCollector"]

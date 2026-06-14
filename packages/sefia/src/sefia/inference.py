@@ -3,14 +3,6 @@ from typing import Any
 
 
 @dataclass
-class LLMToolCall:
-    """A tool call requested by the inference strategy before an ID is assigned."""
-
-    name: str
-    arguments: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
 class ToolCallRequest:
     """Represents a request to call a tool."""
 
@@ -53,7 +45,6 @@ class InferenceHistory:
 
 
 __all__ = [
-    "LLMToolCall",
     "ToolCallRequest",
     "ToolCallResult",
     "ToolCallDecision",

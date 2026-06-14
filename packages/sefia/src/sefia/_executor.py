@@ -6,11 +6,12 @@ from glyff.exceptions import YieldException
 from . import events
 from ._interfaces import InferenceStrategy
 from ._interfaces.middleware import (
-    InferenceMiddleware,
     InferenceContext,
+    InferenceMiddleware,
     StepContext,
     StepMiddleware,
 )
+from ._tool_system import ToolCollector, ToolRegistry
 from .event_system import EventPublisher
 from .exceptions import RequestInferenceRetry
 from .inference import (
@@ -21,7 +22,6 @@ from .inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from .tools import ToolCollector, ToolRegistry
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")

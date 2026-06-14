@@ -11,7 +11,7 @@ from glyff.context import get_context as get_glyff_context
 from ._interfaces import InferenceStrategy, Policy
 from ._interfaces.session_store import SessionStore
 from ._state_store import StateStore
-from .tools import ToolCollector
+from ._tool_system import ToolCollector
 
 T = TypeVar("T")
 
