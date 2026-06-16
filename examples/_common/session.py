@@ -27,11 +27,10 @@ class SessionManager:
     """Manages the lifecycle of CLI sessions, including the active session ID."""
 
     def __init__(self, session_dir: Path):
-        self._session_dir = session_dir
-        self._active_session_file = self._session_dir / "active_session.txt"
-        self._sessions_file = self._session_dir / "sessions.txt"
-        self._glyff_sessions_dir = self._session_dir / "glyff_sessions"
-        self._session_dir.mkdir(exist_ok=True)
+        self._active_session_file = session_dir / "active_session.txt"
+        self._sessions_file = session_dir / "sessions.txt"
+        self._glyff_sessions_dir = session_dir / "glyff_sessions"
+        session_dir.mkdir(exist_ok=True)
 
     def get_active_session_id(self) -> str | None:
         """Gets the ID of the currently active session, if one exists."""
@@ -84,7 +83,11 @@ class SessionManager:
         if session_id is not None:
             if not self.session_exists(session_id):
                 raise UnknownSessionError(session_id)
-            return ResolvedSession(session_id=session_id, is_new=False, source="explicit")
+            return ResolvedSession(
+                session_id=session_id,
+                is_new=False,
+                source="explicit",
+            )
 
         active_session_id = self.get_active_session_id()
         if active_session_id is not None:
