@@ -306,7 +306,8 @@ Two seams are available, exposed as ABCs from `sefia`:
   cap the loop, raising `MaxStepsExceededError` once the step limit is reached.
 
 The executor does not cap the loop on its own; without a `StepMiddleware` there
-is no default cap (though `Session` registers stagnation detection by default).
+is no default cap. The `sefios` session helpers add `MaxSteps(count=25)` by
+default; pass `max_steps=None` to opt out.
 
 ```python
 from sefia import infer, policy
