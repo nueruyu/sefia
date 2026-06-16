@@ -6,9 +6,9 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from sefia import get_context
-from sefios.tools import HumanInputTool
 
 from .._common.chat_cli import create_app
+from .._common.human_input import ChatHumanInputAdapter
 from .._common.session import SessionManager
 from .agents import (
     CodingStyleAuditor,
@@ -30,7 +30,8 @@ from .models import (
 from .rendering import render_quality_report
 from .tools import FileTool, GitTool
 
-human_input_tool = HumanInputTool()
+console = Console()
+human_input_tool = ChatHumanInputAdapter(console).create_tool()
 git_tool = GitTool()
 file_tool = FileTool()
 
@@ -45,8 +46,6 @@ review_agents = {
     ReviewPerspective.MAINTAINABILITY: MaintainabilityAssessor(),
     ReviewPerspective.DEPENDENCIES: DependencySpecialist(),
 }
-
-console = Console()
 
 
 @engrave
