@@ -176,7 +176,7 @@ async def chat(
             help="The input for a new session, or an answer to resume an existing one."
         ),
     ],
-    session: Annotated[
+    session_id: Annotated[
         str | None,
         typer.Option(
             "--session-id",
@@ -184,7 +184,7 @@ async def chat(
         ),
         CLIParam.SESSION_ID,
     ] = None,
-    llm: Annotated[
+    model: Annotated[
         str,
         typer.Option(
             "--model",
@@ -193,7 +193,7 @@ async def chat(
         ),
         CLIParam.MODEL,
     ] = "gpt-4o",
-    debug: Annotated[
+    verbose: Annotated[
         bool,
         typer.Option(
             "--verbose",
