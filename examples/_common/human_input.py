@@ -1,5 +1,3 @@
-from dataclasses import asdict
-
 from rich.console import Console
 from sefia import get_context
 from sefios.tools import HumanInputRequest, HumanInputResult, HumanInputTool
@@ -26,8 +24,14 @@ class ChatHumanInputAdapter:
 
     async def on_request(self, request: HumanInputRequest) -> None:
         session_store = get_context().session_store
-        await session_store.set(_PENDING_HUMAN_INTERACTION_KEY, asdict(request), dict)
-        self._console.print(f"\n[bold yellow][USER_INPUT_REQUIRED][/bold yellow] {request.question}\n")
+        await session_store.set(
+            _PENDING_HUMAN_INTERACTION_KEY,
+            {"id": request.interaction_id, "question": request.question},
+            dict,
+        )
+        self._console.print(
+            f"\n[bold yellow][USER_INPUT_REQUIRED][/bold yellow] {request.question}\n"
+        )
 
     async def on_complete(self, result: HumanInputResult) -> None:
         session_store = get_context().session_store
