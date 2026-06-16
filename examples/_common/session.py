@@ -1,5 +1,16 @@
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
+
+
+@dataclass(frozen=True)
+class ChatSession:
+    """A resolved chat session for a workflow run."""
+
+    session_id: str
+    is_new: bool
+    source: Literal["explicit", "active", "created"]
 
 
 class SessionManager:
@@ -23,3 +34,33 @@ class SessionManager:
     def create_new_session_id(self) -> str:
         """Generates a new unique session ID."""
         return str(uuid.uuid4())
+
+    def switch_active_session(self, session_id: str) -> str:
+        """Switches the active session and returns its ID."""
+        self.set_active_session_id(session_id)
+        return session_id
+
+    def create_new_active_session(self) -> str:
+        """Creates a new session, makes it active, and returns its ID."""
+        session_id = self.create_new_session_id()
+        self.set_active_session_id(session_id)
+        return session_id
+
+    def prepare_chat_session(self, session_id: str | None) -> ChatSession:
+        """Resolves the session to use for a chat command."""
+        if session_id is not None:
+            return ChatSession(session_id=session_id, is_new=False, source="explicit")
+
+        active_session_id = self.get_active_session_id()
+        if active_session_id is not None:
+            return ChatSession(
+                session_id=active_session_id,
+                is_new=False,
+                source="active",
+            )
+
+        return ChatSession(
+            session_id=self.create_new_active_session(),
+            is_new=True,
+            source="created",
+        )
