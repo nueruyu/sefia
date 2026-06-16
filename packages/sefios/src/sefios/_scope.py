@@ -18,19 +18,19 @@ class SefiaScope:
         self,
         *,
         session_dir: Path,
-        default_model: str | None = None,
+        model: str | None = None,
         llm_client: LLMClient | None = None,
-        default_policies: list[Policy] | None = None,
-        default_stream: bool = False,
-        default_verbose: bool = False,
+        policies: list[Policy] | None = None,
+        stream: bool = False,
+        verbose: bool = False,
         max_steps: int | None = 25,
     ):
         self.session_dir = session_dir
-        self.default_model = default_model
+        self.model = model
         self.llm_client = llm_client
-        self.default_policies = list(default_policies or [])
-        self.default_stream = default_stream
-        self.default_verbose = default_verbose
+        self.policies = list(policies or [])
+        self.stream = stream
+        self.verbose = verbose
         self.max_steps = max_steps
 
     def __call__(
@@ -50,10 +50,10 @@ class SefiaScope:
                     "The decorated function must be called with a 'session_id: str' keyword argument."
                 )
 
-            model = kwargs.pop("model", self.default_model)
-            stream = kwargs.pop("stream", self.default_stream)
-            verbose = kwargs.pop("verbose", self.default_verbose)
-            policies = list(self.default_policies)
+            model = kwargs.pop("model", self.model)
+            stream = kwargs.pop("stream", self.stream)
+            verbose = kwargs.pop("verbose", self.verbose)
+            policies = list(self.policies)
 
             async with create_session(
                 session_id=session_id,
