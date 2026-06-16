@@ -1,25 +1,32 @@
-from rich.console import Console
+import inspect
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
+
 from sefia import get_context
 from sefios.tools import HumanInputRequest, HumanInputResult, HumanInputTool
 
 _PENDING_HUMAN_INTERACTION_KEY = "pending_human_interaction"
 
+T = TypeVar("T")
+MaybeAwaitable = T | Awaitable[T]
+HumanInputRequestHandler = Callable[[HumanInputRequest], MaybeAwaitable[None]]
 
-class ChatHumanInputAdapter:
-    """Connects HumanInputTool callbacks to the example chat session protocol."""
 
-    def __init__(self, console: Console):
-        self._console = console
+class CLIHumanInputAdapter:
+    """Connects HumanInputTool callbacks to the CLI session protocol."""
+
+    def __init__(self, *, on_request: HumanInputRequestHandler | None = None):
+        self._on_request = on_request
 
     def create_tool(self) -> HumanInputTool:
         return HumanInputTool(
             get_answer=self.get_answer,
-            on_request=self.on_request,
-            on_complete=self.on_complete,
+            on_request=self.handle_request,
+            on_complete=self.handle_complete,
         )
 
     async def receive_input(self, input_text: str, *, is_new: bool) -> None:
-        """Stores the chat input as the answer for a pending human interaction."""
+        """Stores the CLI input as the answer for a pending human interaction."""
         if is_new:
             return
 
@@ -39,18 +46,17 @@ class ChatHumanInputAdapter:
         session_store = get_context().session_store
         return await session_store.get(self._answer_key(request.interaction_id), str)
 
-    async def on_request(self, request: HumanInputRequest) -> None:
+    async def handle_request(self, request: HumanInputRequest) -> None:
         session_store = get_context().session_store
         await session_store.set(
             _PENDING_HUMAN_INTERACTION_KEY,
             {"id": request.interaction_id, "question": request.question},
             dict,
         )
-        self._console.print(
-            f"\n[bold yellow][USER_INPUT_REQUIRED][/bold yellow] {request.question}\n"
-        )
+        if self._on_request is not None:
+            await _maybe_await(self._on_request(request))
 
-    async def on_complete(self, result: HumanInputResult) -> None:
+    async def handle_complete(self, result: HumanInputResult) -> None:
         session_store = get_context().session_store
         await session_store.delete(self._answer_key(result.interaction_id))
         await session_store.delete(_PENDING_HUMAN_INTERACTION_KEY)
@@ -58,3 +64,9 @@ class ChatHumanInputAdapter:
     @staticmethod
     def _answer_key(interaction_id: str) -> str:
         return f"human_input__{interaction_id}"
+
+
+async def _maybe_await(value: MaybeAwaitable[T]) -> T:
+    if inspect.isawaitable(value):
+        return await value
+    return value
