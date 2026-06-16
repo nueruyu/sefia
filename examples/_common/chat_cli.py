@@ -7,6 +7,7 @@ from rich.console import Console
 from sefios import SefiaScope
 from typing_extensions import Annotated
 
+from .human_input import ChatHumanInputAdapter
 from .runner import run_workflow
 from .session import ChatSession, SessionManager
 
@@ -16,6 +17,7 @@ def create_app(
     session_manager: SessionManager,
     session_dir: Path,
     help_text: str,
+    human_input: ChatHumanInputAdapter | None = None,
 ) -> typer.Typer:
     """
     Creates a Typer application with common chat and session management commands.
@@ -102,6 +104,7 @@ def create_app(
                 workflow_coro=workflow_coro,
                 input_text=input_text,
                 is_new=chat_session.is_new,
+                human_input=human_input,
             )
         )
 
