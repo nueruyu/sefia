@@ -29,7 +29,6 @@ class SessionManager:
     def __init__(self, session_dir: Path):
         self._active_session_file = session_dir / "active_session.txt"
         self._sessions_file = session_dir / "sessions.txt"
-        self._glyff_sessions_dir = session_dir / "glyff_sessions"
         session_dir.mkdir(exist_ok=True)
 
     def get_active_session_id(self) -> str | None:
@@ -49,15 +48,7 @@ class SessionManager:
 
     def session_exists(self, session_id: str) -> bool:
         """Returns whether the session is known to this CLI workspace."""
-        if session_id in self._read_registered_session_ids():
-            return True
-
-        # Backward-compatibility for sessions created before the CLI registry existed.
-        if (self._glyff_sessions_dir / session_id).exists():
-            self._register_session(session_id)
-            return True
-
-        return False
+        return session_id in self._read_registered_session_ids()
 
     def switch_active_session(self, session_id: str) -> str:
         """Switches the active session and returns its ID."""
