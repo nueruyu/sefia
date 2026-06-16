@@ -22,12 +22,8 @@ async def initialize_workflow(initial_input: str) -> None:
 async def run_workflow(
     *,
     workflow_coro: Callable[[str], Coroutine[Any, Any, None]],
-    session_id: str,
     input_text: str,
     is_new: bool,
-    model: str,
-    verbose: bool,
-    stream: bool = True,
 ) -> None:
     """
     Runs the main application logic within a Sefia session context.
