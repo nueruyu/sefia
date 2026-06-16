@@ -23,7 +23,7 @@ def create_app(
     """
     app = typer.Typer(help=help_text)
     console = Console()
-    sefia_scope = SefiaScope(session_dir=session_dir, default_stream=True)
+    sefia_scope = SefiaScope(session_dir=session_dir, stream=True)
     scoped_run_workflow = sefia_scope(run_workflow)
 
     session_app = typer.Typer(help="Manage user sessions.")
