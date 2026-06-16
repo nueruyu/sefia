@@ -5,6 +5,7 @@ from glyff.exceptions import YieldException
 from rich.console import Console
 from sefia import get_context
 
+from .human_input import ChatHumanInputAdapter
 from .ui import print_session_interrupted_hint
 from .workflow import WorkflowState
 
@@ -24,6 +25,7 @@ async def run_workflow(
     workflow_coro: Callable[[str], Coroutine[Any, Any, None]],
     input_text: str,
     is_new: bool,
+    human_input: ChatHumanInputAdapter | None = None,
 ) -> None:
     """
     Runs the main application logic within a Sefia session context.
@@ -32,17 +34,13 @@ async def run_workflow(
     forwarding, and exception handling for a given workflow coroutine.
     """
     try:
-        session = get_context()
-        pending = await session.session_store.get("pending_human_interaction", dict)
-        if pending and not is_new:
-            interaction_id = pending["id"]
-            await session.session_store.set(
-                f"human_input__{interaction_id}", input_text, str
-            )
+        if human_input is not None:
+            await human_input.receive_input(input_text, is_new=is_new)
 
         if is_new:
             await initialize_workflow(input_text)
 
+        session = get_context()
         state_store = session.get_state_store("workflow_state", WorkflowState)
         state = await state_store.ensure()
 
