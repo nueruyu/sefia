@@ -4,8 +4,18 @@ import functools
 import inspect
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Protocol, TypeVar, cast
+from typing import (
+    Annotated,
+    Any,
+    Protocol,
+    TypeVar,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 import typer
 from glyff.exceptions import YieldException
@@ -20,6 +30,14 @@ from .workflow import WorkflowState
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 _USE_DEFAULT_REPORTER = object()
+
+
+class CLIParam(Enum):
+    """Marks command parameters consumed by SefiaCLI."""
+
+    SESSION_ID = auto()
+    MODEL = auto()
+    VERBOSE = auto()
 
 
 @dataclass(frozen=True)
@@ -191,13 +209,17 @@ class SefiaCLI:
 
         def decorator(inner: Callable[..., T]) -> Callable[..., Any]:
             signature = inspect.signature(inner)
+            cli_param_names = _find_cli_param_names(inner)
+            session_id_param = cli_param_names.get(CLIParam.SESSION_ID, session_id_arg)
+            model_param = cli_param_names.get(CLIParam.MODEL, model_arg)
+            verbose_param = cli_param_names.get(CLIParam.VERBOSE, verbose_arg)
 
             @functools.wraps(inner)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
                 bound = signature.bind(*args, **kwargs)
                 bound.apply_defaults()
 
-                session_id = bound.arguments.get(session_id_arg)
+                session_id = bound.arguments.get(session_id_param)
                 resolved_session = self._session_manager.resolve_session(session_id)
 
                 run_kwargs: dict[str, Any] = {
@@ -206,10 +228,10 @@ class SefiaCLI:
                     "bound": bound,
                     "resolved_session": resolved_session,
                 }
-                if model_arg in bound.arguments:
-                    run_kwargs["model"] = bound.arguments[model_arg]
-                if verbose_arg in bound.arguments:
-                    run_kwargs["verbose"] = bound.arguments[verbose_arg]
+                if model_param in bound.arguments:
+                    run_kwargs["model"] = bound.arguments[model_param]
+                if verbose_param in bound.arguments:
+                    run_kwargs["verbose"] = bound.arguments[verbose_param]
 
                 return asyncio.run(self._scoped_run(**run_kwargs))
 
@@ -294,6 +316,27 @@ class SefiaCLI:
         if isinstance(input_value, str):
             return input_value.strip()
         return " ".join(input_value).strip()
+
+
+def _find_cli_param_names(func: Callable[..., Any]) -> dict[CLIParam, str]:
+    hints = get_type_hints(func, include_extras=True)
+    result: dict[CLIParam, str] = {}
+
+    for name, hint in hints.items():
+        if get_origin(hint) is not Annotated:
+            continue
+
+        for metadata in get_args(hint)[1:]:
+            if not isinstance(metadata, CLIParam):
+                continue
+
+            if metadata in result:
+                raise TypeError(
+                    f"Duplicate Sefia CLI parameter marker: {metadata.name}."
+                )
+            result[metadata] = name
+
+    return result
 
 
 async def _maybe_await(value: MaybeAwaitable[T]) -> T:
