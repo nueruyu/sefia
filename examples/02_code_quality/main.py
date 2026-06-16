@@ -48,7 +48,9 @@ def print_session_resolved(session: ResolvedSession) -> None:
 
 
 def print_human_input_request(request: HumanInputRequest) -> None:
-    console.print(f"\n[bold yellow][USER_INPUT_REQUIRED][/bold yellow] {request.question}\n")
+    console.print(
+        f"\n[bold yellow][USER_INPUT_REQUIRED][/bold yellow] {request.question}\n"
+    )
 
 
 sefia_cli = SefiaCLI(
@@ -91,7 +93,10 @@ def new_session():
 
 @session_app.command("switch")
 def switch_session(
-    session_id: Annotated[str, typer.Argument(help="The ID of the session to switch to.")],
+    session_id: Annotated[
+        str,
+        typer.Argument(help="The ID of the session to switch to."),
+    ],
 ):
     """Switch the active session."""
     try:
