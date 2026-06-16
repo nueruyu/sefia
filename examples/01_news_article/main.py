@@ -30,7 +30,9 @@ def print_session_resolved(session: ResolvedSession) -> None:
 
 
 def print_human_input_request(request: HumanInputRequest) -> None:
-    console.print(f"\n[bold yellow][USER_INPUT_REQUIRED][/bold yellow] {request.question}\n")
+    console.print(
+        f"\n[bold yellow][USER_INPUT_REQUIRED][/bold yellow] {request.question}\n"
+    )
 
 
 sefia_cli = SefiaCLI(
@@ -48,7 +50,9 @@ clarifier = RequirementsClarifier(human_input_tool)
 researcher = Researcher(WebSearchTool())
 writer = NewsWriter(human_input_tool, researcher)
 
-app = typer.Typer(help="A multi-agent workflow for generating news articles with human-in-the-loop.")
+app = typer.Typer(
+    help="A multi-agent workflow for generating news articles with human-in-the-loop."
+)
 session_app = typer.Typer(help="Manage sessions.")
 app.add_typer(session_app, name="session")
 
@@ -62,7 +66,10 @@ def new_session():
 
 @session_app.command("switch")
 def switch_session(
-    session_id: Annotated[str, typer.Argument(help="The ID of the session to switch to.")],
+    session_id: Annotated[
+        str,
+        typer.Argument(help="The ID of the session to switch to."),
+    ],
 ):
     """Switch the active session."""
     try:
