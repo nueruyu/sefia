@@ -21,11 +21,13 @@ class SefiaScope:
         default_model: str | None = None,
         llm_client: LLMClient | None = None,
         default_policies: list[Policy] | None = None,
+        max_steps: int | None = 25,
     ):
         self.session_dir = session_dir
         self.default_model = default_model
         self.llm_client = llm_client
         self.default_policies = list(default_policies or [])
+        self.max_steps = max_steps
 
     def __call__(
         self, func: Callable[..., Coroutine[Any, Any, Any]]
@@ -47,6 +49,7 @@ class SefiaScope:
             model = kwargs.get("model", self.default_model)
             stream = kwargs.get("stream", False)
             verbose = kwargs.get("verbose", False)
+            max_steps = kwargs.get("max_steps", self.max_steps)
             policies = list(self.default_policies)
 
             async with create_session(
@@ -57,6 +60,7 @@ class SefiaScope:
                 stream=stream,
                 verbose=verbose,
                 policies=policies,
+                max_steps=max_steps,
             ):
                 return await func(*args, **kwargs)
 
