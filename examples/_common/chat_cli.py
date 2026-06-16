@@ -1,5 +1,4 @@
 import asyncio
-import sys
 from pathlib import Path
 from typing import Any, Callable, Coroutine
 
@@ -9,7 +8,7 @@ from sefios import SefiaScope
 from typing_extensions import Annotated
 
 from .runner import run_workflow
-from .session import SessionManager
+from .session import ChatSession, SessionManager
 
 
 def create_app(
@@ -26,6 +25,14 @@ def create_app(
     sefia_scope = SefiaScope(session_dir=session_dir, stream=True)
     scoped_run_workflow = sefia_scope(run_workflow)
 
+    def print_chat_session_status(session: ChatSession) -> None:
+        if session.source == "created":
+            console.print(
+                f"[bold]> No active session. Starting new session: {session.session_id}[/bold]"
+            )
+        elif session.source == "active":
+            console.print(f"[bold]> Resuming session {session.session_id}[/bold]")
+
     session_app = typer.Typer(help="Manage user sessions.")
     app.add_typer(session_app, name="session")
 
@@ -38,7 +45,7 @@ def create_app(
         """
         Switch the active session.
         """
-        session_manager.set_active_session_id(session_id)
+        session_id = session_manager.switch_active_session(session_id)
         console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 
     @session_app.command("new")
@@ -46,8 +53,7 @@ def create_app(
         """
         Create a new session and make it active.
         """
-        session_id = session_manager.create_new_session_id()
-        session_manager.set_active_session_id(session_id)
+        session_id = session_manager.create_new_active_session()
         console.print(
             f"[bold]> Created and switched to new session: {session_id}[/bold]"
         )
@@ -55,11 +61,11 @@ def create_app(
     @app.command()
     def chat(
         message: Annotated[
-            list[str] | None,
+            list[str],
             typer.Argument(
                 help="The input for a new session, or an answer to resume an existing one."
             ),
-        ] = None,
+        ],
         session_id: Annotated[
             str | None,
             typer.Option(
@@ -84,36 +90,18 @@ def create_app(
         """
         Start a new workflow or provide an answer to continue the current session.
         """
-        input_text = " ".join(message or []).strip()
-
-        if not input_text and not sys.stdin.isatty():
-            input_text = sys.stdin.read().strip()
-
-        if not input_text:
-            console.print("[bold red]Error:[/bold red] Message cannot be empty.")
-            raise typer.Exit(code=1)
-
-        is_new = False
-        if session_id is None:
-            session_id = session_manager.get_active_session_id()
-            if session_id is None:
-                session_id = session_manager.create_new_session_id()
-                console.print(
-                    f"[bold]> No active session. Starting new session: {session_id}[/bold]"
-                )
-                session_manager.set_active_session_id(session_id)
-                is_new = True
-            else:
-                console.print(f"[bold]> Resuming session {session_id}[/bold]")
+        input_text = " ".join(message).strip()
+        chat_session = session_manager.prepare_chat_session(session_id)
+        print_chat_session_status(chat_session)
 
         asyncio.run(
             scoped_run_workflow(
-                session_id=session_id,
+                session_id=chat_session.session_id,
                 model=model,
                 verbose=verbose,
                 workflow_coro=workflow_coro,
                 input_text=input_text,
-                is_new=is_new,
+                is_new=chat_session.is_new,
             )
         )
 
