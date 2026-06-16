@@ -66,7 +66,6 @@ class SefiaCLI:
         verbose: bool = False,
         max_steps: int | None = 25,
     ):
-        self._session_dir = session_dir
         self._session_manager = SessionManager(session_dir)
         self._human_input = human_input_adapter or CLIHumanInputAdapter()
         self._human_input_tool = self._human_input.create_tool()
@@ -185,7 +184,8 @@ class SefiaCLI:
         bound: inspect.BoundArguments,
         resolved_session: ResolvedSession,
     ) -> None:
-        token = self._invocation_var.set(_CLIInvocation(resolved_session=resolved_session))
+        invocation = _CLIInvocation(resolved_session=resolved_session)
+        token = self._invocation_var.set(invocation)
 
         try:
             await self._emit_session_resolved(resolved_session)
