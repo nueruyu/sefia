@@ -178,7 +178,10 @@ async def chat(
     ],
     session: Annotated[
         str | None,
-        typer.Option("--session-id", help="The session ID to use. If not provided, uses the active session."),
+        typer.Option(
+            "--session-id",
+            help="The session ID to use. If not provided, uses the active session.",
+        ),
         CLIParam.SESSION_ID,
     ] = None,
     llm: Annotated[
