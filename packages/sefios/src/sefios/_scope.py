@@ -21,12 +21,16 @@ class SefiaScope:
         default_model: str | None = None,
         llm_client: LLMClient | None = None,
         default_policies: list[Policy] | None = None,
+        default_stream: bool = False,
+        default_verbose: bool = False,
         max_steps: int | None = 25,
     ):
         self.session_dir = session_dir
         self.default_model = default_model
         self.llm_client = llm_client
         self.default_policies = list(default_policies or [])
+        self.default_stream = default_stream
+        self.default_verbose = default_verbose
         self.max_steps = max_steps
 
     def __call__(
@@ -34,22 +38,21 @@ class SefiaScope:
     ) -> Callable[..., Coroutine[Any, Any, Any]]:
         """
         Decorator that wraps an async function to run within a sefia session.
-        It pulls session-related parameters from the decorated function's
-        keyword arguments.
+        It consumes session-related keyword arguments before calling the wrapped
+        function.
         """
 
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            session_id = kwargs.get("session_id")
+            session_id = kwargs.pop("session_id", None)
             if not session_id or not isinstance(session_id, str):
                 raise TypeError(
-                    "The decorated function must have a 'session_id: str' keyword argument."
+                    "The decorated function must be called with a 'session_id: str' keyword argument."
                 )
 
-            model = kwargs.get("model", self.default_model)
-            stream = kwargs.get("stream", False)
-            verbose = kwargs.get("verbose", False)
-            max_steps = kwargs.get("max_steps", self.max_steps)
+            model = kwargs.pop("model", self.default_model)
+            stream = kwargs.pop("stream", self.default_stream)
+            verbose = kwargs.pop("verbose", self.default_verbose)
             policies = list(self.default_policies)
 
             async with create_session(
@@ -60,7 +63,7 @@ class SefiaScope:
                 stream=stream,
                 verbose=verbose,
                 policies=policies,
-                max_steps=max_steps,
+                max_steps=self.max_steps,
             ):
                 return await func(*args, **kwargs)
 
