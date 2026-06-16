@@ -144,22 +144,21 @@ class SefiaCLI:
                 bound.apply_defaults()
 
                 session_id = bound.arguments.get(session_id_arg)
-                model = bound.arguments.get(model_arg)
-                verbose = bound.arguments.get(verbose_arg, False)
-
                 chat_session = self.session_manager.prepare_chat_session(session_id)
                 self._print_session_status(chat_session)
 
-                return asyncio.run(
-                    self._scoped_run(
-                        session_id=chat_session.session_id,
-                        model=model,
-                        verbose=verbose,
-                        func=inner,
-                        bound=bound,
-                        chat_session=chat_session,
-                    )
-                )
+                run_kwargs: dict[str, Any] = {
+                    "session_id": chat_session.session_id,
+                    "func": inner,
+                    "bound": bound,
+                    "chat_session": chat_session,
+                }
+                if model_arg in bound.arguments:
+                    run_kwargs["model"] = bound.arguments[model_arg]
+                if verbose_arg in bound.arguments:
+                    run_kwargs["verbose"] = bound.arguments[verbose_arg]
+
+                return asyncio.run(self._scoped_run(**run_kwargs))
 
             wrapper.__signature__ = signature  # type: ignore[attr-defined]
             return wrapper
