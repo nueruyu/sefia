@@ -23,6 +23,7 @@ async def create_session(
     stream: bool = False,
     verbose: bool = False,
     policies: list[Policy] | None = None,
+    max_steps: int | None = 25,
 ) -> AsyncIterator[sefia.Session]:
     """Sets up and provides a Sefia session."""
     if llm_client is None:
@@ -55,7 +56,8 @@ async def create_session(
     )
 
     final_policies: list[Policy] = list(policies) if policies is not None else []
-    final_policies.append(MaxSteps(count=25))
+    if max_steps is not None:
+        final_policies.append(MaxSteps(count=max_steps))
     if stream:
         from .core.policies._streaming import StreamingPolicy
 
