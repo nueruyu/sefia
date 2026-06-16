@@ -23,7 +23,7 @@ def create_app(
     """
     app = typer.Typer(help=help_text)
     console = Console()
-    sefia_scope = SefiaScope(session_dir=session_dir)
+    sefia_scope = SefiaScope(session_dir=session_dir, default_stream=True)
     scoped_run_workflow = sefia_scope(run_workflow)
 
     session_app = typer.Typer(help="Manage user sessions.")
@@ -108,13 +108,12 @@ def create_app(
 
         asyncio.run(
             scoped_run_workflow(
-                workflow_coro=workflow_coro,
                 session_id=session_id,
-                input_text=input_text,
-                is_new=is_new,
                 model=model,
                 verbose=verbose,
-                stream=True,
+                workflow_coro=workflow_coro,
+                input_text=input_text,
+                is_new=is_new,
             )
         )
 
