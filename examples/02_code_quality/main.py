@@ -9,7 +9,7 @@ from rich.panel import Panel
 from sefia import get_context
 from typing_extensions import Annotated
 
-from .._common.sefia_cli import SefiaCLI
+from .._common.sefia_cli import CLIParam, SefiaCLI
 from .._common.session import UnknownSessionError
 from .agents import (
     CodingStyleAuditor,
@@ -176,23 +176,27 @@ async def chat(
             help="The input for a new session, or an answer to resume an existing one."
         ),
     ],
-    session_id: Annotated[
+    session: Annotated[
         str | None,
-        typer.Option(help="The session ID to use. If not provided, uses the active session."),
+        typer.Option("--session-id", help="The session ID to use. If not provided, uses the active session."),
+        CLIParam.SESSION_ID,
     ] = None,
-    model: Annotated[
+    llm: Annotated[
         str,
         typer.Option(
+            "--model",
             help="The LLM model to use. Can also be set via EXAMPLE_DEFAULT_MODEL env var.",
             envvar="EXAMPLE_DEFAULT_MODEL",
         ),
+        CLIParam.MODEL,
     ] = "gpt-4o",
-    verbose: Annotated[
+    debug: Annotated[
         bool,
         typer.Option(
             "--verbose",
             help="Enable verbose output for debugging, including LLM prompts.",
         ),
+        CLIParam.VERBOSE,
     ] = False,
 ):
     """Start a new workflow or provide an answer to continue the current session."""
