@@ -4,19 +4,21 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefios.tools import HumanInputTool, WebSearchTool
+from sefios.tools import WebSearchTool
 
 from .._common.chat_cli import create_app
+from .._common.human_input import ChatHumanInputAdapter
 from .._common.session import SessionManager
 from .agents import NewsWriter, RequirementsClarifier, Researcher
 from .models import ArticleRequest, NewsArticle
 from .rendering import render_article_request, render_news_article
 
-clarifier = RequirementsClarifier(HumanInputTool())
-researcher = Researcher(WebSearchTool())
-writer = NewsWriter(HumanInputTool(), researcher)
-
 console = Console()
+human_input_tool = ChatHumanInputAdapter(console).create_tool()
+
+clarifier = RequirementsClarifier(human_input_tool)
+researcher = Researcher(WebSearchTool())
+writer = NewsWriter(human_input_tool, researcher)
 
 
 @engrave
