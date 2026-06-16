@@ -3,14 +3,6 @@ import asyncio
 from pydantic import BaseModel, Field
 from sefia import tool
 
-try:
-    from ddgs import DDGS
-except ImportError as e:
-    raise ImportError(
-        "The 'web' extra is required to use the WebSearchTool. "
-        "Please install it with: pip install 'sefios[web]'"
-    ) from e
-
 
 class WebSearchResult(BaseModel):
     """Represents a single web search result."""
@@ -33,6 +25,14 @@ class WebSearchTool:
         """
 
         def _sync_search():
+            try:
+                from ddgs import DDGS
+            except ImportError as e:
+                raise ImportError(
+                    "The 'web' extra is required to use the WebSearchTool. "
+                    "Please install it with: pip install 'sefios[web]'"
+                ) from e
+
             with DDGS() as ddgs:
                 return list(ddgs.text(query, max_results=max_results))
 
