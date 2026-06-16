@@ -7,9 +7,13 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from sefia import get_context
+from sefios.tools import HumanInputRequest
 from typing_extensions import Annotated
 
-from .._common.sefia_cli import SefiaCLI
+from .._common.human_input import CLIHumanInputAdapter
+from .._common.sefia_cli import SefiaCLI, SefiaCLIEvents
+from .._common.session import ResolvedSession, UnknownSessionError
+from .._common.ui import print_session_interrupted_hint
 from .agents import (
     CodingStyleAuditor,
     DependencySpecialist,
@@ -32,7 +36,30 @@ from .tools import FileTool, GitTool
 
 console = Console()
 SESSION_DIR = Path(__file__).parent / ".local"
-sefia_cli = SefiaCLI(session_dir=SESSION_DIR, console=console, stream=True)
+
+
+def print_session_resolved(session: ResolvedSession) -> None:
+    if session.source == "created":
+        console.print(
+            f"[bold]> No active session. Starting new session: {session.session_id}[/bold]"
+        )
+    elif session.source == "active":
+        console.print(f"[bold]> Resuming session {session.session_id}[/bold]")
+
+
+def print_human_input_request(request: HumanInputRequest) -> None:
+    console.print(f"\n[bold yellow][USER_INPUT_REQUIRED][/bold yellow] {request.question}\n")
+
+
+sefia_cli = SefiaCLI(
+    session_dir=SESSION_DIR,
+    human_input_adapter=CLIHumanInputAdapter(on_request=print_human_input_request),
+    events=SefiaCLIEvents(
+        on_session_resolved=print_session_resolved,
+        on_interrupted=lambda _state: print_session_interrupted_hint(console),
+    ),
+    stream=True,
+)
 human_input_tool = sefia_cli.human_input_tool
 
 git_tool = GitTool()
@@ -67,7 +94,12 @@ def switch_session(
     session_id: Annotated[str, typer.Argument(help="The ID of the session to switch to.")],
 ):
     """Switch the active session."""
-    session_id = sefia_cli.switch_session(session_id)
+    try:
+        session_id = sefia_cli.switch_session(session_id)
+    except UnknownSessionError as e:
+        console.print(f"[bold red]> Unknown session:[/bold red] {e.session_id}")
+        raise typer.Exit(code=1) from e
+
     console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 
 
@@ -187,9 +219,9 @@ async def chat(
     ] = False,
 ):
     """Start a new workflow or provide an answer to continue the current session."""
-    initial_input = await sefia_cli.accept_input(message)
+    session_state = await sefia_cli.accept_input(message)
 
-    scope = await _define_scope(initial_input)
+    scope = await _define_scope(session_state.initial_input)
     understanding = await _understand_project(scope)
     review_files = await _confirm_review_files(scope, understanding)
 
