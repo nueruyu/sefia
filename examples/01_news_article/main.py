@@ -14,7 +14,8 @@ from .models import ArticleRequest, NewsArticle
 from .rendering import render_article_request, render_news_article
 
 console = Console()
-human_input_tool = ChatHumanInputAdapter(console).create_tool()
+human_input = ChatHumanInputAdapter(console)
+human_input_tool = human_input.create_tool()
 
 clarifier = RequirementsClarifier(human_input_tool)
 researcher = Researcher(WebSearchTool())
@@ -68,6 +69,7 @@ app = create_app(
     session_manager=session_manager,
     session_dir=SESSION_DIR,
     help_text="A multi-agent workflow for generating news articles with human-in-the-loop.",
+    human_input=human_input,
 )
 
 
