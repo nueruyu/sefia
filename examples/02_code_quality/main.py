@@ -31,7 +31,8 @@ from .rendering import render_quality_report
 from .tools import FileTool, GitTool
 
 console = Console()
-human_input_tool = ChatHumanInputAdapter(console).create_tool()
+human_input = ChatHumanInputAdapter(console)
+human_input_tool = human_input.create_tool()
 git_tool = GitTool()
 file_tool = FileTool()
 
@@ -164,6 +165,7 @@ app = create_app(
     session_manager=session_manager,
     session_dir=SESSION_DIR,
     help_text="A multi-agent workflow for code quality review.",
+    human_input=human_input,
 )
 
 
