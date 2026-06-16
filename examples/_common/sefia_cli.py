@@ -57,17 +57,20 @@ class CLIReporter(Protocol):
     def on_session_resolved(
         self,
         session: ResolvedSession,
-    ) -> MaybeAwaitable[None]: ...
+    ) -> MaybeAwaitable[None]:
+        ...
 
     def on_human_input_request(
         self,
         request: HumanInputRequest,
-    ) -> MaybeAwaitable[None]: ...
+    ) -> MaybeAwaitable[None]:
+        ...
 
     def on_interrupted(
         self,
         state: CLISessionState | None,
-    ) -> MaybeAwaitable[None]: ...
+    ) -> MaybeAwaitable[None]:
+        ...
 
 
 class DefaultCLIReporter:
