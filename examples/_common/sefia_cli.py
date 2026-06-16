@@ -5,13 +5,13 @@ import inspect
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Protocol, TypeVar, cast
 
 import typer
 from glyff.exceptions import YieldException
 from sefia import get_context
 from sefios import SefiaScope
-from sefios.tools import HumanInputTool
+from sefios.tools import HumanInputRequest, HumanInputTool
 
 from .human_input import CLIHumanInputAdapter
 from .session import ResolvedSession, SessionManager, SessionSource
@@ -19,6 +19,7 @@ from .workflow import WorkflowState
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
+_USE_DEFAULT_REPORTER = object()
 
 
 @dataclass(frozen=True)
@@ -32,12 +33,53 @@ class CLISessionState:
     initial_input: str
 
 
-@dataclass(frozen=True)
-class SefiaCLIEvents:
-    """Callbacks for UI or host-specific CLI behavior."""
+class CLIReporter(Protocol):
+    """Receives CLI lifecycle events and renders them for the host application."""
 
-    on_session_resolved: Callable[[ResolvedSession], MaybeAwaitable[None]] | None = None
-    on_interrupted: Callable[[CLISessionState | None], MaybeAwaitable[None]] | None = None
+    def on_session_resolved(
+        self,
+        session: ResolvedSession,
+    ) -> MaybeAwaitable[None]: ...
+
+    def on_human_input_request(
+        self,
+        request: HumanInputRequest,
+    ) -> MaybeAwaitable[None]: ...
+
+    def on_interrupted(
+        self,
+        state: CLISessionState | None,
+    ) -> MaybeAwaitable[None]: ...
+
+
+class DefaultCLIReporter:
+    """Default CLI reporter using Typer's standard terminal output helpers."""
+
+    def on_session_resolved(self, session: ResolvedSession) -> None:
+        if session.source == "created":
+            typer.secho(
+                f"> No active session. Starting new session: {session.session_id}",
+                bold=True,
+            )
+        elif session.source == "active":
+            typer.secho(f"> Resuming session {session.session_id}", bold=True)
+
+    def on_human_input_request(self, request: HumanInputRequest) -> None:
+        typer.echo()
+        typer.secho(
+            "[USER_INPUT_REQUIRED]",
+            fg=typer.colors.YELLOW,
+            bold=True,
+            nl=False,
+        )
+        typer.echo(f" {request.question}")
+        typer.echo()
+
+    def on_interrupted(self, state: CLISessionState | None) -> None:
+        typer.echo()
+        typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
+        typer.echo("Session interrupted to wait for your input.")
+        typer.echo("To resume, run the script again with your answer.")
 
 
 @dataclass(frozen=True)
@@ -60,16 +102,18 @@ class SefiaCLI:
         *,
         session_dir: Path,
         human_input_adapter: CLIHumanInputAdapter | None = None,
-        events: SefiaCLIEvents | None = None,
+        reporter: CLIReporter | None | object = _USE_DEFAULT_REPORTER,
         model: str | None = None,
         stream: bool = True,
         verbose: bool = False,
         max_steps: int | None = 25,
     ):
+        self._reporter = self._resolve_reporter(reporter)
         self._session_manager = SessionManager(session_dir)
-        self._human_input = human_input_adapter or CLIHumanInputAdapter()
+        self._human_input = human_input_adapter or CLIHumanInputAdapter(
+            on_request=self._report_human_input_request,
+        )
         self._human_input_tool = self._human_input.create_tool()
-        self._events = events or SefiaCLIEvents()
 
         self._sefia_scope = SefiaScope(
             session_dir=session_dir,
@@ -188,7 +232,7 @@ class SefiaCLI:
         token = self._invocation_var.set(invocation)
 
         try:
-            await self._emit_session_resolved(resolved_session)
+            await self._report_session_resolved(resolved_session)
 
             result = func(*bound.args, **bound.kwargs)
             if inspect.isawaitable(result):
@@ -202,7 +246,7 @@ class SefiaCLI:
 
         except YieldException:
             invocation = self._invocation_var.get()
-            await self._emit_interrupted(
+            await self._report_interrupted(
                 invocation.session_state if invocation is not None else None
             )
             raise typer.Exit(code=0)
@@ -227,13 +271,23 @@ class SefiaCLI:
             raise RuntimeError("No active Sefia CLI invocation.")
         return invocation
 
-    async def _emit_session_resolved(self, session: ResolvedSession) -> None:
-        if self._events.on_session_resolved is not None:
-            await _maybe_await(self._events.on_session_resolved(session))
+    async def _report_session_resolved(self, session: ResolvedSession) -> None:
+        if self._reporter is not None:
+            await _maybe_await(self._reporter.on_session_resolved(session))
 
-    async def _emit_interrupted(self, state: CLISessionState | None) -> None:
-        if self._events.on_interrupted is not None:
-            await _maybe_await(self._events.on_interrupted(state))
+    async def _report_human_input_request(self, request: HumanInputRequest) -> None:
+        if self._reporter is not None:
+            await _maybe_await(self._reporter.on_human_input_request(request))
+
+    async def _report_interrupted(self, state: CLISessionState | None) -> None:
+        if self._reporter is not None:
+            await _maybe_await(self._reporter.on_interrupted(state))
+
+    @staticmethod
+    def _resolve_reporter(reporter: CLIReporter | None | object) -> CLIReporter | None:
+        if reporter is _USE_DEFAULT_REPORTER:
+            return DefaultCLIReporter()
+        return cast(CLIReporter | None, reporter)
 
     @staticmethod
     def _to_input_text(input_value: str | list[str]) -> str:
