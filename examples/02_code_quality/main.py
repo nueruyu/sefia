@@ -1,15 +1,15 @@
 import asyncio
 from pathlib import Path
 
+import typer
 from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from sefia import get_context
+from typing_extensions import Annotated
 
-from .._common.chat_cli import create_app
-from .._common.human_input import ChatHumanInputAdapter
-from .._common.session import SessionManager
+from .._common.sefia_cli import SefiaCLI
 from .agents import (
     CodingStyleAuditor,
     DependencySpecialist,
@@ -31,8 +31,10 @@ from .rendering import render_quality_report
 from .tools import FileTool, GitTool
 
 console = Console()
-human_input = ChatHumanInputAdapter(console)
-human_input_tool = human_input.create_tool()
+SESSION_DIR = Path(__file__).parent / ".local"
+sefia_cli = SefiaCLI(session_dir=SESSION_DIR, console=console, stream=True)
+human_input_tool = sefia_cli.human_input_tool
+
 git_tool = GitTool()
 file_tool = FileTool()
 
@@ -47,6 +49,26 @@ review_agents = {
     ReviewPerspective.MAINTAINABILITY: MaintainabilityAssessor(),
     ReviewPerspective.DEPENDENCIES: DependencySpecialist(),
 }
+
+app = typer.Typer(help="A multi-agent workflow for code quality review.")
+session_app = typer.Typer(help="Manage sessions.")
+app.add_typer(session_app, name="session")
+
+
+@session_app.command("new")
+def new_session():
+    """Create a new session and make it active."""
+    session_id = sefia_cli.create_session()
+    console.print(f"[bold]> Created and switched to new session: {session_id}[/bold]")
+
+
+@session_app.command("switch")
+def switch_session(
+    session_id: Annotated[str, typer.Argument(help="The ID of the session to switch to.")],
+):
+    """Switch the active session."""
+    session_id = sefia_cli.switch_session(session_id)
+    console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 
 
 @engrave
@@ -136,8 +158,37 @@ async def _create_report(
     return await reporting_agent.create_report(issues, understanding)
 
 
-async def code_quality_workflow(initial_input: str) -> None:
-    """Orchestrates the code quality review workflow."""
+@app.command()
+@sefia_cli.scope
+async def chat(
+    message: Annotated[
+        list[str],
+        typer.Argument(
+            help="The input for a new session, or an answer to resume an existing one."
+        ),
+    ],
+    session_id: Annotated[
+        str | None,
+        typer.Option(help="The session ID to use. If not provided, uses the active session."),
+    ] = None,
+    model: Annotated[
+        str,
+        typer.Option(
+            help="The LLM model to use. Can also be set via EXAMPLE_DEFAULT_MODEL env var.",
+            envvar="EXAMPLE_DEFAULT_MODEL",
+        ),
+    ] = "gpt-4o",
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            help="Enable verbose output for debugging, including LLM prompts.",
+        ),
+    ] = False,
+):
+    """Start a new workflow or provide an answer to continue the current session."""
+    initial_input = await sefia_cli.accept_input(message)
+
     scope = await _define_scope(initial_input)
     understanding = await _understand_project(scope)
     review_files = await _confirm_review_files(scope, understanding)
@@ -156,17 +207,6 @@ async def code_quality_workflow(initial_input: str) -> None:
             border_style="green",
         )
     )
-
-
-SESSION_DIR = Path(__file__).parent / ".local"
-session_manager = SessionManager(SESSION_DIR)
-app = create_app(
-    workflow_coro=code_quality_workflow,
-    session_manager=session_manager,
-    session_dir=SESSION_DIR,
-    help_text="A multi-agent workflow for code quality review.",
-    human_input=human_input,
-)
 
 
 if __name__ == "__main__":
