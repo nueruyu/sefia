@@ -3,10 +3,8 @@ from textwrap import dedent
 from rich.console import Console
 from rich.panel import Panel
 
-console = Console()
 
-
-def print_session_interrupted_hint() -> None:
+def print_session_interrupted_hint(console: Console) -> None:
     """Prints a standardized hint to the console when a session is interrupted."""
     hint = dedent(
         """
