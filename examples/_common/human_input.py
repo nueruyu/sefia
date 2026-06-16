@@ -18,6 +18,23 @@ class ChatHumanInputAdapter:
             on_complete=self.on_complete,
         )
 
+    async def receive_input(self, input_text: str, *, is_new: bool) -> None:
+        """Stores the chat input as the answer for a pending human interaction."""
+        if is_new:
+            return
+
+        pending = await self.get_pending_request()
+        if pending is None:
+            return
+
+        interaction_id = pending["id"]
+        session_store = get_context().session_store
+        await session_store.set(self._answer_key(interaction_id), input_text, str)
+
+    async def get_pending_request(self) -> dict | None:
+        session_store = get_context().session_store
+        return await session_store.get(_PENDING_HUMAN_INTERACTION_KEY, dict)
+
     async def get_answer(self, request: HumanInputRequest) -> str | None:
         session_store = get_context().session_store
         return await session_store.get(self._answer_key(request.interaction_id), str)
