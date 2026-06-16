@@ -30,6 +30,9 @@ from .workflow import WorkflowState
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 _USE_DEFAULT_REPORTER = object()
+_DEFAULT_SESSION_ID_PARAM = "session_id"
+_DEFAULT_MODEL_PARAM = "model"
+_DEFAULT_VERBOSE_PARAM = "verbose"
 
 
 class CLIParam(Enum):
@@ -200,22 +203,18 @@ class SefiaCLI:
         """Return the active CLI session ID, if any."""
         return self._session_manager.get_active_session_id()
 
-    def scope(
-        self,
-        func: Callable[..., T] | None = None,
-        *,
-        session_id_arg: str = "session_id",
-        model_arg: str = "model",
-        verbose_arg: str = "verbose",
-    ):
+    def scope(self, func: Callable[..., T] | None = None):
         """Decorate a Typer command callback to run inside a Sefia CLI scope."""
 
         def decorator(inner: Callable[..., T]) -> Callable[..., Any]:
             signature = inspect.signature(inner)
             cli_param_names = _find_cli_param_names(inner)
-            session_id_param = cli_param_names.get(CLIParam.SESSION_ID, session_id_arg)
-            model_param = cli_param_names.get(CLIParam.MODEL, model_arg)
-            verbose_param = cli_param_names.get(CLIParam.VERBOSE, verbose_arg)
+            session_id_param = cli_param_names.get(
+                CLIParam.SESSION_ID,
+                _DEFAULT_SESSION_ID_PARAM,
+            )
+            model_param = cli_param_names.get(CLIParam.MODEL, _DEFAULT_MODEL_PARAM)
+            verbose_param = cli_param_names.get(CLIParam.VERBOSE, _DEFAULT_VERBOSE_PARAM)
 
             @functools.wraps(inner)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
