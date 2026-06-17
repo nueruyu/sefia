@@ -8,7 +8,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from typing_extensions import Annotated
 
-from .._common.sefia_cli import CLIParam, SefiaCLI
+from .._common.sefia_cli import SefiaCLI
 from .._common.session import UnknownSessionError
 from .agents import (
     CodingStyleAuditor,
@@ -167,14 +167,12 @@ async def _create_report(
 
 
 @app.command()
-@sefia_cli.scope
-async def chat(
+def chat(
     message: Annotated[
         list[str],
         typer.Argument(
             help="The input for a new session, or an answer to resume an existing one."
         ),
-        CLIParam.INPUT,
     ],
     reply_to: Annotated[
         str | None,
@@ -182,7 +180,6 @@ async def chat(
             "--reply-to",
             help="The human input interaction ID to answer.",
         ),
-        CLIParam.REPLY_TO,
     ] = None,
     session_id: Annotated[
         str | None,
@@ -190,7 +187,6 @@ async def chat(
             "--session-id",
             help="The session ID to use. If not provided, uses the active session.",
         ),
-        CLIParam.SESSION_ID,
     ] = None,
     model: Annotated[
         str,
@@ -199,7 +195,6 @@ async def chat(
             help="The LLM model to use. Can also be set via EXAMPLE_DEFAULT_MODEL env var.",
             envvar="EXAMPLE_DEFAULT_MODEL",
         ),
-        CLIParam.MODEL,
     ] = "gpt-4o",
     verbose: Annotated[
         bool,
@@ -207,20 +202,45 @@ async def chat(
             "--verbose",
             help="Enable verbose output for debugging, including LLM prompts.",
         ),
-        CLIParam.VERBOSE,
     ] = False,
 ):
     """Start a new workflow or provide an answer to continue the current session."""
-    scope = await _define_scope()
-    understanding = await _understand_project(scope)
-    review_files = await _confirm_review_files(scope, understanding)
+    asyncio.run(
+        _chat_async(
+            message=message,
+            reply_to=reply_to,
+            session_id=session_id,
+            model=model,
+            verbose=verbose,
+        )
+    )
 
-    if not review_files:
-        console.print("[yellow]No files selected for review. Exiting.[/yellow]")
-        return
 
-    issues = await _run_reviews(review_files, scope.project_path)
-    report = await _create_report(issues, understanding)
+async def _chat_async(
+    *,
+    message: list[str],
+    reply_to: str | None,
+    session_id: str | None,
+    model: str,
+    verbose: bool,
+) -> None:
+    async with sefia_cli.session(
+        session_id=session_id,
+        model=model,
+        verbose=verbose,
+    ) as session:
+        await session.accept_input(message, reply_to=reply_to)
+
+        scope = await _define_scope()
+        understanding = await _understand_project(scope)
+        review_files = await _confirm_review_files(scope, understanding)
+
+        if not review_files:
+            console.print("[yellow]No files selected for review. Exiting.[/yellow]")
+            return
+
+        issues = await _run_reviews(review_files, scope.project_path)
+        report = await _create_report(issues, understanding)
 
     console.print(
         Panel(
