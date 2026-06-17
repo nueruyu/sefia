@@ -1,9 +1,7 @@
 import asyncio
-import contextvars
 import functools
 import inspect
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 from typing import (
@@ -19,13 +17,11 @@ from typing import (
 
 import typer
 from glyff.exceptions import YieldException
-from sefia import get_context
 from sefios import SefiaScope
 from sefios.tools import HumanInputRequest, HumanInputTool
 
 from .human_input import CLIHumanInputAdapter
-from .session import ResolvedSession, SessionManager, SessionSource
-from .workflow import WorkflowState
+from .session import ResolvedSession, SessionManager
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -41,17 +37,8 @@ class CLIParam(Enum):
     SESSION_ID = auto()
     MODEL = auto()
     VERBOSE = auto()
-
-
-@dataclass(frozen=True)
-class CLISessionState:
-    """Input and session state for a Sefia CLI command invocation."""
-
-    session_id: str
-    source: SessionSource
-    is_new_session: bool
-    current_input: str
-    initial_input: str
+    INPUT = auto()
+    REPLY_TO = auto()
 
 
 class CLIReporter(Protocol):
@@ -71,7 +58,7 @@ class CLIReporter(Protocol):
 
     def on_interrupted(
         self,
-        state: CLISessionState | None,
+        session: ResolvedSession,
     ) -> MaybeAwaitable[None]:
         ...
 
@@ -91,7 +78,7 @@ class DefaultCLIReporter:
     def on_human_input_request(self, request: HumanInputRequest) -> None:
         typer.echo()
         typer.secho(
-            "[USER_INPUT_REQUIRED]",
+            f"[USER_INPUT_REQUIRED:{request.interaction_id}]",
             fg=typer.colors.YELLOW,
             bold=True,
             nl=False,
@@ -99,23 +86,11 @@ class DefaultCLIReporter:
         typer.echo(f" {request.question}")
         typer.echo()
 
-    def on_interrupted(self, state: CLISessionState | None) -> None:
+    def on_interrupted(self, session: ResolvedSession) -> None:
         typer.echo()
         typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
         typer.echo("Session interrupted to wait for your input.")
         typer.echo("To resume, run the script again with your answer.")
-
-
-@dataclass(frozen=True)
-class _CLIInvocation:
-    """Internal runtime information for the currently running CLI command."""
-
-    resolved_session: ResolvedSession
-    session_state: CLISessionState | None = None
-
-    @property
-    def input_accepted(self) -> bool:
-        return self.session_state is not None
 
 
 class SefiaCLI:
@@ -147,49 +122,10 @@ class SefiaCLI:
             max_steps=max_steps,
         )
         self._scoped_run = self._sefia_scope(self._run_scoped_command)
-        self._invocation_var: contextvars.ContextVar[_CLIInvocation | None] = (
-            contextvars.ContextVar("sefia_cli_invocation", default=None)
-        )
 
     @property
     def human_input_tool(self) -> HumanInputTool:
         return self._human_input_tool
-
-    async def accept_input(self, input_value: str | list[str]) -> CLISessionState:
-        """
-        Accept the current CLI input and return the current CLI session state.
-
-        New or uninitialized sessions store the input as the workflow initial input.
-        Resumed sessions forward the input to a pending human interaction when present.
-        """
-        invocation = self._get_invocation()
-        if invocation.input_accepted:
-            raise RuntimeError("Input has already been accepted for this invocation.")
-
-        input_text = self._to_input_text(input_value)
-        await self._human_input.receive_input(
-            input_text,
-            is_new=invocation.resolved_session.is_new,
-        )
-
-        workflow_state = await self._get_workflow_state()
-        if not workflow_state.has_initial_input:
-            workflow_state = await self._initialize_workflow(input_text)
-
-        session_state = CLISessionState(
-            session_id=invocation.resolved_session.session_id,
-            source=invocation.resolved_session.source,
-            is_new_session=invocation.resolved_session.is_new,
-            current_input=input_text,
-            initial_input=workflow_state.require_initial_input(),
-        )
-        self._invocation_var.set(
-            _CLIInvocation(
-                resolved_session=invocation.resolved_session,
-                session_state=session_state,
-            )
-        )
-        return session_state
 
     def create_session(self) -> str:
         """Create a new active CLI session and return its ID."""
@@ -228,6 +164,7 @@ class SefiaCLI:
                     "session_id": resolved_session.session_id,
                     "func": inner,
                     "bound": bound,
+                    "cli_param_names": cli_param_names,
                     "resolved_session": resolved_session,
                 }
                 if model_param in bound.arguments:
@@ -245,55 +182,49 @@ class SefiaCLI:
 
         return decorator
 
+    @staticmethod
+    def to_input_text(input_value: str | list[str]) -> str:
+        """Normalize CLI input values into a single text value."""
+        if isinstance(input_value, str):
+            return input_value.strip()
+        return " ".join(input_value).strip()
+
     async def _run_scoped_command(
         self,
         *,
         func: Callable[..., Any],
         bound: inspect.BoundArguments,
+        cli_param_names: dict[CLIParam, str],
         resolved_session: ResolvedSession,
     ) -> None:
-        invocation = _CLIInvocation(resolved_session=resolved_session)
-        token = self._invocation_var.set(invocation)
-
         try:
             await self._report_session_resolved(resolved_session)
+            await self._accept_cli_input(bound, cli_param_names)
 
             result = func(*bound.args, **bound.kwargs)
             if inspect.isawaitable(result):
                 await result
 
-            invocation = self._get_invocation()
-            if not invocation.input_accepted:
-                raise RuntimeError(
-                    "Sefia CLI command must call 'await sefia_cli.accept_input(...)'."
-                )
-
         except YieldException:
-            invocation = self._invocation_var.get()
-            await self._report_interrupted(
-                invocation.session_state if invocation is not None else None
-            )
+            await self._report_interrupted(resolved_session)
             raise typer.Exit(code=0)
-        finally:
-            self._invocation_var.reset(token)
 
-    async def _initialize_workflow(self, initial_input: str) -> WorkflowState:
-        session = get_context()
-        state_store = session.get_state_store("workflow_state", WorkflowState)
-        state = WorkflowState.from_initial_input(initial_input)
-        await state_store.save(state)
-        return state
+    async def _accept_cli_input(
+        self,
+        bound: inspect.BoundArguments,
+        cli_param_names: dict[CLIParam, str],
+    ) -> None:
+        input_param = cli_param_names.get(CLIParam.INPUT)
+        if input_param is None:
+            return
 
-    async def _get_workflow_state(self) -> WorkflowState:
-        session = get_context()
-        state_store = session.get_state_store("workflow_state", WorkflowState)
-        return await state_store.ensure()
+        input_text = self.to_input_text(bound.arguments[input_param])
+        reply_to = None
+        reply_to_param = cli_param_names.get(CLIParam.REPLY_TO)
+        if reply_to_param is not None:
+            reply_to = bound.arguments.get(reply_to_param)
 
-    def _get_invocation(self) -> _CLIInvocation:
-        invocation = self._invocation_var.get()
-        if invocation is None:
-            raise RuntimeError("No active Sefia CLI invocation.")
-        return invocation
+        await self._human_input.receive_input(input_text, reply_to=reply_to)
 
     async def _report_session_resolved(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
@@ -303,21 +234,15 @@ class SefiaCLI:
         if self._reporter is not None:
             await _maybe_await(self._reporter.on_human_input_request(request))
 
-    async def _report_interrupted(self, state: CLISessionState | None) -> None:
+    async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_interrupted(state))
+            await _maybe_await(self._reporter.on_interrupted(session))
 
     @staticmethod
     def _resolve_reporter(reporter: CLIReporter | None | object) -> CLIReporter | None:
         if reporter is _USE_DEFAULT_REPORTER:
             return DefaultCLIReporter()
         return cast(CLIReporter | None, reporter)
-
-    @staticmethod
-    def _to_input_text(input_value: str | list[str]) -> str:
-        if isinstance(input_value, str):
-            return input_value.strip()
-        return " ".join(input_value).strip()
 
 
 def _find_cli_param_names(func: Callable[..., Any]) -> dict[CLIParam, str]:
