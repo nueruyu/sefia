@@ -86,7 +86,7 @@ class DefaultCLIReporter:
         typer.echo(f" {request.question}")
         typer.echo()
 
-    def on_interrupted(self, session: ResolvedSession) -> None:
+    def on_interrupted(self, _session: ResolvedSession) -> None:
         typer.echo()
         typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
         typer.echo("Session interrupted to wait for your input.")
