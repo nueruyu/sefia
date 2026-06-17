@@ -1,22 +1,9 @@
+from __future__ import annotations
+
 import logging
 from collections.abc import AsyncIterator
-from typing import Any, Callable, Coroutine, cast
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
 
-from litellm import (
-    Choices,
-    ModelResponse,
-    Usage,
-    acompletion,
-    cost_per_token,
-    stream_chunk_builder,
-)
-from litellm.exceptions import (
-    APIConnectionError,
-    InternalServerError,
-    RateLimitError,
-    ServiceUnavailableError,
-    Timeout,
-)
 from sefia.exceptions import (
     ConnectionException,
     InferenceException,
@@ -26,26 +13,42 @@ from sefia.exceptions import (
 )
 from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
 
+if TYPE_CHECKING:
+    from litellm import Choices, ModelResponse, Usage
+
 logger = logging.getLogger(__name__)
 
-# Translates provider-specific exceptions into sefia's abstract inference
-# exceptions, so callers never have to know about LiteLLM's types. Order
-# matters: Timeout subclasses APIConnectionError, so it must be checked first.
-# Errors not listed here (AuthenticationError, BadRequestError,
-# ContextWindowExceededError, ContentPolicyViolationError, ...) are deterministic
-# and propagate unchanged as genuine failures.
-_EXCEPTION_MAPPING: tuple[tuple[type[Exception], type[InferenceException]], ...] = (
-    (Timeout, TimeoutException),
-    (APIConnectionError, ConnectionException),
-    (RateLimitError, RateLimitException),
-    (InternalServerError, TemporarilyUnavailableException),
-    (ServiceUnavailableError, TemporarilyUnavailableException),
-)
+# LiteLLM is imported lazily (inside the methods that need it) because importing
+# it eagerly is slow and would penalize anyone who merely imports
+# ``sefia_litellm`` without making a request. After the first call the module is
+# cached in ``sys.modules``, so subsequent local imports are effectively free.
 
 
 def _to_inference_exception(error: Exception) -> InferenceException | None:
     """Maps a LiteLLM exception to a sefia InferenceException, if recognized."""
-    for provider_exc, inference_exc in _EXCEPTION_MAPPING:
+    # Imported here rather than at module load to keep LiteLLM out of the import
+    # path; this is only reached after a request has already imported it. Order
+    # matters: Timeout subclasses APIConnectionError, so it must be checked
+    # first. Errors not listed here (AuthenticationError, BadRequestError,
+    # ContextWindowExceededError, ContentPolicyViolationError, ...) are
+    # deterministic and propagate unchanged as genuine failures.
+    from litellm.exceptions import (
+        APIConnectionError,
+        InternalServerError,
+        RateLimitError,
+        ServiceUnavailableError,
+        Timeout,
+    )
+
+    exception_mapping: tuple[tuple[type[Exception], type[InferenceException]], ...] = (
+        (Timeout, TimeoutException),
+        (APIConnectionError, ConnectionException),
+        (RateLimitError, RateLimitException),
+        (InternalServerError, TemporarilyUnavailableException),
+        (ServiceUnavailableError, TemporarilyUnavailableException),
+    )
+
+    for provider_exc, inference_exc in exception_mapping:
         if isinstance(error, provider_exc):
             return inference_exc(str(error))
     return None
@@ -69,6 +72,8 @@ class LiteLLMClient(LLMClient):
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMResponse:
         """Sends a completion request using LiteLLM."""
+        from litellm import ModelResponse, acompletion
+
         raw_messages = [msg.to_dict(exclude_none=True) for msg in messages]
 
         kwargs = self._kwargs.copy()
@@ -116,6 +121,8 @@ class LiteLLMClient(LLMClient):
         raw_messages: list[dict[str, Any]],
     ) -> LLMResponse:
         """Processes a streaming response."""
+        from litellm import ModelResponse, stream_chunk_builder
+
         chunks = []
         async for chunk in stream:
             chunks.append(chunk)
@@ -134,6 +141,8 @@ class LiteLLMClient(LLMClient):
 
     def _calculate_cost(self, response: ModelResponse) -> float | None:
         """Calculates the cost of a response, if usage data is available."""
+        from litellm import cost_per_token
+
         usage: Usage | None = response.get("usage")
         model = response.model
 

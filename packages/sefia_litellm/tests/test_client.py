@@ -29,7 +29,7 @@ from sefia_litellm._client import LiteLLMClient
 
 @pytest.fixture
 def mock_acompletion(mocker: MockerFixture):
-    return mocker.patch("sefia_litellm._client.acompletion", new_callable=AsyncMock)
+    return mocker.patch("litellm.acompletion", new_callable=AsyncMock)
 
 
 class TestLiteLLMClient:
@@ -63,9 +63,7 @@ class TestLiteLLMClient:
     async def test_complete_parses_litellm_response_and_calculates_cost(
         self, mock_acompletion, mocker: MockerFixture
     ):
-        mocker.patch(
-            "sefia_litellm._client.cost_per_token", return_value=(0.001, 0.002)
-        )
+        mocker.patch("litellm.cost_per_token", return_value=(0.001, 0.002))
         mock_response = ModelResponse(
             id="chatcmpl-123",
             model="gpt-4o",
@@ -106,9 +104,7 @@ class TestLiteLLMClient:
     async def test_cost_is_none_if_calculation_fails(
         self, mock_acompletion, mocker: MockerFixture
     ):
-        mocker.patch(
-            "sefia_litellm._client.cost_per_token", side_effect=Exception("API error")
-        )
+        mocker.patch("litellm.cost_per_token", side_effect=Exception("API error"))
         mock_response = ModelResponse(
             model="gpt-4o",
             usage=Usage(prompt_tokens=10, completion_tokens=20),
