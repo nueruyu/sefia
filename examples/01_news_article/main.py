@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 import typer
@@ -5,6 +6,7 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from sefia import get_context
 from sefios.tools import WebSearchTool
 from typing_extensions import Annotated
 
@@ -30,6 +32,16 @@ session_app = typer.Typer(help="Manage sessions.")
 app.add_typer(session_app, name="session")
 
 
+@dataclass
+class ArticleState:
+    initial_request: str | None = None
+
+    def require_initial_request(self) -> str:
+        if self.initial_request is None:
+            raise RuntimeError("Article state has no initial request.")
+        return self.initial_request
+
+
 @session_app.command("new")
 def new_session():
     """Create a new session and make it active."""
@@ -52,6 +64,17 @@ def switch_session(
         raise typer.Exit(code=1) from e
 
     console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
+
+
+async def _get_initial_request(message: list[str]) -> str:
+    state_store = get_context().get_state_store("article_state", ArticleState)
+    state = await state_store.ensure()
+
+    if state.initial_request is None:
+        state.initial_request = sefia_cli.to_input_text(message)
+        await state_store.save(state)
+
+    return state.require_initial_request()
 
 
 @engrave
@@ -86,7 +109,16 @@ async def chat(
         typer.Argument(
             help="The input for a new session, or an answer to resume an existing one."
         ),
+        CLIParam.INPUT,
     ],
+    reply_to: Annotated[
+        str | None,
+        typer.Option(
+            "--reply-to",
+            help="The human input interaction ID to answer.",
+        ),
+        CLIParam.REPLY_TO,
+    ] = None,
     session_id: Annotated[
         str | None,
         typer.Option(
@@ -114,9 +146,9 @@ async def chat(
     ] = False,
 ):
     """Start a new workflow or provide an answer to continue the current session."""
-    session_state = await sefia_cli.accept_input(message)
+    initial_request = await _get_initial_request(message)
 
-    article_request = await _clarify(session_state.initial_input)
+    article_request = await _clarify(initial_request)
     sources = await _research(article_request)
     article = await _write(article_request, sources)
 
