@@ -1,8 +1,10 @@
 import functools
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable, Coroutine
 
-from sefia import Policy
+from sefia import Policy, Session
 from sefia.llm import LLMClient
 
 from ._factory import create_session
@@ -10,8 +12,8 @@ from ._factory import create_session
 
 class SefiaScope:
     """
-    Manages shared configuration for Sefia sessions and provides a decorator
-    to run functions within a configured session context.
+    Manages shared configuration for Sefia sessions and provides helpers to run
+    code within a configured session context.
     """
 
     def __init__(
@@ -33,6 +35,28 @@ class SefiaScope:
         self.verbose = verbose
         self.max_steps = max_steps
 
+    @asynccontextmanager
+    async def session(
+        self,
+        *,
+        session_id: str,
+        model: str | None = None,
+        stream: bool | None = None,
+        verbose: bool | None = None,
+    ) -> AsyncIterator[Session]:
+        """Run code within a configured Sefia session context."""
+        async with create_session(
+            session_id=session_id,
+            session_dir=self.session_dir,
+            llm_client=self.llm_client,
+            model=model or self.model,
+            stream=self.stream if stream is None else stream,
+            verbose=self.verbose if verbose is None else verbose,
+            policies=list(self.policies),
+            max_steps=self.max_steps,
+        ) as session:
+            yield session
+
     def __call__(
         self, func: Callable[..., Coroutine[Any, Any, Any]]
     ) -> Callable[..., Coroutine[Any, Any, Any]]:
@@ -50,20 +74,15 @@ class SefiaScope:
                     "The decorated function must be called with a 'session_id: str' keyword argument."
                 )
 
-            model = kwargs.pop("model", self.model)
-            stream = kwargs.pop("stream", self.stream)
-            verbose = kwargs.pop("verbose", self.verbose)
-            policies = list(self.policies)
+            model = kwargs.pop("model", None)
+            stream = kwargs.pop("stream", None)
+            verbose = kwargs.pop("verbose", None)
 
-            async with create_session(
+            async with self.session(
                 session_id=session_id,
-                session_dir=self.session_dir,
-                llm_client=self.llm_client,
                 model=model,
                 stream=stream,
                 verbose=verbose,
-                policies=policies,
-                max_steps=self.max_steps,
             ):
                 return await func(*args, **kwargs)
 
