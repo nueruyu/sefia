@@ -1,19 +1,8 @@
-import asyncio
-import functools
 import inspect
-from collections.abc import Awaitable, Callable
-from enum import Enum, auto
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import (
-    Annotated,
-    Any,
-    Protocol,
-    TypeVar,
-    cast,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from typing import Protocol, TypeVar, cast
 
 import typer
 from glyff.exceptions import YieldException
@@ -26,19 +15,6 @@ from .session import ResolvedSession, SessionManager
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 _USE_DEFAULT_REPORTER = object()
-_DEFAULT_SESSION_ID_PARAM = "session_id"
-_DEFAULT_MODEL_PARAM = "model"
-_DEFAULT_VERBOSE_PARAM = "verbose"
-
-
-class CLIParam(Enum):
-    """Marks command parameters consumed by SefiaCLI."""
-
-    SESSION_ID = auto()
-    MODEL = auto()
-    VERBOSE = auto()
-    INPUT = auto()
-    REPLY_TO = auto()
 
 
 class CLIReporter(Protocol):
@@ -93,8 +69,31 @@ class DefaultCLIReporter:
         typer.echo("To resume, run the script again with your answer.")
 
 
+class SefiaCLISession:
+    """Operations available inside a Sefia CLI session context."""
+
+    def __init__(self, *, human_input: CLIHumanInputAdapter):
+        self._human_input = human_input
+
+    async def accept_input(
+        self,
+        input_value: str | list[str] | None,
+        *,
+        reply_to: str | None = None,
+    ) -> None:
+        """Store CLI input as an answer for a pending or upcoming interaction."""
+        if input_value is None:
+            return
+
+        input_text = _to_input_text(input_value)
+        if not input_text:
+            return
+
+        await self._human_input.receive_input(input_text, reply_to=reply_to)
+
+
 class SefiaCLI:
-    """Runs Typer command callbacks inside a Sefia session context."""
+    """Creates Sefia session contexts for Typer commands."""
 
     def __init__(
         self,
@@ -121,7 +120,6 @@ class SefiaCLI:
             verbose=verbose,
             max_steps=max_steps,
         )
-        self._scoped_run = self._sefia_scope(self._run_scoped_command)
 
     @property
     def human_input_tool(self) -> HumanInputTool:
@@ -139,93 +137,30 @@ class SefiaCLI:
         """Return the active CLI session ID, if any."""
         return self._session_manager.get_active_session_id()
 
-    def scope(self, func: Callable[..., T] | None = None):
-        """Decorate a Typer command callback to run inside a Sefia CLI scope."""
-
-        def decorator(inner: Callable[..., T]) -> Callable[..., Any]:
-            signature = inspect.signature(inner)
-            cli_param_names = _find_cli_param_names(inner)
-            session_id_param = cli_param_names.get(
-                CLIParam.SESSION_ID,
-                _DEFAULT_SESSION_ID_PARAM,
-            )
-            model_param = cli_param_names.get(CLIParam.MODEL, _DEFAULT_MODEL_PARAM)
-            verbose_param = cli_param_names.get(CLIParam.VERBOSE, _DEFAULT_VERBOSE_PARAM)
-
-            @functools.wraps(inner)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                bound = signature.bind(*args, **kwargs)
-                bound.apply_defaults()
-
-                session_id = bound.arguments.get(session_id_param)
-                resolved_session = self._session_manager.resolve_session(session_id)
-
-                run_kwargs: dict[str, Any] = {
-                    "session_id": resolved_session.session_id,
-                    "func": inner,
-                    "bound": bound,
-                    "cli_param_names": cli_param_names,
-                    "resolved_session": resolved_session,
-                }
-                if model_param in bound.arguments:
-                    run_kwargs["model"] = bound.arguments[model_param]
-                if verbose_param in bound.arguments:
-                    run_kwargs["verbose"] = bound.arguments[verbose_param]
-
-                return asyncio.run(self._scoped_run(**run_kwargs))
-
-            wrapper.__signature__ = signature  # type: ignore[attr-defined]
-            return wrapper
-
-        if func is not None:
-            return decorator(func)
-
-        return decorator
-
-    async def _run_scoped_command(
+    @asynccontextmanager
+    async def session(
         self,
         *,
-        func: Callable[..., Any],
-        bound: inspect.BoundArguments,
-        cli_param_names: dict[CLIParam, str],
-        resolved_session: ResolvedSession,
-    ) -> None:
+        session_id: str | None = None,
+        model: str | None = None,
+        stream: bool | None = None,
+        verbose: bool | None = None,
+    ) -> AsyncIterator[SefiaCLISession]:
+        """Run code within a resolved Sefia CLI session context."""
+        resolved_session = self._session_manager.resolve_session(session_id)
+
         try:
             await self._report_session_resolved(resolved_session)
-            await self._accept_cli_input(bound, cli_param_names)
-
-            result = func(*bound.args, **bound.kwargs)
-            if inspect.isawaitable(result):
-                await result
-
+            async with self._sefia_scope.session(
+                session_id=resolved_session.session_id,
+                model=model,
+                stream=stream,
+                verbose=verbose,
+            ):
+                yield SefiaCLISession(human_input=self._human_input)
         except YieldException:
             await self._report_interrupted(resolved_session)
             raise typer.Exit(code=0)
-
-    async def _accept_cli_input(
-        self,
-        bound: inspect.BoundArguments,
-        cli_param_names: dict[CLIParam, str],
-    ) -> None:
-        input_param = cli_param_names.get(CLIParam.INPUT)
-        if input_param is None:
-            return
-
-        input_value = bound.arguments[input_param]
-        if input_value is None:
-            return
-
-        input_text = (
-            " ".join(input_value).strip()
-            if isinstance(input_value, list)
-            else str(input_value).strip()
-        )
-        reply_to = None
-        reply_to_param = cli_param_names.get(CLIParam.REPLY_TO)
-        if reply_to_param is not None:
-            reply_to = bound.arguments.get(reply_to_param)
-
-        await self._human_input.receive_input(input_text, reply_to=reply_to)
 
     async def _report_session_resolved(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
@@ -246,25 +181,10 @@ class SefiaCLI:
         return cast(CLIReporter | None, reporter)
 
 
-def _find_cli_param_names(func: Callable[..., Any]) -> dict[CLIParam, str]:
-    hints = get_type_hints(func, include_extras=True)
-    result: dict[CLIParam, str] = {}
-
-    for name, hint in hints.items():
-        if get_origin(hint) is not Annotated:
-            continue
-
-        for metadata in get_args(hint)[1:]:
-            if not isinstance(metadata, CLIParam):
-                continue
-
-            if metadata in result:
-                raise TypeError(
-                    f"Duplicate Sefia CLI parameter marker: {metadata.name}."
-                )
-            result[metadata] = name
-
-    return result
+def _to_input_text(input_value: str | list[str]) -> str:
+    if isinstance(input_value, str):
+        return input_value.strip()
+    return " ".join(input_value).strip()
 
 
 async def _maybe_await(value: MaybeAwaitable[T]) -> T:
