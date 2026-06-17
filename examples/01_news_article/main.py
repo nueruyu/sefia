@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import typer
@@ -8,7 +9,7 @@ from rich.panel import Panel
 from sefios.tools import WebSearchTool
 from typing_extensions import Annotated
 
-from .._common.sefia_cli import CLIParam, SefiaCLI
+from .._common.sefia_cli import SefiaCLI
 from .._common.session import UnknownSessionError
 from .agents import NewsWriter, RequirementsClarifier, Researcher
 from .models import ArticleRequest, NewsArticle
@@ -79,14 +80,12 @@ async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArt
 
 
 @app.command()
-@sefia_cli.scope
-async def chat(
+def chat(
     message: Annotated[
         list[str],
         typer.Argument(
             help="The input for a new session, or an answer to resume an existing one."
         ),
-        CLIParam.INPUT,
     ],
     reply_to: Annotated[
         str | None,
@@ -94,7 +93,6 @@ async def chat(
             "--reply-to",
             help="The human input interaction ID to answer.",
         ),
-        CLIParam.REPLY_TO,
     ] = None,
     session_id: Annotated[
         str | None,
@@ -102,7 +100,6 @@ async def chat(
             "--session-id",
             help="The session ID to use. If not provided, uses the active session.",
         ),
-        CLIParam.SESSION_ID,
     ] = None,
     model: Annotated[
         str,
@@ -111,7 +108,6 @@ async def chat(
             help="The LLM model to use. Can also be set via EXAMPLE_DEFAULT_MODEL env var.",
             envvar="EXAMPLE_DEFAULT_MODEL",
         ),
-        CLIParam.MODEL,
     ] = "gpt-4o",
     verbose: Annotated[
         bool,
@@ -119,13 +115,38 @@ async def chat(
             "--verbose",
             help="Enable verbose output for debugging, including LLM prompts.",
         ),
-        CLIParam.VERBOSE,
     ] = False,
 ):
     """Start a new workflow or provide an answer to continue the current session."""
-    article_request = await _clarify()
-    sources = await _research(article_request)
-    article = await _write(article_request, sources)
+    asyncio.run(
+        _chat_async(
+            message=message,
+            reply_to=reply_to,
+            session_id=session_id,
+            model=model,
+            verbose=verbose,
+        )
+    )
+
+
+async def _chat_async(
+    *,
+    message: list[str],
+    reply_to: str | None,
+    session_id: str | None,
+    model: str,
+    verbose: bool,
+) -> None:
+    async with sefia_cli.session(
+        session_id=session_id,
+        model=model,
+        verbose=verbose,
+    ) as session:
+        await session.accept_input(message, reply_to=reply_to)
+
+        article_request = await _clarify()
+        sources = await _research(article_request)
+        article = await _write(article_request, sources)
 
     console.print(
         Panel(
