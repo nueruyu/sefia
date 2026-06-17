@@ -22,14 +22,15 @@ class ScopingAgent:
         self._human_input = human_input
 
     @infer
-    async def define_scope(self, user_request: str) -> ProjectScope:
+    async def define_scope(self) -> ProjectScope:
         """
         Clarify the user's request and define a concrete code-review scope.
 
-        Determine the Git repository path, review focus areas, and files or
-        patterns that should be excluded. Use the HumanInputTool to ask one
-        focused question at a time when critical details are missing. Preserve
-        explicit paths exactly as the user provides them.
+        First, use the HumanInputTool to obtain the user's initial review
+        request. Then, determine the Git repository path, review focus areas,
+        and files or patterns that should be excluded. Ask one focused question
+        at a time when critical details are missing. Preserve explicit paths
+        exactly as the user provides them.
         """
         ...
 

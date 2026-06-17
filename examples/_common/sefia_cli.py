@@ -182,13 +182,6 @@ class SefiaCLI:
 
         return decorator
 
-    @staticmethod
-    def to_input_text(input_value: str | list[str]) -> str:
-        """Normalize CLI input values into a single text value."""
-        if isinstance(input_value, str):
-            return input_value.strip()
-        return " ".join(input_value).strip()
-
     async def _run_scoped_command(
         self,
         *,
@@ -218,7 +211,15 @@ class SefiaCLI:
         if input_param is None:
             return
 
-        input_text = self.to_input_text(bound.arguments[input_param])
+        input_value = bound.arguments[input_param]
+        if input_value is None:
+            return
+
+        input_text = (
+            " ".join(input_value).strip()
+            if isinstance(input_value, list)
+            else str(input_value).strip()
+        )
         reply_to = None
         reply_to_param = cli_param_names.get(CLIParam.REPLY_TO)
         if reply_to_param is not None:

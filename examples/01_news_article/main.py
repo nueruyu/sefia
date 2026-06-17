@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from pathlib import Path
 
 import typer
@@ -6,7 +5,6 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefia import get_context
 from sefios.tools import WebSearchTool
 from typing_extensions import Annotated
 
@@ -30,16 +28,6 @@ app = typer.Typer(
 )
 session_app = typer.Typer(help="Manage sessions.")
 app.add_typer(session_app, name="session")
-
-
-@dataclass
-class ArticleState:
-    initial_request: str | None = None
-
-    def require_initial_request(self) -> str:
-        if self.initial_request is None:
-            raise RuntimeError("Article state has no initial request.")
-        return self.initial_request
 
 
 @session_app.command("new")
@@ -66,21 +54,10 @@ def switch_session(
     console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 
 
-async def _get_initial_request(message: list[str]) -> str:
-    state_store = get_context().get_state_store("article_state", ArticleState)
-    state = await state_store.ensure()
-
-    if state.initial_request is None:
-        state.initial_request = sefia_cli.to_input_text(message)
-        await state_store.save(state)
-
-    return state.require_initial_request()
-
-
 @engrave
-async def _clarify(initial_input: str) -> ArticleRequest:
+async def _clarify() -> ArticleRequest:
     console.print("[bold]> Stage 1: Clarifying request...[/bold]")
-    article_request = await clarifier.clarify_request(initial_input)
+    article_request = await clarifier.clarify_request()
 
     console.print("[dim]   -> Clarified request:[/dim]")
     console.print(Markdown(render_article_request(article_request)))
@@ -146,9 +123,7 @@ async def chat(
     ] = False,
 ):
     """Start a new workflow or provide an answer to continue the current session."""
-    initial_request = await _get_initial_request(message)
-
-    article_request = await _clarify(initial_request)
+    article_request = await _clarify()
     sources = await _research(article_request)
     article = await _write(article_request, sources)
 

@@ -12,16 +12,17 @@ class RequirementsClarifier:
         self._human_input = human_input
 
     @infer
-    async def clarify_request(self, user_request: str) -> ArticleRequest:
+    async def clarify_request(self) -> ArticleRequest:
         """
-        Clarify the user's initial request before any research or writing begins.
+        Clarify the user's request for a news article before research or writing.
 
         Your goal is to produce a concrete article brief for the downstream
         researcher and writer.
 
-        If the request lacks important details, ask the user one focused question
-        at a time using the HumanInputTool. Repeat this until all critical
-        ambiguities are resolved.
+        First, use the HumanInputTool to obtain the user's initial article
+        request. Then, if the request lacks important details, ask one focused
+        follow-up question at a time. Repeat this until all critical ambiguities
+        are resolved.
 
         Critical details include:
         1. The article topic or subject.

@@ -6,6 +6,7 @@ from sefia import get_context
 from sefios.tools import HumanInputRequest, HumanInputResult, HumanInputTool
 
 _PENDING_HUMAN_INPUTS_KEY = "pending_human_inputs"
+_UNCLAIMED_HUMAN_INPUT_KEY = "unclaimed_human_input"
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -50,12 +51,13 @@ class CLIHumanInputAdapter:
         *,
         reply_to: str | None = None,
     ) -> None:
-        """Stores the CLI input as the answer for a pending human interaction."""
+        """Store CLI input as an answer for a pending or upcoming interaction."""
         interaction_id = await self._resolve_answer_target(reply_to)
+        session_store = get_context().session_store
         if interaction_id is None:
+            await session_store.set(_UNCLAIMED_HUMAN_INPUT_KEY, input_text, str)
             return
 
-        session_store = get_context().session_store
         await session_store.set(self._answer_key(interaction_id), input_text, str)
 
     async def get_pending_requests(self) -> dict[str, dict]:
@@ -65,7 +67,16 @@ class CLIHumanInputAdapter:
 
     async def get_answer(self, request: HumanInputRequest) -> str | None:
         session_store = get_context().session_store
-        return await session_store.get(self._answer_key(request.interaction_id), str)
+        answer = await session_store.get(self._answer_key(request.interaction_id), str)
+        if answer is not None:
+            return answer
+
+        unclaimed_answer = await session_store.get(_UNCLAIMED_HUMAN_INPUT_KEY, str)
+        if unclaimed_answer is None:
+            return None
+
+        await session_store.delete(_UNCLAIMED_HUMAN_INPUT_KEY)
+        return unclaimed_answer
 
     async def handle_request(self, request: HumanInputRequest) -> None:
         session_store = get_context().session_store

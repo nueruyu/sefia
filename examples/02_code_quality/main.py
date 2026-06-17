@@ -1,5 +1,4 @@
 import asyncio
-from dataclasses import dataclass
 from pathlib import Path
 
 import typer
@@ -7,7 +6,6 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefia import get_context
 from typing_extensions import Annotated
 
 from .._common.sefia_cli import CLIParam, SefiaCLI
@@ -57,16 +55,6 @@ session_app = typer.Typer(help="Manage sessions.")
 app.add_typer(session_app, name="session")
 
 
-@dataclass
-class ReviewState:
-    initial_request: str | None = None
-
-    def require_initial_request(self) -> str:
-        if self.initial_request is None:
-            raise RuntimeError("Review state has no initial request.")
-        return self.initial_request
-
-
 @session_app.command("new")
 def new_session():
     """Create a new session and make it active."""
@@ -91,21 +79,10 @@ def switch_session(
     console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 
 
-async def _get_initial_request(message: list[str]) -> str:
-    state_store = get_context().get_state_store("review_state", ReviewState)
-    state = await state_store.ensure()
-
-    if state.initial_request is None:
-        state.initial_request = sefia_cli.to_input_text(message)
-        await state_store.save(state)
-
-    return state.require_initial_request()
-
-
 @engrave
-async def _define_scope(user_request: str) -> ProjectScope:
+async def _define_scope() -> ProjectScope:
     console.print("[bold]> Stage 1: Defining scope...[/bold]")
-    return await scoping_agent.define_scope(user_request)
+    return await scoping_agent.define_scope()
 
 
 async def _understand_project(scope: ProjectScope) -> ProjectUnderstanding:
@@ -234,9 +211,7 @@ async def chat(
     ] = False,
 ):
     """Start a new workflow or provide an answer to continue the current session."""
-    initial_request = await _get_initial_request(message)
-
-    scope = await _define_scope(initial_request)
+    scope = await _define_scope()
     understanding = await _understand_project(scope)
     review_files = await _confirm_review_files(scope, understanding)
 

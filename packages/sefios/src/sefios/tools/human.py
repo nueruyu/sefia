@@ -81,9 +81,22 @@ class HumanInputTool:
             call_state.interaction_id = interaction_id
             await call_store.save(call_state)
 
-            await self._notify_request(
-                HumanInputRequest(interaction_id=interaction_id, question=question)
+            request = HumanInputRequest(
+                interaction_id=interaction_id,
+                question=question,
             )
+            answer = await _maybe_await(self.get_answer(request))
+            if answer is not None:
+                await self._notify_complete(
+                    HumanInputResult(
+                        interaction_id=request.interaction_id,
+                        question=question,
+                        answer=answer,
+                    )
+                )
+                return answer
+
+            await self._notify_request(request)
             raise YieldException()
 
         request = HumanInputRequest(
