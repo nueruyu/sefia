@@ -54,6 +54,10 @@
         {
           "label": "Sefia",
           "value": "sefia.config.json"
+        },
+        {
+          "label": "Examples",
+          "value": "examples.config.json"
         }
       ],
       "default": "default.config.json"

@@ -1,0 +1,12 @@
+{
+  "include": [
+    "examples"
+  ],
+  "ignore": {
+    "customPatterns": []
+  },
+  "output": {
+    "filePath": "./out/repomix/examples.md",
+    "style": "markdown"
+  }
+}
