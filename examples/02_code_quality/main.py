@@ -6,6 +6,7 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from sefia import get_context
 from typing_extensions import Annotated
 
 from .._common.sefia_cli import SefiaCLI
