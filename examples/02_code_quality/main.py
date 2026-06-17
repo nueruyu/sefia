@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 from pathlib import Path
 
 import typer
@@ -56,6 +57,16 @@ session_app = typer.Typer(help="Manage sessions.")
 app.add_typer(session_app, name="session")
 
 
+@dataclass
+class ReviewState:
+    initial_request: str | None = None
+
+    def require_initial_request(self) -> str:
+        if self.initial_request is None:
+            raise RuntimeError("Review state has no initial request.")
+        return self.initial_request
+
+
 @session_app.command("new")
 def new_session():
     """Create a new session and make it active."""
@@ -78,6 +89,17 @@ def switch_session(
         raise typer.Exit(code=1) from e
 
     console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
+
+
+async def _get_initial_request(message: list[str]) -> str:
+    state_store = get_context().get_state_store("review_state", ReviewState)
+    state = await state_store.ensure()
+
+    if state.initial_request is None:
+        state.initial_request = sefia_cli.to_input_text(message)
+        await state_store.save(state)
+
+    return state.require_initial_request()
 
 
 @engrave
@@ -175,7 +197,16 @@ async def chat(
         typer.Argument(
             help="The input for a new session, or an answer to resume an existing one."
         ),
+        CLIParam.INPUT,
     ],
+    reply_to: Annotated[
+        str | None,
+        typer.Option(
+            "--reply-to",
+            help="The human input interaction ID to answer.",
+        ),
+        CLIParam.REPLY_TO,
+    ] = None,
     session_id: Annotated[
         str | None,
         typer.Option(
@@ -203,9 +234,9 @@ async def chat(
     ] = False,
 ):
     """Start a new workflow or provide an answer to continue the current session."""
-    session_state = await sefia_cli.accept_input(message)
+    initial_request = await _get_initial_request(message)
 
-    scope = await _define_scope(session_state.initial_input)
+    scope = await _define_scope(initial_request)
     understanding = await _understand_project(scope)
     review_files = await _confirm_review_files(scope, understanding)
 
