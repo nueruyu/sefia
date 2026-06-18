@@ -81,9 +81,7 @@ class CLIHumanInputAdapter:
         # is pending, an unclaimed input must not be silently attributed here —
         # the caller is expected to answer it explicitly (e.g. via --reply-to).
         pending = await self.get_pending_requests()
-        if any(
-            interaction_id != request.interaction_id for interaction_id in pending
-        ):
+        if any(interaction_id != request.interaction_id for interaction_id in pending):
             return None
 
         queue = await session_store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list)
