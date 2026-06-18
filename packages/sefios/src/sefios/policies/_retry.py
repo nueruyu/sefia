@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sefia._interfaces import InferenceMiddleware, Policy, StepMiddleware
-from sefios.core.middleware._retry import Retrier
+from sefios.middleware._retry import Retrier
 
 
 @dataclass

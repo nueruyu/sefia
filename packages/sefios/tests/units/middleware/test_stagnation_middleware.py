@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 from sefia import StepContext
 from sefia.inference import FinalAnswerDecision, ToolCallDecision, ToolCallRequest
-from sefios.core.middleware import StagnationDetector, StagnationError
+from sefios.middleware import StagnationDetector, StagnationError
 
 
 async def _step(middleware: StagnationDetector, name: str, args: dict, step: int = 0):

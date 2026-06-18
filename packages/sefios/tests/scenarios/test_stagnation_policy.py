@@ -12,7 +12,7 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Session, infer, policy, tool
 from sefia.llm import LLMClient, LLMResponse, Message
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
-from sefios.core.policies import StagnationPolicy
+from sefios.policies import StagnationPolicy
 
 
 class MockLLMClient(LLMClient):
