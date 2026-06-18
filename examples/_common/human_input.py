@@ -43,9 +43,9 @@ class CLIHumanInputAdapter:
 
     def create_tool(self) -> HumanInputTool:
         return HumanInputTool(
-            get_answer=self.get_answer,
-            on_request=self.handle_request,
-            on_complete=self.handle_complete,
+            get_answer=self._get_answer,
+            on_request=self._handle_request,
+            on_complete=self._handle_complete,
         )
 
     async def receive_input(
@@ -65,12 +65,12 @@ class CLIHumanInputAdapter:
 
         await session_store.set(self._answer_key(interaction_id), input_text, str)
 
-    async def get_pending_requests(self) -> dict[str, dict]:
+    async def _get_pending_requests(self) -> dict[str, dict]:
         session_store = get_context().session_store
         pending = await session_store.get(_PENDING_HUMAN_INPUTS_KEY, dict)
         return pending or {}
 
-    async def get_answer(self, request: HumanInputRequest) -> str | None:
+    async def _get_answer(self, request: HumanInputRequest) -> str | None:
         session_store = get_context().session_store
         answer = await session_store.get(self._answer_key(request.interaction_id), str)
         if answer is not None:
@@ -80,7 +80,7 @@ class CLIHumanInputAdapter:
         # unambiguously the one awaiting an answer. If any other distinct request
         # is pending, an unclaimed input must not be silently attributed here —
         # the caller is expected to answer it explicitly (e.g. via --reply-to).
-        pending = await self.get_pending_requests()
+        pending = await self._get_pending_requests()
         if any(interaction_id != request.interaction_id for interaction_id in pending):
             return None
 
@@ -95,9 +95,9 @@ class CLIHumanInputAdapter:
             await session_store.delete(_UNCLAIMED_HUMAN_INPUTS_KEY)
         return next_answer
 
-    async def handle_request(self, request: HumanInputRequest) -> None:
+    async def _handle_request(self, request: HumanInputRequest) -> None:
         session_store = get_context().session_store
-        pending = await self.get_pending_requests()
+        pending = await self._get_pending_requests()
         pending[request.interaction_id] = {
             "id": request.interaction_id,
             "question": request.question,
@@ -107,7 +107,7 @@ class CLIHumanInputAdapter:
         if self._on_request is not None:
             await _maybe_await(self._on_request(request))
 
-    async def handle_complete(self, result: HumanInputResult) -> None:
+    async def _handle_complete(self, result: HumanInputResult) -> None:
         session_store = get_context().session_store
         # Intentionally keep the stored answer in place. The tool memoizes its
         # result via @engrave only after get_human_input returns, so deleting the
@@ -115,7 +115,7 @@ class CLIHumanInputAdapter:
         # where a crash loses the answer and the question is re-asked on resume.
         # Keeping the answer keyed by interaction_id makes a re-run idempotent;
         # the leftover value is inert and namespaced to a single interaction.
-        pending = await self.get_pending_requests()
+        pending = await self._get_pending_requests()
         pending.pop(result.interaction_id, None)
         if pending:
             await session_store.set(_PENDING_HUMAN_INPUTS_KEY, pending, dict)
@@ -123,7 +123,7 @@ class CLIHumanInputAdapter:
             await session_store.delete(_PENDING_HUMAN_INPUTS_KEY)
 
     async def _resolve_answer_target(self, reply_to: str | None) -> str | None:
-        pending = await self.get_pending_requests()
+        pending = await self._get_pending_requests()
         if reply_to is not None:
             if reply_to not in pending:
                 raise UnknownHumanInputError(reply_to)
