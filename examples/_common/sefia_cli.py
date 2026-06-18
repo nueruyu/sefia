@@ -1,5 +1,5 @@
 import inspect
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Protocol, TypeVar, cast
@@ -15,6 +15,9 @@ from .session import ResolvedSession, SessionManager
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 _USE_DEFAULT_REPORTER = object()
+# Sentinel marking "no per-call override"; forwards the scope's configured
+# max_steps instead of an explicit value (note: max_steps=None means no limit).
+_USE_SCOPE_DEFAULT = object()
 
 
 class CLIReporter(Protocol):
@@ -145,9 +148,14 @@ class SefiaCLI:
         model: str | None = None,
         stream: bool | None = None,
         verbose: bool | None = None,
+        max_steps: int | None | object = _USE_SCOPE_DEFAULT,
     ) -> AsyncIterator[SefiaCLISession]:
         """Run code within a resolved Sefia CLI session context."""
         resolved_session = self._session_manager.resolve_session(session_id)
+
+        scope_overrides: dict[str, object] = {}
+        if max_steps is not _USE_SCOPE_DEFAULT:
+            scope_overrides["max_steps"] = max_steps
 
         try:
             await self._report_session_resolved(resolved_session)
@@ -156,6 +164,7 @@ class SefiaCLI:
                 model=model,
                 stream=stream,
                 verbose=verbose,
+                **scope_overrides,
             ):
                 yield SefiaCLISession(human_input=self._human_input)
         except YieldException:
