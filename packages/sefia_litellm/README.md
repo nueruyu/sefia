@@ -67,13 +67,12 @@ This package mitigates that as follows:
    ```
 
 3. **(Optional) Warm up at startup** — if you also want to hide the first
-   request's latency, import LiteLLM in the background during application startup:
+   request's latency, import LiteLLM in the background during application startup.
+   A daemon thread works regardless of whether an asyncio event loop is running
+   yet:
 
    ```python
-   import asyncio
+   import threading
 
-   async def _warmup() -> None:
-       await asyncio.to_thread(__import__, "litellm")
-
-   asyncio.create_task(_warmup())
+   threading.Thread(target=__import__, args=("litellm",), daemon=True).start()
    ```
