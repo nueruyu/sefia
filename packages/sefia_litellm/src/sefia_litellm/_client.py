@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
+
+# Must be set before litellm is imported anywhere. Forces litellm to use its
+# bundled model cost map instead of fetching it from the network at import time,
+# which speeds up the (lazy) import and keeps it working offline. A user who has
+# already set this explicitly is respected.
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
 from sefia.exceptions import (
     ConnectionException,
@@ -22,6 +29,38 @@ logger = logging.getLogger(__name__)
 # it eagerly is slow and would penalize anyone who merely imports
 # ``sefia_litellm`` without making a request. After the first call the module is
 # cached in ``sys.modules``, so subsequent local imports are effectively free.
+
+_LOG_FALSE_VALUES = frozenset({"0", "false", "no", "off", ""})
+
+
+def _env_suppress_logs_default() -> bool:
+    """Resolves the default for ``suppress_logs`` from the environment.
+
+    Reads ``SEFIA_LITELLM_SUPPRESS_LOGS``; when unset, logs are suppressed by
+    default. Any of ``0/false/no/off`` (case-insensitive) disables suppression.
+    """
+    raw = os.environ.get("SEFIA_LITELLM_SUPPRESS_LOGS")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in _LOG_FALSE_VALUES
+
+
+def _configure_litellm_logging(suppress: bool) -> None:
+    """Silences LiteLLM's verbose default logging when ``suppress`` is true.
+
+    Called after LiteLLM is imported. Idempotent and cheap, so it is safe to
+    call on every request. The ``"LiteLLM"`` logger and ``suppress_debug_info``
+    flag are global, so with multiple clients the last ``complete()`` call wins.
+    """
+    if not suppress:
+        return
+    import litellm
+
+    # Suppresses the "Provider List: ..." banner and the debug info printed
+    # alongside exceptions.
+    litellm.suppress_debug_info = True
+    # Silences INFO/DEBUG records emitted through the standard logging module.
+    logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
 
 def _to_inference_exception(error: Exception) -> InferenceException | None:
@@ -60,9 +99,14 @@ class LiteLLMClient(LLMClient):
     various LLM providers.
     """
 
-    def __init__(self, model: str, **kwargs: Any):
+    def __init__(self, model: str, *, suppress_logs: bool | None = None, **kwargs: Any):
         self.model = model
         self._kwargs = kwargs
+        # ``None`` defers to SEFIA_LITELLM_SUPPRESS_LOGS (default: suppress);
+        # an explicit bool overrides the environment.
+        self._suppress_logs = (
+            _env_suppress_logs_default() if suppress_logs is None else suppress_logs
+        )
 
     async def complete(
         self,
@@ -73,6 +117,8 @@ class LiteLLMClient(LLMClient):
     ) -> LLMResponse:
         """Sends a completion request using LiteLLM."""
         from litellm import ModelResponse, acompletion
+
+        _configure_litellm_logging(self._suppress_logs)
 
         raw_messages = [msg.to_dict(exclude_none=True) for msg in messages]
 
