@@ -1,4 +1,5 @@
 import functools
+import inspect
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,6 +9,15 @@ from sefia import Policy, Session
 from sefia.llm import LLMClient
 
 from ._factory import create_session
+
+# Sentinel distinguishing "not overridden" from an explicit ``max_steps=None``
+# (which is a meaningful value meaning "no step limit").
+_UNSET: Any = object()
+
+# Keyword arguments the session decorator consumes before delegating to the
+# wrapped function. A decorated function may not declare parameters of these
+# names, otherwise its arguments would be silently swallowed here.
+_RESERVED_SESSION_KWARGS = ("session_id", "model", "stream", "verbose", "max_steps")
 
 
 class SefiaScope:
@@ -43,6 +53,7 @@ class SefiaScope:
         model: str | None = None,
         stream: bool | None = None,
         verbose: bool | None = None,
+        max_steps: int | None | Any = _UNSET,
     ) -> AsyncIterator[Session]:
         """Run code within a configured Sefia session context."""
         async with create_session(
@@ -53,7 +64,7 @@ class SefiaScope:
             stream=self.stream if stream is None else stream,
             verbose=self.verbose if verbose is None else verbose,
             policies=list(self.policies),
-            max_steps=self.max_steps,
+            max_steps=self.max_steps if max_steps is _UNSET else max_steps,
         ) as session:
             yield session
 
@@ -65,6 +76,17 @@ class SefiaScope:
         It consumes session-related keyword arguments before calling the wrapped
         function.
         """
+        collisions = [
+            name
+            for name in _RESERVED_SESSION_KWARGS
+            if name in inspect.signature(func).parameters
+        ]
+        if collisions:
+            raise TypeError(
+                f"Cannot decorate {func.__qualname__!r} with SefiaScope: its "
+                f"parameters {collisions} collide with reserved session keyword "
+                "arguments and would be swallowed by the session wrapper."
+            )
 
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -77,12 +99,14 @@ class SefiaScope:
             model = kwargs.pop("model", None)
             stream = kwargs.pop("stream", None)
             verbose = kwargs.pop("verbose", None)
+            max_steps = kwargs.pop("max_steps", _UNSET)
 
             async with self.session(
                 session_id=session_id,
                 model=model,
                 stream=stream,
                 verbose=verbose,
+                max_steps=max_steps,
             ):
                 return await func(*args, **kwargs)
 

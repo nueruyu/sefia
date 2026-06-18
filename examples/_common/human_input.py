@@ -6,7 +6,10 @@ from sefia import get_context
 from sefios.tools import HumanInputRequest, HumanInputResult, HumanInputTool
 
 _PENDING_HUMAN_INPUTS_KEY = "pending_human_inputs"
-_UNCLAIMED_HUMAN_INPUT_KEY = "unclaimed_human_input"
+# Inputs supplied before any request is pending are queued here (FIFO) so that
+# providing several seed inputs in a row does not silently overwrite earlier
+# ones.
+_UNCLAIMED_HUMAN_INPUTS_KEY = "unclaimed_human_inputs"
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -55,7 +58,9 @@ class CLIHumanInputAdapter:
         interaction_id = await self._resolve_answer_target(reply_to)
         session_store = get_context().session_store
         if interaction_id is None:
-            await session_store.set(_UNCLAIMED_HUMAN_INPUT_KEY, input_text, str)
+            queue = await session_store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list) or []
+            queue.append(input_text)
+            await session_store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
             return
 
         await session_store.set(self._answer_key(interaction_id), input_text, str)
@@ -71,12 +76,26 @@ class CLIHumanInputAdapter:
         if answer is not None:
             return answer
 
-        unclaimed_answer = await session_store.get(_UNCLAIMED_HUMAN_INPUT_KEY, str)
-        if unclaimed_answer is None:
+        # Only fall back to a queued, unclaimed input when this request is
+        # unambiguously the one awaiting an answer. If any other distinct request
+        # is pending, an unclaimed input must not be silently attributed here —
+        # the caller is expected to answer it explicitly (e.g. via --reply-to).
+        pending = await self.get_pending_requests()
+        if any(
+            interaction_id != request.interaction_id for interaction_id in pending
+        ):
             return None
 
-        await session_store.delete(_UNCLAIMED_HUMAN_INPUT_KEY)
-        return unclaimed_answer
+        queue = await session_store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list)
+        if not queue:
+            return None
+
+        next_answer = queue.pop(0)
+        if queue:
+            await session_store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
+        else:
+            await session_store.delete(_UNCLAIMED_HUMAN_INPUTS_KEY)
+        return next_answer
 
     async def handle_request(self, request: HumanInputRequest) -> None:
         session_store = get_context().session_store
@@ -92,8 +111,12 @@ class CLIHumanInputAdapter:
 
     async def handle_complete(self, result: HumanInputResult) -> None:
         session_store = get_context().session_store
-        await session_store.delete(self._answer_key(result.interaction_id))
-
+        # Intentionally keep the stored answer in place. The tool memoizes its
+        # result via @engrave only after get_human_input returns, so deleting the
+        # answer here (before the return is durably recorded) would leave a window
+        # where a crash loses the answer and the question is re-asked on resume.
+        # Keeping the answer keyed by interaction_id makes a re-run idempotent;
+        # the leftover value is inert and namespaced to a single interaction.
         pending = await self.get_pending_requests()
         pending.pop(result.interaction_id, None)
         if pending:
