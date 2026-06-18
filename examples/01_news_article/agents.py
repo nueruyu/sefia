@@ -20,9 +20,10 @@ class RequirementsClarifier:
         researcher and writer.
 
         First, use the HumanInputTool to obtain the user's initial article
-        request. Then, if the request lacks important details, ask one focused
-        follow-up question at a time. Repeat this until all critical ambiguities
-        are resolved.
+        request. Treat that answer as the source request; do not ask the user to
+        restate it. Then, if the request lacks important details, ask one
+        focused follow-up question at a time. Repeat this only until critical
+        ambiguities are resolved.
 
         Critical details include:
         1. The article topic or subject.
@@ -32,7 +33,8 @@ class RequirementsClarifier:
 
         Do not ask about optional details if the user's request is already clear
         enough to proceed. Use reasonable defaults when they do not materially
-        change the result.
+        change the result, especially for angle, audience, language, and
+        exclusions.
         """
         ...
 
@@ -71,11 +73,16 @@ class NewsWriter:
         Write a news article for the clarified request, using the provided sources.
         1. Briefly review the sources to understand the key points.
         2. Write a draft that follows the topic, angle, audience, and requirements.
-        3. Ask the user for feedback on the draft's direction using the HumanInputTool.
-        4. If the user's feedback reveals missing information or requires additional
-           evidence, ask the Researcher to gather more sources before finalizing.
-        5. Finalize the article based on the user's feedback, incorporating their
-           suggestions and any additional research.
-        6. Return the final article as a NewsArticle object.
+        3. Ask the user for feedback on the draft's direction using the HumanInputTool
+           at most once.
+        4. After receiving any feedback, apply it and return the final NewsArticle.
+           Do not ask another HumanInputTool question unless the feedback is
+           impossible to apply without a specific missing fact from the user.
+        5. If the feedback asks to see the draft, change language, continue, add
+           a point, remove a point, or proceed, treat that as actionable feedback
+           and finalize the article instead of asking for confirmation again.
+        6. If the user's feedback reveals missing information or requires additional
+           evidence, ask the Researcher to gather more sources before finalizing,
+           then return the final NewsArticle without another user confirmation.
         """
         ...

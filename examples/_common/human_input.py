@@ -1,8 +1,9 @@
 import inspect
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
+from contextlib import contextmanager
+from typing import Any, TypeVar
 
-from sefia import get_context
+from sefia import SessionStore
 from sefios.tools import HumanInputRequest, HumanInputResult, HumanInputTool
 
 _PENDING_HUMAN_INPUTS_KEY = "pending_human_inputs"
@@ -32,58 +33,99 @@ class UnknownHumanInputError(Exception):
         self.interaction_id = interaction_id
 
 
+class ReadAfterWriteSessionStore:
+    """SessionStore wrapper that makes staged writes visible to later reads."""
+
+    def __init__(self, store: SessionStore):
+        self._store = store
+        self._values: dict[str, Any] = {}
+        self._deleted: set[str] = set()
+
+    async def get(self, key: str, type_hint: type) -> Any | None:
+        if key in self._values:
+            return self._values[key]
+        if key in self._deleted:
+            return None
+        return await self._store.get(key, type_hint)
+
+    async def set(self, key: str, value: Any, type_hint: type) -> None:
+        self._values[key] = value
+        self._deleted.discard(key)
+        await self._store.set(key, value, type_hint)
+
+    async def delete(self, key: str) -> None:
+        self._values.pop(key, None)
+        self._deleted.add(key)
+        await self._store.delete(key)
+
+
 class HumanInputSessionStore:
     """Small persistence wrapper for human-input state in the active session."""
 
+    def __init__(self):
+        self._active_store: ReadAfterWriteSessionStore | None = None
+
+    @contextmanager
+    def use_session_store(self, session_store: SessionStore):
+        previous_store = self._active_store
+        self._active_store = ReadAfterWriteSessionStore(session_store)
+        try:
+            yield
+        finally:
+            self._active_store = previous_store
+
     async def pending_requests(self) -> dict[str, dict]:
-        session_store = get_context().session_store
-        pending = await session_store.get(_PENDING_HUMAN_INPUTS_KEY, dict) or {}
+        store = self._store()
+        pending = await store.get(_PENDING_HUMAN_INPUTS_KEY, dict) or {}
         if not pending:
             return {}
 
         unanswered = {}
         for interaction_id, request in pending.items():
-            answer = await session_store.get(self._answer_key(interaction_id), str)
+            answer = await self.get_answer(interaction_id)
             if answer is None:
                 unanswered[interaction_id] = request
 
         await self.save_pending_requests(unanswered)
-        return unanswered
+        return dict(unanswered)
 
     async def save_pending_requests(self, pending: dict[str, dict]) -> None:
-        session_store = get_context().session_store
+        store = self._store()
         if pending:
-            await session_store.set(_PENDING_HUMAN_INPUTS_KEY, pending, dict)
+            await store.set(_PENDING_HUMAN_INPUTS_KEY, pending, dict)
             return
 
-        await session_store.delete(_PENDING_HUMAN_INPUTS_KEY)
+        await store.delete(_PENDING_HUMAN_INPUTS_KEY)
 
     async def get_answer(self, interaction_id: str) -> str | None:
-        session_store = get_context().session_store
-        return await session_store.get(self._answer_key(interaction_id), str)
+        return await self._store().get(self._answer_key(interaction_id), str)
 
     async def set_answer(self, interaction_id: str, answer: str) -> None:
-        session_store = get_context().session_store
-        await session_store.set(self._answer_key(interaction_id), answer, str)
+        await self._store().set(self._answer_key(interaction_id), answer, str)
 
     async def queue_input(self, input_text: str) -> None:
-        session_store = get_context().session_store
-        queue = await session_store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list) or []
+        store = self._store()
+        queue = await store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list) or []
         queue.append(input_text)
-        await session_store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
+        await store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
 
     async def pop_queued_input(self) -> str | None:
-        session_store = get_context().session_store
-        queue = await session_store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list)
+        store = self._store()
+        queue = await store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list)
         if not queue:
             return None
 
         next_input = queue.pop(0)
         if queue:
-            await session_store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
+            await store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
         else:
-            await session_store.delete(_UNCLAIMED_HUMAN_INPUTS_KEY)
+            await store.delete(_UNCLAIMED_HUMAN_INPUTS_KEY)
         return next_input
+
+    def _store(self) -> ReadAfterWriteSessionStore:
+        if self._active_store is None:
+            raise RuntimeError("Human input session store is not bound to a session.")
+        return self._active_store
 
     @staticmethod
     def _answer_key(interaction_id: str) -> str:

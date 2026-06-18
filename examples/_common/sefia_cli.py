@@ -166,8 +166,11 @@ class SefiaCLI:
                     model=model,
                     stream=stream,
                     policies=session_policies,
-                ):
-                    yield SefiaCLISession(human_input=self._human_input_receiver)
+                ) as session:
+                    with self._human_input.store.use_session_store(
+                        session.session_store
+                    ):
+                        yield SefiaCLISession(human_input=self._human_input_receiver)
             else:
                 async with self._session_scope.session(
                     session_id=resolved_session.session_id,
@@ -175,8 +178,11 @@ class SefiaCLI:
                     stream=stream,
                     policies=session_policies,
                     max_steps=cast(int | None, max_steps),
-                ):
-                    yield SefiaCLISession(human_input=self._human_input_receiver)
+                ) as session:
+                    with self._human_input.store.use_session_store(
+                        session.session_store
+                    ):
+                        yield SefiaCLISession(human_input=self._human_input_receiver)
         except YieldException:
             await self._report_interrupted(resolved_session)
             raise typer.Exit(code=0)
