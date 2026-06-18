@@ -27,8 +27,9 @@ export EXAMPLE_DEFAULT_MODEL="gpt-4o-mini"
 ## Tests
 
 The shared `_common` helpers, the example tools, and the rendering helpers are
-covered by tests that run without any LLM API calls. Run them from the
-repository root:
+covered by unit tests, and each example's workflow is covered by a scenario test
+that mocks the agents' `@infer` methods. Everything runs without any LLM API
+calls. Run them from the repository root:
 
 ```bash
 uv run pytest examples/tests
