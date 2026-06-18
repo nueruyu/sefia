@@ -1,7 +1,7 @@
 import pytest
 from sefia import StepContext
 from sefia.inference import FinalAnswerDecision
-from sefios.core.middleware import MaxStepsExceededError, StepLimiter
+from sefios.middleware import MaxStepsExceededError, StepLimiter
 
 
 def _ctx(step: int) -> StepContext:

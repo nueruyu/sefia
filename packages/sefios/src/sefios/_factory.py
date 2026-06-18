@@ -10,7 +10,7 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Policy
 from sefia.llm import LLMClient
 
-from .core.policies._max_steps import MaxSteps
+from .policies._max_steps import MaxSteps
 
 
 @asynccontextmanager
@@ -59,11 +59,11 @@ async def create_session(
     if max_steps is not None:
         final_policies.append(MaxSteps(count=max_steps))
     if stream:
-        from .core.policies._streaming import StreamingPolicy
+        from .policies._streaming import StreamingPolicy
 
         final_policies.append(StreamingPolicy())
     if verbose:
-        from .core.policies._debugging import VerbosePolicy
+        from .policies._debugging import VerbosePolicy
 
         final_policies.append(VerbosePolicy())
 
