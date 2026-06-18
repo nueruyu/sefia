@@ -5,12 +5,6 @@ import os
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
 
-# Must be set before litellm is imported anywhere. Forces litellm to use its
-# bundled model cost map instead of fetching it from the network at import time,
-# which speeds up the (lazy) import and keeps it working offline. A user who has
-# already set this explicitly is respected.
-os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-
 from sefia.exceptions import (
     ConnectionException,
     InferenceException,
@@ -25,24 +19,29 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Set before litellm is imported (it is imported lazily, well after this module
+# loads). Forces litellm to use its bundled model cost map instead of fetching it
+# from the network at import time, which speeds up the import and keeps it working
+# offline. A user who has already set this explicitly is respected.
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+
 # LiteLLM is imported lazily (inside the methods that need it) because importing
 # it eagerly is slow and would penalize anyone who merely imports
 # ``sefia_litellm`` without making a request. After the first call the module is
 # cached in ``sys.modules``, so subsequent local imports are effectively free.
 
-_LOG_FALSE_VALUES = frozenset({"0", "false", "no", "off", ""})
+_LOG_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 
 
 def _env_suppress_logs_default() -> bool:
     """Resolves the default for ``suppress_logs`` from the environment.
 
-    Reads ``SEFIA_LITELLM_SUPPRESS_LOGS``; when unset, logs are suppressed by
-    default. Any of ``0/false/no/off`` (case-insensitive) disables suppression.
+    Reads ``SEFIA_LITELLM_SUPPRESS_LOGS``; when unset or empty, logs are
+    suppressed by default. Any of ``0/false/no/off`` (case-insensitive) disables
+    suppression.
     """
-    raw = os.environ.get("SEFIA_LITELLM_SUPPRESS_LOGS")
-    if raw is None:
-        return True
-    return raw.strip().lower() not in _LOG_FALSE_VALUES
+    raw = os.environ.get("SEFIA_LITELLM_SUPPRESS_LOGS", "").strip().lower()
+    return raw not in _LOG_FALSE_VALUES
 
 
 def _configure_litellm_logging(suppress: bool) -> None:
@@ -56,16 +55,17 @@ def _configure_litellm_logging(suppress: bool) -> None:
     """
     import litellm
 
+    litellm_logger = logging.getLogger("LiteLLM")
     if suppress:
-        # Suppresses the "Provider List: ..." banner and the debug info printed
-        # alongside exceptions.
+        # suppress_debug_info hides the "Provider List: ..." banner and the debug
+        # info printed alongside exceptions; the logger level silences INFO/DEBUG
+        # records emitted through the standard logging module.
         litellm.suppress_debug_info = True
-        # Silences INFO/DEBUG records emitted through the standard logging module.
-        logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+        litellm_logger.setLevel(logging.WARNING)
     else:
         # Restore LiteLLM's defaults so this call wins over an earlier suppression.
         litellm.suppress_debug_info = False
-        logging.getLogger("LiteLLM").setLevel(logging.NOTSET)
+        litellm_logger.setLevel(logging.NOTSET)
 
 
 def _to_inference_exception(error: Exception) -> InferenceException | None:
