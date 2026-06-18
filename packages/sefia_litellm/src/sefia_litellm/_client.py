@@ -50,17 +50,22 @@ def _configure_litellm_logging(suppress: bool) -> None:
 
     Called after LiteLLM is imported. Idempotent and cheap, so it is safe to
     call on every request. The ``"LiteLLM"`` logger and ``suppress_debug_info``
-    flag are global, so with multiple clients the last ``complete()`` call wins.
+    flag are global, so with multiple clients the last ``complete()`` call wins:
+    a client with ``suppress=False`` restores LiteLLM's defaults even if an
+    earlier client had suppressed them.
     """
-    if not suppress:
-        return
     import litellm
 
-    # Suppresses the "Provider List: ..." banner and the debug info printed
-    # alongside exceptions.
-    litellm.suppress_debug_info = True
-    # Silences INFO/DEBUG records emitted through the standard logging module.
-    logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+    if suppress:
+        # Suppresses the "Provider List: ..." banner and the debug info printed
+        # alongside exceptions.
+        litellm.suppress_debug_info = True
+        # Silences INFO/DEBUG records emitted through the standard logging module.
+        logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+    else:
+        # Restore LiteLLM's defaults so this call wins over an earlier suppression.
+        litellm.suppress_debug_info = False
+        logging.getLogger("LiteLLM").setLevel(logging.NOTSET)
 
 
 def _to_inference_exception(error: Exception) -> InferenceException | None:

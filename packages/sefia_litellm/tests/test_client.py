@@ -191,13 +191,14 @@ class TestLiteLLMClient:
         assert litellm.suppress_debug_info is True
         assert logging.getLogger("LiteLLM").level == logging.WARNING
 
-    async def test_complete_leaves_logging_untouched_when_disabled(
+    async def test_complete_restores_litellm_logging_when_disabled(
         self, mock_acompletion, monkeypatch
     ):
         import litellm
 
-        monkeypatch.setattr(litellm, "suppress_debug_info", False, raising=False)
-        logging.getLogger("LiteLLM").setLevel(logging.DEBUG)
+        # Simulate an earlier client having suppressed logging globally.
+        monkeypatch.setattr(litellm, "suppress_debug_info", True, raising=False)
+        logging.getLogger("LiteLLM").setLevel(logging.WARNING)
         mock_acompletion.return_value = ModelResponse(
             choices=[
                 Choices(
@@ -211,8 +212,9 @@ class TestLiteLLMClient:
 
         await client.complete([])
 
+        # suppress_logs=False wins over the earlier suppression and restores defaults.
         assert litellm.suppress_debug_info is False
-        assert logging.getLogger("LiteLLM").level == logging.DEBUG
+        assert logging.getLogger("LiteLLM").level == logging.NOTSET
 
     def test_env_suppress_logs_default(self, monkeypatch):
         monkeypatch.delenv("SEFIA_LITELLM_SUPPRESS_LOGS", raising=False)
