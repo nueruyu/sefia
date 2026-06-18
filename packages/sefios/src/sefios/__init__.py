@@ -1,5 +1,5 @@
 """Official stack for building applications with the Sefia framework."""
 
-from ._scope import SefiaScope
+from ._scope import SessionScope
 
-__all__ = ["SefiaScope"]
+__all__ = ["SessionScope"]

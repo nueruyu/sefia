@@ -3,17 +3,22 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from sefia import Policy, Session
+import glyff
+import glyff_file_store
+import sefia
+import sefia.stores
+from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
+from sefia import Policy
 from sefia.llm import LLMClient
 
-from ._factory import create_session
+from .policies import MaxSteps, StreamingPolicy, VerbosePolicy
 
 # Sentinel distinguishing "not overridden" from an explicit ``max_steps=None``
 # (which is a meaningful value meaning "no step limit").
 _UNSET: Any = object()
 
 
-class SefiaScope:
+class SessionScope:
     """
     Manages shared configuration for Sefia sessions and provides helpers to run
     code within a configured session context.
@@ -47,16 +52,57 @@ class SefiaScope:
         stream: bool | None = None,
         verbose: bool | None = None,
         max_steps: int | None | Any = _UNSET,
-    ) -> AsyncIterator[Session]:
+    ) -> AsyncIterator[sefia.Session]:
         """Run code within a configured Sefia session context."""
-        async with create_session(
+        llm_client = self.llm_client
+        resolved_model = model or self.model
+        resolved_stream = self.stream if stream is None else stream
+        resolved_verbose = self.verbose if verbose is None else verbose
+        resolved_max_steps = self.max_steps if max_steps is _UNSET else max_steps
+
+        if llm_client is None:
+            if resolved_model is None:
+                raise ValueError("Either llm_client or model must be provided.")
+            try:
+                import sefia_litellm
+            except ImportError as e:
+                raise ImportError(
+                    "The 'litellm' extra is required to use the default session "
+                    "setup. Please install it with: pip install 'sefios[litellm]'"
+                ) from e
+            llm_client = sefia_litellm.LiteLLMClient(model=resolved_model)
+
+        serializer = PydanticSerializer()
+
+        file_client = glyff_file_store.FileClient(
+            base_dir=self.session_dir / "glyff_sessions",
             session_id=session_id,
-            session_dir=self.session_dir,
-            llm_client=self.llm_client,
-            model=model or self.model,
-            stream=self.stream if stream is None else stream,
-            verbose=self.verbose if verbose is None else verbose,
-            policies=list(self.policies),
-            max_steps=self.max_steps if max_steps is _UNSET else max_steps,
-        ) as session:
-            yield session
+        )
+        gs = glyff.Session(
+            id=session_id,
+            store=glyff_file_store.JsonFileSessionStore(
+                client=file_client, serializer=serializer
+            ),
+            hasher=PydanticArgsHasher(),
+        )
+        session_store = sefia.stores.FileSessionStore(
+            client=file_client, serializer=serializer
+        )
+
+        final_policies: list[Policy] = list(self.policies)
+        if resolved_max_steps is not None:
+            final_policies.append(MaxSteps(count=resolved_max_steps))
+        if resolved_stream:
+            final_policies.append(StreamingPolicy())
+        if resolved_verbose:
+            final_policies.append(VerbosePolicy())
+
+        async with gs:
+            async with sefia.Session(
+                llm_client=llm_client,
+                glyff_session=gs,
+                session_store=session_store,
+                policies=final_policies,
+                stream=resolved_stream,
+            ) as session:
+                yield session

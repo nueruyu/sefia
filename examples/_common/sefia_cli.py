@@ -6,7 +6,7 @@ from typing import Protocol, TypeVar, cast
 
 import typer
 from glyff.exceptions import YieldException
-from sefios import SefiaScope
+from sefios import SessionScope
 from sefios.tools import HumanInputRequest, HumanInputTool
 
 from .human_input import CLIHumanInputAdapter
@@ -113,7 +113,7 @@ class SefiaCLI:
         )
         self._human_input_tool = self._human_input.create_tool()
 
-        self._sefia_scope = SefiaScope(
+        self._session_scope = SessionScope(
             session_dir=session_dir,
             model=model,
             stream=stream,
@@ -156,7 +156,7 @@ class SefiaCLI:
 
         try:
             await self._report_session_resolved(resolved_session)
-            async with self._sefia_scope.session(
+            async with self._session_scope.session(
                 session_id=resolved_session.session_id,
                 model=model,
                 stream=stream,
