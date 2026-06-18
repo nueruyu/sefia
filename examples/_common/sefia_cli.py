@@ -10,7 +10,7 @@ from sefia import Policy
 from sefios import SessionScope
 from sefios.tools import HumanInputRequest, HumanInputTool
 
-from .human_input import CLIHumanInputAdapter
+from .human_input import CLIHumanInputAdapter, CLIHumanInputReceiver
 from .policies import VerbosePolicy
 from .session import ResolvedSession, SessionManager
 
@@ -74,7 +74,7 @@ class DefaultCLIReporter(CLIReporter):
 class SefiaCLISession:
     """Operations available inside a Sefia CLI session context."""
 
-    def __init__(self, *, human_input: CLIHumanInputAdapter):
+    def __init__(self, *, human_input: CLIHumanInputReceiver):
         self._human_input = human_input
 
     async def accept_input(
@@ -114,6 +114,7 @@ class SefiaCLI:
             on_request=self._report_human_input_request,
         )
         self._human_input_tool = self._human_input.create_tool()
+        self._human_input_receiver = CLIHumanInputReceiver(self._human_input.store)
         self._verbose = verbose
 
         self._session_scope = SessionScope(
@@ -166,7 +167,7 @@ class SefiaCLI:
                     stream=stream,
                     policies=session_policies,
                 ):
-                    yield SefiaCLISession(human_input=self._human_input)
+                    yield SefiaCLISession(human_input=self._human_input_receiver)
             else:
                 async with self._session_scope.session(
                     session_id=resolved_session.session_id,
@@ -175,7 +176,7 @@ class SefiaCLI:
                     policies=session_policies,
                     max_steps=cast(int | None, max_steps),
                 ):
-                    yield SefiaCLISession(human_input=self._human_input)
+                    yield SefiaCLISession(human_input=self._human_input_receiver)
         except YieldException:
             await self._report_interrupted(resolved_session)
             raise typer.Exit(code=0)

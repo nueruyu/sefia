@@ -6,9 +6,6 @@ from sefia import get_context
 from sefios.tools import HumanInputRequest, HumanInputResult, HumanInputTool
 
 _PENDING_HUMAN_INPUTS_KEY = "pending_human_inputs"
-# Inputs supplied before any request is pending are queued here (FIFO) so that
-# providing several seed inputs in a row does not silently overwrite earlier
-# ones.
 _UNCLAIMED_HUMAN_INPUTS_KEY = "unclaimed_human_inputs"
 
 T = TypeVar("T")
@@ -35,10 +32,104 @@ class UnknownHumanInputError(Exception):
         self.interaction_id = interaction_id
 
 
-class CLIHumanInputAdapter:
-    """Connects HumanInputTool callbacks to the CLI session protocol."""
+class HumanInputSessionStore:
+    """Small persistence wrapper for human-input state in the active session."""
 
-    def __init__(self, *, on_request: HumanInputRequestHandler | None = None):
+    async def pending_requests(self) -> dict[str, dict]:
+        session_store = get_context().session_store
+        pending = await session_store.get(_PENDING_HUMAN_INPUTS_KEY, dict) or {}
+        if not pending:
+            return {}
+
+        unanswered = {}
+        for interaction_id, request in pending.items():
+            answer = await session_store.get(self._answer_key(interaction_id), str)
+            if answer is None:
+                unanswered[interaction_id] = request
+
+        await self.save_pending_requests(unanswered)
+        return unanswered
+
+    async def save_pending_requests(self, pending: dict[str, dict]) -> None:
+        session_store = get_context().session_store
+        if pending:
+            await session_store.set(_PENDING_HUMAN_INPUTS_KEY, pending, dict)
+            return
+
+        await session_store.delete(_PENDING_HUMAN_INPUTS_KEY)
+
+    async def get_answer(self, interaction_id: str) -> str | None:
+        session_store = get_context().session_store
+        return await session_store.get(self._answer_key(interaction_id), str)
+
+    async def set_answer(self, interaction_id: str, answer: str) -> None:
+        session_store = get_context().session_store
+        await session_store.set(self._answer_key(interaction_id), answer, str)
+
+    async def queue_input(self, input_text: str) -> None:
+        session_store = get_context().session_store
+        queue = await session_store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list) or []
+        queue.append(input_text)
+        await session_store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
+
+    async def pop_queued_input(self) -> str | None:
+        session_store = get_context().session_store
+        queue = await session_store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list)
+        if not queue:
+            return None
+
+        next_input = queue.pop(0)
+        if queue:
+            await session_store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
+        else:
+            await session_store.delete(_UNCLAIMED_HUMAN_INPUTS_KEY)
+        return next_input
+
+    @staticmethod
+    def _answer_key(interaction_id: str) -> str:
+        return f"human_input__{interaction_id}"
+
+
+class CLIHumanInputReceiver:
+    """Accepts CLI input and stores it for pending or future human-input requests."""
+
+    def __init__(self, store: HumanInputSessionStore):
+        self._store = store
+
+    async def receive_input(
+        self,
+        input_text: str,
+        *,
+        reply_to: str | None = None,
+    ) -> None:
+        pending = await self._store.pending_requests()
+
+        if reply_to is not None:
+            if reply_to not in pending:
+                raise UnknownHumanInputError(reply_to)
+            await self._store.set_answer(reply_to, input_text)
+            return
+
+        if len(pending) == 1:
+            await self._store.set_answer(next(iter(pending)), input_text)
+            return
+
+        if len(pending) > 1:
+            raise AmbiguousHumanInputError(sorted(pending))
+
+        await self._store.queue_input(input_text)
+
+
+class CLIHumanInputAdapter:
+    """Connects HumanInputTool callbacks to CLI reporting and session state."""
+
+    def __init__(
+        self,
+        *,
+        store: HumanInputSessionStore | None = None,
+        on_request: HumanInputRequestHandler | None = None,
+    ):
+        self.store = store or HumanInputSessionStore()
         self._on_request = on_request
 
     def create_tool(self) -> HumanInputTool:
@@ -48,98 +139,31 @@ class CLIHumanInputAdapter:
             on_complete=self._handle_complete,
         )
 
-    async def receive_input(
-        self,
-        input_text: str,
-        *,
-        reply_to: str | None = None,
-    ) -> None:
-        """Store CLI input as an answer for a pending or upcoming interaction."""
-        interaction_id = await self._resolve_answer_target(reply_to)
-        session_store = get_context().session_store
-        if interaction_id is None:
-            queue = await session_store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list) or []
-            queue.append(input_text)
-            await session_store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
-            return
-
-        await session_store.set(self._answer_key(interaction_id), input_text, str)
-
-    async def _get_pending_requests(self) -> dict[str, dict]:
-        session_store = get_context().session_store
-        pending = await session_store.get(_PENDING_HUMAN_INPUTS_KEY, dict)
-        return pending or {}
-
     async def _get_answer(self, request: HumanInputRequest) -> str | None:
-        session_store = get_context().session_store
-        answer = await session_store.get(self._answer_key(request.interaction_id), str)
+        answer = await self.store.get_answer(request.interaction_id)
         if answer is not None:
             return answer
 
-        # Only fall back to a queued, unclaimed input when this request is
-        # unambiguously the one awaiting an answer. If any other distinct request
-        # is pending, an unclaimed input must not be silently attributed here —
-        # the caller is expected to answer it explicitly (e.g. via --reply-to).
-        pending = await self._get_pending_requests()
+        pending = await self.store.pending_requests()
         if any(interaction_id != request.interaction_id for interaction_id in pending):
             return None
 
-        queue = await session_store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list)
-        if not queue:
-            return None
-
-        next_answer = queue.pop(0)
-        if queue:
-            await session_store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
-        else:
-            await session_store.delete(_UNCLAIMED_HUMAN_INPUTS_KEY)
-        return next_answer
+        return await self.store.pop_queued_input()
 
     async def _handle_request(self, request: HumanInputRequest) -> None:
-        session_store = get_context().session_store
-        pending = await self._get_pending_requests()
+        pending = await self.store.pending_requests()
         pending[request.interaction_id] = {
             "id": request.interaction_id,
             "question": request.question,
         }
-        await session_store.set(_PENDING_HUMAN_INPUTS_KEY, pending, dict)
-
+        await self.store.save_pending_requests(pending)
         if self._on_request is not None:
             await _maybe_await(self._on_request(request))
 
     async def _handle_complete(self, result: HumanInputResult) -> None:
-        session_store = get_context().session_store
-        # Intentionally keep the stored answer in place. The tool memoizes its
-        # result via @engrave only after get_human_input returns, so deleting the
-        # answer here (before the return is durably recorded) would leave a window
-        # where a crash loses the answer and the question is re-asked on resume.
-        # Keeping the answer keyed by interaction_id makes a re-run idempotent;
-        # the leftover value is inert and namespaced to a single interaction.
-        pending = await self._get_pending_requests()
+        pending = await self.store.pending_requests()
         pending.pop(result.interaction_id, None)
-        if pending:
-            await session_store.set(_PENDING_HUMAN_INPUTS_KEY, pending, dict)
-        else:
-            await session_store.delete(_PENDING_HUMAN_INPUTS_KEY)
-
-    async def _resolve_answer_target(self, reply_to: str | None) -> str | None:
-        pending = await self._get_pending_requests()
-        if reply_to is not None:
-            if reply_to not in pending:
-                raise UnknownHumanInputError(reply_to)
-            return reply_to
-
-        if not pending:
-            return None
-
-        if len(pending) == 1:
-            return next(iter(pending))
-
-        raise AmbiguousHumanInputError(sorted(pending))
-
-    @staticmethod
-    def _answer_key(interaction_id: str) -> str:
-        return f"human_input__{interaction_id}"
+        await self.store.save_pending_requests(pending)
 
 
 async def _maybe_await(value: MaybeAwaitable[T]) -> T:
