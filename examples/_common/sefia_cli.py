@@ -6,10 +6,12 @@ from typing import Protocol, TypeVar, cast
 
 import typer
 from glyff.exceptions import YieldException
+from sefia import Policy
 from sefios import SessionScope
 from sefios.tools import HumanInputRequest, HumanInputTool
 
 from .human_input import CLIHumanInputAdapter
+from .policies import VerbosePolicy
 from .session import ResolvedSession, SessionManager
 
 T = TypeVar("T")
@@ -112,12 +114,12 @@ class SefiaCLI:
             on_request=self._report_human_input_request,
         )
         self._human_input_tool = self._human_input.create_tool()
+        self._verbose = verbose
 
         self._session_scope = SessionScope(
             session_dir=session_dir,
             model=model,
             stream=stream,
-            verbose=verbose,
             max_steps=max_steps,
         )
 
@@ -150,20 +152,30 @@ class SefiaCLI:
         """Run code within a resolved Sefia CLI session context."""
         resolved_session = self._session_manager.resolve_session(session_id)
 
-        scope_overrides: dict[str, object] = {}
-        if max_steps is not _USE_SCOPE_DEFAULT:
-            scope_overrides["max_steps"] = max_steps
+        resolved_verbose = self._verbose if verbose is None else verbose
+        session_policies: list[Policy] | None = None
+        if resolved_verbose:
+            session_policies = [VerbosePolicy()]
 
         try:
             await self._report_session_resolved(resolved_session)
-            async with self._session_scope.session(
-                session_id=resolved_session.session_id,
-                model=model,
-                stream=stream,
-                verbose=verbose,
-                **scope_overrides,
-            ):
-                yield SefiaCLISession(human_input=self._human_input)
+            if max_steps is _USE_SCOPE_DEFAULT:
+                async with self._session_scope.session(
+                    session_id=resolved_session.session_id,
+                    model=model,
+                    stream=stream,
+                    policies=session_policies,
+                ):
+                    yield SefiaCLISession(human_input=self._human_input)
+            else:
+                async with self._session_scope.session(
+                    session_id=resolved_session.session_id,
+                    model=model,
+                    stream=stream,
+                    policies=session_policies,
+                    max_steps=cast(int | None, max_steps),
+                ):
+                    yield SefiaCLISession(human_input=self._human_input)
         except YieldException:
             await self._report_interrupted(resolved_session)
             raise typer.Exit(code=0)

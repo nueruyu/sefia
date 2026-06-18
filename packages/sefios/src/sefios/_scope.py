@@ -11,7 +11,7 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Policy
 from sefia.llm import LLMClient
 
-from .policies import MaxSteps, StreamingPolicy, VerbosePolicy
+from .policies import MaxSteps, StreamingPolicy
 
 # Sentinel distinguishing "not overridden" from an explicit ``max_steps=None``
 # (which is a meaningful value meaning "no step limit").
@@ -32,7 +32,6 @@ class SessionScope:
         llm_client: LLMClient | None = None,
         policies: list[Policy] | None = None,
         stream: bool = False,
-        verbose: bool = False,
         max_steps: int | None = 25,
     ):
         self.session_dir = session_dir
@@ -40,7 +39,6 @@ class SessionScope:
         self.llm_client = llm_client
         self.policies = list(policies or [])
         self.stream = stream
-        self.verbose = verbose
         self.max_steps = max_steps
 
     @asynccontextmanager
@@ -50,14 +48,13 @@ class SessionScope:
         session_id: str,
         model: str | None = None,
         stream: bool | None = None,
-        verbose: bool | None = None,
+        policies: list[Policy] | None = None,
         max_steps: int | None | Any = _UNSET,
     ) -> AsyncIterator[sefia.Session]:
         """Run code within a configured Sefia session context."""
         llm_client = self.llm_client
         resolved_model = model or self.model
         resolved_stream = self.stream if stream is None else stream
-        resolved_verbose = self.verbose if verbose is None else verbose
         resolved_max_steps = self.max_steps if max_steps is _UNSET else max_steps
 
         if llm_client is None:
@@ -90,12 +87,12 @@ class SessionScope:
         )
 
         final_policies: list[Policy] = list(self.policies)
+        if policies is not None:
+            final_policies.extend(policies)
         if resolved_max_steps is not None:
             final_policies.append(MaxSteps(count=resolved_max_steps))
         if resolved_stream:
             final_policies.append(StreamingPolicy())
-        if resolved_verbose:
-            final_policies.append(VerbosePolicy())
 
         async with gs:
             async with sefia.Session(
