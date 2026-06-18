@@ -2090,8 +2090,20 @@ dependencies = [
     { name = "sefios", extra = ["all"] },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
 [package.metadata]
 requires-dist = [{ name = "sefios", extras = ["all"], editable = "packages/sefios" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23" },
+]
 
 [[package]]
 name = "sefia-litellm"

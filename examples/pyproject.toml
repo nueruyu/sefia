@@ -13,3 +13,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
+consider_namespace_packages = true
+
+[dependency-groups]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
