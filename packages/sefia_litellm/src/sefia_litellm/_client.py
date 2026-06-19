@@ -32,6 +32,11 @@ os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
 _LOG_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 
+# A level above CRITICAL drops every record, fully silencing the logger. LiteLLM
+# surfaces real failures as exceptions (see ``_to_inference_exception``), so its
+# log output is noise that can be turned off entirely without hiding errors.
+_SILENCE_LEVEL = logging.CRITICAL + 1
+
 
 def _env_suppress_logs_default() -> bool:
     """Resolves the default for ``suppress_logs`` from the environment.
@@ -44,28 +49,38 @@ def _env_suppress_logs_default() -> bool:
     return raw not in _LOG_FALSE_VALUES
 
 
-def _configure_litellm_logging(suppress: bool) -> None:
-    """Silences LiteLLM's verbose default logging when ``suppress`` is true.
+def _apply_litellm_log_level(suppress: bool) -> None:
+    """Sets the ``"LiteLLM"`` logger level.
 
-    Called after LiteLLM is imported. Idempotent and cheap, so it is safe to
-    call on every request. The ``"LiteLLM"`` logger and ``suppress_debug_info``
-    flag are global, so with multiple clients the last ``complete()`` call wins:
-    a client with ``suppress=False`` restores LiteLLM's defaults even if an
-    earlier client had suppressed them.
+    Does not import litellm, so it can run before litellm is imported — that way
+    even litellm's import-time warnings (e.g. optional-dependency preload
+    warnings) are suppressed. ``suppress`` fully silences the logger; otherwise
+    the level is reset to ``NOTSET`` (inherit from the root logger).
+    """
+    logging.getLogger("LiteLLM").setLevel(
+        _SILENCE_LEVEL if suppress else logging.NOTSET
+    )
+
+
+def _configure_litellm_logging(suppress: bool) -> None:
+    """Applies the full logging configuration once LiteLLM is imported.
+
+    Called from ``complete()``. Sets the logger level and toggles
+    ``suppress_debug_info`` (which controls the "Provider List: ..." banner and
+    the debug info printed alongside exceptions). Both are process-global, so with
+    multiple clients the last ``complete()`` call wins.
     """
     import litellm
 
-    litellm_logger = logging.getLogger("LiteLLM")
-    if suppress:
-        # suppress_debug_info hides the "Provider List: ..." banner and the debug
-        # info printed alongside exceptions; the logger level silences INFO/DEBUG
-        # records emitted through the standard logging module.
-        litellm.suppress_debug_info = True
-        litellm_logger.setLevel(logging.WARNING)
-    else:
-        # Restore LiteLLM's defaults so this call wins over an earlier suppression.
-        litellm.suppress_debug_info = False
-        litellm_logger.setLevel(logging.NOTSET)
+    _apply_litellm_log_level(suppress)
+    litellm.suppress_debug_info = suppress
+
+
+# Silence LiteLLM as early as possible — before it is imported (lazily, on the
+# first request) — so its import-time warnings are suppressed too when the
+# resolved default is "suppress". An explicit per-client ``suppress_logs`` still
+# takes effect later via ``_configure_litellm_logging``.
+_apply_litellm_log_level(_env_suppress_logs_default())
 
 
 def _to_inference_exception(error: Exception) -> InferenceException | None:

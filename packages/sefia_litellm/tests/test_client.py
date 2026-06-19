@@ -25,7 +25,12 @@ from sefia.exceptions import (
     TimeoutException,
 )
 from sefia.llm import LLMResponse, Message
-from sefia_litellm._client import LiteLLMClient, _env_suppress_logs_default
+from sefia_litellm._client import (
+    _SILENCE_LEVEL,
+    LiteLLMClient,
+    _apply_litellm_log_level,
+    _env_suppress_logs_default,
+)
 
 
 @pytest.fixture
@@ -189,7 +194,7 @@ class TestLiteLLMClient:
         await client.complete([])
 
         assert litellm.suppress_debug_info is True
-        assert logging.getLogger("LiteLLM").level == logging.WARNING
+        assert logging.getLogger("LiteLLM").level == _SILENCE_LEVEL
 
     async def test_complete_restores_litellm_logging_when_disabled(
         self, mock_acompletion, monkeypatch
@@ -198,7 +203,7 @@ class TestLiteLLMClient:
 
         # Simulate an earlier client having suppressed logging globally.
         monkeypatch.setattr(litellm, "suppress_debug_info", True, raising=False)
-        logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+        logging.getLogger("LiteLLM").setLevel(_SILENCE_LEVEL)
         mock_acompletion.return_value = ModelResponse(
             choices=[
                 Choices(
@@ -225,6 +230,13 @@ class TestLiteLLMClient:
 
         monkeypatch.setenv("SEFIA_LITELLM_SUPPRESS_LOGS", "1")
         assert _env_suppress_logs_default() is True
+
+    def test_apply_litellm_log_level(self):
+        lg = logging.getLogger("LiteLLM")
+        _apply_litellm_log_level(True)
+        assert lg.level == _SILENCE_LEVEL
+        _apply_litellm_log_level(False)
+        assert lg.level == logging.NOTSET
 
     def test_explicit_suppress_logs_overrides_env(self, monkeypatch):
         monkeypatch.setenv("SEFIA_LITELLM_SUPPRESS_LOGS", "false")

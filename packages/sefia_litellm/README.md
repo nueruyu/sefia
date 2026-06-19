@@ -11,9 +11,13 @@ client = sefia_litellm.LiteLLMClient(model="gpt-4o")
 
 ## Suppressing LiteLLM logging
 
-LiteLLM emits verbose logging by default (the `Provider List: ...` banner and
-debug info printed alongside exceptions). `LiteLLMClient` **suppresses these by
-default**.
+LiteLLM logs through the standard-library `LiteLLM` logger — mostly INFO-level
+messages that become visible whenever your application configures logging at
+INFO/DEBUG — and, when a request raises, prints debug info including a
+`Provider List: ...` banner. `LiteLLMClient` **silences all of this by default**.
+
+Real failures still surface: LiteLLM raises exceptions on errors (which this
+client maps to `sefia` exceptions), so silencing the logs never hides a failure.
 
 There are two ways to control this:
 
@@ -39,8 +43,11 @@ There are two ways to control this:
   An explicit `suppress_logs` argument overrides the environment variable. When
   unset, suppression is on.
 
-When suppression is on, `litellm.suppress_debug_info` is set to `True` and the
-standard-library `"LiteLLM"` logger is raised to `WARNING` (silencing INFO/DEBUG).
+When suppression is on, the `LiteLLM` logger is fully silenced (its level is set
+above `CRITICAL`) and `litellm.suppress_debug_info` is set to `True`. The logger
+level is applied as soon as `sefia_litellm` is imported — before LiteLLM itself is
+imported — so even LiteLLM's import-time warnings (e.g. optional-dependency
+preload warnings) are suppressed.
 
 ## On slow imports
 
