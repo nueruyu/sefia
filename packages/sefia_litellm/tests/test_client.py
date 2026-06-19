@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import AsyncMock
 
 import pytest
@@ -24,7 +25,12 @@ from sefia.exceptions import (
     TimeoutException,
 )
 from sefia.llm import LLMResponse, Message
-from sefia_litellm._client import LiteLLMClient
+from sefia_litellm._client import (
+    _SILENCE_LEVEL,
+    LiteLLMClient,
+    _apply_litellm_log_level,
+    _env_suppress_logs_default,
+)
 
 
 @pytest.fixture
@@ -166,6 +172,76 @@ class TestLiteLLMClient:
 
         with pytest.raises(AuthenticationError):
             await client.complete([])
+
+    async def test_complete_suppresses_litellm_logging_by_default(
+        self, mock_acompletion, monkeypatch
+    ):
+        import litellm
+
+        monkeypatch.setattr(litellm, "suppress_debug_info", False, raising=False)
+        logging.getLogger("LiteLLM").setLevel(logging.NOTSET)
+        mock_acompletion.return_value = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(role="assistant", content="Hi"),
+                )
+            ]
+        )
+        client = LiteLLMClient(model="gpt-4o")
+
+        await client.complete([])
+
+        assert litellm.suppress_debug_info is True
+        assert logging.getLogger("LiteLLM").level == _SILENCE_LEVEL
+
+    async def test_complete_restores_litellm_logging_when_disabled(
+        self, mock_acompletion, monkeypatch
+    ):
+        import litellm
+
+        # Simulate an earlier client having suppressed logging globally.
+        monkeypatch.setattr(litellm, "suppress_debug_info", True, raising=False)
+        logging.getLogger("LiteLLM").setLevel(_SILENCE_LEVEL)
+        mock_acompletion.return_value = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(role="assistant", content="Hi"),
+                )
+            ]
+        )
+        client = LiteLLMClient(model="gpt-4o", suppress_logs=False)
+
+        await client.complete([])
+
+        # suppress_logs=False wins over the earlier suppression and restores defaults.
+        assert litellm.suppress_debug_info is False
+        assert logging.getLogger("LiteLLM").level == logging.NOTSET
+
+    def test_env_suppress_logs_default(self, monkeypatch):
+        monkeypatch.delenv("SEFIA_LITELLM_SUPPRESS_LOGS", raising=False)
+        assert _env_suppress_logs_default() is True
+
+        monkeypatch.setenv("SEFIA_LITELLM_SUPPRESS_LOGS", "false")
+        assert _env_suppress_logs_default() is False
+
+        monkeypatch.setenv("SEFIA_LITELLM_SUPPRESS_LOGS", "1")
+        assert _env_suppress_logs_default() is True
+
+    def test_apply_litellm_log_level(self):
+        lg = logging.getLogger("LiteLLM")
+        _apply_litellm_log_level(True)
+        assert lg.level == _SILENCE_LEVEL
+        _apply_litellm_log_level(False)
+        assert lg.level == logging.NOTSET
+
+    def test_explicit_suppress_logs_overrides_env(self, monkeypatch):
+        monkeypatch.setenv("SEFIA_LITELLM_SUPPRESS_LOGS", "false")
+        assert LiteLLMClient(model="gpt-4o", suppress_logs=True)._suppress_logs is True
+        assert LiteLLMClient(model="gpt-4o")._suppress_logs is False
 
     async def test_complete_uses_streaming_when_callback_is_provided(
         self, mock_acompletion, mocker

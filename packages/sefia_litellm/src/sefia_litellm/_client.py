@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
 
@@ -18,10 +19,68 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Set before litellm is imported (it is imported lazily, well after this module
+# loads). Forces litellm to use its bundled model cost map instead of fetching it
+# from the network at import time, which speeds up the import and keeps it working
+# offline. A user who has already set this explicitly is respected.
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+
 # LiteLLM is imported lazily (inside the methods that need it) because importing
 # it eagerly is slow and would penalize anyone who merely imports
 # ``sefia_litellm`` without making a request. After the first call the module is
 # cached in ``sys.modules``, so subsequent local imports are effectively free.
+
+_LOG_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
+
+# A level above CRITICAL drops every record, fully silencing the logger. LiteLLM
+# surfaces real failures as exceptions (see ``_to_inference_exception``), so its
+# log output is noise that can be turned off entirely without hiding errors.
+_SILENCE_LEVEL = logging.CRITICAL + 1
+
+
+def _env_suppress_logs_default() -> bool:
+    """Resolves the default for ``suppress_logs`` from the environment.
+
+    Reads ``SEFIA_LITELLM_SUPPRESS_LOGS``; when unset or empty, logs are
+    suppressed by default. Any of ``0/false/no/off`` (case-insensitive) disables
+    suppression.
+    """
+    raw = os.environ.get("SEFIA_LITELLM_SUPPRESS_LOGS", "").strip().lower()
+    return raw not in _LOG_FALSE_VALUES
+
+
+def _apply_litellm_log_level(suppress: bool) -> None:
+    """Sets the ``"LiteLLM"`` logger level.
+
+    Does not import litellm, so it can run before litellm is imported — that way
+    even litellm's import-time warnings (e.g. optional-dependency preload
+    warnings) are suppressed. ``suppress`` fully silences the logger; otherwise
+    the level is reset to ``NOTSET`` (inherit from the root logger).
+    """
+    logging.getLogger("LiteLLM").setLevel(
+        _SILENCE_LEVEL if suppress else logging.NOTSET
+    )
+
+
+def _configure_litellm_logging(suppress: bool) -> None:
+    """Applies the full logging configuration once LiteLLM is imported.
+
+    Called from ``complete()``. Sets the logger level and toggles
+    ``suppress_debug_info`` (which controls the "Provider List: ..." banner and
+    the debug info printed alongside exceptions). Both are process-global, so with
+    multiple clients the last ``complete()`` call wins.
+    """
+    import litellm
+
+    _apply_litellm_log_level(suppress)
+    litellm.suppress_debug_info = suppress
+
+
+# Silence LiteLLM as early as possible — before it is imported (lazily, on the
+# first request) — so its import-time warnings are suppressed too when the
+# resolved default is "suppress". An explicit per-client ``suppress_logs`` still
+# takes effect later via ``_configure_litellm_logging``.
+_apply_litellm_log_level(_env_suppress_logs_default())
 
 
 def _to_inference_exception(error: Exception) -> InferenceException | None:
@@ -60,9 +119,14 @@ class LiteLLMClient(LLMClient):
     various LLM providers.
     """
 
-    def __init__(self, model: str, **kwargs: Any):
+    def __init__(self, model: str, *, suppress_logs: bool | None = None, **kwargs: Any):
         self.model = model
         self._kwargs = kwargs
+        # ``None`` defers to SEFIA_LITELLM_SUPPRESS_LOGS (default: suppress);
+        # an explicit bool overrides the environment.
+        self._suppress_logs = (
+            _env_suppress_logs_default() if suppress_logs is None else suppress_logs
+        )
 
     async def complete(
         self,
@@ -73,6 +137,8 @@ class LiteLLMClient(LLMClient):
     ) -> LLMResponse:
         """Sends a completion request using LiteLLM."""
         from litellm import ModelResponse, acompletion
+
+        _configure_litellm_logging(self._suppress_logs)
 
         raw_messages = [msg.to_dict(exclude_none=True) for msg in messages]
 
