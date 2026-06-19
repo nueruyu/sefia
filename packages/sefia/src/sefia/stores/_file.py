@@ -5,15 +5,16 @@ from typing import Any
 from glyff.interfaces import Serializer
 from glyff_file_store import FileClient
 
-from .._interfaces.session_store import SessionStore
+from ._buffered import BufferedSessionStore
 
 _UNSAFE = re.compile(r'[<>:"\\|?*%' + r"\x00-\x1f]")
 
 
-class FileSessionStore(SessionStore):
+class FileSessionStore(BufferedSessionStore):
     """A file-based metadata store backed by glyff's FileClient."""
 
     def __init__(self, client: FileClient, serializer: Serializer):
+        super().__init__()
         self._client = client
         self._serializer = serializer
 
@@ -26,14 +27,14 @@ class FileSessionStore(SessionStore):
             safe_parts.append(_UNSAFE.sub(lambda m: f"%{ord(m.group()):02X}", p))
         return Path("sefia", "metadata", *safe_parts).with_suffix(".json")
 
-    async def get(self, key: str, type_hint: type) -> Any | None:
+    async def _read(self, key: str, type_hint: type) -> Any | None:
         path = self._key_to_path(key)
         data = await self._client.read(path)
         if data:
             return await self._serializer.deserialize(data, type_hint)
         return None
 
-    async def set(self, key: str, value: Any, type_hint: type) -> None:
+    async def _stage_write(self, key: str, value: Any, type_hint: type) -> None:
         path = self._key_to_path(key)
         data = await self._serializer.serialize(value, type_hint)
 
@@ -42,6 +43,6 @@ class FileSessionStore(SessionStore):
 
         await self._client.stage_write(path, _write)
 
-    async def delete(self, key: str) -> None:
+    async def _stage_delete(self, key: str) -> None:
         path = self._key_to_path(key)
         await self._client.stage_delete(path)

@@ -13,3 +13,16 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
+consider_namespace_packages = true
+# Put the repository root on sys.path so the ``examples`` package (and entry
+# points like ``examples.01_news_article.main``, which use ``from .._common``
+# imports) resolve regardless of the working directory.
+pythonpath = [".."]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]

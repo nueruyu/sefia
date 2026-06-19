@@ -1,7 +1,7 @@
 import inspect
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from sefia import SessionStore
 from sefios.tools import HumanInputRequest, HumanInputResult, HumanInputTool
@@ -33,42 +33,20 @@ class UnknownHumanInputError(Exception):
         self.interaction_id = interaction_id
 
 
-class ReadAfterWriteSessionStore:
-    """SessionStore wrapper that makes staged writes visible to later reads."""
-
-    def __init__(self, store: SessionStore):
-        self._store = store
-        self._values: dict[str, Any] = {}
-        self._deleted: set[str] = set()
-
-    async def get(self, key: str, type_hint: type) -> Any | None:
-        if key in self._values:
-            return self._values[key]
-        if key in self._deleted:
-            return None
-        return await self._store.get(key, type_hint)
-
-    async def set(self, key: str, value: Any, type_hint: type) -> None:
-        self._values[key] = value
-        self._deleted.discard(key)
-        await self._store.set(key, value, type_hint)
-
-    async def delete(self, key: str) -> None:
-        self._values.pop(key, None)
-        self._deleted.add(key)
-        await self._store.delete(key)
-
-
 class HumanInputSessionStore:
-    """Small persistence wrapper for human-input state in the active session."""
+    """Small persistence wrapper for human-input state in the active session.
+
+    Reads observe writes made earlier in the same session because the bound
+    Sefia ``SessionStore`` provides read-your-writes consistency.
+    """
 
     def __init__(self):
-        self._active_store: ReadAfterWriteSessionStore | None = None
+        self._active_store: SessionStore | None = None
 
     @contextmanager
     def use_session_store(self, session_store: SessionStore):
         previous_store = self._active_store
-        self._active_store = ReadAfterWriteSessionStore(session_store)
+        self._active_store = session_store
         try:
             yield
         finally:
@@ -122,7 +100,7 @@ class HumanInputSessionStore:
             await store.delete(_UNCLAIMED_HUMAN_INPUTS_KEY)
         return next_input
 
-    def _store(self) -> ReadAfterWriteSessionStore:
+    def _store(self) -> SessionStore:
         if self._active_store is None:
             raise RuntimeError("Human input session store is not bound to a session.")
         return self._active_store
