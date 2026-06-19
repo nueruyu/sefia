@@ -86,6 +86,7 @@ async def _define_scope() -> ProjectScope:
     return await scoping_agent.define_scope()
 
 
+@engrave
 async def _understand_project(scope: ProjectScope) -> ProjectUnderstanding:
     console.print("\n[bold]> Stage 2: Understanding project...[/bold]")
     file_paths = await git_tool.list_tracked_files(scope.project_path)
@@ -127,6 +128,7 @@ async def _confirm_review_files(
     return list(dict.fromkeys(path for path in review_files if path in tracked_files))
 
 
+@engrave
 async def _run_reviews(
     review_files: list[str],
     project_path: str,

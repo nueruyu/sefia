@@ -51,19 +51,24 @@ async def _no_answer(_: HumanInputRequest) -> str | None:
     return None
 
 
-@dataclass
 class HumanInputTool:
-    get_answer: HumanInputAnswerProvider = _no_answer
-    on_request: HumanInputRequestCallback | None = None
-    on_complete: HumanInputCompleteCallback | None = None
+    def __init__(
+        self,
+        get_answer: HumanInputAnswerProvider = _no_answer,
+        on_request: HumanInputRequestCallback | None = None,
+        on_complete: HumanInputCompleteCallback | None = None,
+    ) -> None:
+        self._get_answer = get_answer
+        self._on_request = on_request
+        self._on_complete = on_complete
 
     async def _notify_request(self, request: HumanInputRequest) -> None:
-        if self.on_request is not None:
-            await _maybe_await(self.on_request(request))
+        if self._on_request is not None:
+            await _maybe_await(self._on_request(request))
 
     async def _notify_complete(self, result: HumanInputResult) -> None:
-        if self.on_complete is not None:
-            await _maybe_await(self.on_complete(result))
+        if self._on_complete is not None:
+            await _maybe_await(self._on_complete(result))
 
     @tool
     @engrave
@@ -84,7 +89,7 @@ class HumanInputTool:
             interaction_id=call_state.interaction_id,
             question=question,
         )
-        answer = await _maybe_await(self.get_answer(request))
+        answer = await _maybe_await(self._get_answer(request))
         if answer is not None:
             await self._notify_complete(
                 HumanInputResult(

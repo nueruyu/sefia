@@ -1,12 +1,9 @@
-from dataclasses import dataclass
-
 from sefia import infer, tool
 from sefios.tools import HumanInputTool, WebSearchTool
 
 from .models import ArticleRequest, NewsArticle
 
 
-@dataclass
 class RequirementsClarifier:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
@@ -39,7 +36,6 @@ class RequirementsClarifier:
         ...
 
 
-@dataclass
 class Researcher:
     def __init__(self, web_search: WebSearchTool):
         self._web = web_search
@@ -59,7 +55,6 @@ class Researcher:
         ...
 
 
-@dataclass
 class NewsWriter:
     def __init__(self, human_input: HumanInputTool, researcher: Researcher):
         self._human_input = human_input

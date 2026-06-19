@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
@@ -16,7 +15,6 @@ from .tools import FileTool
 RawCode = Annotated[str, AsRawText]
 
 
-@dataclass
 class ScopingAgent:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
@@ -35,7 +33,6 @@ class ScopingAgent:
         ...
 
 
-@dataclass
 class UnderstandingAgent:
     def __init__(self, file_tool: FileTool):
         self._file_tool = file_tool
@@ -104,7 +101,6 @@ class UnderstandingAgent:
         return updated_understanding
 
 
-@dataclass
 class ReviewScopingAgent:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
@@ -127,7 +123,6 @@ class ReviewScopingAgent:
         ...
 
 
-@dataclass
 class CodingStyleAuditor:
     @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
@@ -142,7 +137,6 @@ class CodingStyleAuditor:
         ...
 
 
-@dataclass
 class DesignPrincipleArchitect:
     @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
@@ -156,7 +150,6 @@ class DesignPrincipleArchitect:
         ...
 
 
-@dataclass
 class MaintainabilityAssessor:
     @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
@@ -170,7 +163,6 @@ class MaintainabilityAssessor:
         ...
 
 
-@dataclass
 class DependencySpecialist:
     @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
@@ -185,7 +177,6 @@ class DependencySpecialist:
         ...
 
 
-@dataclass
 class ReportingAgent:
     @infer
     async def create_report(
