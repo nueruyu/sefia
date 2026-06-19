@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Coroutine
 
 import pytest
-from glyff.interfaces import ArgsHasher, Serializer
+from glyff import ArgsHasher, Serializer
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 
 from sefia import infer, tool

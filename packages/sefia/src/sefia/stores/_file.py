@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from glyff.interfaces import Serializer
+from glyff import Serializer
 from glyff_file_store import FileClient
 
 from ._buffered import BufferedSessionStore

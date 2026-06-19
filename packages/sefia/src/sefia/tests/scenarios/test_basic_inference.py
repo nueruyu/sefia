@@ -3,10 +3,10 @@ from dataclasses import dataclass
 
 import glyff
 import pytest
+from glyff import ArgsHasher, Serializer
 from glyff.exceptions import ExecutionFailedError
-from glyff.interfaces import ArgsHasher, Serializer
-from glyff.stores import MemoryClient
-from glyff.stores import MemorySessionStore as GlyffMemoryStore
+from glyff.store import MemoryClient
+from glyff.store import MemorySessionStore as GlyffMemoryStore
 
 from sefia import Policy, Session, infer, policy
 from sefia._decorators import get_metadata

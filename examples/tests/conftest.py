@@ -1,5 +1,5 @@
 import pytest
-from glyff.stores import MemoryClient
+from glyff.store import MemoryClient
 from glyff_pydantic import PydanticSerializer
 from sefia.stores import MemorySessionStore
 

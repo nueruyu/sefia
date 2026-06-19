@@ -1,7 +1,7 @@
 from typing import Any
 
-from glyff.interfaces import Serializer
-from glyff.stores import MemoryClient
+from glyff import Serializer
+from glyff.store import MemoryClient
 
 from ._buffered import BufferedSessionStore
 
