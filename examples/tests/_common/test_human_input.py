@@ -5,7 +5,6 @@ from _common.human_input import (
     CLIHumanInputAdapter,
     CLIHumanInputReceiver,
     HumanInputSessionStore,
-    ReadAfterWriteSessionStore,
     UnknownHumanInputError,
 )
 from sefios.tools import HumanInputRequest, HumanInputResult
@@ -13,49 +12,6 @@ from sefios.tools import HumanInputRequest, HumanInputResult
 
 def _request(interaction_id: str) -> dict:
     return {"id": interaction_id, "question": f"question for {interaction_id}?"}
-
-
-class TestReadAfterWriteSessionStore:
-    async def test_staged_write_is_visible_before_commit(
-        self, session_store, memory_client
-    ):
-        wrapper = ReadAfterWriteSessionStore(session_store)
-
-        await wrapper.set("key", "value", str)
-
-        # The wrapper surfaces its own staged write immediately...
-        assert await wrapper.get("key", str) == "value"
-        # ...even though the underlying store has not committed it yet.
-        assert await session_store.get("key", str) is None
-
-        await memory_client.commit_staged()
-        assert await session_store.get("key", str) == "value"
-
-    async def test_delete_hides_delegate_value(self, session_store, memory_client):
-        await session_store.set("key", "value", str)
-        await memory_client.commit_staged()
-        wrapper = ReadAfterWriteSessionStore(session_store)
-
-        await wrapper.delete("key")
-
-        assert await wrapper.get("key", str) is None
-
-    async def test_set_after_delete_is_visible(self, session_store):
-        wrapper = ReadAfterWriteSessionStore(session_store)
-        await wrapper.delete("key")
-
-        await wrapper.set("key", "fresh", str)
-
-        assert await wrapper.get("key", str) == "fresh"
-
-    async def test_falls_through_to_committed_delegate(
-        self, session_store, memory_client
-    ):
-        await session_store.set("key", "delegate", str)
-        await memory_client.commit_staged()
-        wrapper = ReadAfterWriteSessionStore(session_store)
-
-        assert await wrapper.get("key", str) == "delegate"
 
 
 class TestHumanInputSessionStore:
