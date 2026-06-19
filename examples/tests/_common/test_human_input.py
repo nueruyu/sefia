@@ -1,4 +1,5 @@
 import pytest
+from sefios.tools import HumanInputRequest, HumanInputResult
 
 from examples._common.human_input import (
     AmbiguousHumanInputError,
@@ -7,7 +8,6 @@ from examples._common.human_input import (
     HumanInputSessionStore,
     UnknownHumanInputError,
 )
-from sefios.tools import HumanInputRequest, HumanInputResult
 
 
 def _request(interaction_id: str) -> dict:
@@ -16,7 +16,7 @@ def _request(interaction_id: str) -> dict:
 
 class TestHumanInputSessionStore:
     @pytest.fixture
-    def store(self, session_store) -> HumanInputSessionStore:
+    def store(self, session_store):
         human_store = HumanInputSessionStore()
         with human_store.use_session_store(session_store):
             yield human_store
@@ -63,7 +63,7 @@ class TestHumanInputSessionStore:
 
 class TestCLIHumanInputReceiver:
     @pytest.fixture
-    def store(self, session_store) -> HumanInputSessionStore:
+    def store(self, session_store):
         human_store = HumanInputSessionStore()
         with human_store.use_session_store(session_store):
             yield human_store
