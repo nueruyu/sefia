@@ -18,14 +18,8 @@ class TestHumanInputSessionStore:
     @pytest.fixture
     def store(self, session_store) -> HumanInputSessionStore:
         human_store = HumanInputSessionStore()
-        self._cm = human_store.use_session_store(session_store)
-        self._cm.__enter__()
-        return human_store
-
-    def teardown_method(self):
-        cm = getattr(self, "_cm", None)
-        if cm is not None:
-            cm.__exit__(None, None, None)
+        with human_store.use_session_store(session_store):
+            yield human_store
 
     async def test_requires_bound_session(self):
         store = HumanInputSessionStore()
@@ -71,14 +65,8 @@ class TestCLIHumanInputReceiver:
     @pytest.fixture
     def store(self, session_store) -> HumanInputSessionStore:
         human_store = HumanInputSessionStore()
-        self._cm = human_store.use_session_store(session_store)
-        self._cm.__enter__()
-        return human_store
-
-    def teardown_method(self):
-        cm = getattr(self, "_cm", None)
-        if cm is not None:
-            cm.__exit__(None, None, None)
+        with human_store.use_session_store(session_store):
+            yield human_store
 
     async def test_input_is_queued_when_nothing_pending(self, store):
         receiver = CLIHumanInputReceiver(store)
@@ -127,14 +115,8 @@ class TestCLIHumanInputAdapter:
     @pytest.fixture
     def adapter(self, session_store):
         adapter = CLIHumanInputAdapter()
-        self._cm = adapter.store.use_session_store(session_store)
-        self._cm.__enter__()
-        return adapter
-
-    def teardown_method(self):
-        cm = getattr(self, "_cm", None)
-        if cm is not None:
-            cm.__exit__(None, None, None)
+        with adapter.store.use_session_store(session_store):
+            yield adapter
 
     def test_create_tool_returns_human_input_tool(self, adapter):
         from sefios.tools import HumanInputTool

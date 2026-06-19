@@ -31,45 +31,41 @@ class TestToInputText:
 
 class TestSefiaCLISession:
     @pytest.fixture
-    def session(self, session_store):
-        store = HumanInputSessionStore()
-        self._cm = store.use_session_store(session_store)
-        self._cm.__enter__()
-        self._store = store
-        receiver = CLIHumanInputReceiver(store)
-        return SefiaCLISession(human_input=receiver)
+    def store(self) -> HumanInputSessionStore:
+        return HumanInputSessionStore()
 
-    def teardown_method(self):
-        cm = getattr(self, "_cm", None)
-        if cm is not None:
-            cm.__exit__(None, None, None)
+    @pytest.fixture
+    def session(self, store, session_store):
+        with store.use_session_store(session_store):
+            receiver = CLIHumanInputReceiver(store)
+            yield SefiaCLISession(human_input=receiver)
 
-    async def test_none_input_is_ignored(self, session):
+    async def test_none_input_is_ignored(self, session, store):
         await session.accept_input(None)
 
-        assert await self._store.pop_queued_input() is None
+        assert await store.pop_queued_input() is None
 
-    async def test_blank_input_is_ignored(self, session):
+    async def test_blank_input_is_ignored(self, session, store):
         await session.accept_input("   ")
 
-        assert await self._store.pop_queued_input() is None
+        assert await store.pop_queued_input() is None
 
-    async def test_string_input_is_stored(self, session):
+    async def test_string_input_is_stored(self, session, store):
         await session.accept_input("hello")
 
-        assert await self._store.pop_queued_input() == "hello"
+        assert await store.pop_queued_input() == "hello"
 
-    async def test_list_input_is_joined_and_stored(self, session):
+    async def test_list_input_is_joined_and_stored(self, session, store):
         await session.accept_input(["hello", "world"])
 
-        assert await self._store.pop_queued_input() == "hello world"
+        assert await store.pop_queued_input() == "hello world"
 
-    async def test_reply_to_answers_pending_request(self, session):
-        await self._store.save_pending_requests({"a": {"id": "a", "question": "q?"}})
+    async def test_reply_to_answers_pending_request(self, session, store):
+        await store.save_pending_requests({"a": {"id": "a", "question": "q?"}})
 
         await session.accept_input("answer", reply_to="a")
 
-        assert await self._store.get_answer("a") == "answer"
+        assert await store.get_answer("a") == "answer"
 
 
 class TestSefiaCLISessionManagement:
