@@ -1,6 +1,6 @@
 import pytest
 
-from _common.session import (
+from examples._common.session import (
     SessionManager,
     UnknownSessionError,
 )

@@ -1,6 +1,6 @@
 import pytest
 
-from _common.human_input import (
+from examples._common.human_input import (
     AmbiguousHumanInputError,
     CLIHumanInputAdapter,
     CLIHumanInputReceiver,

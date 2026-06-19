@@ -1,17 +1,17 @@
 import pytest
 
-from _common.human_input import (
+from examples._common.human_input import (
     CLIHumanInputReceiver,
     HumanInputSessionStore,
 )
-from _common.sefia_cli import (
+from examples._common.sefia_cli import (
     DefaultCLIReporter,
     SefiaCLI,
     SefiaCLISession,
     _to_input_text,
     _USE_DEFAULT_REPORTER,
 )
-from _common.session import ResolvedSession
+from examples._common.session import ResolvedSession
 from sefios.tools import HumanInputRequest, HumanInputTool
 
 

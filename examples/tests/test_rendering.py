@@ -2,10 +2,10 @@ from importlib import import_module
 
 # Example packages are prefixed with digits (e.g. ``01_news_article``), which a
 # plain ``import`` statement cannot reference, so load them via importlib.
-news_models = import_module("01_news_article.models")
-news_rendering = import_module("01_news_article.rendering")
-code_models = import_module("02_code_quality.models")
-code_rendering = import_module("02_code_quality.rendering")
+news_models = import_module("examples.01_news_article.models")
+news_rendering = import_module("examples.01_news_article.rendering")
+code_models = import_module("examples.02_code_quality.models")
+code_rendering = import_module("examples.02_code_quality.rendering")
 
 
 class TestRenderArticleRequest:

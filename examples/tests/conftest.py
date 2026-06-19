@@ -1,18 +1,7 @@
-import sys
-from pathlib import Path
-
 import pytest
 from glyff.stores import MemoryClient
 from glyff_pydantic import PydanticSerializer
 from sefia.stores import MemorySessionStore
-
-# Make the repository root importable so example entry points such as
-# ``examples.01_news_article.main`` resolve. Their ``from .._common ...`` imports
-# require the full ``examples`` package, which only exists when the repo root is
-# on ``sys.path``.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
 
 
 @pytest.fixture

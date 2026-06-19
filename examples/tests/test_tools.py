@@ -5,7 +5,7 @@ import pytest
 from sefia import exceptions
 
 # ``02_code_quality`` starts with a digit, so it must be loaded via importlib.
-tools = import_module("02_code_quality.tools")
+tools = import_module("examples.02_code_quality.tools")
 
 
 def _init_repo(path):
