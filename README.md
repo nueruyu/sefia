@@ -269,7 +269,7 @@ either or both:
 
 ```python
 from sefia import infer, policy
-from sefia.policies import MaxRetries
+from sefios.policies import MaxRetries
 
 
 class MyAgent:
@@ -306,11 +306,12 @@ Two seams are available, exposed as ABCs from `sefia`:
   cap the loop, raising `MaxStepsExceededError` once the step limit is reached.
 
 The executor does not cap the loop on its own; without a `StepMiddleware` there
-is no default cap (though `Session` registers stagnation detection by default).
+is no default cap. The `sefios` session helpers add `MaxSteps(count=25)` by
+default; pass `max_steps=None` to opt out.
 
 ```python
 from sefia import infer, policy
-from sefia.policies import MaxSteps
+from sefios.policies import MaxSteps
 
 
 class MyAgent:
@@ -393,8 +394,8 @@ class LoggingPolicy(Policy):
 
 Pass policies to `Session` or to a specific `@infer` call.
 
-The built-in `StagnationDetector` is registered by default and aborts the loop
-if the same tool is called repeatedly with identical arguments.
+Use `sefios.policies.StagnationPolicy` when you want to abort the loop if the
+same tool is called repeatedly with identical arguments.
 
 ## Resources
 

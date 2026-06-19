@@ -1,10 +1,9 @@
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
 from sefia import AsRawText, infer
+from sefios.tools import HumanInputTool
 
-from ..common.human_input import HumanInputTool
 from .models import (
     CodeIssue,
     ProjectScope,
@@ -16,25 +15,23 @@ from .tools import FileTool
 RawCode = Annotated[str, AsRawText]
 
 
-@dataclass
 class ScopingAgent:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
 
     @infer
-    async def define_scope(self, user_request: str) -> ProjectScope:
+    async def define_scope(self) -> ProjectScope:
         """
-        Clarify the user's request and define a concrete code-review scope.
+        Defines a concrete code-review scope from the user's review request.
 
-        Determine the Git repository path, review focus areas, and files or
-        patterns that should be excluded. Use the HumanInputTool to ask one
-        focused question at a time when critical details are missing. Preserve
-        explicit paths exactly as the user provides them.
+        The resulting ProjectScope contains the target Git repository path,
+        review focus areas, and excluded files or patterns. Explicit paths
+        provided by the user are preserved exactly. Critical missing details may
+        be resolved through a focused HumanInputTool question.
         """
         ...
 
 
-@dataclass
 class UnderstandingAgent:
     def __init__(self, file_tool: FileTool):
         self._file_tool = file_tool
@@ -46,13 +43,14 @@ class UnderstandingAgent:
         unread_file_paths: list[str],
     ) -> list[str]:
         """
-        Select up to three unread files that will most improve the current
-        project understanding.
+        Selects up to three unread files that are most useful for improving the
+        current project understanding.
 
-        Prioritize README files, dependency and build configuration, main entry
-        points, public interfaces, and representative tests. Return only paths
-        from unread_file_paths. Return an empty list when the understanding is
-        already sufficient for selecting files to review.
+        Useful files are typically README files, package and build metadata,
+        public API entry points, central orchestration code, core domain models,
+        and representative tests. The returned paths are members of
+        unread_file_paths. An empty list represents that the current
+        understanding is already sufficient for review-file selection.
         """
         ...
 
@@ -63,11 +61,11 @@ class UnderstandingAgent:
         new_file_contents: dict[str, str],
     ) -> ProjectUnderstanding:
         """
-        Update the project understanding using the newly read file contents.
+        Updates the project understanding from newly read file contents.
 
-        Refine the concise project summary, detected technology stack, and key
-        components. Preserve useful facts from the current understanding and do
-        not claim details that are unsupported by the provided files.
+        The returned ProjectUnderstanding keeps a concise summary, detected
+        technology stack, and key components. It preserves useful existing
+        facts and incorporates only facts supported by the supplied files.
         """
         ...
 
@@ -103,7 +101,6 @@ class UnderstandingAgent:
         return updated_understanding
 
 
-@dataclass
 class ReviewScopingAgent:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
@@ -116,75 +113,107 @@ class ReviewScopingAgent:
         all_file_paths: list[str],
     ) -> list[str]:
         """
-        Propose the most relevant tracked files for review, then use the
-        HumanInputTool to ask the user to confirm or adjust the selection.
+        Returns the final tracked files selected for code review.
 
-        Respect the requested focus areas and exclusions. Return only paths from
-        all_file_paths, without duplicates, after the user has approved the
-        final selection.
+        The initial proposal is based on the project understanding, requested
+        focus areas, exclusions, public interfaces, central implementation
+        files, configuration files relevant to the requested focus, and
+        representative tests. The final list reflects the user's confirmation
+        or adjustment through HumanInputTool. Returned paths are unique members
+        of all_file_paths.
         """
         ...
 
 
-@dataclass
 class CodingStyleAuditor:
     @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
-        Review the given files from a coding-style perspective.
+        Returns coding-style issues found in the supplied files.
 
-        Report actionable issues involving naming conventions, formatting,
-        comments, duplicated literals, and magic values. Use precise file paths
-        and line numbers. Do not report purely subjective preferences or invent
-        issues when the code is already clear and consistent.
+        A coding-style issue is a concrete naming, formatting, comment, or local
+        consistency problem that reduces readability in the supplied code. The
+        result excludes subjective preferences, ordinary string literals,
+        ordinary numeric values, punctuation used only for rendering, parameter
+        names required by language convention, and constants whose extraction
+        would make the code less clear.
+
+        A duplicated literal or magic value is treated as an issue only when it
+        represents shared domain meaning, configuration, protocol text, storage
+        keys, external API names, or a value likely to change in multiple places.
+        The returned issues use supplied file paths and specific line numbers.
+        CodeIssue.perspective is assigned by the caller and may be empty here.
         """
         ...
 
 
-@dataclass
 class DesignPrincipleArchitect:
     @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
-        Review the given files from a software-design-principles perspective.
+        Returns software-design issues found in the supplied files.
 
-        Focus on SOLID, DRY, cohesion, coupling, responsibility boundaries, and
-        useful abstractions. Report only concrete, actionable issues with precise
-        file paths and line numbers.
+        A design issue is a concrete responsibility, coupling, cohesion,
+        abstraction, or boundary problem whose improvement would make the code
+        easier to evolve. The result excludes thin functions that intentionally
+        define workflow stages, persistence boundaries, logging boundaries,
+        resumable execution boundaries, or agent/orchestration steps.
+
+        A wrapper is treated as a design issue only when it hides important
+        behavior, duplicates nontrivial logic, or creates a misleading
+        abstraction. The returned issues use supplied file paths and specific
+        line numbers. CodeIssue.perspective is assigned by the caller and may be
+        empty here.
         """
         ...
 
 
-@dataclass
 class MaintainabilityAssessor:
     @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
-        Review the given files from a maintainability and readability perspective.
+        Returns maintainability and readability issues found in the supplied
+        files.
 
-        Focus on complexity, clarity, documentation, error handling, and
-        testability. Report only concrete, actionable issues with precise file
-        paths and line numbers.
+        A maintainability issue is a concrete problem involving control-flow
+        complexity, unclear state transitions, weak error handling, missing
+        validation at a meaningful boundary, hard-to-test behavior, or
+        misleading structure. The result excludes speculative scalability
+        concerns, production-hardening suggestions for intentionally small
+        examples, and refactors whose main benefit is stylistic.
+
+        File-based persistence, simple session files, and small CLI examples are
+        treated as acceptable unless the supplied code itself shows a concrete
+        correctness, concurrency, or data-loss risk. The returned issues use
+        supplied file paths and specific line numbers. CodeIssue.perspective is
+        assigned by the caller and may be empty here.
         """
         ...
 
 
-@dataclass
 class DependencySpecialist:
     @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
-        Review the given files from an external-dependency perspective.
+        Returns external-dependency issues found in the supplied files.
 
-        Focus on unnecessary dependencies, unsafe or incorrect library usage,
-        unbounded or incompatible versions, and visible security risks. Report
-        only evidence supported by the supplied files, with precise paths and
-        line numbers.
+        A dependency issue is a concrete problem involving dependency
+        declarations, optional dependency boundaries, version constraints,
+        unnecessary runtime imports, unsafe library use, or mismatches between
+        declared packages and imported packages. Version-constraint issues are
+        based on dependency metadata files supplied in file_contents, such as
+        pyproject.toml, requirements files, lock files, or package manifests.
+
+        The result excludes claims inferred only from an import statement when
+        the relevant dependency declaration file is not supplied. Conditional
+        imports are treated as acceptable when they support optional features and
+        produce clear errors for missing extras. The returned issues use supplied
+        file paths and specific line numbers. CodeIssue.perspective is assigned
+        by the caller and may be empty here.
         """
         ...
 
 
-@dataclass
 class ReportingAgent:
     @infer
     async def create_report(
@@ -193,11 +222,14 @@ class ReportingAgent:
         understanding: ProjectUnderstanding,
     ) -> QualityReport:
         """
-        Consolidate the identified issues and project understanding into a final
-        code-quality report.
+        Creates the final code-quality report from reviewed issues and project
+        understanding.
 
-        Write a concise overall summary and group every issue by its perspective.
-        Preserve issue details exactly, avoid duplicating issues, and include
-        perspectives with no issues only when that adds useful context.
+        The report contains a concise overall summary and issues grouped by
+        perspective. Duplicate issues are merged. Low-value nits are omitted
+        when their suggested change would not clearly improve readability,
+        maintainability, correctness, or design clarity. Issue descriptions and
+        suggestions remain faithful to the supplied issue details and do not add
+        unsupported findings.
         """
         ...

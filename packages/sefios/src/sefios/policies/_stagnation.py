@@ -1,0 +1,18 @@
+from dataclasses import dataclass
+
+from sefia._interfaces import InferenceMiddleware, Policy, StepMiddleware
+from sefios.middleware._stagnation import StagnationDetector
+
+
+@dataclass
+class StagnationPolicy(Policy):
+    """
+    A policy that adds middleware to detect and prevent infinite loops
+    of the same tool call.
+    """
+
+    max_repeats: int = 3
+
+    def create_middleware(self) -> list[InferenceMiddleware | StepMiddleware]:
+        """Creates a new StagnationDetector instance."""
+        return [StagnationDetector(max_repeats=self.max_repeats)]

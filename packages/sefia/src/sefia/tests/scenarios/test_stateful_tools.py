@@ -5,11 +5,10 @@ from typing import Callable
 
 import glyff
 import pytest
-from glyff import engrave
+from glyff import ArgsHasher, Serializer, engrave
 from glyff.exceptions import YieldException
-from glyff.interfaces import ArgsHasher, Serializer
-from glyff.stores import MemoryClient
-from glyff.stores import MemorySessionStore as GlyffMemoryStore
+from glyff.store import MemoryClient
+from glyff.store import MemorySessionStore as GlyffMemoryStore
 
 from sefia import (
     Session,

@@ -11,7 +11,6 @@ from ._tool_system import ToolCollector
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
 from .llm._xml_prompt_formatter import XmlPromptFormatter
-from .policies import StagnationPolicy
 from .pydantic._model_inspector import PydanticModelInspector
 from .pydantic.json_utils import pydantic_json_default
 from .tool_collectors import DefaultToolCollector
@@ -39,10 +38,7 @@ class Session:
         self._glyff_session = glyff_session
         self.session_store = session_store
         self._context_token = None
-        self._policies: list[Policy] = [
-            StagnationPolicy(),
-            *(policies if policies is not None else []),
-        ]
+        self._policies: list[Policy] = list(policies) if policies is not None else []
 
         model_inspector = model_inspector or PydanticModelInspector()
 

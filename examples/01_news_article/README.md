@@ -9,7 +9,7 @@ article, and can pause/resume when human input is needed.
 ## Commands
 
 Run these commands from the repository root. See the [examples README](../README.md)
-for common setup.
+for setup.
 
 ### Start or Resume Chat
 

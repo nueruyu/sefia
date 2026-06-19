@@ -3,15 +3,14 @@ from dataclasses import dataclass
 
 import glyff
 import pytest
+from glyff import ArgsHasher, Serializer
 from glyff.exceptions import ExecutionFailedError
-from glyff.interfaces import ArgsHasher, Serializer
-from glyff.stores import MemoryClient
-from glyff.stores import MemorySessionStore as GlyffMemoryStore
+from glyff.store import MemoryClient
+from glyff.store import MemorySessionStore as GlyffMemoryStore
 
-from sefia import Session, infer, policy
+from sefia import Policy, Session, infer, policy
 from sefia._decorators import get_metadata
 from sefia.llm import LLMResponse
-from sefia.policies import MaxSteps
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
 from ..conftest import (
@@ -30,6 +29,11 @@ def _make_stores(serializer):
         GlyffMemoryStore(client=client, serializer=serializer),
         SefiaMemoryStore(client=client, serializer=serializer),
     )
+
+
+@dataclass
+class _PolicyFixture(Policy):
+    count: int
 
 
 async def test_inference_with_tool_calls(
@@ -242,79 +246,6 @@ async def test_inference_with_nonexistent_tool_call(
     )
 
 
-async def test_stagnation_state_is_isolated_between_infer_calls(
-    serializer: Serializer, hasher: ArgsHasher
-):
-    # Regression: StagnationDetector was previously shared at the Session level,
-    # so the second @infer call would start with a history already partially filled
-    # by the first call. With policy-based instantiation each call gets a fresh detector.
-    repeated_call_response = LLMResponse(
-        content=json.dumps(
-            {
-                "tool_calls": [
-                    {"name": "WebToolkit_search", "arguments": {"query": "sefia"}}
-                ]
-            }
-        )
-    )
-    final_response = LLMResponse(
-        content=json.dumps(
-            {
-                "final_answer": {
-                    "topic": "sefia",
-                    "summary": "Sefia is a framework for building LLM agents.",
-                    "sources": [],
-                }
-            }
-        )
-    )
-
-    # First call: one tool call then final answer (fills stagnation history with 1 entry)
-    # Second call: same tool call repeated — with a shared detector this would raise
-    # StagnationError on the 2nd repetition (max_repeats=3 minus the 1 from call #1).
-    # With isolated detectors the second call starts fresh and completes normally.
-    mock_llm = MockLLMClient(
-        responses=[
-            repeated_call_response,
-            LLMResponse(
-                content=json.dumps(
-                    {
-                        "final_answer": {
-                            "topic": "sefia",
-                            "summary": "first call done",
-                            "sources": [],
-                        }
-                    }
-                )
-            ),
-            # Second @infer call — same tool, same args; would trip a shared detector
-            repeated_call_response,
-            repeated_call_response,
-            final_response,
-        ]
-    )
-
-    session_id = "stagnation-isolation-test"
-    glyff_store, sefia_store = _make_stores(serializer)
-
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
-        async with Session(
-            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-        ):
-            toolkit = WebToolkit()
-            researcher = Researcher(toolkit)
-
-            # First call consumes 1 "search" tool call
-            report1 = await researcher.generate_report(topic="first")
-            assert report1.summary == "first call done"
-
-            # Second call repeats the same tool call 2 more times before finishing.
-            # If the detector were shared this would be 1+2=3 repeats → StagnationError.
-            report2 = await researcher.generate_report(topic="sefia")
-            result = report2 if isinstance(report2, Report) else Report(**report2)
-            assert result.topic == "sefia"
-
-
 async def test_inference_with_invalid_output_schema(
     serializer: Serializer, hasher: ArgsHasher
 ):
@@ -375,12 +306,12 @@ def test_policy_attaches_metadata():
     where it sits relative to @infer."""
 
     @infer
-    @policy(MaxSteps(count=3))
+    @policy(_PolicyFixture(count=3))
     async def below(value: int) -> int:
         """Policy applied below @infer."""
         ...
 
-    @policy(MaxSteps(count=3))
+    @policy(_PolicyFixture(count=3))
     @infer
     async def above(value: int) -> int:
         """Policy applied above @infer."""
@@ -389,7 +320,7 @@ def test_policy_attaches_metadata():
     for fn in (below, above):
         policies = get_metadata(fn)["policies"]
         assert len(policies) == 1
-        assert isinstance(policies[0], MaxSteps)
+        assert isinstance(policies[0], _PolicyFixture)
 
 
 def test_policy_coexists_with_other_metadata():
@@ -403,15 +334,15 @@ def test_policy_coexists_with_other_metadata():
     fn.__sefia_metadata__ = {"other": True}
 
     # @policy sits above @infer, so the policy lands on the wrapper chain.
-    decorated = policy(MaxSteps(count=2))(infer(fn))
+    decorated = policy(_PolicyFixture(count=2))(infer(fn))
 
     metadata = get_metadata(decorated)
     assert metadata.get("other") is True
-    assert [type(p) for p in metadata.get("policies", [])] == [MaxSteps]
+    assert [type(p) for p in metadata.get("policies", [])] == [_PolicyFixture]
 
 
 def test_policy_rejects_non_policy():
     """@policy raises a clear error when given a non-Policy (e.g. the class
     itself instead of an instance)."""
     with pytest.raises(TypeError):
-        policy(MaxSteps)  # type: ignore
+        policy(_PolicyFixture)  # type: ignore

@@ -6,7 +6,7 @@ from typing import Type, TypeVar
 
 from glyff import ExecutionId
 from glyff import Session as GlyffSession
-from glyff.context import get_context as get_glyff_context
+from glyff import get_context as get_glyff_context
 
 from ._interfaces import InferenceStrategy, Policy
 from ._interfaces.session_store import SessionStore

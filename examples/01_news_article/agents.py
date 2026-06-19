@@ -1,27 +1,25 @@
-from dataclasses import dataclass
-
 from sefia import infer, tool
+from sefios.tools import HumanInputTool, WebSearchTool
 
-from ..common.human_input import HumanInputTool
-from ..common.web_search import WebSearchTool
 from .models import ArticleRequest, NewsArticle
 
 
-@dataclass
 class RequirementsClarifier:
     def __init__(self, human_input: HumanInputTool):
         self._human_input = human_input
 
     @infer
-    async def clarify_request(self, user_request: str) -> ArticleRequest:
+    async def clarify_request(self) -> ArticleRequest:
         """
-        Clarify the user's initial request before any research or writing begins.
+        Clarify the user's request for a news article before research or writing.
 
         Your goal is to produce a concrete article brief for the downstream
         researcher and writer.
 
-        If the request lacks important details, ask the user one focused question
-        at a time using the HumanInputTool. Repeat this until all critical
+        First, use the HumanInputTool to obtain the user's initial article
+        request. Treat that answer as the source request; do not ask the user to
+        restate it. Then, if the request lacks important details, ask one
+        focused follow-up question at a time. Repeat this only until critical
         ambiguities are resolved.
 
         Critical details include:
@@ -32,12 +30,12 @@ class RequirementsClarifier:
 
         Do not ask about optional details if the user's request is already clear
         enough to proceed. Use reasonable defaults when they do not materially
-        change the result.
+        change the result, especially for angle, audience, language, and
+        exclusions.
         """
         ...
 
 
-@dataclass
 class Researcher:
     def __init__(self, web_search: WebSearchTool):
         self._web = web_search
@@ -57,7 +55,6 @@ class Researcher:
         ...
 
 
-@dataclass
 class NewsWriter:
     def __init__(self, human_input: HumanInputTool, researcher: Researcher):
         self._human_input = human_input
@@ -71,11 +68,16 @@ class NewsWriter:
         Write a news article for the clarified request, using the provided sources.
         1. Briefly review the sources to understand the key points.
         2. Write a draft that follows the topic, angle, audience, and requirements.
-        3. Ask the user for feedback on the draft's direction using the HumanInputTool.
-        4. If the user's feedback reveals missing information or requires additional
-           evidence, ask the Researcher to gather more sources before finalizing.
-        5. Finalize the article based on the user's feedback, incorporating their
-           suggestions and any additional research.
-        6. Return the final article as a NewsArticle object.
+        3. Ask the user for feedback on the draft's direction using the HumanInputTool
+           at most once.
+        4. After receiving any feedback, apply it and return the final NewsArticle.
+           Do not ask another HumanInputTool question unless the feedback is
+           impossible to apply without a specific missing fact from the user.
+        5. If the feedback asks to see the draft, change language, continue, add
+           a point, remove a point, or proceed, treat that as actionable feedback
+           and finalize the article instead of asking for confirmation again.
+        6. If the user's feedback reveals missing information or requires additional
+           evidence, ask the Researcher to gather more sources before finalizing,
+           then return the final NewsArticle without another user confirmation.
         """
         ...
