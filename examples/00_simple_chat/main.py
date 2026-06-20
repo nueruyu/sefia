@@ -7,12 +7,11 @@ next. Run it again to continue the conversation.
 
 import asyncio
 from pathlib import Path
+from typing import Annotated, Never
 
 import typer
 from sefia import infer
 from sefios.tools import HumanInputTool
-from typing import Never
-from typing_extensions import Annotated
 
 from .._common.sefia_cli import SefiaCLI
 

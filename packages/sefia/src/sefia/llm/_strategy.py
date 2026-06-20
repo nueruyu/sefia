@@ -1,26 +1,9 @@
+from __future__ import annotations
+
 import json
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Union
-
-
-def _is_never(typ: Any) -> bool:
-    """Return True if typ is typing.Never or typing_extensions.Never."""
-    try:
-        from typing import Never as _Never  # type: ignore[attr-defined]
-
-        if typ is _Never:
-            return True
-    except ImportError:
-        pass
-    try:
-        from typing_extensions import Never as _ExtNever
-
-        if typ is _ExtNever:
-            return True
-    except ImportError:
-        pass
-    return False
 
 from pydantic import create_model
 
@@ -298,3 +281,22 @@ class LLMInferenceStrategy(InferenceStrategy):
                 )
 
         return messages
+
+
+def _is_never(typ: Any) -> bool:
+    """Return True if typ is typing.Never or typing_extensions.Never."""
+    try:
+        from typing import Never as _Never
+
+        if typ is _Never:
+            return True
+    except ImportError:
+        pass
+    try:
+        from typing_extensions import Never as _ExtNever
+
+        if typ is _ExtNever:
+            return True
+    except ImportError:
+        pass
+    return False
