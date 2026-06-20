@@ -1,6 +1,6 @@
 import functools
 import inspect
-from typing import Callable, TypeVar
+from typing import Any, Callable, Coroutine, ParamSpec, TypeVar
 
 from glyff import engrave
 
@@ -10,6 +10,8 @@ from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from .event_system import EventPublisher
 
 T = TypeVar("T")
+P = ParamSpec("P")
+R = TypeVar("R")
 
 # Attribute that holds sefia's per-function metadata dict, and the key under
 # which inference policies live inside it.
@@ -42,7 +44,7 @@ def tool(func: T) -> T:
     return func
 
 
-def policy(policy: Policy) -> Callable:
+def policy(p: Policy) -> Callable[[T], T]:
     """
     Decorator that attaches an inference policy to an ``@infer`` function.
 
@@ -68,21 +70,21 @@ def policy(policy: Policy) -> Callable:
       decoration shares one policy list.
     """
 
-    if not isinstance(policy, Policy):
+    if not isinstance(p, Policy):
         raise TypeError(
             "@policy must be called with a Policy instance, "
             "e.g. @policy(CustomPolicy(middleware=lambda: [Retrier(max_retries=5)]))."
         )
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: T) -> T:
         # Attach metadata to the innermost function so it lives in one place
         # regardless of decorator order or intermediate wrappers.
-        underlying = inspect.unwrap(func)
+        underlying = inspect.unwrap(func)  # type: ignore[arg-type]
         metadata = getattr(underlying, METADATA_ATTR, None)
         if metadata is None:
             metadata = {}
             setattr(underlying, METADATA_ATTR, metadata)
-        metadata.setdefault(POLICIES_KEY, []).append(policy)
+        metadata.setdefault(POLICIES_KEY, []).append(p)
         return func
 
     return decorator
@@ -107,7 +109,7 @@ def _partition_middleware(
     return inference_middlewares, step_middlewares
 
 
-def infer(func: Callable) -> Callable:
+def infer(func: Callable[P, R]) -> Callable[P, Coroutine[Any, Any, R]]:
     """
     Decorator that enables a function's implementation to be inferred by an LLM.
     The function body is ignored; its signature and docstring are used as a prompt.
@@ -164,4 +166,4 @@ def infer(func: Callable) -> Callable:
 
         return await _engraved_run(*args, **kwargs)
 
-    return _run
+    return _run  # type: ignore[return-value]
