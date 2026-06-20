@@ -11,6 +11,7 @@ from pathlib import Path
 import typer
 from sefia import infer
 from sefios.tools import HumanInputTool
+from typing import Never
 from typing_extensions import Annotated
 
 from .._common.sefia_cli import SefiaCLI
@@ -21,7 +22,7 @@ class ChatAgent:
         self._human_input = human_input
 
     @infer
-    async def chat(self) -> str:
+    async def chat(self) -> Never:
         """
         You are a helpful assistant having a conversation with a user.
 

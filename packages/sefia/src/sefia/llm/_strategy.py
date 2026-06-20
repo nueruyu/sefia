@@ -3,6 +3,25 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Union
 
+
+def _is_never(typ: Any) -> bool:
+    """Return True if typ is typing.Never or typing_extensions.Never."""
+    try:
+        from typing import Never as _Never  # type: ignore[attr-defined]
+
+        if typ is _Never:
+            return True
+    except ImportError:
+        pass
+    try:
+        from typing_extensions import Never as _ExtNever
+
+        if typ is _ExtNever:
+            return True
+    except ImportError:
+        pass
+    return False
+
 from pydantic import create_model
 
 from .._interfaces import InferenceStrategy, ModelInspector
@@ -65,7 +84,12 @@ class LLMInferenceStrategy(InferenceStrategy):
         Dynamically creates a JSON Schema that represents the LLM's
         choice: either call tools or provide a final answer.
         """
-        if tools:
+        if _is_never(output_type):
+            decision_model = create_model(
+                "LLMDecision",
+                tool_calls=(list[LLMToolCall], ...),
+            )
+        elif tools:
             decision_model = create_model(
                 "LLMDecision",
                 final_answer=(Union[output_type, None], ...),
@@ -100,6 +124,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             history,
             output_schema,
             tools,
+            output_type=output_type,
         )
 
         await publisher.publish(
@@ -154,6 +179,10 @@ class LLMInferenceStrategy(InferenceStrategy):
                 )
 
             if decision.final_answer is not None:
+                if _is_never(output_type):
+                    raise ValueError(
+                        "Return type is Never but LLM returned a final answer."
+                    )
                 validated_answer = self.model_inspector.validate_and_create(
                     output_type, decision.final_answer
                 )
@@ -176,12 +205,19 @@ class LLMInferenceStrategy(InferenceStrategy):
         history: list[HistoryItem],
         output_schema: dict,
         tools: list[dict],
+        *,
+        output_type: Any = Any,
     ) -> list[Message]:
         messages: list[Message] = []
 
         system_content = instructions
 
-        if tools:
+        if _is_never(output_type):
+            core_instruction = (
+                "Your task is to call tools. You MUST always populate the `tool_calls` "
+                "field. There is no `final_answer` — you must never stop calling tools."
+            )
+        elif tools:
             core_instruction = (
                 "Your task is to decide the next step. You have two options:\n"
                 "1. Call one or more tools by populating the `tool_calls` field.\n"
