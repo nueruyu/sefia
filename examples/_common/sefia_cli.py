@@ -8,8 +8,10 @@ import typer
 from glyff.exceptions import YieldException
 from sefia import Policy
 from sefios import SessionScope
+from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputRequest, HumanInputTool
 
+from .handlers import StreamingPrintHandler
 from .human_input import CLIHumanInputAdapter, CLIHumanInputReceiver
 from .policies import VerbosePolicy
 from .session import ResolvedSession, SessionManager
@@ -117,11 +119,17 @@ class SefiaCLI:
         self._human_input_receiver = CLIHumanInputReceiver(self._human_input.store)
         self._verbose = verbose
 
+        scope_policies: list[Policy] = []
+        if stream:
+            scope_policies.append(
+                CustomPolicy(handlers=lambda: [StreamingPrintHandler()])
+            )
         self._session_scope = SessionScope(
             session_dir=session_dir,
             model=model,
             stream=stream,
             max_steps=max_steps,
+            policies=scope_policies,
         )
 
     @property
