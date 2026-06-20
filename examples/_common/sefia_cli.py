@@ -7,7 +7,8 @@ from typing import Protocol, TypeVar, cast
 import typer
 from glyff.exceptions import YieldException
 from sefia import Policy
-from sefios import SessionScope
+from sefios import SessionScope, get_state
+from sefios.handlers import CostCalculator, CostState
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputRequest, HumanInputTool
 
@@ -42,6 +43,11 @@ class CLIReporter(Protocol):
         session: ResolvedSession,
     ) -> MaybeAwaitable[None]: ...
 
+    def on_session_finished(
+        self,
+        total_cost: float,
+    ) -> MaybeAwaitable[None]: ...
+
 
 class DefaultCLIReporter(CLIReporter):
     """Default CLI reporter using Typer's standard terminal output helpers."""
@@ -71,6 +77,10 @@ class DefaultCLIReporter(CLIReporter):
         typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
         typer.echo("Session interrupted to wait for your input.")
         typer.echo("To resume, run the script again with your answer.")
+
+    def on_session_finished(self, total_cost: float) -> None:
+        typer.echo()
+        typer.secho(f"> Total cost: ${total_cost:.4f}", bold=True)
 
 
 class SefiaCLISession:
@@ -119,7 +129,9 @@ class SefiaCLI:
         self._human_input_receiver = CLIHumanInputReceiver(self._human_input.store)
         self._verbose = verbose
 
-        scope_policies: list[Policy] = []
+        scope_policies: list[Policy] = [
+            CustomPolicy(handlers=lambda: [CostCalculator()])
+        ]
         if stream:
             scope_policies.append(
                 CustomPolicy(handlers=lambda: [StreamingPrintHandler()])
@@ -179,6 +191,10 @@ class SefiaCLI:
                         session.session_store
                     ):
                         yield SefiaCLISession(human_input=self._human_input_receiver)
+                    # Reached only on normal completion (a human-input interrupt
+                    # raises YieldException before this point), while the session
+                    # context is still alive so total cost can be read.
+                    await self._report_session_finished()
             else:
                 async with self._session_scope.session(
                     session_id=resolved_session.session_id,
@@ -191,6 +207,7 @@ class SefiaCLI:
                         session.session_store
                     ):
                         yield SefiaCLISession(human_input=self._human_input_receiver)
+                    await self._report_session_finished()
         except YieldException:
             await self._report_interrupted(resolved_session)
             raise typer.Exit(code=0)
@@ -206,6 +223,12 @@ class SefiaCLI:
     async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
             await _maybe_await(self._reporter.on_interrupted(session))
+
+    async def _report_session_finished(self) -> None:
+        if self._reporter is None:
+            return
+        cost_state = await get_state().get(CostState).ensure()
+        await _maybe_await(self._reporter.on_session_finished(cost_state.cost))
 
     @staticmethod
     def _resolve_reporter(reporter: CLIReporter | None | object) -> CLIReporter | None:
