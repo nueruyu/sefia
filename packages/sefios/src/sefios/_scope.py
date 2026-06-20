@@ -11,7 +11,7 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Policy
 from sefia.llm import LLMClient
 
-from .policies import MaxSteps, StreamingPolicy
+from .policies import DefaultPolicy
 
 # Sentinel distinguishing "not overridden" from an explicit ``max_steps=None``
 # (which is a meaningful value meaning "no step limit").
@@ -89,10 +89,7 @@ class SessionScope:
         final_policies: list[Policy] = list(self.policies)
         if policies is not None:
             final_policies.extend(policies)
-        if resolved_max_steps is not None:
-            final_policies.append(MaxSteps(count=resolved_max_steps))
-        if resolved_stream:
-            final_policies.append(StreamingPolicy())
+        final_policies.append(DefaultPolicy(max_steps=resolved_max_steps))
 
         async with gs:
             async with sefia.Session(

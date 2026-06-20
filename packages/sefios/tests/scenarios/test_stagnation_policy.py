@@ -11,7 +11,8 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Session, infer, policy, tool
 from sefia.llm import LLMClient, LLMResponse, Message
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
-from sefios.policies import StagnationPolicy
+from sefios.middleware import StagnationDetector
+from sefios.policies import CustomPolicy
 
 
 class MockLLMClient(LLMClient):
@@ -71,7 +72,7 @@ class Researcher:
     def __init__(self, web: WebToolkit):
         self._web = web
 
-    @policy(StagnationPolicy(max_repeats=3))
+    @policy(CustomPolicy(middleware=lambda: [StagnationDetector(max_repeats=3)]))
     @infer
     async def generate_report(self, topic: str) -> Report:
         """
