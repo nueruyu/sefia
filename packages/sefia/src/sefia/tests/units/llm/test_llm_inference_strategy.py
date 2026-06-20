@@ -75,14 +75,14 @@ class TestLLMInferenceStrategy:
         ]
 
         dummy_tools = [{"function": {"name": "search"}}]
+        director = strategy._create_director(str, dummy_tools)
         messages = strategy._build_messages(
             "instructions",
             {"arg": "val"},
             {},
             history,
             DUMMY_SCHEMA,
-            dummy_tools,
-            mode=strategy._determine_mode(str, dummy_tools),
+            director,
         )
 
         assert len(messages) == 4
@@ -103,10 +103,8 @@ class TestLLMInferenceStrategy:
     def test_build_decision_schema_hoists_nested_definitions(self):
         strategy = self._strategy(AsyncMock())
 
-        schema = strategy._build_llm_decision_schema(
-            list[MyIssue],
-            [{"type": "function"}],
-        )
+        director = strategy._create_director(list[MyIssue], [{"type": "function"}])
+        schema = director.build_decision_schema()
 
         assert "MyIssue" in schema["$defs"]
         final_answer_schema = schema["properties"]["final_answer"]["anyOf"][0]
@@ -119,7 +117,8 @@ class TestLLMInferenceStrategy:
     def test_build_decision_schema_requires_non_null_answer_without_tools(self):
         strategy = self._strategy(AsyncMock())
 
-        schema = strategy._build_llm_decision_schema(list[MyIssue], [])
+        director = strategy._create_director(list[MyIssue], [])
+        schema = director.build_decision_schema()
 
         assert schema["required"] == ["final_answer"]
         final_answer_schema = schema["properties"]["final_answer"]
@@ -129,10 +128,8 @@ class TestLLMInferenceStrategy:
     def test_build_decision_schema_requires_nullable_fields_with_tools(self):
         strategy = self._strategy(AsyncMock())
 
-        schema = strategy._build_llm_decision_schema(
-            list[MyIssue],
-            [{"type": "function"}],
-        )
+        director = strategy._create_director(list[MyIssue], [{"type": "function"}])
+        schema = director.build_decision_schema()
 
         assert schema["required"] == ["final_answer", "tool_calls"]
         assert {"type": "null"} in schema["properties"]["final_answer"]["anyOf"]
@@ -141,14 +138,14 @@ class TestLLMInferenceStrategy:
     def test_build_messages_tells_no_tool_agent_to_return_empty_collection(self):
         strategy = self._strategy(AsyncMock())
 
+        director = strategy._create_director(list[MyIssue], [])
         messages = strategy._build_messages(
             "instructions",
             {},
             {},
             [],
             DUMMY_SCHEMA,
-            [],
-            mode=strategy._determine_mode(list[MyIssue], []),
+            director,
         )
 
         assert "empty collection instead of null" in str(messages[0].content)
@@ -248,7 +245,7 @@ class TestLLMInferenceStrategy:
         )
         strategy = self._strategy(mock_llm_client)
 
-        with pytest.raises(ValueError, match="must contain either"):
+        with pytest.raises(ValueError, match="non-null 'final_answer'"):
             await strategy.decide_next_step(
                 "do it", {}, {}, [], [], str, MockEventPublisher()
             )
