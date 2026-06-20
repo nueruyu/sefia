@@ -1,7 +1,7 @@
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import cast
+from typing import Never, cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -248,4 +248,122 @@ class TestLLMInferenceStrategy:
         with pytest.raises(ValueError, match="non-null 'final_answer'"):
             await strategy.decide_next_step(
                 "do it", {}, {}, [], [], str, MockEventPublisher()
+            )
+
+
+class TestToolOnlyDirector:
+    """Tests for _ToolOnlyDirector — the Never return type mode."""
+
+    def _strategy(self):
+        mock_formatter = Mock()
+        mock_formatter.format_arguments.return_value = "<arguments/>"
+        return LLMInferenceStrategy(
+            llm_client=AsyncMock(),
+            model_inspector=PydanticModelInspector(),
+            prompt_formatter=mock_formatter,
+            json_default=pydantic_json_default,
+        )
+
+    def test_create_director_returns_tool_only_for_never(self):
+        from sefia.llm._strategy import _ToolOnlyDirector
+
+        strategy = self._strategy()
+        director = strategy._create_director(Never, [{"type": "function"}])
+        assert isinstance(director, _ToolOnlyDirector)
+
+    def test_build_decision_schema_has_no_final_answer_field(self):
+        strategy = self._strategy()
+        director = strategy._create_director(Never, [{"type": "function"}])
+        schema = director.build_decision_schema()
+
+        assert "final_answer" not in schema.get("properties", {})
+        assert "tool_calls" in schema["properties"]
+        assert schema["required"] == ["tool_calls"]
+
+    def test_build_system_prompt_instructs_tool_only(self):
+        strategy = self._strategy()
+        director = strategy._create_director(Never, [{"type": "function"}])
+        schema = director.build_decision_schema()
+        prompt = director.build_system_prompt_addition(schema)
+
+        assert "final_answer" not in prompt or "There is no `final_answer`" in prompt
+        assert "tool_calls" in prompt
+
+    def test_process_decision_accepts_tool_calls(self):
+        from sefia.llm._strategy import LLMToolCall, _LLMDecision
+
+        strategy = self._strategy()
+        director = strategy._create_director(Never, [{"type": "function"}])
+
+        decision = _LLMDecision(
+            tool_calls=[LLMToolCall(name="my_tool", arguments={"x": 1})]
+        )
+        result = director.process_decision(decision)
+
+        assert isinstance(result, ToolCallDecision)
+        assert result.calls[0].name == "my_tool"
+
+    def test_process_decision_raises_on_final_answer(self):
+        from sefia.llm._strategy import _LLMDecision
+
+        strategy = self._strategy()
+        director = strategy._create_director(Never, [{"type": "function"}])
+
+        decision = _LLMDecision(final_answer="oops")
+        with pytest.raises(ValueError, match="Never"):
+            director.process_decision(decision)
+
+    def test_process_decision_raises_when_no_tool_calls_and_no_final_answer(self):
+        from sefia.llm._strategy import _LLMDecision
+
+        strategy = self._strategy()
+        director = strategy._create_director(Never, [{"type": "function"}])
+
+        decision = _LLMDecision()
+        with pytest.raises(ValueError, match="tool_calls"):
+            director.process_decision(decision)
+
+    async def test_decide_next_step_returns_tool_call_decision_for_never(self):
+        from unittest.mock import AsyncMock
+
+        from sefia.llm import LLMResponse
+
+        mock_client = AsyncMock()
+        mock_client.complete.return_value = LLMResponse(
+            content='{"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
+        )
+        mock_formatter = Mock()
+        mock_formatter.format_arguments.return_value = "<arguments/>"
+        strategy = LLMInferenceStrategy(
+            llm_client=mock_client,
+            model_inspector=PydanticModelInspector(),
+            prompt_formatter=mock_formatter,
+        )
+
+        result = await strategy.decide_next_step(
+            "chat", {}, {}, [], [{"type": "function"}], Never, MockEventPublisher()
+        )
+
+        assert isinstance(result, ToolCallDecision)
+
+    async def test_decide_next_step_raises_when_llm_returns_final_answer_for_never(
+        self,
+    ):
+        from sefia.llm import LLMResponse
+
+        mock_client = AsyncMock()
+        mock_client.complete.return_value = LLMResponse(
+            content='{"tool_calls": null, "final_answer": "bye"}'
+        )
+        mock_formatter = Mock()
+        mock_formatter.format_arguments.return_value = "<arguments/>"
+        strategy = LLMInferenceStrategy(
+            llm_client=mock_client,
+            model_inspector=PydanticModelInspector(),
+            prompt_formatter=mock_formatter,
+        )
+
+        with pytest.raises(ValueError, match="Never"):
+            await strategy.decide_next_step(
+                "chat", {}, {}, [], [{"type": "function"}], Never, MockEventPublisher()
             )

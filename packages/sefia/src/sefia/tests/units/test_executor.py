@@ -1,3 +1,4 @@
+from typing import Never
 from unittest.mock import AsyncMock
 
 import pytest
@@ -467,6 +468,38 @@ class TestInferenceExecutor:
         )
 
         with pytest.raises(ValueError, match="transient"):
+            await executor.run()
+
+    async def test_never_return_type_raises_on_final_answer_decision(
+        self, executor_dependencies
+    ):
+        # When the function is annotated -> Never, a FinalAnswerDecision reaching
+        # the executor is a framework bug — it must raise RuntimeError, not return.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.return_value = FinalAnswerDecision(
+            answer="oops"
+        )
+
+        def never_func(self) -> Never:
+            """Never returns."""
+            ...
+
+        executor = InferenceExecutor(
+            never_func,
+            (object(),),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        with pytest.raises(RuntimeError, match="Never"):
             await executor.run()
 
     async def test_handles_request_inference_retry(self, executor_dependencies):
