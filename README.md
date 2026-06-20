@@ -164,6 +164,33 @@ Dataclasses, Pydantic models, primitives, and `Serializable` instances are
 supported. Sefia generates a structured output schema from the declared return
 type and validates the response before returning it.
 
+#### `-> Never`: tool-only loops
+
+Annotate an `@infer` function with `-> Never` when it should never produce a
+final answer — only call tools, indefinitely.
+
+```python
+from typing import Never
+from sefia import infer
+
+
+class ChatAgent:
+    @infer
+    async def chat(self) -> Never:
+        """
+        Have a conversation with the user via HumanInputTool.
+        Always call the tool to get the next message; never return a final answer.
+        """
+        ...
+```
+
+When the return type is `Never`, Sefia enforces tool-only execution at every
+layer: the JSON schema sent to the LLM omits the `final_answer` field entirely,
+the system prompt instructs the model to always use `tool_calls`, and the
+executor raises `RuntimeError` if a final answer somehow arrives anyway. The
+inference loop then runs until an external signal (such as `YieldException` from
+a human-input tool) interrupts it.
+
 ### `@tool`
 
 Tools are opt-in. Mark a method with `@tool`, and when an `@infer` step runs,
