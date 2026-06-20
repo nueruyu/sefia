@@ -76,7 +76,13 @@ class TestLLMInferenceStrategy:
 
         dummy_tools = [{"function": {"name": "search"}}]
         messages = strategy._build_messages(
-            "instructions", {"arg": "val"}, {}, history, DUMMY_SCHEMA, dummy_tools
+            "instructions",
+            {"arg": "val"},
+            {},
+            history,
+            DUMMY_SCHEMA,
+            dummy_tools,
+            mode=strategy._determine_mode(str, dummy_tools),
         )
 
         assert len(messages) == 4
@@ -142,6 +148,7 @@ class TestLLMInferenceStrategy:
             [],
             DUMMY_SCHEMA,
             [],
+            mode=strategy._determine_mode(list[MyIssue], []),
         )
 
         assert "empty collection instead of null" in str(messages[0].content)

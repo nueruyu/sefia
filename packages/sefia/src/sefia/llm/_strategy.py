@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import Any, Callable, Union
 
 from pydantic import create_model
@@ -23,6 +24,12 @@ from ._messages import Message
 from ._prompt_formatter import PromptFormatter
 
 JsonDefault = Callable[[Any], Any]
+
+
+class _ExecutionMode(Enum):
+    TOOL_ONLY = auto()
+    TOOL_ENABLED = auto()
+    OUTPUT_ONLY = auto()
 
 
 @dataclass
@@ -62,17 +69,51 @@ class LLMInferenceStrategy(InferenceStrategy):
         self._json_default = json_default
         self._stream = stream
 
+    def _determine_mode(self, output_type: Any, tools: list[dict]) -> _ExecutionMode:
+        """Determines the execution mode based on output type and available tools."""
+        if _is_never(output_type):
+            return _ExecutionMode.TOOL_ONLY
+        if tools:
+            return _ExecutionMode.TOOL_ENABLED
+        return _ExecutionMode.OUTPUT_ONLY
+
+    def _get_core_instruction(self, mode: _ExecutionMode) -> str:
+        """Generates the core instruction for the LLM based on the execution mode."""
+        if mode == _ExecutionMode.TOOL_ONLY:
+            return (
+                "Your task is to call tools. You MUST always populate the `tool_calls` "
+                "field. There is no `final_answer` — you must never stop calling tools."
+            )
+        if mode == _ExecutionMode.TOOL_ENABLED:
+            return (
+                "Your task is to decide the next step. You have two options:\n"
+                "1. Call one or more tools by populating the `tool_calls` field.\n"
+                "2. Provide the final answer by populating the `final_answer` field.\n\n"
+                "You MUST populate both fields and set the unused field to null. "
+                "Exactly one field must be non-null. "
+                "Use `tool_calls` to gather more information, and use `final_answer` "
+                "only when you have enough information to complete the entire task."
+            )
+        return (
+            "Your task is to provide a non-null final answer by populating the "
+            "`final_answer` field. No tools are available. If the requested "
+            "result is a collection and there are no results, return an empty "
+            "collection instead of null."
+        )
+
     def _build_llm_decision_schema(self, output_type: Any, tools: list[dict]) -> dict:
         """
         Dynamically creates a JSON Schema that represents the LLM's
         choice: either call tools or provide a final answer.
         """
-        if _is_never(output_type):
+        mode = self._determine_mode(output_type, tools)
+
+        if mode == _ExecutionMode.TOOL_ONLY:
             decision_model = create_model(
                 "LLMDecision",
                 tool_calls=(list[LLMToolCall], ...),
             )
-        elif tools:
+        elif mode == _ExecutionMode.TOOL_ENABLED:
             decision_model = create_model(
                 "LLMDecision",
                 final_answer=(Union[output_type, None], ...),
@@ -98,6 +139,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         output_type: Any,
         publisher: EventPublisher,
     ) -> InferenceDecision:
+        mode = self._determine_mode(output_type, tools)
         output_schema = self._build_llm_decision_schema(output_type, tools)
 
         messages = self._build_messages(
@@ -107,7 +149,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             history,
             output_schema,
             tools,
-            output_type=output_type,
+            mode=mode,
         )
 
         await publisher.publish(
@@ -162,7 +204,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 )
 
             if decision.final_answer is not None:
-                if _is_never(output_type):
+                if mode == _ExecutionMode.TOOL_ONLY:
                     raise ValueError(
                         "Return type is Never but LLM returned a final answer."
                     )
@@ -189,37 +231,16 @@ class LLMInferenceStrategy(InferenceStrategy):
         output_schema: dict,
         tools: list[dict],
         *,
-        output_type: Any = Any,
+        mode: _ExecutionMode,
     ) -> list[Message]:
         messages: list[Message] = []
 
         system_content = instructions
-
-        if _is_never(output_type):
-            core_instruction = (
-                "Your task is to call tools. You MUST always populate the `tool_calls` "
-                "field. There is no `final_answer` — you must never stop calling tools."
-            )
-        elif tools:
-            core_instruction = (
-                "Your task is to decide the next step. You have two options:\n"
-                "1. Call one or more tools by populating the `tool_calls` field.\n"
-                "2. Provide the final answer by populating the `final_answer` field.\n\n"
-                "You MUST populate both fields and set the unused field to null. "
-                "Exactly one field must be non-null. "
-                "Use `tool_calls` to gather more information, and use `final_answer` only when you have enough information to complete the entire task."
-            )
-        else:
-            core_instruction = (
-                "Your task is to provide a non-null final answer by populating the "
-                "`final_answer` field. No tools are available. If the requested "
-                "result is a collection and there are no results, return an empty "
-                "collection instead of null."
-            )
+        core_instruction = self._get_core_instruction(mode)
 
         system_content += f"\n\n### Response Instructions\n{core_instruction}\n"
 
-        if tools:
+        if mode in (_ExecutionMode.TOOL_ONLY, _ExecutionMode.TOOL_ENABLED):
             tool_definitions = [t.get("function", {}) for t in tools]
             system_content += (
                 "\n### Available Tools\n"
