@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import uuid
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable, Union
+from typing import Any, Callable, Never, Union
 
 from pydantic import create_model
 
@@ -29,6 +32,175 @@ class LLMToolCall:
 
     name: str
     arguments: dict[str, Any] = field(default_factory=dict)
+
+
+class _ExecutionDirector(ABC):
+    """
+    Abstract base class for directing the LLM's execution flow.
+    Encapsulates the logic for building schemas, prompts, and processing
+    decisions for a specific mode of operation.
+    """
+
+    def __init__(
+        self,
+        model_inspector: ModelInspector,
+        output_type: Any,
+        tools: list[dict],
+    ):
+        self.model_inspector = model_inspector
+        self.output_type = output_type
+        self.tools = tools
+
+    @abstractmethod
+    def build_decision_schema(self) -> dict:
+        """Builds the JSON schema for the LLM's decision."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def build_system_prompt_addition(self, output_schema: dict) -> str:
+        """Builds the core instruction part of the system prompt."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def process_decision(self, decision: _LLMDecision) -> InferenceDecision:
+        """Processes the LLM's decision and returns an InferenceDecision."""
+        raise NotImplementedError
+
+
+class _ToolOnlyDirector(_ExecutionDirector):
+    """Director for tool-only execution mode."""
+
+    def build_decision_schema(self) -> dict:
+        decision_model = create_model(
+            "LLMDecision",
+            tool_calls=(list[LLMToolCall], ...),
+        )
+        schema = self.model_inspector.get_schema_for_type(decision_model)
+        schema["description"] = "The model for the LLM's decision on the next action."
+        return schema
+
+    def build_system_prompt_addition(self, output_schema: dict) -> str:
+        core_instruction = (
+            "Your task is to call tools. You MUST always populate the `tool_calls` "
+            "field. There is no `final_answer` — you must never stop calling tools."
+        )
+        tool_definitions = [t.get("function", {}) for t in self.tools]
+        return (
+            f"\n\n### Response Instructions\n{core_instruction}\n"
+            "\n### Available Tools\n"
+            "Here is a list of tools you can call. Use their `name` in the `tool_calls` field.\n"
+            f"{json.dumps(tool_definitions, indent=2, ensure_ascii=False)}\n"
+            f"\n### Response Schema\n"
+            f"Your response MUST be a single, valid, raw JSON object that strictly conforms to this JSON Schema:\n"
+            f"{json.dumps(output_schema, ensure_ascii=False)}"
+        )
+
+    def process_decision(self, decision: _LLMDecision) -> InferenceDecision:
+        if decision.tool_calls:
+            return ToolCallDecision(
+                calls=[
+                    ToolCallRequest(
+                        id=f"call_{uuid.uuid4().hex[:12]}",
+                        name=tc.name,
+                        arguments=tc.arguments,
+                    )
+                    for tc in decision.tool_calls
+                ]
+            )
+        if decision.final_answer is not None:
+            raise ValueError("Return type is Never but LLM returned a final answer.")
+        raise ValueError("LLM response must contain 'tool_calls'.")
+
+
+class _ToolEnabledDirector(_ExecutionDirector):
+    """Director for tool-enabled execution mode (tools or final answer)."""
+
+    def build_decision_schema(self) -> dict:
+        decision_model = create_model(
+            "LLMDecision",
+            final_answer=(Union[self.output_type, None], ...),
+            tool_calls=(Union[list[LLMToolCall], None], ...),
+        )
+        schema = self.model_inspector.get_schema_for_type(decision_model)
+        schema["description"] = "The model for the LLM's decision on the next action."
+        return schema
+
+    def build_system_prompt_addition(self, output_schema: dict) -> str:
+        core_instruction = (
+            "Your task is to decide the next step. You have two options:\n"
+            "1. Call one or more tools by populating the `tool_calls` field.\n"
+            "2. Provide the final answer by populating the `final_answer` field.\n\n"
+            "You MUST populate both fields and set the unused field to null. "
+            "Exactly one field must be non-null. "
+            "Use `tool_calls` to gather more information, and use `final_answer` "
+            "only when you have enough information to complete the entire task."
+        )
+        tool_definitions = [t.get("function", {}) for t in self.tools]
+        return (
+            f"\n\n### Response Instructions\n{core_instruction}\n"
+            "\n### Available Tools\n"
+            "Here is a list of tools you can call. Use their `name` in the `tool_calls` field.\n"
+            f"{json.dumps(tool_definitions, indent=2, ensure_ascii=False)}\n"
+            f"\n### Response Schema\n"
+            f"Your response MUST be a single, valid, raw JSON object that strictly conforms to this JSON Schema:\n"
+            f"{json.dumps(output_schema, ensure_ascii=False)}"
+        )
+
+    def process_decision(self, decision: _LLMDecision) -> InferenceDecision:
+        if decision.tool_calls:
+            return ToolCallDecision(
+                calls=[
+                    ToolCallRequest(
+                        id=f"call_{uuid.uuid4().hex[:12]}",
+                        name=tc.name,
+                        arguments=tc.arguments,
+                    )
+                    for tc in decision.tool_calls
+                ]
+            )
+        if decision.final_answer is not None:
+            validated_answer = self.model_inspector.validate_and_create(
+                self.output_type, decision.final_answer
+            )
+            return FinalAnswerDecision(answer=validated_answer)
+        raise ValueError(
+            "LLM response must contain either 'tool_calls' or a non-null 'final_answer'."
+        )
+
+
+class _OutputOnlyDirector(_ExecutionDirector):
+    """Director for final-answer-only execution mode."""
+
+    def build_decision_schema(self) -> dict:
+        decision_model = create_model(
+            "LLMDecision",
+            final_answer=(self.output_type, ...),
+        )
+        schema = self.model_inspector.get_schema_for_type(decision_model)
+        schema["description"] = "The model for the LLM's decision on the next action."
+        return schema
+
+    def build_system_prompt_addition(self, output_schema: dict) -> str:
+        core_instruction = (
+            "Your task is to provide a non-null final answer by populating the "
+            "`final_answer` field. No tools are available. If the requested "
+            "result is a collection and there are no results, return an empty "
+            "collection instead of null."
+        )
+        return (
+            f"\n\n### Response Instructions\n{core_instruction}\n"
+            f"\n### Response Schema\n"
+            f"Your response MUST be a single, valid, raw JSON object that strictly conforms to this JSON Schema:\n"
+            f"{json.dumps(output_schema, ensure_ascii=False)}"
+        )
+
+    def process_decision(self, decision: _LLMDecision) -> InferenceDecision:
+        if decision.final_answer is not None:
+            validated_answer = self.model_inspector.validate_and_create(
+                self.output_type, decision.final_answer
+            )
+            return FinalAnswerDecision(answer=validated_answer)
+        raise ValueError("LLM response must contain a non-null 'final_answer'.")
 
 
 @dataclass
@@ -60,26 +232,20 @@ class LLMInferenceStrategy(InferenceStrategy):
         self._json_default = json_default
         self._stream = stream
 
-    def _build_llm_decision_schema(self, output_type: Any, tools: list[dict]) -> dict:
-        """
-        Dynamically creates a JSON Schema that represents the LLM's
-        choice: either call tools or provide a final answer.
-        """
+    def _create_director(
+        self, output_type: Any, tools: list[dict]
+    ) -> _ExecutionDirector:
+        """Creates the appropriate execution director based on the context."""
+        if output_type is Never:
+            if not tools:
+                raise ValueError(
+                    "An @infer function returning Never must have tools available, "
+                    "otherwise the inference loop can never make progress."
+                )
+            return _ToolOnlyDirector(self.model_inspector, output_type, tools)
         if tools:
-            decision_model = create_model(
-                "LLMDecision",
-                final_answer=(Union[output_type, None], ...),
-                tool_calls=(Union[list[LLMToolCall], None], ...),
-            )
-        else:
-            decision_model = create_model(
-                "LLMDecision",
-                final_answer=(output_type, ...),
-            )
-
-        result = self.model_inspector.get_schema_for_type(decision_model)
-        result["description"] = "The model for the LLM's decision on the next action."
-        return result
+            return _ToolEnabledDirector(self.model_inspector, output_type, tools)
+        return _OutputOnlyDirector(self.model_inspector, output_type, tools)
 
     async def decide_next_step(
         self,
@@ -91,15 +257,15 @@ class LLMInferenceStrategy(InferenceStrategy):
         output_type: Any,
         publisher: EventPublisher,
     ) -> InferenceDecision:
-        output_schema = self._build_llm_decision_schema(output_type, tools)
-
+        director = self._create_director(output_type, tools)
+        output_schema = director.build_decision_schema()
         messages = self._build_messages(
             instructions,
             arguments,
             argument_type_hints,
             history,
             output_schema,
-            tools,
+            director,
         )
 
         await publisher.publish(
@@ -139,34 +305,12 @@ class LLMInferenceStrategy(InferenceStrategy):
             decision: _LLMDecision = self.model_inspector.validate_and_create(
                 _LLMDecision, decision_data
             )
-
-            tool_calls = decision.tool_calls
-            if tool_calls:
-                return ToolCallDecision(
-                    calls=[
-                        ToolCallRequest(
-                            id=f"call_{uuid.uuid4().hex[:12]}",
-                            name=tc.name,
-                            arguments=tc.arguments,
-                        )
-                        for tc in tool_calls
-                    ]
-                )
-
-            if decision.final_answer is not None:
-                validated_answer = self.model_inspector.validate_and_create(
-                    output_type, decision.final_answer
-                )
-                return FinalAnswerDecision(answer=validated_answer)
+            return director.process_decision(decision)
 
         except (json.JSONDecodeError, ValueError) as e:
             raise ValueError(
                 f"LLM output failed validation against the master schema: {e}, content: {response.content}"
             ) from e
-
-        raise ValueError(
-            "LLM response must contain either 'tool_calls' or a non-null 'final_answer'."
-        )
 
     def _build_messages(
         self,
@@ -175,44 +319,12 @@ class LLMInferenceStrategy(InferenceStrategy):
         argument_type_hints: dict[str, Any],
         history: list[HistoryItem],
         output_schema: dict,
-        tools: list[dict],
+        director: _ExecutionDirector,
     ) -> list[Message]:
         messages: list[Message] = []
 
-        system_content = instructions
-
-        if tools:
-            core_instruction = (
-                "Your task is to decide the next step. You have two options:\n"
-                "1. Call one or more tools by populating the `tool_calls` field.\n"
-                "2. Provide the final answer by populating the `final_answer` field.\n\n"
-                "You MUST populate both fields and set the unused field to null. "
-                "Exactly one field must be non-null. "
-                "Use `tool_calls` to gather more information, and use `final_answer` only when you have enough information to complete the entire task."
-            )
-        else:
-            core_instruction = (
-                "Your task is to provide a non-null final answer by populating the "
-                "`final_answer` field. No tools are available. If the requested "
-                "result is a collection and there are no results, return an empty "
-                "collection instead of null."
-            )
-
-        system_content += f"\n\n### Response Instructions\n{core_instruction}\n"
-
-        if tools:
-            tool_definitions = [t.get("function", {}) for t in tools]
-            system_content += (
-                "\n### Available Tools\n"
-                "Here is a list of tools you can call. Use their `name` in the `tool_calls` field.\n"
-                f"{json.dumps(tool_definitions, indent=2, ensure_ascii=False)}\n"
-            )
-
-        system_content += (
-            f"\n### Response Schema\n"
-            f"Your response MUST be a single, valid, raw JSON object that strictly conforms to this JSON Schema:\n"
-            f"{json.dumps(output_schema, ensure_ascii=False)}"
-        )
+        system_prompt_addition = director.build_system_prompt_addition(output_schema)
+        system_content = instructions + system_prompt_addition
         messages.append(Message(role="system", content=system_content))
 
         prompt_arguments = {
