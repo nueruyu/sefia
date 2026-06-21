@@ -10,15 +10,16 @@ from ._executor import InferenceExecutor
 from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from .event_system import EventPublisher
 
-T = TypeVar("T")
+C = TypeVar("C", bound=Callable[..., object])
 P = ParamSpec("P")
 R = TypeVar("R")
+T = TypeVar("T")
 
 
 class _PolicyDecorator(Protocol):
     """Callable that decorates a function without changing its type."""
 
-    def __call__(self, func: T) -> T: ...
+    def __call__(self, func: C) -> C: ...
 
 
 
@@ -69,7 +70,7 @@ def policy(p: Policy) -> _PolicyDecorator:
             "e.g. @policy(CustomPolicy(middleware=lambda: [Retrier(max_retries=5)]))."
         )
 
-    def decorator(func: T) -> T:
+    def decorator(func: C) -> C:
         # Attach metadata to the innermost function so it lives in one place
         # regardless of decorator order or intermediate wrappers.
         metadata = _metadata.ensure_metadata(func)

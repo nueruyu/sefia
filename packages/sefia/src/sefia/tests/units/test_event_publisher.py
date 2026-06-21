@@ -52,9 +52,17 @@ class ToolExecutionFailedHandler(EventHandler[ToolExecutionFailed]):
         pass
 
 
-class MultiInheritedEventHandler(AfterToolCallHandler, ToolExecutionFailedHandler):
-    async def handle(self, event: AfterToolCall | ToolExecutionFailed) -> None:
-        pass
+async def _handle_multi_inherited_event(
+    self, event: AfterToolCall | ToolExecutionFailed
+) -> None:
+    pass
+
+
+MultiInheritedEventHandler = type(
+    "MultiInheritedEventHandler",
+    (AfterToolCallHandler, ToolExecutionFailedHandler),
+    {"handle": _handle_multi_inherited_event},
+)
 
 
 @pytest.fixture
