@@ -1,7 +1,6 @@
 import pytest
 from glyff.exceptions import YieldException
 from sefia import InferenceContext
-from sefia.exceptions import RequestInferenceRetry
 from sefios.middleware import (
     MaxRetriesExceededError,
     MaxStepsExceededError,
@@ -26,28 +25,32 @@ class TestRetrier:
 
         assert await middleware.wrap(_ctx(), nxt) == "ok"
 
-    async def test_requests_retry_within_limits(self):
+    async def test_retries_until_success_within_limits(self):
         middleware = Retrier(max_retries=3)
+        calls = 0
 
-        async def failing():
-            raise ValueError("boom")
+        async def flaky():
+            nonlocal calls
+            calls += 1
+            if calls < 3:
+                raise ValueError("boom")
+            return "ok"
 
-        for _ in range(3):
-            with pytest.raises(RequestInferenceRetry):
-                await middleware.wrap(_ctx(), failing)
+        assert await middleware.wrap(_ctx(), flaky) == "ok"
+        assert calls == 3
 
     async def test_raises_error_when_retries_exceeded(self):
         middleware = Retrier(max_retries=2)
+        calls = 0
 
         async def failing():
+            nonlocal calls
+            calls += 1
             raise ValueError("boom")
 
-        with pytest.raises(RequestInferenceRetry):
-            await middleware.wrap(_ctx(), failing)
-        with pytest.raises(RequestInferenceRetry):
-            await middleware.wrap(_ctx(), failing)
         with pytest.raises(MaxRetriesExceededError):
             await middleware.wrap(_ctx(), failing)
+        assert calls == 3
 
     async def test_preserves_original_error_as_cause(self):
         middleware = Retrier(max_retries=0)

@@ -289,17 +289,16 @@ added by implementing the `Policy` ABC.
 
 ### Steps and the inference loop
 
-The executor owns both loops — the outer retry loop and the inner step loop —
-and wraps each unit of work with the configured middleware. A middleware never
-loops itself; it wraps a single attempt or a single step and delegates to the
-next layer, so multiple middlewares compose cleanly. To steer a loop, a
-middleware raises a typed control signal that the executor interprets.
+The executor owns the inference lifecycle and the inner step loop, and wraps
+each unit of work with the configured middleware. Inference middleware can
+retry by calling its wrapped function again, while step middleware can stop the
+step loop by raising a typed control signal.
 
 Two seams are available, exposed as ABCs from `sefia`:
 
 - `InferenceMiddleware.wrap(ctx, nxt)` wraps a whole inference run. `MaxRetries`
-  uses this: on a retryable failure it raises `RequestInferenceRetry` to ask for
-  another attempt, or `MaxRetriesExceededError` once the budget is spent.
+  uses this: on a retryable failure it calls `nxt` again, or raises
+  `MaxRetriesExceededError` once the budget is spent.
 - `StepMiddleware.wrap(ctx, nxt)` wraps a single step. `MaxSteps` uses this to
   cap the loop, raising `MaxStepsExceededError` once the step limit is reached.
 
@@ -363,7 +362,7 @@ lives in middleware instead; see [Steps and the inference
 loop](#steps-and-the-inference-loop).)
 
 - `InferenceStart`: an `@infer` call begins
-- `AttemptStart`: a new attempt within the retry loop
+- `AttemptStart`: a new inference attempt
 - `BeforeInferenceStep` and `AfterInferenceStep`: surrounding each LLM decision
 - `BeforeToolCall`, `AfterToolCall`, and `ToolExecutionFailed`: surrounding tool
   execution

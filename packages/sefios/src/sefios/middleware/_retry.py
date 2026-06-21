@@ -3,7 +3,7 @@ from typing import Any, Awaitable, Callable
 from glyff.exceptions import YieldException
 
 from sefia._interfaces.middleware import InferenceContext, InferenceMiddleware
-from sefia.exceptions import InferenceControlSignal, RequestInferenceRetry
+from sefia.exceptions import InferenceControlSignal
 
 
 class MaxRetriesExceededError(InferenceControlSignal):
@@ -37,14 +37,14 @@ class Retrier(InferenceMiddleware):
     async def wrap(
         self, ctx: InferenceContext, nxt: Callable[[], Awaitable[Any]]
     ) -> Any:
-        try:
-            return await nxt()
-        except (InferenceControlSignal, YieldException):
-            raise
-        except Exception as e:
-            if self._retries_used < self.max_retries:
+        while True:
+            try:
+                return await nxt()
+            except (InferenceControlSignal, YieldException):
+                raise
+            except Exception as e:
+                if self._retries_used >= self.max_retries:
+                    raise MaxRetriesExceededError(
+                        f"Failed after {self.max_retries} retries."
+                    ) from e
                 self._retries_used += 1
-                raise RequestInferenceRetry() from e
-            raise MaxRetriesExceededError(
-                f"Failed after {self.max_retries} retries."
-            ) from e

@@ -16,8 +16,8 @@ from sefia import (
 )
 from sefia._executor import InferenceExecutor
 from sefia.event_system import EventHandler, EventPublisher
-from sefia.events import StepStarted
-from sefia.exceptions import InferenceControlSignal, RequestInferenceRetry
+from sefia.events import AttemptStart, StepStarted
+from sefia.exceptions import InferenceControlSignal
 from sefia.inference import (
     FinalAnswerDecision,
     InferenceDecision,
@@ -51,15 +51,15 @@ class _Retrier(InferenceMiddleware):
         self._retries_used = 0
 
     async def wrap(self, ctx: InferenceContext, nxt):
-        try:
-            return await nxt()
-        except InferenceControlSignal:
-            raise
-        except Exception as e:
-            if self._retries_used < self.max_retries:
+        while True:
+            try:
+                return await nxt()
+            except InferenceControlSignal:
+                raise
+            except Exception as e:
+                if self._retries_used >= self.max_retries:
+                    raise _MaxRetriesExceededError() from e
                 self._retries_used += 1
-                raise RequestInferenceRetry() from e
-            raise _MaxRetriesExceededError() from e
 
 
 def sample_func(arg1: str) -> str:
@@ -465,14 +465,19 @@ class TestInferenceExecutor:
         with pytest.raises(ValueError, match="transient"):
             await executor.run()
 
-    async def test_handles_request_inference_retry(self, executor_dependencies):
-        # Arrange
+    async def test_retry_middleware_publishes_attempt_start_per_attempt(
+        self, executor_dependencies
+    ):
         (
             mock_strategy,
             mock_collector,
             mock_publisher,
             non_engrave,
         ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ValueError("flaky inference"),
+            FinalAnswerDecision(answer="attempt 2 succeeds"),
+        ]
 
         executor = InferenceExecutor(
             sample_func,
@@ -482,14 +487,14 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
+            inference_middlewares=[_Retrier(max_retries=1)],
         )
-        executor._attempt_inference = AsyncMock(
-            side_effect=[RequestInferenceRetry(), "attempt 2 succeeds"]
-        )
-
-        # Act
         result = await executor.run()
 
-        # Assert
         assert result == "attempt 2 succeeds"
-        assert executor._attempt_inference.call_count == 2
+        attempt_events = [
+            call.args[0]
+            for call in mock_publisher.publish.call_args_list
+            if isinstance(call.args[0], AttemptStart)
+        ]
+        assert len(attempt_events) == 2

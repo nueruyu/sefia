@@ -14,7 +14,6 @@ from ._interfaces.middleware import (
 )
 from ._tool_system import ToolCollector, ToolRegistry
 from .event_system import EventPublisher
-from .exceptions import RequestInferenceRetry
 from .inference import (
     FinalAnswerDecision,
     HistoryItem,
@@ -78,9 +77,9 @@ def _compose(
     """
     Compose ``middlewares`` into an onion around ``core``.
 
-    The executor owns the loop; each middleware merely wraps the single unit of
-    work (``core``) and delegates to the next layer via ``nxt``. Middlewares are
-    applied so the first in the list is the outermost layer.
+    Middlewares are applied so the first in the list is the outermost layer.
+    A middleware receives ``nxt`` as the next layer and may call it once, call it
+    again for retry behavior, or short-circuit by raising a control signal.
     """
     nxt = core
     for middleware in reversed(middlewares):
@@ -99,9 +98,8 @@ class InferenceExecutor:
     """
     Orchestrates the inference loop for a single @infer call.
 
-    The executor owns both loops (the outer retry loop and the inner step loop)
-    and wraps each unit of work with the configured middleware. Middleware steers
-    those loops by raising typed control signals, keeping control flow explicit
+    The executor owns the inference lifecycle and the inner step loop, and wraps
+    the run with configured middleware. Middleware keeps control flow explicit
     and separate from observation (which flows through the event publisher).
     """
 
@@ -210,11 +208,11 @@ class InferenceExecutor:
 
     async def run(self) -> Any:
         """
-        Runs the inference process, owning the retry loop.
+        Runs the inference process.
 
-        Inference middleware wraps each attempt. A middleware may raise
-        ``RequestInferenceRetry`` to ask for another attempt; any other control
-        signal (or genuine failure) propagates out.
+        Inference middleware wraps the attempt factory. A retry middleware may
+        call the wrapped function more than once; any control signal or genuine
+        failure that escapes middleware propagates out.
         """
         await self.publisher.publish(
             events.InferenceStart(
@@ -231,26 +229,20 @@ class InferenceExecutor:
         )
 
         async def core() -> Any:
+            await self.publisher.publish(events.AttemptStart())
             return await self._attempt_inference()
 
-        # ctx and core are loop-invariant, so the chain is built once; each retry
-        # simply re-invokes it. The middleware instances (and their state, e.g.
-        # the retry counter) persist across attempts.
         chain = _compose(self._inference_middlewares, ctx, core)
 
-        while True:
-            try:
-                await self.publisher.publish(events.AttemptStart())
-                result = await chain()
-                await self.publisher.publish(events.InferenceEnd(result=result))
-                return result
-            except RequestInferenceRetry:
-                continue
-            except YieldException:
-                raise
-            except Exception as e:
-                await self.publisher.publish(events.InferenceFailed(error=e))
-                raise
+        try:
+            result = await chain()
+            await self.publisher.publish(events.InferenceEnd(result=result))
+            return result
+        except YieldException:
+            raise
+        except Exception as e:
+            await self.publisher.publish(events.InferenceFailed(error=e))
+            raise
 
     async def _attempt_inference(self) -> Any:
         """Executes a single attempt of the inference loop, owning the step loop."""

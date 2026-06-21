@@ -39,14 +39,9 @@ class TemporarilyUnavailableException(InferenceException):
 
 class InferenceControlSignal(Exception):
     """
-    Base class for the typed control signals that steer the executor's loops.
+    Base class for typed control signals.
 
     These are not failures to be retried; they are deliberate instructions (or
-    terminal limits) that a middleware raises to communicate with the executor's
-    loops, which interpret them directly. Concrete terminal signals live next to
-    the middleware that raises them.
+    terminal limits) that a middleware raises to communicate control flow.
+    Concrete terminal signals live next to the middleware that raises them.
     """
-
-
-class RequestInferenceRetry(InferenceControlSignal):
-    """Signal asking the executor to discard the current run and start over."""
