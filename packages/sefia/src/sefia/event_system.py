@@ -41,9 +41,10 @@ def _event_types_from_annotation(annotation: object) -> tuple[Type[Event], ...] 
 
     event_types: list[Type[Event]] = []
     for arg in args:
-        if not isinstance(arg, type) or not issubclass(arg, Event):
+        event_type = get_origin(arg) or arg
+        if not isinstance(event_type, type) or not issubclass(event_type, Event):
             return None
-        event_types.append(arg)
+        event_types.append(event_type)
     return tuple(event_types)
 
 
@@ -74,10 +75,19 @@ def _infer_event_types_from_bases(
 
 @lru_cache(maxsize=None)
 def _infer_event_types(handler_cls: type) -> tuple[Type[Event], ...]:
+    all_event_types: list[Type[Event]] = []
     for cls in handler_cls.__mro__:
         event_types = _infer_event_types_from_bases(cls, {})
         if event_types is not None:
-            return event_types
+            all_event_types.extend(event_types)
+
+    if all_event_types:
+        seen: set[Type[Event]] = set()
+        return tuple(
+            event_type
+            for event_type in all_event_types
+            if not (event_type in seen or seen.add(event_type))
+        )
 
     raise TypeError(
         f"{handler_cls.__name__} must specify concrete EventHandler[...] event "

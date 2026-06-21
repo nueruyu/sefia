@@ -1,4 +1,5 @@
-from typing import Union
+from dataclasses import dataclass
+from typing import Generic, TypeVar, Union
 
 import pytest
 from glyff.exceptions import YieldException
@@ -7,6 +8,13 @@ from pytest_mock import MockerFixture
 from sefia.event_system import EventHandler, EventPublisher
 from sefia.events import AfterToolCall, BeforeToolCall, Event, ToolExecutionFailed
 from sefia.inference import ToolCallRequest
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class GenericEvent(Event, Generic[T]):
+    value: T
 
 
 class MyEventHandler(EventHandler[BeforeToolCall]):
@@ -26,6 +34,26 @@ class MyPipeUnionEventHandler(EventHandler[AfterToolCall | ToolExecutionFailed])
 
 class MyBaseEventHandler(EventHandler[Event]):
     async def handle(self, event: Event) -> None:
+        pass
+
+
+class MyGenericEventHandler(EventHandler[GenericEvent[int]]):
+    async def handle(self, event: GenericEvent[int]) -> None:
+        pass
+
+
+class AfterToolCallHandler(EventHandler[AfterToolCall]):
+    async def handle(self, event: AfterToolCall) -> None:
+        pass
+
+
+class ToolExecutionFailedHandler(EventHandler[ToolExecutionFailed]):
+    async def handle(self, event: ToolExecutionFailed) -> None:
+        pass
+
+
+class MultiInheritedEventHandler(AfterToolCallHandler, ToolExecutionFailedHandler):
+    async def handle(self, event: AfterToolCall | ToolExecutionFailed) -> None:
         pass
 
 
@@ -67,6 +95,37 @@ class TestEventPublisher:
 
     async def test_dispatches_event_to_pipe_union_handler(self, mocker: MockerFixture):
         handler = MyPipeUnionEventHandler()
+        spy = mocker.spy(handler, "handle")
+        publisher = EventPublisher(handlers=[handler])
+        event1 = AfterToolCall(
+            tool_call=ToolCallRequest(id="1", name="test", arguments={}), result="ok"
+        )
+        event2 = ToolExecutionFailed(
+            tool_call=ToolCallRequest(id="2", name="test", arguments={}),
+            error=ValueError(),
+        )
+
+        await publisher.publish(event1)
+        await publisher.publish(event2)
+
+        assert spy.call_count == 2
+        spy.assert_any_call(event1)
+        spy.assert_any_call(event2)
+
+    async def test_dispatches_event_to_generic_handler(self, mocker: MockerFixture):
+        handler = MyGenericEventHandler()
+        spy = mocker.spy(handler, "handle")
+        publisher = EventPublisher(handlers=[handler])
+        event = GenericEvent[int](value=1)
+
+        await publisher.publish(event)
+
+        spy.assert_called_once_with(event)
+
+    async def test_dispatches_event_to_multi_inherited_handler(
+        self, mocker: MockerFixture
+    ):
+        handler = MultiInheritedEventHandler()
         spy = mocker.spy(handler, "handle")
         publisher = EventPublisher(handlers=[handler])
         event1 = AfterToolCall(
