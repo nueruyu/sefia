@@ -13,7 +13,7 @@ build-backend = "hatchling.build"
 packages = ["src/jsonstream"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["src/jsonstream/tests"]
 
 [dependency-groups]
 dev = ["pytest>=8.0"]
