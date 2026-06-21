@@ -1,13 +1,11 @@
 # Sefia
 
-**S**tateless **F**unction **I**nference **A**gent
+**S**tateless **E**ngraved **F**unction **I**nference **A**bstraction
 
-Sefia lets you write LLM-powered behavior as typed async Python functions.
+Sefia lets you define LLM-powered behavior as typed async Python functions.
 
 The function signature defines the inputs, the return type defines the output,
-and the docstring defines the instruction. The body can stay empty: at runtime,
-Sefia asks the LLM to produce the result and validates it against the declared
-type.
+and the docstring defines the instruction.
 
 ```python
 import glyff
