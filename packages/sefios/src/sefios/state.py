@@ -34,13 +34,8 @@ class StateRegistry:
 
         A type may only be registered once, and a key may only be claimed by a
         single type; violating either raises ``ValueError`` to surface
-        collisions early. Passing an instance instead of a class raises
-        ``TypeError``.
+        collisions early.
         """
-        if not isinstance(state_type, type):
-            raise TypeError(
-                f"Expected a class, got an instance of {type(state_type).__name__}."
-            )
         if state_type in self._keys:
             raise ValueError(
                 f"{state_type.__module__}.{state_type.__name__} is already "
@@ -57,13 +52,8 @@ class StateRegistry:
     def key_for(self, state_type: type) -> str:
         """Returns the registered key for ``state_type``.
 
-        Raises ``KeyError`` if the type was never registered with ``@state``,
-        or ``TypeError`` if an instance is passed instead of a class.
+        Raises ``KeyError`` if the type was never registered with ``@state``.
         """
-        if not isinstance(state_type, type):
-            raise TypeError(
-                f"Expected a class, got an instance of {type(state_type).__name__}."
-            )
         try:
             return self._keys[state_type]
         except KeyError:

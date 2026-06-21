@@ -2,12 +2,12 @@ import inspect
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Protocol, TypeVar, cast
+from typing import Protocol, TypeVar, cast
 
 import typer
 from glyff.exceptions import YieldException
 from sefia import Policy
-from sefios import SessionScope, StateContainer, get_state
+from sefios import SessionScope, get_state
 from sefios.handlers import CostCalculator, CostState
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputRequest, HumanInputTool
@@ -43,10 +43,7 @@ class CLIReporter(Protocol):
         session: ResolvedSession,
     ) -> MaybeAwaitable[None]: ...
 
-    def on_session_finished(
-        self,
-        state: StateContainer,
-    ) -> MaybeAwaitable[None]: ...
+    def on_session_finished(self) -> MaybeAwaitable[None]: ...
 
 
 class DefaultCLIReporter(CLIReporter):
@@ -72,14 +69,19 @@ class DefaultCLIReporter(CLIReporter):
         typer.echo(f" {request.question}")
         typer.echo()
 
-    def on_interrupted(self, _session: ResolvedSession) -> None:
+    async def on_interrupted(self, _session: ResolvedSession) -> None:
         typer.echo()
         typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
         typer.echo("Session interrupted to wait for your input.")
         typer.echo("To resume, run the script again with your answer.")
+        await self._echo_total_cost()
 
-    async def on_session_finished(self, state: StateContainer) -> None:
-        cost_state = await state.get(CostState).ensure()
+    async def on_session_finished(self) -> None:
+        await self._echo_total_cost()
+
+    @staticmethod
+    async def _echo_total_cost() -> None:
+        cost_state = await get_state().get(CostState).ensure()
         typer.echo()
         typer.secho(f"> Total cost: ${cost_state.cost:.4f}", bold=True)
 
@@ -179,28 +181,36 @@ class SefiaCLI:
         if resolved_verbose:
             session_policies = [VerbosePolicy()]
 
-        scope_kwargs: dict[str, Any] = dict(
-            session_id=resolved_session.session_id,
-            model=model,
-            stream=stream,
-            policies=session_policies,
-        )
-        if max_steps is not _USE_SCOPE_DEFAULT:
-            scope_kwargs["max_steps"] = cast(int | None, max_steps)
+        if max_steps is _USE_SCOPE_DEFAULT:
+            scope_cm = self._session_scope.session(
+                session_id=resolved_session.session_id,
+                model=model,
+                stream=stream,
+                policies=session_policies,
+            )
+        else:
+            scope_cm = self._session_scope.session(
+                session_id=resolved_session.session_id,
+                model=model,
+                stream=stream,
+                policies=session_policies,
+                max_steps=cast(int | None, max_steps),
+            )
 
         try:
             await self._report_session_resolved(resolved_session)
-            async with self._session_scope.session(**scope_kwargs) as session:
+            async with scope_cm as session:
                 with self._human_input.store.use_session_store(session.session_store):
                     try:
                         yield SefiaCLISession(human_input=self._human_input_receiver)
-                    finally:
-                        # Runs on normal completion and on a human-input
-                        # YieldException (each chat turn). The session context is
-                        # still alive here, so the state container is readable.
+                    except YieldException:
+                        # The session context is still alive here, so reporters
+                        # may read running state (e.g. cost) via get_state().
+                        await self._report_interrupted(resolved_session)
+                        raise
+                    else:
                         await self._report_session_finished()
         except YieldException:
-            await self._report_interrupted(resolved_session)
             raise typer.Exit(code=0)
 
     async def _report_session_resolved(self, session: ResolvedSession) -> None:
@@ -216,9 +226,8 @@ class SefiaCLI:
             await _maybe_await(self._reporter.on_interrupted(session))
 
     async def _report_session_finished(self) -> None:
-        if self._reporter is None:
-            return
-        await _maybe_await(self._reporter.on_session_finished(get_state()))
+        if self._reporter is not None:
+            await _maybe_await(self._reporter.on_session_finished())
 
     @staticmethod
     def _resolve_reporter(reporter: CLIReporter | None | object) -> CLIReporter | None:

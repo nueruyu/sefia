@@ -36,5 +36,7 @@ class TestCostReporting:
             async with cli.session():
                 raise YieldException()
 
-        reporter.on_session_finished.assert_called_once()
+        # On a yield, the interrupt hook fires (reporters may read running cost
+        # via get_state there) but the session did not finish normally.
         reporter.on_interrupted.assert_called_once()
+        reporter.on_session_finished.assert_not_called()
