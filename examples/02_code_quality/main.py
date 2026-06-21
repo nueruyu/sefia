@@ -1,16 +1,17 @@
 import asyncio
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefia import get_context
+from sefios import get_state
 from typing_extensions import Annotated
 
 from .._common.sefia_cli import SefiaCLI
-from .._common.session import UnknownSessionError
+from .._common.typer_utils import add_session_commands, async_command
 from .agents import (
     CodingStyleAuditor,
     DependencySpecialist,
@@ -52,32 +53,6 @@ review_agents = {
 }
 
 app = typer.Typer(help="A multi-agent workflow for code quality review.")
-session_app = typer.Typer(help="Manage sessions.")
-app.add_typer(session_app, name="session")
-
-
-@session_app.command("new")
-def new_session():
-    """Create a new session and make it active."""
-    session_id = sefia_cli.create_session()
-    console.print(f"[bold]> Created and switched to new session: {session_id}[/bold]")
-
-
-@session_app.command("switch")
-def switch_session(
-    session_id: Annotated[
-        str,
-        typer.Argument(help="The ID of the session to switch to."),
-    ],
-):
-    """Switch the active session."""
-    try:
-        session_id = sefia_cli.switch_session(session_id)
-    except UnknownSessionError as e:
-        console.print(f"[bold red]> Unknown session:[/bold red] {e.session_id}")
-        raise typer.Exit(code=1) from e
-
-    console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
 
 
 @engrave
@@ -90,9 +65,7 @@ async def _define_scope() -> ProjectScope:
 async def _understand_project(scope: ProjectScope) -> ProjectUnderstanding:
     console.print("\n[bold]> Stage 2: Understanding project...[/bold]")
     file_paths = await git_tool.list_tracked_files(scope.project_path)
-    understanding_store = get_context().get_state_store(
-        "project_understanding", ProjectUnderstanding
-    )
+    understanding_store = get_state().get(ProjectUnderstanding)
     understanding = await understanding_store.ensure()
 
     for iteration in range(5):
@@ -170,7 +143,8 @@ async def _create_report(
 
 
 @app.command()
-def chat(
+@async_command
+async def chat(
     message: Annotated[
         list[str],
         typer.Argument(
@@ -206,27 +180,8 @@ def chat(
             help="Enable verbose output for debugging, including LLM prompts.",
         ),
     ] = False,
-):
-    """Start a new workflow or provide an answer to continue the current session."""
-    asyncio.run(
-        _chat_async(
-            message=message,
-            reply_to=reply_to,
-            session_id=session_id,
-            model=model,
-            verbose=verbose,
-        )
-    )
-
-
-async def _chat_async(
-    *,
-    message: list[str],
-    reply_to: str | None,
-    session_id: str | None,
-    model: str,
-    verbose: bool,
 ) -> None:
+    """Start a new workflow or provide an answer to continue the current session."""
     async with sefia_cli.session(
         session_id=session_id,
         model=model,
@@ -253,6 +208,8 @@ async def _chat_async(
         )
     )
 
+
+add_session_commands(app, sefia_cli)
 
 if __name__ == "__main__":
     from dotenv import load_dotenv

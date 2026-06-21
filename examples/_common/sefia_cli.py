@@ -7,7 +7,8 @@ from typing import Protocol, TypeVar, cast
 import typer
 from glyff.exceptions import YieldException
 from sefia import Policy
-from sefios import SessionScope
+from sefios import SessionScope, get_state
+from sefios.handlers import CostCalculator, CostState
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputRequest, HumanInputTool
 
@@ -19,9 +20,6 @@ from .session import ResolvedSession, SessionManager
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 _USE_DEFAULT_REPORTER = object()
-# Sentinel marking "no per-call override"; forwards the scope's configured
-# max_steps instead of an explicit value (note: max_steps=None means no limit).
-_USE_SCOPE_DEFAULT = object()
 
 
 class CLIReporter(Protocol):
@@ -41,6 +39,8 @@ class CLIReporter(Protocol):
         self,
         session: ResolvedSession,
     ) -> MaybeAwaitable[None]: ...
+
+    def on_session_finished(self) -> MaybeAwaitable[None]: ...
 
 
 class DefaultCLIReporter(CLIReporter):
@@ -66,11 +66,22 @@ class DefaultCLIReporter(CLIReporter):
         typer.echo(f" {request.question}")
         typer.echo()
 
-    def on_interrupted(self, _session: ResolvedSession) -> None:
+
+    async def on_interrupted(self, session: ResolvedSession) -> None:
         typer.echo()
         typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
         typer.echo("Session interrupted to wait for your input.")
         typer.echo("To resume, run the script again with your answer.")
+        await self._echo_total_cost()
+
+    async def on_session_finished(self) -> None:
+        await self._echo_total_cost()
+
+    @staticmethod
+    async def _echo_total_cost() -> None:
+        cost_state = await get_state().get(CostState).ensure()
+        typer.echo()
+        typer.secho(f"> Total cost: ${cost_state.cost:.4f}", bold=True)
 
 
 class SefiaCLISession:
@@ -119,7 +130,9 @@ class SefiaCLI:
         self._human_input_receiver = CLIHumanInputReceiver(self._human_input.store)
         self._verbose = verbose
 
-        scope_policies: list[Policy] = []
+        scope_policies: list[Policy] = [
+            CustomPolicy(handlers=lambda: [CostCalculator()])
+        ]
         if stream:
             scope_policies.append(
                 CustomPolicy(handlers=lambda: [StreamingPrintHandler()])
@@ -156,7 +169,6 @@ class SefiaCLI:
         model: str | None = None,
         stream: bool | None = None,
         verbose: bool | None = None,
-        max_steps: int | None | object = _USE_SCOPE_DEFAULT,
     ) -> AsyncIterator[SefiaCLISession]:
         """Run code within a resolved Sefia CLI session context."""
         resolved_session = self._session_manager.resolve_session(session_id)
@@ -168,31 +180,23 @@ class SefiaCLI:
 
         try:
             await self._report_session_resolved(resolved_session)
-            if max_steps is _USE_SCOPE_DEFAULT:
-                async with self._session_scope.session(
-                    session_id=resolved_session.session_id,
-                    model=model,
-                    stream=stream,
-                    policies=session_policies,
-                ) as session:
-                    with self._human_input.store.use_session_store(
-                        session.session_store
-                    ):
+            async with self._session_scope.session(
+                session_id=resolved_session.session_id,
+                model=model,
+                stream=stream,
+                policies=session_policies,
+            ) as session:
+                with self._human_input.store.use_session_store(session.session_store):
+                    try:
                         yield SefiaCLISession(human_input=self._human_input_receiver)
-            else:
-                async with self._session_scope.session(
-                    session_id=resolved_session.session_id,
-                    model=model,
-                    stream=stream,
-                    policies=session_policies,
-                    max_steps=cast(int | None, max_steps),
-                ) as session:
-                    with self._human_input.store.use_session_store(
-                        session.session_store
-                    ):
-                        yield SefiaCLISession(human_input=self._human_input_receiver)
+                    except YieldException:
+                        # The session context is still alive here, so reporters
+                        # may read running state (e.g. cost) via get_state().
+                        await self._report_interrupted(resolved_session)
+                        raise
+                    else:
+                        await self._report_session_finished()
         except YieldException:
-            await self._report_interrupted(resolved_session)
             raise typer.Exit(code=0)
 
     async def _report_session_resolved(self, session: ResolvedSession) -> None:
@@ -206,6 +210,10 @@ class SefiaCLI:
     async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
             await _maybe_await(self._reporter.on_interrupted(session))
+
+    async def _report_session_finished(self) -> None:
+        if self._reporter is not None:
+            await _maybe_await(self._reporter.on_session_finished())
 
     @staticmethod
     def _resolve_reporter(reporter: CLIReporter | None | object) -> CLIReporter | None:

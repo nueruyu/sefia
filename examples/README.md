@@ -21,6 +21,7 @@ export EXAMPLE_DEFAULT_MODEL="gpt-4o-mini"
 
 ## Examples
 
+- [00 Simple Chat](./00_simple_chat/README.md)
 - [01 News Article Generation](./01_news_article/README.md)
 - [02 Code Quality Review](./02_code_quality/README.md)
 
