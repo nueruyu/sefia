@@ -1,6 +1,6 @@
 import functools
 import inspect
-from typing import Callable, ParamSpec, Protocol, TypeVar
+from typing import Callable, ParamSpec, Protocol, TypeVar, cast
 
 from glyff import engrave
 
@@ -173,4 +173,4 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
 
         return await _engraved_run(*args, **kwargs)
 
-    return _run  # type: ignore[return-value]
+    return cast(Callable[P, R], _run)
