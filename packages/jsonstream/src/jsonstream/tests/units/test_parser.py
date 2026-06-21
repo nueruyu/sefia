@@ -1,8 +1,8 @@
-from jsonstream import (
+from jsonstream import IncrementalJsonParser
+from jsonstream.events import (
     EndArray,
     EndObject,
     EndString,
-    IncrementalJsonParser,
     JsonParseError,
     Key,
     Scalar,
