@@ -20,9 +20,6 @@ from .session import ResolvedSession, SessionManager
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 _USE_DEFAULT_REPORTER = object()
-# Sentinel marking "no per-call override"; forwards the scope's configured
-# max_steps instead of an explicit value (note: max_steps=None means no limit).
-_USE_SCOPE_DEFAULT = object()
 
 
 class CLIReporter(Protocol):
@@ -171,7 +168,6 @@ class SefiaCLI:
         model: str | None = None,
         stream: bool | None = None,
         verbose: bool | None = None,
-        max_steps: int | None | object = _USE_SCOPE_DEFAULT,
     ) -> AsyncIterator[SefiaCLISession]:
         """Run code within a resolved Sefia CLI session context."""
         resolved_session = self._session_manager.resolve_session(session_id)
@@ -181,25 +177,14 @@ class SefiaCLI:
         if resolved_verbose:
             session_policies = [VerbosePolicy()]
 
-        if max_steps is _USE_SCOPE_DEFAULT:
-            scope_cm = self._session_scope.session(
-                session_id=resolved_session.session_id,
-                model=model,
-                stream=stream,
-                policies=session_policies,
-            )
-        else:
-            scope_cm = self._session_scope.session(
-                session_id=resolved_session.session_id,
-                model=model,
-                stream=stream,
-                policies=session_policies,
-                max_steps=cast(int | None, max_steps),
-            )
-
         try:
             await self._report_session_resolved(resolved_session)
-            async with scope_cm as session:
+            async with self._session_scope.session(
+                session_id=resolved_session.session_id,
+                model=model,
+                stream=stream,
+                policies=session_policies,
+            ) as session:
                 with self._human_input.store.use_session_store(session.session_store):
                     try:
                         yield SefiaCLISession(human_input=self._human_input_receiver)
