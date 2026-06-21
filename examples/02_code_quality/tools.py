@@ -5,6 +5,22 @@ from pathlib import Path
 from sefia import exceptions, tool
 
 
+class FileOperationToolError(exceptions.ToolError):
+    """Base for file-related tool errors."""
+
+    def __init__(self, message: str, path: str):
+        super().__init__(message)
+        self.path = path
+
+
+class FileNotFoundToolError(FileOperationToolError):
+    """Raised when a file is not found."""
+
+
+class PermissionDeniedToolError(FileOperationToolError):
+    """Raised when a file cannot be accessed."""
+
+
 class GitTool:
     """A tool for interacting with a Git repository."""
 
@@ -54,11 +70,11 @@ class FileTool:
                 )
                 return path_str, content
             except FileNotFoundError as exc:
-                raise exceptions.FileNotFoundToolError(
+                raise FileNotFoundToolError(
                     f"File not found: {exc}", path=path_str
                 ) from exc
             except PermissionError as exc:
-                raise exceptions.PermissionDeniedToolError(
+                raise PermissionDeniedToolError(
                     f"Permission denied: {exc}", path=path_str
                 ) from exc
             except (OSError, UnicodeError) as exc:

@@ -2,22 +2,6 @@ class ToolError(Exception):
     """Base class for errors raised by a tool."""
 
 
-class FileOperationToolError(ToolError):
-    """Base for file-related tool errors."""
-
-    def __init__(self, message: str, path: str):
-        super().__init__(message)
-        self.path = path
-
-
-class FileNotFoundToolError(FileOperationToolError):
-    """Raised when a file is not found."""
-
-
-class PermissionDeniedToolError(FileOperationToolError):
-    """Raised when a file cannot be accessed."""
-
-
 class ToolConflictError(Exception):
     """Raised when two tools with the same name are found."""
 
