@@ -5,7 +5,6 @@ Each CLI invocation sends one message and the session pauses waiting for the
 next. Run it again to continue the conversation.
 """
 
-import asyncio
 from pathlib import Path
 from typing import Annotated, Never
 
@@ -14,6 +13,7 @@ from sefia import infer
 from sefios.tools import HumanInputTool
 
 from .._common.sefia_cli import SefiaCLI
+from .._common.typer_utils import add_session_commands, async_command
 
 
 class ChatAgent:
@@ -46,15 +46,12 @@ app = typer.Typer(help="Simple one-agent chat loop.")
 
 
 @app.command()
-def chat(
+@async_command
+async def chat(
     message: Annotated[
         list[str],
         typer.Argument(help="Your message, or an answer to resume the session."),
     ],
-    session_id: Annotated[
-        str | None,
-        typer.Option("--session-id", help="Session to use (default: active session)."),
-    ] = None,
     model: Annotated[
         str,
         typer.Option(
@@ -63,27 +60,14 @@ def chat(
             help="LLM model to use.",
         ),
     ] = "gpt-4o-mini",
-):
-    """Send a message to the chat agent."""
-    asyncio.run(
-        _chat_async(
-            message=message,
-            session_id=session_id,
-            model=model,
-        )
-    )
-
-
-async def _chat_async(
-    *,
-    message: list[str],
-    session_id: str | None,
-    model: str,
 ) -> None:
-    async with sefia_cli.session(session_id=session_id, model=model) as session:
+    """Send a message to the chat agent."""
+    async with sefia_cli.session(model=model) as session:
         await session.accept_input(message)
         await agent.chat()
 
+
+add_session_commands(app, sefia_cli)
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
