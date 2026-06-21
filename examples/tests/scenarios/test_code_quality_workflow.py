@@ -89,7 +89,7 @@ class TestCodeQualityWorkflow:
             report=report,
         )
 
-        await workflow._chat_async(
+        await workflow.chat.__wrapped__(
             message=["Review my project"],
             reply_to=None,
             session_id=None,
@@ -124,7 +124,7 @@ class TestCodeQualityWorkflow:
             report=report,
         )
 
-        await workflow._chat_async(
+        await workflow.chat.__wrapped__(
             message=["Review my project"],
             reply_to=None,
             session_id=None,

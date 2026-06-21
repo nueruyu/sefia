@@ -41,7 +41,7 @@ class TestNewsArticleWorkflow:
         monkeypatch.setattr(workflow.researcher, "research_topic", research)
         monkeypatch.setattr(workflow.writer, "write_article", write)
 
-        await workflow._chat_async(
+        await workflow.chat.__wrapped__(
             message=["Write about generative AI"],
             reply_to=None,
             session_id=None,
@@ -77,7 +77,7 @@ class TestNewsArticleWorkflow:
         write = AsyncMock(return_value=article)
         monkeypatch.setattr(workflow.writer, "write_article", write)
 
-        await workflow._chat_async(
+        await workflow.chat.__wrapped__(
             message=["topic"],
             reply_to=None,
             session_id=None,

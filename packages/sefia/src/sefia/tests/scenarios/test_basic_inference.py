@@ -331,7 +331,7 @@ def test_policy_coexists_with_other_metadata():
         """A function whose metadata was already touched by another decorator."""
         ...
 
-    fn.__sefia_metadata__ = {"other": True}
+    setattr(fn, "__sefia_metadata__", {"other": True})
 
     # @policy sits above @infer, so the policy lands on the wrapper chain.
     decorated = policy(_PolicyFixture(count=2))(infer(fn))
