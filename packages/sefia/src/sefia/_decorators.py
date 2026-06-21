@@ -1,6 +1,6 @@
 import functools
 import inspect
-from typing import Any, Callable, Coroutine, ParamSpec, Protocol, TypeVar
+from typing import Callable, ParamSpec, Protocol, TypeVar
 
 from glyff import engrave
 
@@ -15,7 +15,10 @@ R = TypeVar("R")
 
 
 class _PolicyDecorator(Protocol):
+    """Callable that decorates a function without changing its type."""
+
     def __call__(self, func: T) -> T: ...
+
 
 # Attribute that holds sefia's per-function metadata dict, and the key under
 # which inference policies live inside it.
