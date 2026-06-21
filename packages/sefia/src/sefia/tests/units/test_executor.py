@@ -17,7 +17,6 @@ from sefia import (
 from sefia._executor import InferenceExecutor
 from sefia.event_system import EventHandler, EventPublisher
 from sefia.events import AttemptStart, StepStarted
-from sefia.exceptions import InferenceControlSignal
 from sefia.inference import (
     FinalAnswerDecision,
     InferenceDecision,
@@ -27,11 +26,11 @@ from sefia.inference import (
 )
 
 
-class _MaxStepsExceededError(InferenceControlSignal):
+class _MaxStepsExceededError(Exception):
     pass
 
 
-class _MaxRetriesExceededError(InferenceControlSignal):
+class _MaxRetriesExceededError(Exception):
     pass
 
 
@@ -54,7 +53,7 @@ class _Retrier(InferenceMiddleware):
         while True:
             try:
                 return await nxt()
-            except InferenceControlSignal:
+            except (_MaxRetriesExceededError, _MaxStepsExceededError):
                 raise
             except Exception as e:
                 if self._retries_used >= self.max_retries:
@@ -208,7 +207,7 @@ class TestInferenceExecutor:
         assert [event.step for event in step_events] == [0, 1]
 
     async def test_step_middleware_can_stop_the_loop(self, executor_dependencies):
-        # A step middleware that raises a control signal stops the loop. Here
+        # A step middleware that raises an exception stops the loop. Here
         # StepLimiter refuses to start a fourth step (0-based index 3).
         (
             mock_strategy,

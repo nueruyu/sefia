@@ -1,12 +1,16 @@
-class ToolError(Exception):
+class SefiaError(Exception):
+    """Base class for errors raised by sefia."""
+
+
+class ToolError(SefiaError):
     """Base class for errors raised by a tool."""
 
 
-class ToolConflictError(Exception):
+class ToolConflictError(SefiaError):
     """Raised when two tools with the same name are found."""
 
 
-class InferenceException(Exception):
+class InferenceException(SefiaError):
     """
     Base class for errors raised by an LLM client while performing an inference
     step.
@@ -35,13 +39,3 @@ class RateLimitException(InferenceException):
 
 class TemporarilyUnavailableException(InferenceException):
     """The provider was temporarily unable to serve the request."""
-
-
-class InferenceControlSignal(Exception):
-    """
-    Base class for typed control signals.
-
-    These are not failures to be retried; they are deliberate instructions (or
-    terminal limits) that a middleware raises to communicate control flow.
-    Concrete terminal signals live next to the middleware that raises them.
-    """

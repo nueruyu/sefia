@@ -1,6 +1,7 @@
 import pytest
 from glyff.exceptions import YieldException
 from sefia import InferenceContext
+from sefia.exceptions import SefiaError, TimeoutException
 from sefios.middleware import (
     MaxRetriesExceededError,
     MaxStepsExceededError,
@@ -63,7 +64,7 @@ class TestRetrier:
             await middleware.wrap(_ctx(), failing)
         assert exc_info.value.__cause__ is original
 
-    async def test_does_not_retry_terminal_control_signals(self):
+    async def test_does_not_retry_terminal_exceptions(self):
         middleware = Retrier(max_retries=3)
 
         async def hit_limit():
@@ -71,6 +72,33 @@ class TestRetrier:
 
         with pytest.raises(MaxStepsExceededError):
             await middleware.wrap(_ctx(), hit_limit)
+
+    async def test_does_not_retry_sefia_errors(self):
+        middleware = Retrier(max_retries=3)
+        calls = 0
+
+        async def fail_with_framework_error():
+            nonlocal calls
+            calls += 1
+            raise SefiaError("stop")
+
+        with pytest.raises(SefiaError):
+            await middleware.wrap(_ctx(), fail_with_framework_error)
+        assert calls == 1
+
+    async def test_retries_inference_exceptions(self):
+        middleware = Retrier(max_retries=1)
+        calls = 0
+
+        async def fail_then_succeed():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise TimeoutException("timeout")
+            return "ok"
+
+        assert await middleware.wrap(_ctx(), fail_then_succeed) == "ok"
+        assert calls == 2
 
     async def test_does_not_retry_yield_exception(self):
         middleware = Retrier(max_retries=3)

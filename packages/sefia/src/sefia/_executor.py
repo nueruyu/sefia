@@ -79,7 +79,7 @@ def _compose(
 
     Middlewares are applied so the first in the list is the outermost layer.
     A middleware receives ``nxt`` as the next layer and may call it once, call it
-    again for retry behavior, or short-circuit by raising a control signal.
+    again for retry behavior, or short-circuit by raising an exception.
     """
     nxt = core
     for middleware in reversed(middlewares):
@@ -211,7 +211,7 @@ class InferenceExecutor:
         Runs the inference process.
 
         Inference middleware wraps the attempt factory. A retry middleware may
-        call the wrapped function more than once; any control signal or genuine
+        call the wrapped function more than once; any exception or genuine
         failure that escapes middleware propagates out.
         """
         await self.publisher.publish(

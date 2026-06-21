@@ -1,11 +1,11 @@
 from typing import Awaitable, Callable
 
 from sefia._interfaces.middleware import StepContext, StepMiddleware
-from sefia.exceptions import InferenceControlSignal
+from sefia.exceptions import SefiaError
 from sefia.inference import InferenceDecision
 
 
-class MaxStepsExceededError(InferenceControlSignal):
+class MaxStepsExceededError(SefiaError):
     """Raised when an inference run exceeds its maximum number of steps."""
 
 

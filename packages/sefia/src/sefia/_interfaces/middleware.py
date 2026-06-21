@@ -36,7 +36,7 @@ class InferenceMiddleware(ABC):
 
     Unlike an :class:`~sefia.EventHandler` (which observes), a middleware
     *controls*: it may run the wrapped inference, inspect the outcome, retry by
-    calling ``nxt`` again, or raise a typed control signal such as
+    calling ``nxt`` again, or raise an exception such as
     ``MaxRetriesExceededError``.
     """
 
@@ -54,7 +54,7 @@ class StepMiddleware(ABC):
 
     The executor owns the step loop and invokes the middleware once per step.
     A middleware may short-circuit the step (e.g. refuse to start it) or inspect
-    the resulting decision, raising a typed control signal to stop the loop.
+    the resulting decision, raising an exception to stop the loop.
     """
 
     @abstractmethod

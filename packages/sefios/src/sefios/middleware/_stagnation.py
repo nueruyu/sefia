@@ -3,11 +3,11 @@ from collections import deque
 from typing import Any, Awaitable, Callable
 
 from sefia._interfaces.middleware import StepContext, StepMiddleware
-from sefia.exceptions import InferenceControlSignal
+from sefia.exceptions import SefiaError
 from sefia.inference import InferenceDecision, ToolCallDecision
 
 
-class StagnationError(InferenceControlSignal):
+class StagnationError(SefiaError):
     """Raised when the inference run appears stuck repeating the same tool call."""
 
 

@@ -3,10 +3,10 @@ from typing import Any, Awaitable, Callable
 from glyff.exceptions import YieldException
 
 from sefia._interfaces.middleware import InferenceContext, InferenceMiddleware
-from sefia.exceptions import InferenceControlSignal
+from sefia.exceptions import InferenceException, SefiaError
 
 
-class MaxRetriesExceededError(InferenceControlSignal):
+class MaxRetriesExceededError(SefiaError):
     """Raised when the configured number of retries has been exhausted."""
 
 
@@ -14,12 +14,14 @@ class Retrier(InferenceMiddleware):
     """
     Restarts the inference run when an inference attempt fails.
 
-    Only failures arising from the inference process itself are retried. Terminal
-    control signals (max steps, stagnation, an already-exhausted retry budget) and
-    graceful interrupts (``YieldException``) are allowed to propagate untouched,
-    so retries are never wasted on a deterministic limit. Tool failures are not
-    retried either: the executor stringifies them into the history and feeds them
-    back to the model, so they never surface here as exceptions.
+    Only failures arising from the inference process itself are retried.
+    Framework exceptions (for example max steps, stagnation, or an
+    already-exhausted retry budget) and graceful interrupts (``YieldException``)
+    are allowed to propagate untouched, so retries are never wasted on a
+    deterministic limit. Provider failures translated to ``InferenceException``
+    are retried. Tool failures are not retried either: the executor stringifies
+    them into the history and feeds them back to the model, so they never surface
+    here as exceptions.
 
     The retry counter is intentionally kept on the instance and persists across
     the attempts of a single run. Middleware is instantiated per inference run
@@ -40,7 +42,13 @@ class Retrier(InferenceMiddleware):
         while True:
             try:
                 return await nxt()
-            except (InferenceControlSignal, YieldException):
+            except InferenceException as e:
+                if self._retries_used >= self.max_retries:
+                    raise MaxRetriesExceededError(
+                        f"Failed after {self.max_retries} retries."
+                    ) from e
+                self._retries_used += 1
+            except (SefiaError, YieldException):
                 raise
             except Exception as e:
                 if self._retries_used >= self.max_retries:

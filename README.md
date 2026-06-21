@@ -292,7 +292,7 @@ added by implementing the `Policy` ABC.
 The executor owns the inference lifecycle and the inner step loop, and wraps
 each unit of work with the configured middleware. Inference middleware can
 retry by calling its wrapped function again, while step middleware can stop the
-step loop by raising a typed control signal.
+step loop by raising an exception.
 
 Two seams are available, exposed as ABCs from `sefia`:
 
