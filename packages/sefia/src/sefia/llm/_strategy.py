@@ -294,7 +294,9 @@ class LLMInferenceStrategy(InferenceStrategy):
         await publisher.publish(events.AfterLLMCall(response))
 
         if response.content is None:
-            raise InvalidInferenceResponseError("LLM did not provide a response content.")
+            raise InvalidInferenceResponseError(
+                "LLM did not provide a response content."
+            )
 
         try:
             raw = response.content.strip()

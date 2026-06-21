@@ -36,7 +36,9 @@ def add_session_commands(app: typer.Typer, sefia_cli: SefiaCLI) -> None:
     def new_session() -> None:
         """Create a new session and make it active."""
         session_id = sefia_cli.create_session()
-        console.print(f"[bold]> Created and switched to new session: {session_id}[/bold]")
+        console.print(
+            f"[bold]> Created and switched to new session: {session_id}[/bold]"
+        )
 
     @session_app.command("switch")
     def switch_session(

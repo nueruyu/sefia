@@ -16,7 +16,13 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import LLMInferenceStrategy, LLMResponse
-from sefia.llm._strategy import LLMToolCall, _LLMDecision, _OutputOnlyDirector, _ToolEnabledDirector, _ToolOnlyDirector
+from sefia.llm._strategy import (
+    LLMToolCall,
+    _LLMDecision,
+    _OutputOnlyDirector,
+    _ToolEnabledDirector,
+    _ToolOnlyDirector,
+)
 from sefia.llm.events import LLMTokenReceived
 from sefia.pydantic import PydanticModelInspector
 from sefia.pydantic._json_utils import pydantic_json_default
@@ -199,7 +205,10 @@ class TestLLMInferenceStrategy:
         publisher = MockEventPublisher()
 
         decision = await strategy.decide_next_step(
-            _function_info(return_type=MyOutput, instructions="do it"), [], [], publisher
+            _function_info(return_type=MyOutput, instructions="do it"),
+            [],
+            [],
+            publisher,
         )
 
         assert isinstance(decision, FinalAnswerDecision)
