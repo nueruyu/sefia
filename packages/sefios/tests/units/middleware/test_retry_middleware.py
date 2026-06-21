@@ -100,6 +100,29 @@ class TestRetrier:
         assert await middleware.wrap(_ctx(), fail_then_succeed) == "ok"
         assert calls == 2
 
+    async def test_inference_error_yields_after_exhausting_retries(self):
+        # When the recoverable budget is spent, the original InferenceError is
+        # re-raised untouched (NOT wrapped in MaxRetriesExceededError). It is a
+        # YieldException, so it propagates as a non-engraved, resumable interrupt
+        # rather than a hard, engraved failure.
+        middleware = Retrier(max_retries=2)
+        calls = 0
+        original = InferenceTimeoutError("still timing out")
+
+        async def always_timeout():
+            nonlocal calls
+            calls += 1
+            raise original
+
+        with pytest.raises(InferenceTimeoutError) as exc_info:
+            await middleware.wrap(_ctx(), always_timeout)
+
+        assert exc_info.value is original
+        assert isinstance(exc_info.value, YieldException)
+        assert not isinstance(exc_info.value, MaxRetriesExceededError)
+        # initial attempt + 2 retries
+        assert calls == 3
+
     async def test_does_not_retry_yield_exception(self):
         middleware = Retrier(max_retries=3)
 

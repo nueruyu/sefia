@@ -14,14 +14,26 @@ class Retrier(InferenceMiddleware):
     """
     Restarts the inference run when an inference attempt fails.
 
-    Only failures arising from the inference process itself are retried.
+    Two kinds of failure are retried, with different exhaustion behavior:
+
+    - A recoverable ``InferenceError`` (a transient provider hiccup, or an
+      invalid LLM response) is retried within this process. Once the budget is
+      spent, the *original* error is re-raised untouched. Because an
+      ``InferenceError`` is also a ``YieldException``, that propagates as a
+      graceful, non-engraved interrupt: the run pauses and a later re-invocation
+      can still recover the step, rather than the failure being engraved as a
+      permanent ``FAILED`` record. In other words, retries here are an in-process
+      fast path, with a durable resume as the fallback.
+    - Any other exception is retried too, but once the budget is spent it is
+      wrapped in ``MaxRetriesExceededError`` (a ``SefiaError``), which is a
+      genuine, engraved failure.
+
     Framework exceptions (for example max steps, stagnation, or an
-    already-exhausted retry budget) and graceful interrupts (``YieldException``)
+    already-exhausted retry budget) and intentional ``YieldException`` interrupts
     are allowed to propagate untouched, so retries are never wasted on a
-    deterministic limit. Provider failures translated to ``InferenceError``
-    are retried. Tool failures are not retried either: the executor stringifies
-    them into the history and feeds them back to the model, so they never surface
-    here as exceptions.
+    deterministic limit. Tool failures are not retried either: the executor
+    stringifies them into the history and feeds them back to the model, so they
+    never surface here as exceptions.
 
     The retry counter is intentionally kept on the instance and persists across
     the attempts of a single run. Middleware is instantiated per inference run
@@ -42,11 +54,14 @@ class Retrier(InferenceMiddleware):
         while True:
             try:
                 return await nxt()
-            except InferenceError as e:
+            except InferenceError:
+                # Recoverable. ``InferenceError`` is checked before the
+                # ``(SefiaError, YieldException)`` branch because it subclasses
+                # both. On exhaustion, re-raise the original error: it is a
+                # YieldException, so it propagates as a non-engraved, resumable
+                # interrupt instead of a hard failure.
                 if self._retries_used >= self.max_retries:
-                    raise MaxRetriesExceededError(
-                        f"Failed after {self.max_retries} retries."
-                    ) from e
+                    raise
                 self._retries_used += 1
             except (SefiaError, YieldException):
                 raise

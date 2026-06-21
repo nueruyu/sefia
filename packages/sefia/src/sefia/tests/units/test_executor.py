@@ -435,6 +435,48 @@ class TestInferenceExecutor:
         assert len(step_failures) == 1
         assert step_failures[0].error is error
 
+    async def test_recoverable_inference_error_yields_without_failing_run(
+        self, executor_dependencies
+    ):
+        # A recoverable InferenceError is also a YieldException, so it must
+        # propagate as a graceful interrupt: the step's failure is still
+        # published for observation (InferenceStepFailed), but the run is NOT
+        # reported as failed (no InferenceFailed), and the original typed error
+        # propagates so glyff can leave the step resumable rather than engraving
+        # it.
+        from sefia.exceptions import InferenceTimeoutError
+
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        error = InferenceTimeoutError("provider timed out")
+        mock_strategy.decide_next_step.side_effect = error
+
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        with pytest.raises(InferenceTimeoutError, match="provider timed out"):
+            await executor.run()
+
+        published = [call.args[0] for call in mock_publisher.publish.call_args_list]
+        step_failures = [
+            e for e in published if isinstance(e, events.InferenceStepFailed)
+        ]
+        assert len(step_failures) == 1
+        assert step_failures[0].error is error
+        # The run itself is not reported as failed — it is a recoverable yield.
+        assert not any(isinstance(e, events.InferenceFailed) for e in published)
+
     async def test_handler_yield_on_failed_step_is_isolated(
         self, executor_dependencies
     ):
