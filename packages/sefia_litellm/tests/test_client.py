@@ -20,9 +20,9 @@ from litellm.types.utils import (
 )
 from pytest_mock import MockerFixture
 from sefia.exceptions import (
-    RateLimitException,
-    TemporarilyUnavailableException,
-    TimeoutException,
+    InferenceRateLimitError,
+    InferenceTemporarilyUnavailableError,
+    InferenceTimeoutError,
 )
 from sefia.llm import LLMResponse, Message
 from sefia_litellm._client import (
@@ -131,35 +131,35 @@ class TestLiteLLMClient:
             await client.complete([])
 
     @pytest.mark.parametrize(
-        ("provider_error", "expected_exception"),
+        ("provider_error", "expected_error"),
         [
             (
                 RateLimitError(
                     message="rate limited", llm_provider="openai", model="gpt-4o"
                 ),
-                RateLimitException,
+                InferenceRateLimitError,
             ),
             (
                 Timeout(message="timed out", model="gpt-4o", llm_provider="openai"),
-                TimeoutException,
+                InferenceTimeoutError,
             ),
             (
                 InternalServerError(
                     message="boom", llm_provider="openai", model="gpt-4o"
                 ),
-                TemporarilyUnavailableException,
+                InferenceTemporarilyUnavailableError,
             ),
         ],
     )
-    async def test_provider_errors_map_to_inference_exceptions(
-        self, mock_acompletion, provider_error, expected_exception
+    async def test_provider_errors_map_to_inference_errors(
+        self, mock_acompletion, provider_error, expected_error
     ):
         # The adapter translates LiteLLM's transient errors into sefia's abstract
-        # exceptions so callers never have to know about LiteLLM's types.
+        # errors so callers never have to know about LiteLLM's types.
         mock_acompletion.side_effect = provider_error
         client = LiteLLMClient(model="gpt-4o")
 
-        with pytest.raises(expected_exception):
+        with pytest.raises(expected_error):
             await client.complete([])
 
     async def test_unmapped_provider_error_propagates_unchanged(self, mock_acompletion):

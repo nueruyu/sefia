@@ -3,7 +3,7 @@ from typing import Any, Awaitable, Callable
 from glyff.exceptions import YieldException
 
 from sefia._interfaces.middleware import InferenceContext, InferenceMiddleware
-from sefia.exceptions import InferenceException, SefiaError
+from sefia.exceptions import InferenceError, SefiaError
 
 
 class MaxRetriesExceededError(SefiaError):
@@ -18,7 +18,7 @@ class Retrier(InferenceMiddleware):
     Framework exceptions (for example max steps, stagnation, or an
     already-exhausted retry budget) and graceful interrupts (``YieldException``)
     are allowed to propagate untouched, so retries are never wasted on a
-    deterministic limit. Provider failures translated to ``InferenceException``
+    deterministic limit. Provider failures translated to ``InferenceError``
     are retried. Tool failures are not retried either: the executor stringifies
     them into the history and feeds them back to the model, so they never surface
     here as exceptions.
@@ -42,7 +42,7 @@ class Retrier(InferenceMiddleware):
         while True:
             try:
                 return await nxt()
-            except InferenceException as e:
+            except InferenceError as e:
                 if self._retries_used >= self.max_retries:
                     raise MaxRetriesExceededError(
                         f"Failed after {self.max_retries} retries."

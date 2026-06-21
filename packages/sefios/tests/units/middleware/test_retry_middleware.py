@@ -1,7 +1,7 @@
 import pytest
 from glyff.exceptions import YieldException
 from sefia import InferenceContext
-from sefia.exceptions import SefiaError, TimeoutException
+from sefia.exceptions import InferenceTimeoutError, SefiaError
 from sefios.middleware import (
     MaxRetriesExceededError,
     MaxStepsExceededError,
@@ -86,7 +86,7 @@ class TestRetrier:
             await middleware.wrap(_ctx(), fail_with_framework_error)
         assert calls == 1
 
-    async def test_retries_inference_exceptions(self):
+    async def test_retries_inference_errors(self):
         middleware = Retrier(max_retries=1)
         calls = 0
 
@@ -94,7 +94,7 @@ class TestRetrier:
             nonlocal calls
             calls += 1
             if calls == 1:
-                raise TimeoutException("timeout")
+                raise InferenceTimeoutError("timeout")
             return "ok"
 
         assert await middleware.wrap(_ctx(), fail_then_succeed) == "ok"

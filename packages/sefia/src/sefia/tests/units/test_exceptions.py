@@ -1,10 +1,10 @@
 from sefia.exceptions import (
-    ConnectionException,
-    InferenceException,
-    RateLimitException,
+    InferenceConnectionError,
+    InferenceError,
+    InferenceRateLimitError,
+    InferenceTemporarilyUnavailableError,
+    InferenceTimeoutError,
     SefiaError,
-    TemporarilyUnavailableException,
-    TimeoutException,
     ToolConflictError,
     ToolError,
 )
@@ -13,11 +13,11 @@ from sefia.exceptions import (
 def test_core_exceptions_share_sefia_base():
     assert issubclass(ToolError, SefiaError)
     assert issubclass(ToolConflictError, SefiaError)
-    assert issubclass(InferenceException, SefiaError)
+    assert issubclass(InferenceError, SefiaError)
 
 
-def test_inference_exceptions_share_inference_base():
-    assert issubclass(TimeoutException, InferenceException)
-    assert issubclass(ConnectionException, InferenceException)
-    assert issubclass(RateLimitException, InferenceException)
-    assert issubclass(TemporarilyUnavailableException, InferenceException)
+def test_inference_errors_share_inference_base():
+    assert issubclass(InferenceTimeoutError, InferenceError)
+    assert issubclass(InferenceConnectionError, InferenceError)
+    assert issubclass(InferenceRateLimitError, InferenceError)
+    assert issubclass(InferenceTemporarilyUnavailableError, InferenceError)

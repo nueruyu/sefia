@@ -6,11 +6,11 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
 
 from sefia.exceptions import (
-    ConnectionException,
-    InferenceException,
-    RateLimitException,
-    TemporarilyUnavailableException,
-    TimeoutException,
+    InferenceConnectionError,
+    InferenceError,
+    InferenceRateLimitError,
+    InferenceTemporarilyUnavailableError,
+    InferenceTimeoutError,
 )
 from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
 
@@ -33,7 +33,7 @@ os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 _LOG_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 
 # A level above CRITICAL drops every record, fully silencing the logger. LiteLLM
-# surfaces real failures as exceptions (see ``_to_inference_exception``), so its
+# surfaces real failures as exceptions (see ``_to_inference_error``), so its
 # log output is noise that can be turned off entirely without hiding errors.
 _SILENCE_LEVEL = logging.CRITICAL + 1
 
@@ -83,8 +83,8 @@ def _configure_litellm_logging(suppress: bool) -> None:
 _apply_litellm_log_level(_env_suppress_logs_default())
 
 
-def _to_inference_exception(error: Exception) -> InferenceException | None:
-    """Maps a LiteLLM exception to a sefia InferenceException, if recognized."""
+def _to_inference_error(error: Exception) -> InferenceError | None:
+    """Maps a LiteLLM exception to a sefia InferenceError, if recognized."""
     # Imported here rather than at module load to keep LiteLLM out of the import
     # path; this is only reached after a request has already imported it. Order
     # matters: Timeout subclasses APIConnectionError, so it must be checked
@@ -99,17 +99,17 @@ def _to_inference_exception(error: Exception) -> InferenceException | None:
         Timeout,
     )
 
-    exception_mapping: tuple[tuple[type[Exception], type[InferenceException]], ...] = (
-        (Timeout, TimeoutException),
-        (APIConnectionError, ConnectionException),
-        (RateLimitError, RateLimitException),
-        (InternalServerError, TemporarilyUnavailableException),
-        (ServiceUnavailableError, TemporarilyUnavailableException),
+    error_mapping: tuple[tuple[type[Exception], type[InferenceError]], ...] = (
+        (Timeout, InferenceTimeoutError),
+        (APIConnectionError, InferenceConnectionError),
+        (RateLimitError, InferenceRateLimitError),
+        (InternalServerError, InferenceTemporarilyUnavailableError),
+        (ServiceUnavailableError, InferenceTemporarilyUnavailableError),
     )
 
-    for provider_exc, inference_exc in exception_mapping:
+    for provider_exc, inference_error in error_mapping:
         if isinstance(error, provider_exc):
-            return inference_exc(str(error))
+            return inference_error(str(error))
     return None
 
 
@@ -171,7 +171,7 @@ class LiteLLMClient(LLMClient):
                 stream = cast(AsyncIterator[Any], response)
                 return await self._handle_stream(stream, stream_callback, raw_messages)
         except Exception as e:
-            inference_error = _to_inference_exception(e)
+            inference_error = _to_inference_error(e)
             if inference_error is not None:
                 raise inference_error from e
             raise
