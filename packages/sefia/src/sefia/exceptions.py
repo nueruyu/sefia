@@ -18,14 +18,18 @@ class InferenceError(SefiaError, YieldException):
     Base class for *recoverable* errors raised while performing an inference
     step.
 
-    Client adapters translate provider-specific failures into these abstract
-    errors so the rest of sefia never has to know about a particular provider's
+    Client adapters translate provider-specific failures into ``InferenceError``
+    so the rest of sefia never has to know about a particular provider's
     exception types. Only failures that can plausibly succeed on a later attempt
     are mapped here — a transient network/provider hiccup, or an LLM response
     that did not conform to the expected schema. Genuinely permanent failures
     (authentication, malformed request, content policy, ...) are deliberately
     *not* mapped to ``InferenceError`` and propagate as their own exceptions,
     which glyff engraves as genuine failures.
+
+    Adapters may define their own provider-shaped subclasses of this base (for
+    example ``sefia_litellm`` defines ``InferenceTimeoutError`` and friends);
+    the framework only depends on this abstract base.
 
     Because an ``InferenceError`` is recoverable, it also subclasses glyff's
     ``YieldException``. glyff therefore does **not** engrave it as a permanent
@@ -35,22 +39,6 @@ class InferenceError(SefiaError, YieldException):
     propagates, so callers can catch it either as an ``InferenceError`` (to
     inspect what went wrong) or as a ``YieldException`` (to treat it as a pause).
     """
-
-
-class InferenceTimeoutError(InferenceError):
-    """The inference request did not complete within the allotted time."""
-
-
-class InferenceConnectionError(InferenceError):
-    """The inference request could not reach the provider."""
-
-
-class InferenceRateLimitError(InferenceError):
-    """The request was rejected because a rate limit was exceeded."""
-
-
-class InferenceTemporarilyUnavailableError(InferenceError):
-    """The provider was temporarily unable to serve the request."""
 
 
 class InvalidInferenceResponseError(InferenceError):

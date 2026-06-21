@@ -1,7 +1,7 @@
 import pytest
 from glyff.exceptions import YieldException
 from sefia import InferenceContext
-from sefia.exceptions import InferenceTimeoutError, SefiaError
+from sefia.exceptions import InvalidInferenceResponseError, SefiaError
 from sefios.middleware import (
     MaxStepsExceededError,
     Retrier,
@@ -73,7 +73,7 @@ class TestRetrier:
             nonlocal calls
             calls += 1
             if calls == 1:
-                raise InferenceTimeoutError("timeout")
+                raise InvalidInferenceResponseError("bad response")
             return "ok"
 
         assert await middleware.wrap(_ctx(), fail_then_succeed) == "ok"
@@ -85,15 +85,15 @@ class TestRetrier:
         # non-engraved, resumable interrupt rather than a hard, engraved failure.
         middleware = Retrier(max_retries=2)
         calls = 0
-        original = InferenceTimeoutError("still timing out")
+        original = InvalidInferenceResponseError("still invalid")
 
-        async def always_timeout():
+        async def always_fail():
             nonlocal calls
             calls += 1
             raise original
 
-        with pytest.raises(InferenceTimeoutError) as exc_info:
-            await middleware.wrap(_ctx(), always_timeout)
+        with pytest.raises(InvalidInferenceResponseError) as exc_info:
+            await middleware.wrap(_ctx(), always_fail)
 
         assert exc_info.value is original
         assert isinstance(exc_info.value, YieldException)

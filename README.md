@@ -392,12 +392,14 @@ instead the step is left resumable. Re-invoking the workflow re-runs just that
 step, and earlier completed steps replay without re-running. This means a
 one-off network blip or malformed model response never poisons a run.
 
-The `@infer` call surfaces the failure as the typed error (e.g.
-`InferenceTimeoutError`, `InvalidInferenceResponseError`), which you can catch
-either as an `InferenceError` or as a `YieldException`. Genuinely permanent
-failures (authentication, malformed request, content policy, ...) are *not*
-mapped to `InferenceError`; they propagate as their own exceptions and are
-engraved as genuine failures.
+The `@infer` call surfaces the failure as the typed error, which you can catch
+either as an `InferenceError` or as a `YieldException`. The abstract
+`InferenceError` and `InvalidInferenceResponseError` live in `sefia`; a client
+adapter contributes its own provider-shaped subclasses (for example
+`sefia_litellm` defines `InferenceTimeoutError`, `InferenceRateLimitError`, and
+friends). Genuinely permanent failures (authentication, malformed request,
+content policy, ...) are *not* mapped to `InferenceError`; they propagate as
+their own exceptions and are engraved as genuine failures.
 
 `Retrier` adds an in-process fast path on top of this: it retries a recoverable
 error a few times within the same process, and only once that budget is spent

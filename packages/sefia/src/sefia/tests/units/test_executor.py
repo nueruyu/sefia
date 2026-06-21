@@ -444,7 +444,7 @@ class TestInferenceExecutor:
         # reported as failed (no InferenceFailed), and the original typed error
         # propagates so glyff can leave the step resumable rather than engraving
         # it.
-        from sefia.exceptions import InferenceTimeoutError
+        from sefia.exceptions import InvalidInferenceResponseError
 
         (
             mock_strategy,
@@ -452,7 +452,7 @@ class TestInferenceExecutor:
             mock_publisher,
             non_engrave,
         ) = executor_dependencies
-        error = InferenceTimeoutError("provider timed out")
+        error = InvalidInferenceResponseError("malformed response")
         mock_strategy.decide_next_step.side_effect = error
 
         executor = InferenceExecutor(
@@ -465,7 +465,7 @@ class TestInferenceExecutor:
             mock_publisher,
         )
 
-        with pytest.raises(InferenceTimeoutError, match="provider timed out"):
+        with pytest.raises(InvalidInferenceResponseError, match="malformed response"):
             await executor.run()
 
         published = [call.args[0] for call in mock_publisher.publish.call_args_list]
