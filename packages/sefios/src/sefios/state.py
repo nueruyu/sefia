@@ -31,16 +31,22 @@ class StateRegistry:
         """Registers ``state_type`` under ``key``.
 
         A given type may only be registered once; re-registering it raises
-        ``ValueError``. A key may be shared by more than one type, so that a
-        state class imported twice under different module paths — yielding
-        distinct class objects that carry the same key — is tolerated
-        unconditionally rather than treated as a collision.
+        ``ValueError``. A key may be shared only by re-imports of the same
+        class — distinct class objects with the same ``__qualname__``, as
+        produced when one module is imported under two paths. A genuinely
+        different type claiming an already-used key raises ``ValueError``.
         """
         if state_type in self._keys:
             raise ValueError(
                 f"{state_type.__module__}.{state_type.__name__} is already "
                 f"registered under key {self._keys[state_type]!r}."
             )
+        for other_type, other_key in self._keys.items():
+            if other_key == key and other_type.__qualname__ != state_type.__qualname__:
+                raise ValueError(
+                    f"Key {key!r} is already registered for a different type "
+                    f"{other_type.__module__}.{other_type.__name__}."
+                )
         self._keys[state_type] = key
 
     def key_for(self, state_type: type) -> str:
