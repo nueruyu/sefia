@@ -31,15 +31,18 @@ class TestStateRegistry:
         with pytest.raises(ValueError, match="already registered"):
             registry.register(_SampleState, "other.key")
 
-    def test_registering_key_used_by_another_type_raises(self):
+    def test_allows_same_key_for_distinct_types(self):
+        # A double import produces two distinct class objects that share a key;
+        # this is tolerated unconditionally and both remain resolvable.
         @dataclass
         class _OtherState:
             value: int = 0
 
         registry = StateRegistry()
         registry.register(_SampleState, "shared.key")
-        with pytest.raises(ValueError, match="already registered"):
-            registry.register(_OtherState, "shared.key")
+        registry.register(_OtherState, "shared.key")
+        assert registry.key_for(_SampleState) == "shared.key"
+        assert registry.key_for(_OtherState) == "shared.key"
 
     def test_key_for_unregistered_type_raises(self):
         registry = StateRegistry()

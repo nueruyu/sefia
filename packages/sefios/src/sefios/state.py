@@ -30,21 +30,17 @@ class StateRegistry:
     def register(self, state_type: type, key: str) -> None:
         """Registers ``state_type`` under ``key``.
 
-        A type may only be registered once, and a key may only be claimed by a
-        single type; violating either raises ``ValueError`` to surface
-        collisions early.
+        A given type may only be registered once; re-registering it raises
+        ``ValueError``. A key may be shared by more than one type, so that a
+        state class imported twice under different module paths — yielding
+        distinct class objects that carry the same key — is tolerated
+        unconditionally rather than treated as a collision.
         """
         if state_type in self._keys:
             raise ValueError(
                 f"{state_type.__module__}.{state_type.__name__} is already "
                 f"registered under key {self._keys[state_type]!r}."
             )
-        for other_type, other_key in self._keys.items():
-            if other_key == key:
-                raise ValueError(
-                    f"Key {key!r} is already registered for "
-                    f"{other_type.__module__}.{other_type.__name__}."
-                )
         self._keys[state_type] = key
 
     def key_for(self, state_type: type) -> str:
