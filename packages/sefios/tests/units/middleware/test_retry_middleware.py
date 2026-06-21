@@ -3,7 +3,6 @@ from glyff.exceptions import YieldException
 from sefia import InferenceContext
 from sefia.exceptions import InferenceTimeoutError, SefiaError
 from sefios.middleware import (
-    MaxRetriesExceededError,
     MaxStepsExceededError,
     Retrier,
 )
@@ -26,43 +25,23 @@ class TestRetrier:
 
         assert await middleware.wrap(_ctx(), nxt) == "ok"
 
-    async def test_retries_until_success_within_limits(self):
+    async def test_does_not_retry_genuine_exceptions(self):
+        # A non-recoverable error (anything that is not an InferenceError) is a
+        # genuine failure — already engraved by glyff when it escaped the step.
+        # Retrying would only waste the budget, so it propagates immediately.
         middleware = Retrier(max_retries=3)
         calls = 0
-
-        async def flaky():
-            nonlocal calls
-            calls += 1
-            if calls < 3:
-                raise ValueError("boom")
-            return "ok"
-
-        assert await middleware.wrap(_ctx(), flaky) == "ok"
-        assert calls == 3
-
-    async def test_raises_error_when_retries_exceeded(self):
-        middleware = Retrier(max_retries=2)
-        calls = 0
+        original = RuntimeError("boom")
 
         async def failing():
             nonlocal calls
             calls += 1
-            raise ValueError("boom")
-
-        with pytest.raises(MaxRetriesExceededError):
-            await middleware.wrap(_ctx(), failing)
-        assert calls == 3
-
-    async def test_preserves_original_error_as_cause(self):
-        middleware = Retrier(max_retries=0)
-        original = ValueError("boom")
-
-        async def failing():
             raise original
 
-        with pytest.raises(MaxRetriesExceededError) as exc_info:
+        with pytest.raises(RuntimeError) as exc_info:
             await middleware.wrap(_ctx(), failing)
-        assert exc_info.value.__cause__ is original
+        assert exc_info.value is original
+        assert calls == 1
 
     async def test_does_not_retry_terminal_exceptions(self):
         middleware = Retrier(max_retries=3)
@@ -102,9 +81,8 @@ class TestRetrier:
 
     async def test_inference_error_yields_after_exhausting_retries(self):
         # When the recoverable budget is spent, the original InferenceError is
-        # re-raised untouched (NOT wrapped in MaxRetriesExceededError). It is a
-        # YieldException, so it propagates as a non-engraved, resumable interrupt
-        # rather than a hard, engraved failure.
+        # re-raised untouched. It is a YieldException, so it propagates as a
+        # non-engraved, resumable interrupt rather than a hard, engraved failure.
         middleware = Retrier(max_retries=2)
         calls = 0
         original = InferenceTimeoutError("still timing out")
@@ -119,7 +97,6 @@ class TestRetrier:
 
         assert exc_info.value is original
         assert isinstance(exc_info.value, YieldException)
-        assert not isinstance(exc_info.value, MaxRetriesExceededError)
         # initial attempt + 2 retries
         assert calls == 3
 

@@ -323,9 +323,11 @@ step loop by raising an exception.
 
 Two seams are available, exposed as ABCs from `sefia`:
 
-- `InferenceMiddleware.wrap(ctx, nxt)` wraps a whole inference run. `MaxRetries`
-  uses this: on a retryable failure it calls `nxt` again, or raises
-  `MaxRetriesExceededError` once the budget is spent.
+- `InferenceMiddleware.wrap(ctx, nxt)` wraps a whole inference run. `Retrier`
+  uses this: on a recoverable `InferenceError` it calls `nxt` again, and once
+  the budget is spent it re-raises the original error — which, being a
+  `YieldException`, propagates as a resumable yield rather than a hard failure
+  (see [Recoverable inference errors](#recoverable-inference-errors)).
 - `StepMiddleware.wrap(ctx, nxt)` wraps a single step. `MaxSteps` uses this to
   cap the loop, raising `MaxStepsExceededError` once the step limit is reached.
 
