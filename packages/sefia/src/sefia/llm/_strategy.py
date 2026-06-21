@@ -236,7 +236,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self, output_type: Any, tools: list[dict]
     ) -> _ExecutionDirector:
         """Creates the appropriate execution director based on the context."""
-        if _is_never(output_type):
+        if output_type is Never:
             if not tools:
                 raise ValueError(
                     "An @infer function returning Never must have tools available, "
@@ -374,8 +374,3 @@ class LLMInferenceStrategy(InferenceStrategy):
                 )
 
         return messages
-
-
-def _is_never(typ: Any) -> bool:
-    """Return True if typ is typing.Never."""
-    return typ is Never

@@ -14,6 +14,7 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import LLMInferenceStrategy, LLMResponse
+from sefia.llm._strategy import LLMToolCall, _LLMDecision, _OutputOnlyDirector, _ToolEnabledDirector, _ToolOnlyDirector
 from sefia.llm.events import LLMTokenReceived
 from sefia.pydantic import PydanticModelInspector
 from sefia.pydantic.json_utils import pydantic_json_default
@@ -265,8 +266,6 @@ class TestToolOnlyDirector:
         )
 
     def test_create_director_returns_tool_only_for_never(self):
-        from sefia.llm._strategy import _ToolOnlyDirector
-
         strategy = self._strategy()
         director = strategy._create_director(Never, [{"type": "function"}])
         assert isinstance(director, _ToolOnlyDirector)
@@ -295,8 +294,6 @@ class TestToolOnlyDirector:
         assert "tool_calls" in prompt
 
     def test_process_decision_accepts_tool_calls(self):
-        from sefia.llm._strategy import LLMToolCall, _LLMDecision
-
         strategy = self._strategy()
         director = strategy._create_director(Never, [{"type": "function"}])
 
@@ -309,8 +306,6 @@ class TestToolOnlyDirector:
         assert result.calls[0].name == "my_tool"
 
     def test_process_decision_raises_on_final_answer(self):
-        from sefia.llm._strategy import _LLMDecision
-
         strategy = self._strategy()
         director = strategy._create_director(Never, [{"type": "function"}])
 
@@ -319,8 +314,6 @@ class TestToolOnlyDirector:
             director.process_decision(decision)
 
     def test_process_decision_raises_when_no_tool_calls_and_no_final_answer(self):
-        from sefia.llm._strategy import _LLMDecision
-
         strategy = self._strategy()
         director = strategy._create_director(Never, [{"type": "function"}])
 
@@ -329,10 +322,6 @@ class TestToolOnlyDirector:
             director.process_decision(decision)
 
     async def test_decide_next_step_returns_tool_call_decision_for_never(self):
-        from unittest.mock import AsyncMock
-
-        from sefia.llm import LLMResponse
-
         mock_client = AsyncMock()
         mock_client.complete.return_value = LLMResponse(
             content='{"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
@@ -354,8 +343,6 @@ class TestToolOnlyDirector:
     async def test_decide_next_step_raises_when_llm_returns_final_answer_for_never(
         self,
     ):
-        from sefia.llm import LLMResponse
-
         mock_client = AsyncMock()
         mock_client.complete.return_value = LLMResponse(
             content='{"tool_calls": null, "final_answer": "bye"}'
@@ -372,3 +359,110 @@ class TestToolOnlyDirector:
             await strategy.decide_next_step(
                 "chat", {}, {}, [], [{"type": "function"}], Never, MockEventPublisher()
             )
+
+
+class TestToolEnabledDirector:
+    """Tests for _ToolEnabledDirector — tools available, final answer also allowed."""
+
+    def _director(self, output_type=str):
+        inspector = PydanticModelInspector()
+        return _ToolEnabledDirector(inspector, output_type, [{"type": "function"}])
+
+    def test_build_decision_schema_has_nullable_final_answer_and_tool_calls(self):
+        schema = self._director().build_decision_schema()
+
+        assert {"type": "null"} in schema["properties"]["final_answer"]["anyOf"]
+        assert {"type": "null"} in schema["properties"]["tool_calls"]["anyOf"]
+        assert schema["required"] == ["final_answer", "tool_calls"]
+
+    def test_build_system_prompt_mentions_both_options(self):
+        director = self._director()
+        prompt = director.build_system_prompt_addition(director.build_decision_schema())
+
+        assert "tool_calls" in prompt
+        assert "final_answer" in prompt
+
+    def test_process_decision_returns_tool_call_decision(self):
+        director = self._director()
+        decision = _LLMDecision(
+            tool_calls=[LLMToolCall(name="search", arguments={"q": "x"})]
+        )
+        result = director.process_decision(decision)
+
+        assert isinstance(result, ToolCallDecision)
+        assert result.calls[0].name == "search"
+
+    def test_process_decision_returns_final_answer_decision(self):
+        director = self._director(output_type=str)
+        decision = _LLMDecision(final_answer="done")
+        result = director.process_decision(decision)
+
+        assert isinstance(result, FinalAnswerDecision)
+        assert result.answer == "done"
+
+    def test_process_decision_validates_final_answer_type(self):
+        director = self._director(output_type=MyOutput)
+        decision = _LLMDecision(final_answer={"name": "ok", "value": 7})
+        result = director.process_decision(decision)
+
+        assert isinstance(result, FinalAnswerDecision)
+        assert isinstance(result.answer, MyOutput)
+        assert result.answer.value == 7
+
+    def test_process_decision_raises_when_both_null(self):
+        director = self._director()
+        decision = _LLMDecision()
+        with pytest.raises(ValueError, match="tool_calls.*final_answer|final_answer.*tool_calls"):
+            director.process_decision(decision)
+
+    def test_tool_calls_take_priority_over_final_answer(self):
+        director = self._director()
+        decision = _LLMDecision(
+            tool_calls=[LLMToolCall(name="t", arguments={})],
+            final_answer="ignored",
+        )
+        result = director.process_decision(decision)
+
+        assert isinstance(result, ToolCallDecision)
+
+
+class TestOutputOnlyDirector:
+    """Tests for _OutputOnlyDirector — no tools, final answer required."""
+
+    def _director(self, output_type=str):
+        inspector = PydanticModelInspector()
+        return _OutputOnlyDirector(inspector, output_type, [])
+
+    def test_build_decision_schema_has_only_final_answer(self):
+        schema = self._director().build_decision_schema()
+
+        assert "tool_calls" not in schema.get("properties", {})
+        assert "final_answer" in schema["properties"]
+        assert schema["required"] == ["final_answer"]
+
+    def test_build_system_prompt_mentions_no_tools(self):
+        director = self._director()
+        prompt = director.build_system_prompt_addition(director.build_decision_schema())
+
+        assert "No tools are available" in prompt
+
+    def test_process_decision_returns_final_answer(self):
+        director = self._director(output_type=str)
+        result = director.process_decision(_LLMDecision(final_answer="hello"))
+
+        assert isinstance(result, FinalAnswerDecision)
+        assert result.answer == "hello"
+
+    def test_process_decision_validates_structured_output(self):
+        director = self._director(output_type=MyOutput)
+        result = director.process_decision(
+            _LLMDecision(final_answer={"name": "test", "value": 99})
+        )
+
+        assert isinstance(result.answer, MyOutput)
+        assert result.answer.name == "test"
+
+    def test_process_decision_raises_when_final_answer_is_null(self):
+        director = self._director()
+        with pytest.raises(ValueError, match="non-null 'final_answer'"):
+            director.process_decision(_LLMDecision())
