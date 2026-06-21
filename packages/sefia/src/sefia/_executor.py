@@ -1,5 +1,4 @@
 import inspect
-from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from glyff.exceptions import YieldException
@@ -16,6 +15,7 @@ from ._tool_system import ToolCollector, ToolRegistry
 from .event_system import EventPublisher
 from .inference import (
     FinalAnswerDecision,
+    FunctionInfo,
     HistoryItem,
     InferenceDecision,
     ToolCallDecision,
@@ -25,46 +25,6 @@ from .inference import (
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
-
-
-@dataclass(frozen=True)
-class FunctionInfo:
-    """Encapsulates the function to be inferred and its call information."""
-
-    qualname: str
-    instructions: str
-    bound_arguments: dict[str, Any]
-    type_hints: dict[str, Any]
-    return_type: Any
-    args: tuple
-    kwargs: dict
-
-    @classmethod
-    def create(cls, func: Callable, args: tuple, kwargs: dict) -> "FunctionInfo":
-        """Create a FunctionInfo instance from a function and its arguments."""
-        type_hints = inspect.get_annotations(func, eval_str=True)
-        instructions = inspect.getdoc(func) or "Execute the requested task."
-        qualname = func.__qualname__
-        return_type = type_hints.get("return", Any)
-
-        sig = inspect.signature(func)
-        bound_args = sig.bind(*args, **kwargs)
-        bound_args.apply_defaults()
-
-        return cls(
-            qualname=qualname,
-            instructions=instructions,
-            bound_arguments=bound_args.arguments,
-            type_hints=type_hints,
-            return_type=return_type,
-            args=args,
-            kwargs=kwargs,
-        )
-
-    @property
-    def instance(self) -> Any | None:
-        """Return the instance ('self') if the function is a method."""
-        return self.bound_arguments.get("self")
 
 
 def _wrap(f: Callable[_P, _R], decorator) -> Callable[_P, _R]:
@@ -141,12 +101,9 @@ class InferenceExecutor:
 
         try:
             decision = await self.strategy.decide_next_step(
-                instructions=self.func_info.instructions,
-                arguments=self.func_info.bound_arguments,
-                argument_type_hints=self.func_info.type_hints,
+                function_info=self.func_info,
                 history=history,
                 tools=self._tool_schemas,
-                output_type=self.func_info.return_type,
                 publisher=self.publisher,
             )
         except Exception as e:

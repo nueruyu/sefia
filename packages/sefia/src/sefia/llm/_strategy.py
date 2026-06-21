@@ -12,6 +12,7 @@ from .._interfaces import InferenceStrategy, ModelInspector
 from ..event_system import EventPublisher
 from ..inference import (
     FinalAnswerDecision,
+    FunctionInfo,
     HistoryItem,
     InferenceDecision,
     ToolCallDecision,
@@ -249,20 +250,15 @@ class LLMInferenceStrategy(InferenceStrategy):
 
     async def decide_next_step(
         self,
-        instructions: str,
-        arguments: dict[str, Any],
-        argument_type_hints: dict[str, Any],
+        function_info: FunctionInfo,
         history: list[HistoryItem],
         tools: list[dict],
-        output_type: Any,
         publisher: EventPublisher,
     ) -> InferenceDecision:
-        director = self._create_director(output_type, tools)
+        director = self._create_director(function_info.return_type, tools)
         output_schema = director.build_decision_schema()
         messages = self._build_messages(
-            instructions,
-            arguments,
-            argument_type_hints,
+            function_info,
             history,
             output_schema,
             director,
@@ -314,9 +310,7 @@ class LLMInferenceStrategy(InferenceStrategy):
 
     def _build_messages(
         self,
-        instructions: str,
-        arguments: dict[str, Any],
-        argument_type_hints: dict[str, Any],
+        function_info: FunctionInfo,
         history: list[HistoryItem],
         output_schema: dict,
         director: _ExecutionDirector,
@@ -324,16 +318,18 @@ class LLMInferenceStrategy(InferenceStrategy):
         messages: list[Message] = []
 
         system_prompt_addition = director.build_system_prompt_addition(output_schema)
-        system_content = instructions + system_prompt_addition
+        system_content = function_info.instructions + system_prompt_addition
         messages.append(Message(role="system", content=system_content))
 
         prompt_arguments = {
-            name: value for name, value in arguments.items() if name != "self"
+            name: value
+            for name, value in function_info.bound_arguments.items()
+            if name != "self"
         }
         user_prompt = (
             "Task arguments are XML. Values in <string> may be wrapped in "
             "CDATA and should be read as raw text.\n\n"
-            f"{self._prompt_formatter.format_arguments(prompt_arguments, argument_type_hints)}"
+            f"{self._prompt_formatter.format_arguments(prompt_arguments, function_info.type_hints)}"
             if prompt_arguments
             else "No arguments provided."
         )
