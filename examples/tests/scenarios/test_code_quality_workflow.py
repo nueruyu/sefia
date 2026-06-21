@@ -1,5 +1,7 @@
 import subprocess
 from importlib import import_module
+from types import ModuleType
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -10,7 +12,7 @@ main = import_module("examples.02_code_quality.main")
 models = import_module("examples.02_code_quality.models")
 
 
-def _init_repo(path):
+def _init_repo(path: Any) -> None:
     subprocess.run(["git", "init", "-q"], cwd=path, check=True)
     subprocess.run(
         ["git", "config", "user.email", "t@example.com"], cwd=path, check=True
@@ -19,7 +21,7 @@ def _init_repo(path):
 
 
 @pytest.fixture
-def project(tmp_path):
+def project(tmp_path: Any) -> Any:
     """A small tracked git project for the review workflow to operate on."""
     repo = tmp_path / "project"
     repo.mkdir()
@@ -31,13 +33,27 @@ def project(tmp_path):
 
 
 @pytest.fixture
-def workflow(monkeypatch, tmp_path):
+def workflow(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> ModuleType:
     cli = SefiaCLI(session_dir=tmp_path / "sessions", model="gpt-4o", stream=False)
     monkeypatch.setattr(main, "sefia_cli", cli)
-    return main
+    return main  # type: ignore[return-value]
 
 
-def _mock_inference(workflow, monkeypatch, *, scope, review_files, issues, report):
+@pytest.fixture
+def chat_async(workflow: ModuleType) -> Any:
+    """Return the unwrapped async chat function for direct testing."""
+    return getattr(workflow.chat, "__wrapped__")
+
+
+def _mock_inference(
+    workflow: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    scope: Any,
+    review_files: list[str],
+    issues: dict[Any, Any],
+    report: Any,
+) -> tuple[dict[Any, AsyncMock], AsyncMock]:
     """Mock every @infer entry point used across the review workflow."""
     monkeypatch.setattr(
         workflow.scoping_agent, "define_scope", AsyncMock(return_value=scope)
@@ -53,20 +69,25 @@ def _mock_inference(workflow, monkeypatch, *, scope, review_files, issues, repor
         "propose_and_confirm_review_files",
         AsyncMock(return_value=review_files),
     )
-    review_mocks = {}
+    review_mocks: dict[Any, AsyncMock] = {}
     for perspective, agent in workflow.review_agents.items():
         mock = AsyncMock(return_value=list(issues.get(perspective, [])))
         monkeypatch.setattr(agent, "review", mock)
         review_mocks[perspective] = mock
-    create_report = AsyncMock(return_value=report)
+    create_report: AsyncMock = AsyncMock(return_value=report)
     monkeypatch.setattr(workflow.reporting_agent, "create_report", create_report)
     return review_mocks, create_report
 
 
 class TestCodeQualityWorkflow:
     async def test_runs_full_review_and_renders_report(
-        self, workflow, project, monkeypatch, capsys
-    ):
+        self,
+        workflow: ModuleType,
+        chat_async: Any,
+        project: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         scope = models.ProjectScope(project_path=str(project))
         perspective = models.ReviewPerspective.CODING_STYLE
         issue = models.CodeIssue(
@@ -89,7 +110,7 @@ class TestCodeQualityWorkflow:
             report=report,
         )
 
-        await workflow._chat_async(
+        await chat_async(
             message=["Review my project"],
             reply_to=None,
             session_id=None,
@@ -111,8 +132,13 @@ class TestCodeQualityWorkflow:
         assert "One style issue found." in output
 
     async def test_no_selected_files_skips_review(
-        self, workflow, project, monkeypatch, capsys
-    ):
+        self,
+        workflow: ModuleType,
+        chat_async: Any,
+        project: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         scope = models.ProjectScope(project_path=str(project))
         report = models.QualityReport(overall_summary="unused")
         review_mocks, create_report = _mock_inference(
@@ -124,7 +150,7 @@ class TestCodeQualityWorkflow:
             report=report,
         )
 
-        await workflow._chat_async(
+        await chat_async(
             message=["Review my project"],
             reply_to=None,
             session_id=None,
