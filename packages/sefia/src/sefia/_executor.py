@@ -13,9 +13,9 @@ from ._interfaces.middleware import (
 )
 from ._tool_system import ToolCollector, ToolRegistry
 from .event_system import EventPublisher
-from .exceptions import RequestInferenceRetry
 from .inference import (
     FinalAnswerDecision,
+    FunctionInfo,
     HistoryItem,
     InferenceDecision,
     ToolCallDecision,
@@ -37,9 +37,9 @@ def _compose(
     """
     Compose ``middlewares`` into an onion around ``core``.
 
-    The executor owns the loop; each middleware merely wraps the single unit of
-    work (``core``) and delegates to the next layer via ``nxt``. Middlewares are
-    applied so the first in the list is the outermost layer.
+    Middlewares are applied so the first in the list is the outermost layer.
+    A middleware receives ``nxt`` as the next layer and may call it once, call it
+    again for retry behavior, or short-circuit by raising an exception.
     """
     nxt = core
     for middleware in reversed(middlewares):
@@ -58,9 +58,8 @@ class InferenceExecutor:
     """
     Orchestrates the inference loop for a single @infer call.
 
-    The executor owns both loops (the outer retry loop and the inner step loop)
-    and wraps each unit of work with the configured middleware. Middleware steers
-    those loops by raising typed control signals, keeping control flow explicit
+    The executor owns the inference lifecycle and the inner step loop, and wraps
+    the run with configured middleware. Middleware keeps control flow explicit
     and separate from observation (which flows through the event publisher).
     """
 
@@ -76,44 +75,35 @@ class InferenceExecutor:
         inference_middlewares: list[InferenceMiddleware] | None = None,
         step_middlewares: list[StepMiddleware] | None = None,
     ):
-        self.args = args
-        self.kwargs = kwargs
+        self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy
-        self.tool_collector = tool_collector
         self.publisher = publisher
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
-        self._tool_registry: ToolRegistry | None = None
 
-        self.type_hints = inspect.get_annotations(func, eval_str=True)
-        self.return_type = self.type_hints.get("return", Any)
-        self.instructions = inspect.getdoc(func) or "Execute the requested task."
-        self.func_name = func.__qualname__
-
-        sig = inspect.signature(func)
-        bound_args = sig.bind(*self.args, **self.kwargs)
-        bound_args.apply_defaults()
-        self.arguments = bound_args.arguments
+        instance = self.func_info.instance
+        if instance is not None:
+            self._tool_registry: ToolRegistry = tool_collector.collect(instance)
+        else:
+            self._tool_registry = ToolRegistry()
+        self._tool_schemas: list[dict] = [
+            t.schema for t in self._tool_registry.get_all()
+        ]
 
         self._next_step_engraved = _wrap(self._next_step, engrave)
         self._call_tools_engraved = _wrap(self._call_tools, engrave)
 
-    async def _next_step(
-        self, history: list[HistoryItem], tools: list[dict]
-    ) -> InferenceDecision:
+    async def _next_step(self, history: list[HistoryItem]) -> InferenceDecision:
         """Internal engraved method for a single inference strategy call."""
         await self.publisher.publish(
-            events.BeforeInferenceStep(history=history, tools=tools)
+            events.BeforeInferenceStep(history=history, tools=self._tool_schemas)
         )
 
         try:
             decision = await self.strategy.decide_next_step(
-                instructions=self.instructions,
-                arguments=self.arguments,
-                argument_type_hints=self.type_hints,
+                function_info=self.func_info,
                 history=history,
-                tools=tools,
-                output_type=self.return_type,
+                tools=self._tool_schemas,
                 publisher=self.publisher,
             )
         except Exception as e:
@@ -134,7 +124,6 @@ class InferenceExecutor:
         self, tool_calls: list[ToolCallRequest]
     ) -> list[ToolCallResult]:
         """Internal engraved method for executing a batch of tool calls."""
-        assert self._tool_registry is not None
         tool_results: list[ToolCallResult] = []
         for call in tool_calls:
             await self.publisher.publish(events.BeforeToolCall(tool_call=call))
@@ -143,6 +132,12 @@ class InferenceExecutor:
 
             if not tool_info:
                 output = f"Error: Tool '{tool_name}' not found."
+                await self.publisher.publish(
+                    events.ToolExecutionFailed(
+                        tool_call=call,
+                        error=RuntimeError(f"Tool '{tool_name}' not found."),
+                    )
+                )
             else:
                 try:
                     tool_func = tool_info.function
@@ -170,59 +165,44 @@ class InferenceExecutor:
 
     async def run(self) -> Any:
         """
-        Runs the inference process, owning the retry loop.
+        Runs the inference process.
 
-        Inference middleware wraps each attempt. A middleware may raise
-        ``RequestInferenceRetry`` to ask for another attempt; any other control
-        signal (or genuine failure) propagates out.
+        Inference middleware wraps the attempt factory. A retry middleware may
+        call the wrapped function more than once; any exception or genuine
+        failure that escapes middleware propagates out.
         """
         await self.publisher.publish(
             events.InferenceStart(
-                func_name=self.func_name,
-                args=self.args,
-                kwargs=self.kwargs,
+                func_name=self.func_info.qualname,
+                args=self.func_info.args,
+                kwargs=self.func_info.kwargs,
             )
         )
 
         ctx = InferenceContext(
-            func_name=self.func_name, args=self.args, kwargs=self.kwargs
+            func_name=self.func_info.qualname,
+            args=self.func_info.args,
+            kwargs=self.func_info.kwargs,
         )
 
         async def core() -> Any:
+            await self.publisher.publish(events.AttemptStart())
             return await self._attempt_inference()
 
-        # ctx and core are loop-invariant, so the chain is built once; each retry
-        # simply re-invokes it. The middleware instances (and their state, e.g.
-        # the retry counter) persist across attempts.
         chain = _compose(self._inference_middlewares, ctx, core)
 
-        while True:
-            try:
-                await self.publisher.publish(events.AttemptStart())
-                result = await chain()
-                await self.publisher.publish(events.InferenceEnd(result=result))
-                return result
-            except RequestInferenceRetry:
-                continue
-            except YieldException:
-                raise
-            except Exception as e:
-                await self.publisher.publish(events.InferenceFailed(error=e))
-                raise
+        try:
+            result = await chain()
+            await self.publisher.publish(events.InferenceEnd(result=result))
+            return result
+        except YieldException:
+            raise
+        except Exception as e:
+            await self.publisher.publish(events.InferenceFailed(error=e))
+            raise
 
     async def _attempt_inference(self) -> Any:
         """Executes a single attempt of the inference loop, owning the step loop."""
-
-        instance = self.arguments.get("self")
-        self._tool_registry = (
-            self.tool_collector.collect(instance) if instance is not None else None
-        )
-        tool_schemas = (
-            [t.schema for t in self._tool_registry.get_all()]
-            if self._tool_registry
-            else []
-        )
-
         history: list[HistoryItem] = []
         step = 0
 
@@ -232,7 +212,7 @@ class InferenceExecutor:
             step_ctx = StepContext(step=step, history=history)
 
             async def core() -> InferenceDecision:
-                return await self._next_step_engraved(history, tool_schemas)
+                return await self._next_step_engraved(history)
 
             step_chain = _compose(self._step_middlewares, step_ctx, core)
             decision = await step_chain()
@@ -246,22 +226,7 @@ class InferenceExecutor:
                 if not decision.calls:
                     continue
 
-                if self._tool_registry:
-                    tool_results = await self._call_tools_engraved(decision.calls)
-                    history.extend(tool_results)
-                else:
-                    first_call = decision.calls[0]
-                    await self.publisher.publish(
-                        events.ToolExecutionFailed(
-                            tool_call=first_call,
-                            error=RuntimeError("No tools available"),
-                        )
-                    )
-                    history.append(
-                        ToolCallResult(
-                            tool_call_id=first_call.id,
-                            result="Error: No tools are available to execute.",
-                        )
-                    )
+                tool_results = await self._call_tools_engraved(decision.calls)
+                history.extend(tool_results)
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")

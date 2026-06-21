@@ -1,7 +1,6 @@
 from dataclasses import dataclass
-from typing import Type
 
-from sefia.event_system import Event, EventHandler
+from sefia.event_system import EventHandler
 from sefia.llm.events import AfterLLMCall
 
 from ..state import get_state, state
@@ -21,10 +20,6 @@ class CostCalculator(EventHandler[AfterLLMCall]):
     container. This handler is completely stateless. The total cost can be
     retrieved from the session's state container after execution.
     """
-
-    @property
-    def event_types(self) -> tuple[Type[Event], ...]:
-        return (AfterLLMCall,)
 
     async def handle(self, event: AfterLLMCall):
         state_store = get_state().get(CostState)

@@ -19,10 +19,6 @@ class PromptDumpHandler(EventHandler[BeforeLLMCall]):
         "tool": "bold magenta",
     }
 
-    @property
-    def event_types(self):
-        return (BeforeLLMCall,)
-
     def _format_message(self, msg: Message) -> Text:
         """Formats a single message with role-based color."""
         style = self.ROLE_STYLES.get(msg.role, "white")

@@ -1,21 +1,19 @@
 # Sefia
 
-**S**tateless **F**unction **I**nference **A**gent
+**S**tateless **E**ngraved **F**unction **I**nference **A**bstraction
 
-Sefia lets you write LLM-powered behavior as typed async Python functions.
+Sefia lets you define LLM-powered behavior as typed async Python functions.
 
 The function signature defines the inputs, the return type defines the output,
-and the docstring defines the instruction. The body can stay empty: at runtime,
-Sefia asks the LLM to produce the result and validates it against the declared
-type.
+and the docstring defines the instruction.
 
 ```python
 import glyff
-from glyff.stores import MemoryClient
-from glyff.stores import MemorySessionStore as GlyffMemorySessionStore
+from glyff.store import MemoryClient
+from glyff.store import MemorySessionStore as GlyffMemorySessionStore
+from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from pydantic import BaseModel
 from sefia import Session, infer
-from sefia.pydantic.glyff_serialization import SefiaArgsHasher, SefiaSerializer
 from sefia.stores import MemorySessionStore as SefiaMemorySessionStore
 from sefia_litellm import LiteLLMClient
 
@@ -35,7 +33,7 @@ async def summarize(article: str) -> Summary:
 
 
 async def main(article: str):
-    serializer = SefiaSerializer()
+    serializer = PydanticSerializer()
     client = MemoryClient()
     glyff_store = GlyffMemorySessionStore(client=client, serializer=serializer)
     sefia_store = SefiaMemorySessionStore(client=client, serializer=serializer)
@@ -43,7 +41,7 @@ async def main(article: str):
     async with glyff.Session(
         id="demo",
         store=glyff_store,
-        hasher=SefiaArgsHasher(),
+        hasher=PydanticArgsHasher(),
     ) as gs:
         async with Session(
             llm_client=LiteLLMClient(model="gpt-4o"),
@@ -160,7 +158,7 @@ The signature and docstring define the contract. The LLM:
 2. Calls `@tool` methods when tools are reachable from `self`.
 3. Returns a value matching the declared return type.
 
-Dataclasses, Pydantic models, primitives, and `Serializable` instances are
+Dataclasses, Pydantic models, primitives, and standard typing constructs are
 supported. Sefia generates a structured output schema from the declared return
 type and validates the response before returning it.
 
@@ -318,17 +316,16 @@ added by implementing the `Policy` ABC.
 
 ### Steps and the inference loop
 
-The executor owns both loops — the outer retry loop and the inner step loop —
-and wraps each unit of work with the configured middleware. A middleware never
-loops itself; it wraps a single attempt or a single step and delegates to the
-next layer, so multiple middlewares compose cleanly. To steer a loop, a
-middleware raises a typed control signal that the executor interprets.
+The executor owns the inference lifecycle and the inner step loop, and wraps
+each unit of work with the configured middleware. Inference middleware can
+retry by calling its wrapped function again, while step middleware can stop the
+step loop by raising an exception.
 
 Two seams are available, exposed as ABCs from `sefia`:
 
 - `InferenceMiddleware.wrap(ctx, nxt)` wraps a whole inference run. `MaxRetries`
-  uses this: on a retryable failure it raises `RequestInferenceRetry` to ask for
-  another attempt, or `MaxRetriesExceededError` once the budget is spent.
+  uses this: on a retryable failure it calls `nxt` again, or raises
+  `MaxRetriesExceededError` once the budget is spent.
 - `StepMiddleware.wrap(ctx, nxt)` wraps a single step. `MaxSteps` uses this to
   cap the loop, raising `MaxStepsExceededError` once the step limit is reached.
 
@@ -392,24 +389,23 @@ lives in middleware instead; see [Steps and the inference
 loop](#steps-and-the-inference-loop).)
 
 - `InferenceStart`: an `@infer` call begins
-- `AttemptStart`: a new attempt within the retry loop
+- `AttemptStart`: a new inference attempt
 - `BeforeInferenceStep` and `AfterInferenceStep`: surrounding each LLM decision
 - `BeforeToolCall`, `AfterToolCall`, and `ToolExecutionFailed`: surrounding tool
   execution
 - `InferenceEnd`: the call completes
 
-Handlers are typed by event:
+Handlers are typed by event. `EventHandler[SomeEvent]` infers the subscribed
+event type automatically; `EventHandler[A | B]` or `EventHandler[Union[A, B]]`
+subscribes to multiple event types.
 
 ```python
-from sefia import EventHandler, Policy
+from sefia import Policy
+from sefia.event_system import EventHandler
 from sefia.events import AfterInferenceStep
 
 
 class DecisionLogger(EventHandler[AfterInferenceStep]):
-    @property
-    def event_types(self):
-        return (AfterInferenceStep,)
-
     async def handle(self, event: AfterInferenceStep) -> None:
         print(type(event.decision).__name__)
 
@@ -423,27 +419,6 @@ Pass policies to `Session` or to a specific `@infer` call.
 
 Use `sefios.policies.StagnationPolicy` when you want to abort the loop if the
 same tool is called repeatedly with identical arguments.
-
-## Resources
-
-`Resource[T]` is an abstract reference to a value that lives outside the LLM's
-context. Use it when passing large objects between `@infer` functions.
-
-```python
-from pydantic import BaseModel
-from sefia import Resource
-
-
-class FileResource(Resource[bytes], BaseModel):
-    path: str
-
-    async def get(self) -> bytes: ...
-
-    async def set(self, value: bytes) -> None: ...
-```
-
-The `T` parameter has no constraints. The resource itself must be serializable,
-as a Pydantic model or `Serializable`, so it can be checkpointed by glyff.
 
 ## How it compares
 

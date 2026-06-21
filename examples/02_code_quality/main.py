@@ -8,7 +8,6 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from sefios import get_state
-from typing_extensions import Annotated
 
 from .._common.sefia_cli import SefiaCLI
 from .._common.typer_utils import add_session_commands, async_command

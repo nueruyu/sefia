@@ -1,5 +1,6 @@
-from dataclasses import dataclass, field
-from typing import Any
+import inspect
+from dataclasses import dataclass
+from typing import Any, Callable
 
 
 @dataclass
@@ -37,11 +38,44 @@ InferenceDecision = ToolCallDecision | FinalAnswerDecision
 HistoryItem = ToolCallDecision | ToolCallResult
 
 
-@dataclass
-class InferenceHistory:
-    """Represents the persisted history of an inference process."""
+@dataclass(frozen=True)
+class FunctionInfo:
+    """Encapsulates the function to be inferred and its call information."""
 
-    items: list[HistoryItem] = field(default_factory=list)
+    qualname: str
+    instructions: str
+    bound_arguments: dict[str, Any]
+    type_hints: dict[str, Any]
+    return_type: Any
+    args: tuple
+    kwargs: dict
+
+    @classmethod
+    def create(cls, func: Callable, args: tuple, kwargs: dict) -> "FunctionInfo":
+        """Create a FunctionInfo instance from a function and its arguments."""
+        type_hints = inspect.get_annotations(func, eval_str=True)
+        instructions = inspect.getdoc(func) or "Execute the requested task."
+        qualname = func.__qualname__
+        return_type = type_hints.get("return", Any)
+
+        sig = inspect.signature(func)
+        bound_args = sig.bind(*args, **kwargs)
+        bound_args.apply_defaults()
+
+        return cls(
+            qualname=qualname,
+            instructions=instructions,
+            bound_arguments=bound_args.arguments,
+            type_hints=type_hints,
+            return_type=return_type,
+            args=args,
+            kwargs=kwargs,
+        )
+
+    @property
+    def instance(self) -> Any | None:
+        """Return the instance ('self') if the function is a method."""
+        return self.bound_arguments.get("self")
 
 
 __all__ = [
@@ -51,5 +85,5 @@ __all__ = [
     "FinalAnswerDecision",
     "InferenceDecision",
     "HistoryItem",
-    "InferenceHistory",
+    "FunctionInfo",
 ]

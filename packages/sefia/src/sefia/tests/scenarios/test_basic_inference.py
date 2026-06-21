@@ -9,7 +9,7 @@ from glyff.store import MemoryClient
 from glyff.store import MemorySessionStore as GlyffMemoryStore
 
 from sefia import Policy, Session, infer, policy
-from sefia._decorators import get_metadata
+from sefia._metadata import get_metadata
 from sefia.llm import LLMResponse
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 

@@ -9,6 +9,7 @@ import pytest
 from sefia.event_system import EventPublisher
 from sefia.inference import (
     FinalAnswerDecision,
+    FunctionInfo,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
@@ -17,7 +18,7 @@ from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._strategy import LLMToolCall, _LLMDecision, _OutputOnlyDirector, _ToolEnabledDirector, _ToolOnlyDirector
 from sefia.llm.events import LLMTokenReceived
 from sefia.pydantic import PydanticModelInspector
-from sefia.pydantic.json_utils import pydantic_json_default
+from sefia.pydantic._json_utils import pydantic_json_default
 
 
 class MockEventPublisher(EventPublisher):
@@ -46,6 +47,23 @@ def mock_llm_client():
 
 
 DUMMY_SCHEMA: dict = {}
+
+
+def _function_info(
+    return_type: Any = str,
+    arguments: dict[str, Any] | None = None,
+    type_hints: dict[str, Any] | None = None,
+    instructions: str = "instructions",
+) -> FunctionInfo:
+    return FunctionInfo(
+        qualname="test",
+        instructions=instructions,
+        bound_arguments=arguments or {},
+        type_hints=type_hints or {},
+        return_type=return_type,
+        args=(),
+        kwargs={},
+    )
 
 
 class TestLLMInferenceStrategy:
@@ -78,9 +96,7 @@ class TestLLMInferenceStrategy:
         dummy_tools = [{"function": {"name": "search"}}]
         director = strategy._create_director(str, dummy_tools)
         messages = strategy._build_messages(
-            "instructions",
-            {"arg": "val"},
-            {},
+            _function_info(arguments={"arg": "val"}),
             history,
             DUMMY_SCHEMA,
             director,
@@ -141,9 +157,7 @@ class TestLLMInferenceStrategy:
 
         director = strategy._create_director(list[MyIssue], [])
         messages = strategy._build_messages(
-            "instructions",
-            {},
-            {},
+            _function_info(return_type=list[MyIssue]),
             [],
             DUMMY_SCHEMA,
             director,
@@ -159,7 +173,10 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client, stream=True)
 
         decision = await strategy.decide_next_step(
-            "do it", {}, {}, [], [{"type": "function"}], str, MockEventPublisher()
+            _function_info(instructions="do it"),
+            [],
+            [{"type": "function"}],
+            MockEventPublisher(),
         )
 
         assert isinstance(decision, ToolCallDecision)
@@ -181,7 +198,7 @@ class TestLLMInferenceStrategy:
         publisher = MockEventPublisher()
 
         decision = await strategy.decide_next_step(
-            "do it", {}, {}, [], [], MyOutput, publisher
+            _function_info(return_type=MyOutput, instructions="do it"), [], [], publisher
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -209,7 +226,7 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            "do it", {}, {}, [], [], str, MockEventPublisher()
+            _function_info(instructions="do it"), [], [], MockEventPublisher()
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -224,7 +241,10 @@ class TestLLMInferenceStrategy:
 
         with pytest.raises(ValueError, match="LLM output failed validation"):
             await strategy.decide_next_step(
-                "do it", {}, {}, [], [], MyOutput, MockEventPublisher()
+                _function_info(return_type=MyOutput, instructions="do it"),
+                [],
+                [],
+                MockEventPublisher(),
             )
 
     async def test_decide_next_step_handles_plain_string_output(self, mock_llm_client):
@@ -234,7 +254,7 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            "do it", {}, {}, [], [], str, MockEventPublisher()
+            _function_info(instructions="do it"), [], [], MockEventPublisher()
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -248,7 +268,7 @@ class TestLLMInferenceStrategy:
 
         with pytest.raises(ValueError, match="non-null 'final_answer'"):
             await strategy.decide_next_step(
-                "do it", {}, {}, [], [], str, MockEventPublisher()
+                _function_info(instructions="do it"), [], [], MockEventPublisher()
             )
 
 
@@ -335,7 +355,10 @@ class TestToolOnlyDirector:
         )
 
         result = await strategy.decide_next_step(
-            "chat", {}, {}, [], [{"type": "function"}], Never, MockEventPublisher()
+            _function_info(return_type=Never, instructions="chat"),
+            [],
+            [{"type": "function"}],
+            MockEventPublisher(),
         )
 
         assert isinstance(result, ToolCallDecision)
@@ -357,7 +380,10 @@ class TestToolOnlyDirector:
 
         with pytest.raises(ValueError, match="Never"):
             await strategy.decide_next_step(
-                "chat", {}, {}, [], [{"type": "function"}], Never, MockEventPublisher()
+                _function_info(return_type=Never, instructions="chat"),
+                [],
+                [{"type": "function"}],
+                MockEventPublisher(),
             )
 
 

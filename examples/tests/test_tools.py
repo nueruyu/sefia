@@ -53,7 +53,7 @@ class TestFileTool:
     async def test_missing_file_raises_file_not_found(self, tmp_path):
         missing = tmp_path / "missing.txt"
 
-        with pytest.raises(exceptions.FileNotFoundToolError) as exc_info:
+        with pytest.raises(tools.FileNotFoundToolError) as exc_info:
             await tools.FileTool().read_files([str(missing)])
 
         assert exc_info.value.path == str(missing)

@@ -12,7 +12,7 @@ from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
 from .llm._xml_prompt_formatter import XmlPromptFormatter
 from .pydantic._model_inspector import PydanticModelInspector
-from .pydantic.json_utils import pydantic_json_default
+from .pydantic._json_utils import pydantic_json_default
 from .tool_collectors import DefaultToolCollector
 
 T = TypeVar("T")

@@ -4,36 +4,23 @@ from typing import Callable, ParamSpec, Protocol, TypeVar, cast
 
 from glyff import engrave
 
+from . import _metadata
 from ._context import get_context
 from ._executor import InferenceExecutor
 from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from .event_system import EventPublisher
 
-T = TypeVar("T")
+C = TypeVar("C", bound=Callable[..., object])
 P = ParamSpec("P")
 R = TypeVar("R")
+T = TypeVar("T")
 
 
 class _PolicyDecorator(Protocol):
     """Callable that decorates a function without changing its type."""
 
-    def __call__(self, func: T) -> T: ...
+    def __call__(self, func: C) -> C: ...
 
-
-# Attribute that holds sefia's per-function metadata dict, and the key under
-# which inference policies live inside it.
-METADATA_ATTR = "__sefia_metadata__"
-POLICIES_KEY = "policies"
-
-
-def get_metadata(func: Callable) -> dict:
-    """
-    Return the sefia metadata dict attached to ``func`` (empty if there is none).
-
-    The lookup unwraps ``functools.wraps`` layers, so it works on a function
-    regardless of which decorators wrap it.
-    """
-    return getattr(inspect.unwrap(func), METADATA_ATTR, {})
 
 
 def tool(func: T) -> T:
@@ -83,15 +70,11 @@ def policy(p: Policy) -> _PolicyDecorator:
             "e.g. @policy(CustomPolicy(middleware=lambda: [Retrier(max_retries=5)]))."
         )
 
-    def decorator(func: T) -> T:
+    def decorator(func: C) -> C:
         # Attach metadata to the innermost function so it lives in one place
         # regardless of decorator order or intermediate wrappers.
-        underlying = inspect.unwrap(func)  # type: ignore[arg-type]
-        metadata = getattr(underlying, METADATA_ATTR, None)
-        if metadata is None:
-            metadata = {}
-            setattr(underlying, METADATA_ATTR, metadata)
-        metadata.setdefault(POLICIES_KEY, []).append(p)
+        metadata = _metadata.ensure_metadata(func)
+        metadata.setdefault(_metadata.POLICIES_KEY, []).append(p)
         return func
 
     return decorator
@@ -136,8 +119,8 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
         context = get_context()
         # Read policy metadata from the innermost function so the decorator
         # order does not matter and intermediate wrappers are handled.
-        metadata = getattr(unwrapped, METADATA_ATTR, {})
-        fn_policies = metadata.get(POLICIES_KEY, [])
+        metadata = _metadata.get_metadata(unwrapped)
+        fn_policies = metadata.get(_metadata.POLICIES_KEY, [])
         all_policies = list(context.policies) + fn_policies
         all_handlers = [
             handler for p in all_policies for handler in p.create_handlers()

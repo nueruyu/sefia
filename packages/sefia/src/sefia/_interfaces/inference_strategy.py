@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any
-
 from ..event_system import EventPublisher
-from ..inference import HistoryItem, InferenceDecision
+from ..inference import FunctionInfo, HistoryItem, InferenceDecision
 
 
 class InferenceStrategy(ABC):
@@ -13,12 +11,9 @@ class InferenceStrategy(ABC):
     @abstractmethod
     async def decide_next_step(
         self,
-        instructions: str,
-        arguments: dict[str, Any],
-        argument_type_hints: dict[str, Any],
+        function_info: FunctionInfo,
         history: list[HistoryItem],
         tools: list[dict],
-        output_type: Any,
         publisher: EventPublisher,
     ) -> InferenceDecision:
         """Decides the next action, either calling tools or returning a final answer."""
