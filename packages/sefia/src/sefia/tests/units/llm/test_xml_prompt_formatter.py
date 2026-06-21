@@ -4,7 +4,7 @@ from typing import Annotated
 
 from sefia import AsRawText
 from sefia.llm import XmlPromptFormatter
-from sefia.pydantic.json_utils import pydantic_json_default
+from sefia.pydantic._json_utils import pydantic_json_default
 
 
 @dataclass

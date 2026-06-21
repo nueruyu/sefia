@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-from typing import Type
 
 from sefia._context import get_context
-from sefia.event_system import Event, EventHandler
+from sefia.event_system import EventHandler
 from sefia.llm.events import AfterLLMCall
 
 
@@ -19,10 +18,6 @@ class CostCalculator(EventHandler[AfterLLMCall]):
     This handler is completely stateless. The total cost can be retrieved
     from the session's state store after execution.
     """
-
-    @property
-    def event_types(self) -> tuple[Type[Event], ...]:
-        return (AfterLLMCall,)
 
     async def handle(self, event: AfterLLMCall):
         ctx = get_context()

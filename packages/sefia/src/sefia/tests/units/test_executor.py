@@ -447,11 +447,7 @@ class TestInferenceExecutor:
         mock_strategy, mock_collector, _, non_engrave = executor_dependencies
         mock_strategy.decide_next_step.side_effect = ValueError("transient")
 
-        class InterruptOnFailure(EventHandler):
-            @property
-            def event_types(self):
-                return (events.InferenceStepFailed,)
-
+        class InterruptOnFailure(EventHandler[events.InferenceStepFailed]):
             async def handle(self, event):
                 raise YieldException("interrupted for resume")
 
