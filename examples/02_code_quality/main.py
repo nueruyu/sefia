@@ -7,7 +7,8 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefia import get_context
+from sefios import get_state
+from typing_extensions import Annotated
 
 from .._common.sefia_cli import SefiaCLI
 from .._common.typer_utils import add_session_commands, async_command
@@ -64,9 +65,7 @@ async def _define_scope() -> ProjectScope:
 async def _understand_project(scope: ProjectScope) -> ProjectUnderstanding:
     console.print("\n[bold]> Stage 2: Understanding project...[/bold]")
     file_paths = await git_tool.list_tracked_files(scope.project_path)
-    understanding_store = get_context().get_state_store(
-        "project_understanding", ProjectUnderstanding
-    )
+    understanding_store = get_state().get(ProjectUnderstanding)
     understanding = await understanding_store.ensure()
 
     for iteration in range(5):

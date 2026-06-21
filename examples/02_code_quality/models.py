@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from enum import Enum
 
+from sefios import state
+
 
 @dataclass
 class ProjectScope:
@@ -11,6 +13,7 @@ class ProjectScope:
     excluded_files: list[str] = field(default_factory=list)
 
 
+@state(key="examples.code_quality.project_understanding")
 @dataclass
 class ProjectUnderstanding:
     """Represents the evolving understanding of the project."""

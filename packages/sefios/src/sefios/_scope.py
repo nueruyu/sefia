@@ -1,7 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
 
 import glyff
 import glyff_file_store
@@ -12,10 +11,6 @@ from sefia import Policy
 from sefia.llm import LLMClient
 
 from .policies import DefaultPolicy
-
-# Sentinel distinguishing "not overridden" from an explicit ``max_steps=None``
-# (which is a meaningful value meaning "no step limit").
-_UNSET: Any = object()
 
 
 class SessionScope:
@@ -49,13 +44,11 @@ class SessionScope:
         model: str | None = None,
         stream: bool | None = None,
         policies: list[Policy] | None = None,
-        max_steps: int | None | Any = _UNSET,
     ) -> AsyncIterator[sefia.Session]:
         """Run code within a configured Sefia session context."""
         llm_client = self.llm_client
         resolved_model = model or self.model
         resolved_stream = self.stream if stream is None else stream
-        resolved_max_steps = self.max_steps if max_steps is _UNSET else max_steps
 
         if llm_client is None:
             if resolved_model is None:
@@ -89,7 +82,7 @@ class SessionScope:
         final_policies: list[Policy] = list(self.policies)
         if policies is not None:
             final_policies.extend(policies)
-        final_policies.append(DefaultPolicy(max_steps=resolved_max_steps))
+        final_policies.append(DefaultPolicy(max_steps=self.max_steps))
 
         async with gs:
             async with sefia.Session(
