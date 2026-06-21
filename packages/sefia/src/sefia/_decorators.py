@@ -1,6 +1,6 @@
 import functools
 import inspect
-from typing import Any, Callable, Coroutine, ParamSpec, TypeVar
+from typing import Any, Callable, Coroutine, ParamSpec, Protocol, TypeVar
 
 from glyff import engrave
 
@@ -12,6 +12,10 @@ from .event_system import EventPublisher
 T = TypeVar("T")
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+class _PolicyDecorator(Protocol):
+    def __call__(self, func: T) -> T: ...
 
 # Attribute that holds sefia's per-function metadata dict, and the key under
 # which inference policies live inside it.
@@ -44,7 +48,7 @@ def tool(func: T) -> T:
     return func
 
 
-def policy(p: Policy) -> Callable[[T], T]:
+def policy(p: Policy) -> _PolicyDecorator:
     """
     Decorator that attaches an inference policy to an ``@infer`` function.
 
@@ -109,7 +113,7 @@ def _partition_middleware(
     return inference_middlewares, step_middlewares
 
 
-def infer(func: Callable[P, R]) -> Callable[P, Coroutine[Any, Any, R]]:
+def infer(func: Callable[P, R]) -> Callable[P, R]:
     """
     Decorator that enables a function's implementation to be inferred by an LLM.
     The function body is ignored; its signature and docstring are used as a prompt.
