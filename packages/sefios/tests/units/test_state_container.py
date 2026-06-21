@@ -18,11 +18,12 @@ class TestStateRegistry:
         registry.register(_SampleState, "sample.key")
         assert registry.key_for(_SampleState) == "sample.key"
 
-    def test_re_registering_same_pair_is_idempotent(self):
+    def test_re_registering_same_type_raises(self):
         registry = StateRegistry()
         registry.register(_SampleState, "sample.key")
-        registry.register(_SampleState, "sample.key")
-        assert registry.key_for(_SampleState) == "sample.key"
+        # A type may only be registered once, even under the same key.
+        with pytest.raises(ValueError, match="already registered"):
+            registry.register(_SampleState, "sample.key")
 
     def test_registering_same_type_under_different_key_raises(self):
         registry = StateRegistry()
@@ -40,10 +41,21 @@ class TestStateRegistry:
         with pytest.raises(ValueError, match="already registered"):
             registry.register(_OtherState, "shared.key")
 
+    def test_register_instance_raises_typeerror(self):
+        registry = StateRegistry()
+        with pytest.raises(TypeError, match="Expected a class"):
+            registry.register(_SampleState(), "sample.key")
+
     def test_key_for_unregistered_type_raises(self):
         registry = StateRegistry()
-        with pytest.raises(KeyError, match="not a registered state type"):
+        with pytest.raises(KeyError, match="not a .*registered state type"):
             registry.key_for(_SampleState)
+
+    def test_key_for_instance_raises_typeerror(self):
+        registry = StateRegistry()
+        registry.register(_SampleState, "sample.key")
+        with pytest.raises(TypeError, match="Expected a class"):
+            registry.key_for(_SampleState())
 
 
 class TestStateDecorator:

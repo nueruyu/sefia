@@ -13,7 +13,7 @@ class ProjectScope:
     excluded_files: list[str] = field(default_factory=list)
 
 
-@state(key="code_quality.project_understanding")
+@state(key="examples.code_quality.project_understanding")
 @dataclass
 class ProjectUnderstanding:
     """Represents the evolving understanding of the project."""

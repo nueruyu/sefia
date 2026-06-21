@@ -32,38 +32,45 @@ class StateRegistry:
     def register(self, state_type: type, key: str) -> None:
         """Registers ``state_type`` under ``key``.
 
-        Re-registering the exact same type/key pair is a no-op. Registering a
-        type under a different key, or registering a key already used by a
-        different type, raises ``ValueError`` to surface collisions early.
+        A type may only be registered once, and a key may only be claimed by a
+        single type; violating either raises ``ValueError`` to surface
+        collisions early. Passing an instance instead of a class raises
+        ``TypeError``.
         """
-        existing_key = self._keys.get(state_type)
-        if existing_key is not None:
-            if existing_key == key:
-                return
-            raise ValueError(
-                f"{state_type.__name__} is already registered under key "
-                f"{existing_key!r}; cannot re-register under {key!r}."
+        if not isinstance(state_type, type):
+            raise TypeError(
+                f"Expected a class, got an instance of {type(state_type).__name__}."
             )
-
+        if state_type in self._keys:
+            raise ValueError(
+                f"{state_type.__module__}.{state_type.__name__} is already "
+                f"registered under key {self._keys[state_type]!r}."
+            )
         for other_type, other_key in self._keys.items():
-            if other_key == key and other_type is not state_type:
+            if other_key == key:
                 raise ValueError(
-                    f"Key {key!r} is already registered for {other_type.__name__}."
+                    f"Key {key!r} is already registered for "
+                    f"{other_type.__module__}.{other_type.__name__}."
                 )
-
         self._keys[state_type] = key
 
     def key_for(self, state_type: type) -> str:
         """Returns the registered key for ``state_type``.
 
-        Raises ``KeyError`` if the type was never registered with ``@state``.
+        Raises ``KeyError`` if the type was never registered with ``@state``,
+        or ``TypeError`` if an instance is passed instead of a class.
         """
+        if not isinstance(state_type, type):
+            raise TypeError(
+                f"Expected a class, got an instance of {type(state_type).__name__}."
+            )
         try:
             return self._keys[state_type]
         except KeyError:
             raise KeyError(
-                f"{state_type.__name__} is not a registered state type. "
-                f"Decorate it with @state(key=...) before using it."
+                f"{state_type.__module__}.{state_type.__name__} is not a "
+                f"registered state type. Decorate it with @state(key=...) "
+                f"before using it."
             ) from None
 
 
