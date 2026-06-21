@@ -271,6 +271,11 @@ class TestToolOnlyDirector:
         director = strategy._create_director(Never, [{"type": "function"}])
         assert isinstance(director, _ToolOnlyDirector)
 
+    def test_create_director_raises_for_never_without_tools(self):
+        strategy = self._strategy()
+        with pytest.raises(ValueError, match="must have tools available"):
+            strategy._create_director(Never, [])
+
     def test_build_decision_schema_has_no_final_answer_field(self):
         strategy = self._strategy()
         director = strategy._create_director(Never, [{"type": "function"}])

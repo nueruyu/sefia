@@ -4,7 +4,7 @@ import json
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable, Union
+from typing import Any, Callable, Never, Union
 
 from pydantic import create_model
 
@@ -237,6 +237,11 @@ class LLMInferenceStrategy(InferenceStrategy):
     ) -> _ExecutionDirector:
         """Creates the appropriate execution director based on the context."""
         if _is_never(output_type):
+            if not tools:
+                raise ValueError(
+                    "An @infer function returning Never must have tools available, "
+                    "otherwise the inference loop can never make progress."
+                )
             return _ToolOnlyDirector(self.model_inspector, output_type, tools)
         if tools:
             return _ToolEnabledDirector(self.model_inspector, output_type, tools)
@@ -372,19 +377,5 @@ class LLMInferenceStrategy(InferenceStrategy):
 
 
 def _is_never(typ: Any) -> bool:
-    """Return True if typ is typing.Never or typing_extensions.Never."""
-    try:
-        from typing import Never as _Never
-
-        if typ is _Never:
-            return True
-    except ImportError:
-        pass
-    try:
-        from typing_extensions import Never as _ExtNever
-
-        if typ is _ExtNever:
-            return True
-    except ImportError:
-        pass
-    return False
+    """Return True if typ is typing.Never."""
+    return typ is Never
