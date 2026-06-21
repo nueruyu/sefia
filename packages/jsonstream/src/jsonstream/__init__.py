@@ -1,9 +1,8 @@
-from .parser import (
+from .events import (
     EndArray,
     EndObject,
     EndString,
     Event,
-    IncrementalJsonParser,
     JsonParseError,
     Key,
     Scalar,
@@ -12,6 +11,7 @@ from .parser import (
     StartString,
     StringDelta,
 )
+from .parser import IncrementalJsonParser
 
 __all__ = [
     "EndArray",

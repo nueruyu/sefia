@@ -1,114 +1,32 @@
-import dataclasses
-import json
 from collections.abc import Generator
-from enum import Enum, auto
-from typing import Any, NoReturn, TypeAlias
 
-JsonPath: TypeAlias = tuple[str | int, ...]
-JsonScalar: TypeAlias = str | int | float | bool | None
-
-
-@dataclasses.dataclass(frozen=True)
-class StartObject:
-    path: JsonPath
-
-
-@dataclasses.dataclass(frozen=True)
-class EndObject:
-    path: JsonPath
-
-
-@dataclasses.dataclass(frozen=True)
-class StartArray:
-    path: JsonPath
-
-
-@dataclasses.dataclass(frozen=True)
-class EndArray:
-    path: JsonPath
-
-
-@dataclasses.dataclass(frozen=True)
-class Key:
-    path: JsonPath
-    value: str
-
-
-@dataclasses.dataclass(frozen=True)
-class StartString:
-    path: JsonPath
-
-
-@dataclasses.dataclass(frozen=True)
-class StringDelta:
-    path: JsonPath
-    text: str
-
-
-@dataclasses.dataclass(frozen=True)
-class EndString:
-    path: JsonPath
-    value: str
-
-
-@dataclasses.dataclass(frozen=True)
-class Scalar:
-    path: JsonPath
-    value: JsonScalar
-
-
-@dataclasses.dataclass(frozen=True)
-class JsonParseError:
-    message: str
-    fatal: bool
-
-
-Event: TypeAlias = (
-    StartObject
-    | EndObject
-    | StartArray
-    | EndArray
-    | Key
-    | StartString
-    | StringDelta
-    | EndString
-    | Scalar
-    | JsonParseError
+from ._literals import decode_literal
+from ._state import (
+    ArrayState,
+    ContainerState,
+    ObjectState,
+    ParserState,
+    path_from_stack,
 )
-
-
-class ParserState(Enum):
-    EXPECT_VALUE_OR_ARRAY_END = auto()
-    EXPECT_KEY_OR_OBJECT_END = auto()
-    EXPECT_COLON = auto()
-    EXPECT_VALUE = auto()
-    EXPECT_COMMA_OR_ARRAY_END = auto()
-    EXPECT_COMMA_OR_OBJECT_END = auto()
-
-
-@dataclasses.dataclass
-class _ArrayState:
-    state: ParserState = ParserState.EXPECT_VALUE_OR_ARRAY_END
-    next_index: int = 0
-
-
-@dataclasses.dataclass
-class _ObjectState:
-    state: ParserState = ParserState.EXPECT_KEY_OR_OBJECT_END
-    current_key: str | None = None
-    member_count: int = 0
-
-
-_ContainerState: TypeAlias = _ArrayState | _ObjectState
-
-
-def _reject_json_constant(value: str) -> NoReturn:
-    raise ValueError(f"Invalid JSON constant: {value}")
+from .events import (
+    EndArray,
+    EndObject,
+    EndString,
+    Event,
+    JsonParseError,
+    JsonPath,
+    Key,
+    Scalar,
+    StartArray,
+    StartObject,
+    StartString,
+    StringDelta,
+)
 
 
 class IncrementalJsonParser:
     def __init__(self) -> None:
-        self._container_stack: list[_ContainerState] = [_ArrayState()]
+        self._container_stack: list[ContainerState] = [ArrayState()]
 
         self._literal_buffer: list[str] = []
         self._string_buffer: list[str] = []
@@ -122,7 +40,7 @@ class IncrementalJsonParser:
 
     @property
     def path(self) -> JsonPath:
-        return self._path_from_stack(self._container_stack[1:])
+        return path_from_stack(self._container_stack[1:])
 
     def feed(self, chunk: str) -> Generator[Event, None, None]:
         for char in chunk:
@@ -145,18 +63,8 @@ class IncrementalJsonParser:
             return
 
         root = self._container_stack[0]
-        if isinstance(root, _ArrayState) and root.next_index == 0:
+        if isinstance(root, ArrayState) and root.next_index == 0:
             yield JsonParseError("Expected JSON value at end of input", fatal=True)
-
-    def _path_from_stack(self, stack: list[_ContainerState]) -> JsonPath:
-        path: list[str | int] = []
-        for container in stack:
-            if isinstance(container, _ObjectState):
-                if container.current_key is not None:
-                    path.append(container.current_key)
-            else:
-                path.append(container.next_index)
-        return tuple(path)
 
     def _parse_char(self, char: str) -> Generator[Event, None, None]:
         if self._in_string:
@@ -192,12 +100,8 @@ class IncrementalJsonParser:
             return
 
         try:
-            value: Any = json.loads(literal, parse_constant=_reject_json_constant)
-        except (json.JSONDecodeError, ValueError):
-            yield JsonParseError(f"Invalid literal or number: {literal}", fatal=True)
-            return
-
-        if isinstance(value, (dict, list, str)):
+            value = decode_literal(literal)
+        except ValueError:
             yield JsonParseError(f"Invalid literal or number: {literal}", fatal=True)
             return
 
@@ -216,9 +120,9 @@ class IncrementalJsonParser:
                 yield JsonParseError("Unexpected '{'", fatal=True)
                 return
             yield StartObject(path=self.path)
-            self._container_stack.append(_ObjectState())
+            self._container_stack.append(ObjectState())
         elif char == "}":
-            if not isinstance(current_container, _ObjectState):
+            if not isinstance(current_container, ObjectState):
                 yield JsonParseError("Unexpected '}'", fatal=True)
                 return
             if state == ParserState.EXPECT_KEY_OR_OBJECT_END:
@@ -241,9 +145,9 @@ class IncrementalJsonParser:
                 yield JsonParseError("Unexpected '['", fatal=True)
                 return
             yield StartArray(path=self.path)
-            self._container_stack.append(_ArrayState())
+            self._container_stack.append(ArrayState())
         elif char == "]":
-            if not isinstance(current_container, _ArrayState):
+            if not isinstance(current_container, ArrayState):
                 yield JsonParseError("Unexpected ']'", fatal=True)
                 return
             if state == ParserState.EXPECT_VALUE_OR_ARRAY_END:
@@ -260,7 +164,7 @@ class IncrementalJsonParser:
             self._transition_state_after_value()
         elif char == ":":
             if (
-                not isinstance(current_container, _ObjectState)
+                not isinstance(current_container, ObjectState)
                 or state != ParserState.EXPECT_COLON
             ):
                 yield JsonParseError("Unexpected ':'", fatal=True)
@@ -268,22 +172,22 @@ class IncrementalJsonParser:
             current_container.state = ParserState.EXPECT_VALUE
         elif char == ",":
             if (
-                isinstance(current_container, _ObjectState)
+                isinstance(current_container, ObjectState)
                 and state == ParserState.EXPECT_COMMA_OR_OBJECT_END
             ):
                 current_container.current_key = None
                 current_container.state = ParserState.EXPECT_KEY_OR_OBJECT_END
             elif (
-                isinstance(current_container, _ArrayState)
+                isinstance(current_container, ArrayState)
                 and state == ParserState.EXPECT_COMMA_OR_ARRAY_END
             ):
                 current_container.state = ParserState.EXPECT_VALUE
             else:
                 yield JsonParseError("Unexpected ','", fatal=True)
 
-    def _end_array_path(self, current_container: _ArrayState) -> JsonPath:
+    def _end_array_path(self, current_container: ArrayState) -> JsonPath:
         if current_container.next_index == 0:
-            return self._path_from_stack(self._container_stack[1:-1])
+            return path_from_stack(self._container_stack[1:-1])
         return self.path
 
     def _start_string(self) -> Generator[Event, None, None]:
@@ -291,7 +195,7 @@ class IncrementalJsonParser:
         state = current_container.state
 
         if (
-            isinstance(current_container, _ObjectState)
+            isinstance(current_container, ObjectState)
             and state == ParserState.EXPECT_KEY_OR_OBJECT_END
         ):
             self._in_string = True
@@ -319,7 +223,7 @@ class IncrementalJsonParser:
 
         current_container = self._container_stack[-1]
         if self._string_is_key:
-            if not isinstance(current_container, _ObjectState):
+            if not isinstance(current_container, ObjectState):
                 yield JsonParseError("Unexpected object key", fatal=True)
                 return
             yield Key(path=self.path, value=final_value)
@@ -442,7 +346,7 @@ class IncrementalJsonParser:
 
     def _transition_state_after_value(self) -> None:
         parent_container = self._container_stack[-1]
-        if isinstance(parent_container, _ArrayState):
+        if isinstance(parent_container, ArrayState):
             parent_container.next_index += 1
             parent_container.state = ParserState.EXPECT_COMMA_OR_ARRAY_END
         else:
