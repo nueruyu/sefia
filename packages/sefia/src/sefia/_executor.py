@@ -5,7 +5,6 @@ from glyff.exceptions import YieldException
 
 from . import events
 from ._interfaces import InferenceStrategy
-from .llm._strategy import _is_never
 from ._interfaces.middleware import (
     InferenceContext,
     InferenceMiddleware,
@@ -240,10 +239,6 @@ class InferenceExecutor:
             step += 1
 
             if isinstance(decision, FinalAnswerDecision):
-                if _is_never(self.return_type):
-                    raise RuntimeError(
-                        "Return type is Never but LLM returned a final answer."
-                    )
                 return decision.answer
 
             if isinstance(decision, ToolCallDecision):
