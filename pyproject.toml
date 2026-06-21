@@ -15,7 +15,13 @@ sefios = { workspace = true }
 addopts = ["--import-mode=importlib"]
 asyncio_mode = "auto"
 
+[tool.pyright]
+include = ["packages", "examples"]
+exclude = [".venv", ".uv-cache", "**/__pycache__"]
+pythonVersion = "3.11"
+
 [dependency-groups]
 dev = [
+    "pyright>=1.1.410",
     "ruff>=0.15.16",
 ]
