@@ -1,4 +1,6 @@
 from importlib import import_module
+from types import ModuleType
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,17 +14,27 @@ models = import_module("examples.01_news_article.models")
 
 
 @pytest.fixture
-def workflow(monkeypatch, tmp_path):
+def workflow(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> ModuleType:
     """Point the example's module-level CLI at a throwaway session directory."""
     cli = SefiaCLI(session_dir=tmp_path / "sessions", model="gpt-4o", stream=False)
     monkeypatch.setattr(main, "sefia_cli", cli)
-    return main
+    return main  # type: ignore[return-value]
+
+
+@pytest.fixture
+def chat_async(workflow: ModuleType) -> Any:
+    """Return the unwrapped async chat function for direct testing."""
+    return getattr(workflow.chat, "__wrapped__")
 
 
 class TestNewsArticleWorkflow:
     async def test_runs_every_stage_and_renders_article(
-        self, workflow, monkeypatch, capsys
-    ):
+        self,
+        workflow: ModuleType,
+        chat_async: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         request = models.ArticleRequest(
             topic="Generative AI",
             angle="Impact on developers",
@@ -41,7 +53,7 @@ class TestNewsArticleWorkflow:
         monkeypatch.setattr(workflow.researcher, "research_topic", research)
         monkeypatch.setattr(workflow.writer, "write_article", write)
 
-        await workflow._chat_async(
+        await chat_async(
             message=["Write about generative AI"],
             reply_to=None,
             session_id=None,
@@ -61,8 +73,12 @@ class TestNewsArticleWorkflow:
         assert "A concise summary." in output
 
     async def test_research_output_feeds_the_writer(
-        self, workflow, monkeypatch, capsys
-    ):
+        self,
+        workflow: ModuleType,
+        chat_async: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         request = models.ArticleRequest(
             topic="t", angle="a", audience="aud", requirements=[]
         )
@@ -77,7 +93,7 @@ class TestNewsArticleWorkflow:
         write = AsyncMock(return_value=article)
         monkeypatch.setattr(workflow.writer, "write_article", write)
 
-        await workflow._chat_async(
+        await chat_async(
             message=["topic"],
             reply_to=None,
             session_id=None,

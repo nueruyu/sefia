@@ -1,7 +1,7 @@
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Never, cast
+from typing import Any, Never, cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -364,7 +364,7 @@ class TestToolOnlyDirector:
 class TestToolEnabledDirector:
     """Tests for _ToolEnabledDirector — tools available, final answer also allowed."""
 
-    def _director(self, output_type=str):
+    def _director(self, output_type: Any = str):
         inspector = PydanticModelInspector()
         return _ToolEnabledDirector(inspector, output_type, [{"type": "function"}])
 
@@ -429,7 +429,7 @@ class TestToolEnabledDirector:
 class TestOutputOnlyDirector:
     """Tests for _OutputOnlyDirector — no tools, final answer required."""
 
-    def _director(self, output_type=str):
+    def _director(self, output_type: Any = str):
         inspector = PydanticModelInspector()
         return _OutputOnlyDirector(inspector, output_type, [])
 
@@ -459,6 +459,7 @@ class TestOutputOnlyDirector:
             _LLMDecision(final_answer={"name": "test", "value": 99})
         )
 
+        assert isinstance(result, FinalAnswerDecision)
         assert isinstance(result.answer, MyOutput)
         assert result.answer.name == "test"
 
