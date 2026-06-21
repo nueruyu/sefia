@@ -36,6 +36,9 @@ class JsonStringDecoder:
         elif char == '"':
             yield from self.finish(path, emit_delta=emit_delta)
         else:
+            if ord(char) < 0x20:
+                yield JsonParseError("Invalid control character in string", fatal=True)
+                return
             if self._high_surrogate is not None:
                 yield JsonParseError(
                     "High surrogate not followed by low surrogate.", fatal=True

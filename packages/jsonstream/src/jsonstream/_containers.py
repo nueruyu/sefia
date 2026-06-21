@@ -119,6 +119,9 @@ class ContainerTracker:
     def _end_array(
         self, current_container: ContainerState, state: ParserState
     ) -> Generator[Event, None, None]:
+        if len(self._stack) == 1:
+            yield JsonParseError("Unexpected ']'", fatal=True)
+            return
         if not isinstance(current_container, ArrayState):
             yield JsonParseError("Unexpected ']'", fatal=True)
             return
