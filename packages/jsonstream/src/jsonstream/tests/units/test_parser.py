@@ -91,7 +91,7 @@ def test_simple_object():
         StartString(path=("key",)),
         StringDelta(path=("key",), text="value"),
         EndString(path=("key",), value="value"),
-        EndObject(path=("key",)),
+        EndObject(path=()),
     ]
 
 
@@ -102,7 +102,7 @@ def test_simple_array():
         Scalar(path=(0,), value=True),
         Scalar(path=(1,), value=None),
         Scalar(path=(2,), value=123),
-        EndArray(path=(3,)),
+        EndArray(path=()),
     ]
 
 
@@ -118,9 +118,9 @@ def test_nested_structure():
         StartString(path=("a", 1, "b")),
         StringDelta(path=("a", 1, "b"), text="c"),
         EndString(path=("a", 1, "b"), value="c"),
-        EndObject(path=("a", 1, "b")),
-        EndArray(path=("a", 2)),
-        EndObject(path=("a",)),
+        EndObject(path=("a", 1)),
+        EndArray(path=("a",)),
+        EndObject(path=()),
     ]
 
 
@@ -133,7 +133,7 @@ def test_chunked_string_value():
         StringDelta(path=("key",), text="hello"),
         StringDelta(path=("key",), text=" world"),
         EndString(path=("key",), value="hello world"),
-        EndObject(path=("key",)),
+        EndObject(path=()),
     ]
 
 
@@ -143,7 +143,7 @@ def test_chunked_object_key():
         StartObject(path=()),
         Key(path=(), value="name"),
         Scalar(path=("name",), value=1),
-        EndObject(path=("name",)),
+        EndObject(path=()),
     ]
 
 
@@ -154,7 +154,7 @@ def test_chunked_literal():
         Scalar(path=(0,), value=True),
         Scalar(path=(1,), value=False),
         Scalar(path=(2,), value=None),
-        EndArray(path=(3,)),
+        EndArray(path=()),
     ]
 
 
@@ -164,7 +164,7 @@ def test_chunked_number():
         StartArray(path=()),
         Scalar(path=(0,), value=123),
         Scalar(path=(1,), value=45.67),
-        EndArray(path=(2,)),
+        EndArray(path=()),
     ]
 
 
@@ -174,7 +174,7 @@ def test_empty_string():
         StartArray(path=()),
         StartString(path=(0,)),
         EndString(path=(0,), value=""),
-        EndArray(path=(1,)),
+        EndArray(path=()),
     ]
 
 
@@ -193,7 +193,7 @@ def test_string_with_standard_escapes():
         StringDelta(path=(0,), text="\r"),
         StringDelta(path=(0,), text="\t"),
         EndString(path=(0,), value=expected_text),
-        EndArray(path=(1,)),
+        EndArray(path=()),
     ]
 
 
@@ -204,7 +204,7 @@ def test_chunked_escape_sequence():
         StartString(path=(0,)),
         StringDelta(path=(0,), text="\n"),
         EndString(path=(0,), value="\n"),
-        EndArray(path=(1,)),
+        EndArray(path=()),
     ]
 
 
@@ -215,7 +215,7 @@ def test_unicode_bmp():
         StartString(path=(0,)),
         StringDelta(path=(0,), text="\u1234"),
         EndString(path=(0,), value="\u1234"),
-        EndArray(path=(1,)),
+        EndArray(path=()),
     ]
 
 
@@ -227,7 +227,7 @@ def test_unicode_surrogate_pair():
         StartString(path=(0,)),
         StringDelta(path=(0,), text=expected),
         EndString(path=(0,), value=expected),
-        EndArray(path=(1,)),
+        EndArray(path=()),
     ]
 
 
@@ -239,7 +239,7 @@ def test_chunked_surrogate_pair():
         StartString(path=(0,)),
         StringDelta(path=(0,), text=expected),
         EndString(path=(0,), value=expected),
-        EndArray(path=(1,)),
+        EndArray(path=()),
     ]
 
 
@@ -250,7 +250,7 @@ def test_chunked_unicode_escape_digits():
         StartString(path=(0,)),
         StringDelta(path=(0,), text="\u1234"),
         EndString(path=(0,), value="\u1234"),
-        EndArray(path=(1,)),
+        EndArray(path=()),
     ]
 
 
@@ -268,7 +268,7 @@ def test_valid_number_forms(source, expected):
     assert events == [
         StartArray(path=()),
         Scalar(path=(0,), value=expected),
-        EndArray(path=(1,)),
+        EndArray(path=()),
     ]
 
 
@@ -357,6 +357,12 @@ def test_fatal_separator_errors(source, message_part):
 def test_fatal_multiple_top_level_values(source):
     events = run_parser([source])
     assert fatal_messages(events)
+
+
+@pytest.mark.parametrize("source", ["1,2", "1,", "{},{}", "[],[]", '"a","b"'])
+def test_fatal_root_comma_separated_values(source):
+    events = run_parser([source])
+    assert_fatal_error(events, "Unexpected ','")
 
 
 def test_fatal_unescaped_control_character_in_string():

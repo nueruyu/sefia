@@ -111,7 +111,7 @@ class ContainerTracker:
             yield JsonParseError("Unexpected '}'", fatal=True)
             return
 
-        path_before_pop = self.path
+        path_before_pop = path_from_stack(self._stack[1:-1])
         self._stack.pop()
         yield EndObject(path=path_before_pop)
         self.value_completed()
@@ -133,7 +133,7 @@ class ContainerTracker:
             yield JsonParseError("Unexpected ']'", fatal=True)
             return
 
-        path_before_pop = self._end_array_path(current_container)
+        path_before_pop = path_from_stack(self._stack[1:-1])
         self._stack.pop()
         yield EndArray(path=path_before_pop)
         self.value_completed()
@@ -141,7 +141,12 @@ class ContainerTracker:
     def _parse_comma(
         self, current_container: ContainerState, state: ParserState
     ) -> Generator[Event, None, None]:
-        if (
+        if len(self._stack) == 1:
+            # The root is wrapped in a virtual array; a comma here would
+            # otherwise allow multiple top-level values or a trailing comma,
+            # both of which are invalid per RFC 8259.
+            yield JsonParseError("Unexpected ','", fatal=True)
+        elif (
             isinstance(current_container, ObjectState)
             and state == ParserState.EXPECT_COMMA_OR_OBJECT_END
         ):
@@ -154,8 +159,3 @@ class ContainerTracker:
             current_container.state = ParserState.EXPECT_VALUE
         else:
             yield JsonParseError("Unexpected ','", fatal=True)
-
-    def _end_array_path(self, current_container: ArrayState) -> JsonPath:
-        if current_container.next_index == 0:
-            return path_from_stack(self._stack[1:-1])
-        return self.path

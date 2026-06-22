@@ -31,10 +31,10 @@ def test_tracks_nested_object_array_paths_and_completion():
     tracker.value_completed()
     assert tracker.path == ("items", 1)
 
-    assert collect_events(tracker, "]") == [EndArray(path=("items", 1))]
+    assert collect_events(tracker, "]") == [EndArray(path=("items",))]
     assert tracker.path == ("items",)
 
-    assert collect_events(tracker, "}") == [EndObject(path=("items",))]
+    assert collect_events(tracker, "}") == [EndObject(path=())]
     assert not tracker.has_unclosed_containers
 
 
@@ -68,3 +68,12 @@ def test_rejects_root_array_end_after_root_value_completed():
     events = collect_events(tracker, "]")
 
     assert events == [JsonParseError("Unexpected ']'", fatal=True)]
+
+
+def test_rejects_root_comma_after_value():
+    tracker = ContainerTracker()
+    tracker.value_completed()
+
+    events = collect_events(tracker, ",")
+
+    assert events == [JsonParseError("Unexpected ','", fatal=True)]
