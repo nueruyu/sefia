@@ -1,30 +1,32 @@
 from typing import Any, Awaitable, Callable
 
-from glyff.exceptions import YieldException
-
 from sefia._interfaces.middleware import InferenceContext, InferenceMiddleware
-from sefia.exceptions import InferenceError, SefiaError
-
-
-class MaxRetriesExceededError(SefiaError):
-    """Raised when the configured number of retries has been exhausted."""
+from sefia.exceptions import InferenceError
 
 
 class Retrier(InferenceMiddleware):
     """
-    Restarts the inference run when an inference attempt fails.
+    Retries a recoverable inference failure within the current process.
 
-    Only failures arising from the inference process itself are retried.
-    Framework exceptions (for example max steps, stagnation, or an
-    already-exhausted retry budget) and graceful interrupts (``YieldException``)
-    are allowed to propagate untouched, so retries are never wasted on a
-    deterministic limit. Provider failures translated to ``InferenceError``
-    are retried. Tool failures are not retried either: the executor stringifies
-    them into the history and feeds them back to the model, so they never surface
-    here as exceptions.
+    Only a recoverable ``InferenceError`` (a transient provider hiccup, or an
+    invalid LLM response) is retried: the inference run is restarted, up to
+    ``max_retries`` times. Once the budget is spent, the *original* error is
+    re-raised untouched. Because an ``InferenceError`` is also a
+    ``YieldException``, that propagates as a graceful, non-engraved interrupt —
+    the run pauses and a later re-invocation can still recover the step, rather
+    than the failure being engraved as a permanent ``FAILED`` record. In other
+    words, retries here are an in-process fast path, with a durable resume as the
+    fallback.
 
-    The retry counter is intentionally kept on the instance and persists across
-    the attempts of a single run. Middleware is instantiated per inference run
+    Everything else propagates untouched: framework limits (max steps,
+    stagnation), intentional ``YieldException`` interrupts, and any genuine,
+    deterministic failure (already engraved by glyff). Retrying those would only
+    waste the budget and delay surfacing the real error. Tool failures never
+    surface here either: the executor stringifies them into the history and
+    feeds them back to the model, so the model can recover.
+
+    The retry counter is kept on the instance and persists across the attempts
+    of a single run. Middleware is instantiated per inference run
     (``Policy.create_middleware`` is called once per ``@infer`` invocation in
     ``decorators._run``), so an instance is never shared across concurrent runs;
     its state is scoped to a single run.
@@ -42,17 +44,11 @@ class Retrier(InferenceMiddleware):
         while True:
             try:
                 return await nxt()
-            except InferenceError as e:
+            except InferenceError:
+                # The only retryable failure. On exhaustion, re-raise the
+                # original error: it is a YieldException, so it propagates as a
+                # non-engraved, resumable interrupt instead of a hard failure.
+                # Any other exception is not caught here and propagates as-is.
                 if self._retries_used >= self.max_retries:
-                    raise MaxRetriesExceededError(
-                        f"Failed after {self.max_retries} retries."
-                    ) from e
-                self._retries_used += 1
-            except (SefiaError, YieldException):
-                raise
-            except Exception as e:
-                if self._retries_used >= self.max_retries:
-                    raise MaxRetriesExceededError(
-                        f"Failed after {self.max_retries} retries."
-                    ) from e
+                    raise
                 self._retries_used += 1

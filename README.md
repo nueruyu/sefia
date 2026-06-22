@@ -323,9 +323,11 @@ step loop by raising an exception.
 
 Two seams are available, exposed as ABCs from `sefia`:
 
-- `InferenceMiddleware.wrap(ctx, nxt)` wraps a whole inference run. `MaxRetries`
-  uses this: on a retryable failure it calls `nxt` again, or raises
-  `MaxRetriesExceededError` once the budget is spent.
+- `InferenceMiddleware.wrap(ctx, nxt)` wraps a whole inference run. `Retrier`
+  uses this: on a recoverable `InferenceError` it calls `nxt` again, and once
+  the budget is spent it re-raises the original error — which, being a
+  `YieldException`, propagates as a resumable yield rather than a hard failure
+  (see [Recoverable inference errors](#recoverable-inference-errors)).
 - `StepMiddleware.wrap(ctx, nxt)` wraps a single step. `MaxSteps` uses this to
   cap the loop, raising `MaxStepsExceededError` once the step limit is reached.
 
@@ -379,6 +381,29 @@ class HumanInputTool:
 
 A web handler can return `202 Accepted` with the session ID, then resume by
 calling the same workflow again when the answer arrives.
+
+#### Recoverable inference errors
+
+A recoverable inference failure — a transient provider hiccup (timeout, rate
+limit, connection, temporarily unavailable) or an LLM response that fails schema
+validation — is treated the same way. `InferenceError` subclasses
+`YieldException`, so glyff never engraves it as a permanent `FAILED` record;
+instead the step is left resumable. Re-invoking the workflow re-runs just that
+step, and earlier completed steps replay without re-running. This means a
+one-off network blip or malformed model response never poisons a run.
+
+The `@infer` call surfaces the failure as the typed error, which you can catch
+either as an `InferenceError` or as a `YieldException`. The abstract
+`InferenceError` and `InvalidInferenceResponseError` live in `sefia`; a client
+adapter contributes its own provider-shaped subclasses (for example
+`sefia_litellm` defines `InferenceTimeoutError`, `InferenceRateLimitError`, and
+friends). Genuinely permanent failures (authentication, malformed request,
+content policy, ...) are *not* mapped to `InferenceError`; they propagate as
+their own exceptions and are engraved as genuine failures.
+
+`Retrier` adds an in-process fast path on top of this: it retries a recoverable
+error a few times within the same process, and only once that budget is spent
+does it let the error propagate as a resumable yield.
 
 ## Event handlers
 

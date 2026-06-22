@@ -5,14 +5,15 @@ import os
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
 
-from sefia.exceptions import (
+from sefia.exceptions import InferenceError
+from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
+
+from .exceptions import (
     InferenceConnectionError,
-    InferenceError,
     InferenceRateLimitError,
     InferenceTemporarilyUnavailableError,
     InferenceTimeoutError,
 )
-from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage

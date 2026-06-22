@@ -19,17 +19,17 @@ from litellm.types.utils import (
     Message as LiteLLMMessage,
 )
 from pytest_mock import MockerFixture
-from sefia.exceptions import (
-    InferenceRateLimitError,
-    InferenceTemporarilyUnavailableError,
-    InferenceTimeoutError,
-)
 from sefia.llm import LLMResponse, Message
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
     LiteLLMClient,
     _apply_litellm_log_level,
     _env_suppress_logs_default,
+)
+from sefia_litellm.exceptions import (
+    InferenceRateLimitError,
+    InferenceTemporarilyUnavailableError,
+    InferenceTimeoutError,
 )
 
 

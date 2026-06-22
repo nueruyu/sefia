@@ -10,6 +10,7 @@ from pydantic import create_model
 
 from .._interfaces import InferenceStrategy, ModelInspector
 from ..event_system import EventPublisher
+from ..exceptions import InvalidInferenceResponseError
 from ..inference import (
     FinalAnswerDecision,
     FunctionInfo,
@@ -109,8 +110,10 @@ class _ToolOnlyDirector(_ExecutionDirector):
                 ]
             )
         if decision.final_answer is not None:
-            raise ValueError("Return type is Never but LLM returned a final answer.")
-        raise ValueError("LLM response must contain 'tool_calls'.")
+            raise InvalidInferenceResponseError(
+                "Return type is Never but LLM returned a final answer."
+            )
+        raise InvalidInferenceResponseError("LLM response must contain 'tool_calls'.")
 
 
 class _ToolEnabledDirector(_ExecutionDirector):
@@ -164,7 +167,7 @@ class _ToolEnabledDirector(_ExecutionDirector):
                 self.output_type, decision.final_answer
             )
             return FinalAnswerDecision(answer=validated_answer)
-        raise ValueError(
+        raise InvalidInferenceResponseError(
             "LLM response must contain either 'tool_calls' or a non-null 'final_answer'."
         )
 
@@ -201,7 +204,9 @@ class _OutputOnlyDirector(_ExecutionDirector):
                 self.output_type, decision.final_answer
             )
             return FinalAnswerDecision(answer=validated_answer)
-        raise ValueError("LLM response must contain a non-null 'final_answer'.")
+        raise InvalidInferenceResponseError(
+            "LLM response must contain a non-null 'final_answer'."
+        )
 
 
 @dataclass
@@ -289,7 +294,9 @@ class LLMInferenceStrategy(InferenceStrategy):
         await publisher.publish(events.AfterLLMCall(response))
 
         if response.content is None:
-            raise ValueError("LLM did not provide a response content.")
+            raise InvalidInferenceResponseError(
+                "LLM did not provide a response content."
+            )
 
         try:
             raw = response.content.strip()
@@ -304,7 +311,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             return director.process_decision(decision)
 
         except (json.JSONDecodeError, ValueError) as e:
-            raise ValueError(
+            raise InvalidInferenceResponseError(
                 f"LLM output failed validation against the master schema: {e}, content: {response.content}"
             ) from e
 

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from sefia.event_system import EventPublisher
+from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
     FinalAnswerDecision,
     FunctionInfo,
@@ -15,7 +16,13 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import LLMInferenceStrategy, LLMResponse
-from sefia.llm._strategy import LLMToolCall, _LLMDecision, _OutputOnlyDirector, _ToolEnabledDirector, _ToolOnlyDirector
+from sefia.llm._strategy import (
+    LLMToolCall,
+    _LLMDecision,
+    _OutputOnlyDirector,
+    _ToolEnabledDirector,
+    _ToolOnlyDirector,
+)
 from sefia.llm.events import LLMTokenReceived
 from sefia.pydantic import PydanticModelInspector
 from sefia.pydantic._json_utils import pydantic_json_default
@@ -198,7 +205,10 @@ class TestLLMInferenceStrategy:
         publisher = MockEventPublisher()
 
         decision = await strategy.decide_next_step(
-            _function_info(return_type=MyOutput, instructions="do it"), [], [], publisher
+            _function_info(return_type=MyOutput, instructions="do it"),
+            [],
+            [],
+            publisher,
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -239,7 +249,9 @@ class TestLLMInferenceStrategy:
         )
         strategy = self._strategy(mock_llm_client)
 
-        with pytest.raises(ValueError, match="LLM output failed validation"):
+        with pytest.raises(
+            InvalidInferenceResponseError, match="LLM output failed validation"
+        ):
             await strategy.decide_next_step(
                 _function_info(return_type=MyOutput, instructions="do it"),
                 [],
@@ -266,7 +278,9 @@ class TestLLMInferenceStrategy:
         )
         strategy = self._strategy(mock_llm_client)
 
-        with pytest.raises(ValueError, match="non-null 'final_answer'"):
+        with pytest.raises(
+            InvalidInferenceResponseError, match="non-null 'final_answer'"
+        ):
             await strategy.decide_next_step(
                 _function_info(instructions="do it"), [], [], MockEventPublisher()
             )
@@ -330,7 +344,7 @@ class TestToolOnlyDirector:
         director = strategy._create_director(Never, [{"type": "function"}])
 
         decision = _LLMDecision(final_answer="oops")
-        with pytest.raises(ValueError, match="Never"):
+        with pytest.raises(InvalidInferenceResponseError, match="Never"):
             director.process_decision(decision)
 
     def test_process_decision_raises_when_no_tool_calls_and_no_final_answer(self):
@@ -338,7 +352,7 @@ class TestToolOnlyDirector:
         director = strategy._create_director(Never, [{"type": "function"}])
 
         decision = _LLMDecision()
-        with pytest.raises(ValueError, match="tool_calls"):
+        with pytest.raises(InvalidInferenceResponseError, match="tool_calls"):
             director.process_decision(decision)
 
     async def test_decide_next_step_returns_tool_call_decision_for_never(self):
@@ -378,7 +392,7 @@ class TestToolOnlyDirector:
             prompt_formatter=mock_formatter,
         )
 
-        with pytest.raises(ValueError, match="Never"):
+        with pytest.raises(InvalidInferenceResponseError, match="Never"):
             await strategy.decide_next_step(
                 _function_info(return_type=Never, instructions="chat"),
                 [],
@@ -438,7 +452,10 @@ class TestToolEnabledDirector:
     def test_process_decision_raises_when_both_null(self):
         director = self._director()
         decision = _LLMDecision()
-        with pytest.raises(ValueError, match="tool_calls.*final_answer|final_answer.*tool_calls"):
+        with pytest.raises(
+            InvalidInferenceResponseError,
+            match="tool_calls.*final_answer|final_answer.*tool_calls",
+        ):
             director.process_decision(decision)
 
     def test_tool_calls_take_priority_over_final_answer(self):
@@ -491,5 +508,7 @@ class TestOutputOnlyDirector:
 
     def test_process_decision_raises_when_final_answer_is_null(self):
         director = self._director()
-        with pytest.raises(ValueError, match="non-null 'final_answer'"):
+        with pytest.raises(
+            InvalidInferenceResponseError, match="non-null 'final_answer'"
+        ):
             director.process_decision(_LLMDecision())

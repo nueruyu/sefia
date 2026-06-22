@@ -4,12 +4,12 @@ from dataclasses import dataclass
 import glyff
 import pytest
 from glyff import ArgsHasher, Serializer
-from glyff.exceptions import ExecutionFailedError
 from glyff.store import MemoryClient
 from glyff.store import MemorySessionStore as GlyffMemoryStore
 
 from sefia import Policy, Session, infer, policy
 from sefia._metadata import get_metadata
+from sefia.exceptions import InvalidInferenceResponseError
 from sefia.llm import LLMResponse
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
@@ -250,6 +250,9 @@ async def test_inference_with_invalid_output_schema(
     serializer: Serializer, hasher: ArgsHasher
 ):
     # Scenario: The LLM returns a final_answer that doesn't match the schema.
+    # An invalid response is recoverable, so it is NOT engraved as a permanent
+    # failure: it surfaces as an InvalidInferenceResponseError (a YieldException),
+    # leaving the step resumable on re-invocation.
     mock_response = LLMResponse(
         content=json.dumps(
             {"final_answer": {"summary": "This is missing the topic field."}}
@@ -265,7 +268,7 @@ async def test_inference_with_invalid_output_schema(
         ):
             agent = SimpleAgent()
             with pytest.raises(
-                ExecutionFailedError, match="LLM output failed validation"
+                InvalidInferenceResponseError, match="LLM output failed validation"
             ):
                 await agent.generate_report(topic="invalid")
 

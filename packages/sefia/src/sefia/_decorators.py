@@ -22,7 +22,6 @@ class _PolicyDecorator(Protocol):
     def __call__(self, func: C) -> C: ...
 
 
-
 def tool(func: T) -> T:
     """
     Mark a method as a tool available to an @infer step.

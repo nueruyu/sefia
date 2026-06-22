@@ -36,8 +36,7 @@ class InferenceMiddleware(ABC):
 
     Unlike an :class:`~sefia.EventHandler` (which observes), a middleware
     *controls*: it may run the wrapped inference, inspect the outcome, retry by
-    calling ``nxt`` again, or raise an exception such as
-    ``MaxRetriesExceededError``.
+    calling ``nxt`` again, or raise an exception to stop the run.
     """
 
     @abstractmethod
