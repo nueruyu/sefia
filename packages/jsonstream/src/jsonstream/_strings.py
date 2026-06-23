@@ -116,13 +116,16 @@ class JsonStringDecoder:
         self._unicode_buffer = None
         self._in_escape = False
 
-        try:
-            codepoint = int(hex_digits, 16)
-        except ValueError:
+        # int(..., 16) also accepts signs and surrounding whitespace (e.g.
+        # "+12" or " 12"), but RFC 8259 requires exactly four hex digits, so
+        # validate the characters explicitly before decoding.
+        if not all(c in "0123456789abcdefABCDEF" for c in hex_digits):
             yield JsonParseError(
                 f"Invalid unicode escape sequence '\\u{hex_digits}'", fatal=True
             )
             return
+
+        codepoint = int(hex_digits, 16)
 
         if 0xD800 <= codepoint <= 0xDBFF:
             if self._high_surrogate is not None:

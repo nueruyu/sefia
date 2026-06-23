@@ -263,6 +263,15 @@ def test_chunked_unicode_escape_digits():
 
 
 @pytest.mark.parametrize(
+    "source",
+    ['["\\u+123"]', '["\\u 123"]', '["\\u-100"]', '["\\u12gh"]'],
+)
+def test_fatal_invalid_unicode_escape_digits(source):
+    events = run_parser([source])
+    assert_fatal_error(events, "Invalid unicode escape sequence")
+
+
+@pytest.mark.parametrize(
     ("source", "expected"),
     [
         ("[-1]", -1),
