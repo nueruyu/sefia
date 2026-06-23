@@ -79,27 +79,37 @@ def policy(p: Policy) -> _PolicyDecorator:
     return decorator
 
 
-def model(profile_name: str) -> _PolicyDecorator:
+def profile(profile_name: str) -> _PolicyDecorator:
     """
-    Decorator that selects the model profile an ``@infer`` function runs on.
+    Decorator that selects the profile an ``@infer`` function runs on.
 
     Instead of writing a raw model name at the call site, you reference a
-    :class:`~sefia.ModelProfile` by name. Profiles are built up front and
-    registered on the :class:`~sefia.Session` (``profiles=[...]``); this
-    decorator only records which one to use, so the same code can bind to a
-    different concrete client per session (e.g. a mock in tests)::
+    :class:`~sefia.ModelProfile` by name. A profile bundles the model (its
+    ``client``) and any policies that should apply whenever it is selected.
+    Profiles are built up front and registered on the :class:`~sefia.Session`
+    (``profiles=[...]``); this decorator only records which one to use, so the
+    same code can bind to a different concrete client per session (e.g. a mock
+    in tests)::
 
         @infer
-        @model("fast")
+        @profile("fast")
         async def step(...): ...
 
-    The name is recorded under the ``"model_profile"`` key of the function's
+    Configuration is layered, most specific wins::
+
+        function (@policy / @profile)  >  profile  >  session
+
+    The selected profile's client overrides the session default, and its
+    policies are applied on top of the session policies and beneath the
+    function's own ``@policy`` decorators.
+
+    The name is recorded under the ``"profile"`` key of the function's
     ``__sefia_metadata__`` dict, where ``@infer`` reads it. Like ``@policy``, the
     order relative to ``@infer`` does not matter, and any decorator stacked
     between the two must preserve the ``__wrapped__`` chain (``functools.wraps``)
-    for the selection to be found. A function has a single model profile; a later
-    ``@model`` decoration overrides an earlier one. When no ``@model`` is present,
-    the session's default ``llm_client`` is used.
+    for the selection to be found. A function has a single profile; a later
+    ``@profile`` decoration overrides an earlier one. When no ``@profile`` is
+    present, the session's default ``llm_client`` and policies are used.
 
     The referenced profile must exist on the session; an unknown name raises at
     call time with the list of registered profiles.
@@ -107,15 +117,15 @@ def model(profile_name: str) -> _PolicyDecorator:
 
     if not isinstance(profile_name, str):
         raise TypeError(
-            "@model must be called with a profile name (str), "
-            'e.g. @model("fast").'
+            "@profile must be called with a profile name (str), "
+            'e.g. @profile("fast").'
         )
 
     def decorator(func: C) -> C:
         # Attach metadata to the innermost function so it lives in one place
         # regardless of decorator order or intermediate wrappers.
         metadata = _metadata.ensure_metadata(func)
-        metadata[_metadata.MODEL_PROFILE_KEY] = profile_name
+        metadata[_metadata.PROFILE_KEY] = profile_name
         return func
 
     return decorator
@@ -158,11 +168,20 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
     @functools.wraps(func)
     async def _run(*args, **kwargs):
         context = get_context()
-        # Read policy metadata from the innermost function so the decorator
-        # order does not matter and intermediate wrappers are handled.
+        # Read metadata from the innermost function so the decorator order does
+        # not matter and intermediate wrappers are handled.
         metadata = _metadata.get_metadata(unwrapped)
         fn_policies = metadata.get(_metadata.POLICIES_KEY, [])
-        all_policies = list(context.policies) + fn_policies
+
+        # Resolve the profile selected by @profile, falling back to the session
+        # default when none was attached.
+        profile_name = metadata.get(_metadata.PROFILE_KEY)
+        inference_strategy, profile_policies = context.resolve_profile(profile_name)
+
+        # Policies are additive across layers; collect them most-general first so
+        # the most-specific (function) policies sit closest to the call:
+        #   session  ->  profile  ->  function
+        all_policies = list(context.policies) + list(profile_policies) + fn_policies
         all_handlers = [
             handler for p in all_policies for handler in p.create_handlers()
         ]
@@ -171,11 +190,6 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
         ]
         publisher = EventPublisher(all_handlers)
         inference_middlewares, step_middlewares = _partition_middleware(all_middleware)
-
-        # Resolve the model profile selected by @model, falling back to the
-        # session default when none was attached.
-        profile_name = metadata.get(_metadata.MODEL_PROFILE_KEY)
-        inference_strategy = context.resolve_inference_strategy(profile_name)
 
         executor = InferenceExecutor(
             func=unwrapped,

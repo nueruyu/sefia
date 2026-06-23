@@ -64,12 +64,14 @@ class Session:
         self._inference_strategy = make_strategy(llm_client)
 
         self._profile_strategies: dict[str, InferenceStrategy] = {}
+        self._profile_policies: dict[str, tuple[Policy, ...]] = {}
         for profile in profiles or []:
             if profile.name in self._profile_strategies:
                 raise ValueError(
-                    f"Duplicate model profile name: '{profile.name}'."
+                    f"Duplicate profile name: '{profile.name}'."
                 )
             self._profile_strategies[profile.name] = make_strategy(profile.client)
+            self._profile_policies[profile.name] = tuple(profile.policies)
 
         self._context: SessionContext | None = None
 
@@ -92,6 +94,7 @@ class Session:
             policies=tuple(self._policies),
             tool_collector=self._tool_collector,
             profile_strategies=self._profile_strategies,
+            profile_policies=self._profile_policies,
         )
         self._context_token = context_var.set(self._context)
         return self

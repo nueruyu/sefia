@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 
 import glyff
 import pytest
@@ -6,8 +7,9 @@ from glyff import ArgsHasher, Serializer
 from glyff.store import MemoryClient
 from glyff.store import MemorySessionStore as GlyffMemoryStore
 
-from sefia import ModelProfile, Session, infer, model
-from sefia._metadata import MODEL_PROFILE_KEY, get_metadata
+from sefia import ModelProfile, Policy, Session, infer, policy, profile
+from sefia._metadata import PROFILE_KEY, get_metadata
+from sefia.event_system import EventHandler
 from sefia.llm import LLMResponse
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
@@ -30,6 +32,18 @@ def _final_answer(summary: str) -> LLMResponse:
     )
 
 
+@dataclass
+class _LabelPolicy(Policy):
+    """A policy that appends its label to a shared log when its handlers build."""
+
+    label: str
+    log: list[str]
+
+    def create_handlers(self) -> list[EventHandler]:
+        self.log.append(self.label)
+        return []
+
+
 class _ProfileAgent:
     @infer
     async def with_default(self, topic: str) -> Report:
@@ -37,50 +51,57 @@ class _ProfileAgent:
         ...
 
     @infer
-    @model("fast")
+    @profile("fast")
     async def with_fast(self, topic: str) -> Report:
-        """Run on the 'fast' model profile."""
+        """Run on the 'fast' profile."""
         ...
 
 
 class _MissingProfileAgent:
     @infer
-    @model("missing")
+    @profile("missing")
     async def step(self, topic: str) -> Report:
         """Selects a profile that was never registered."""
         ...
 
 
-def test_model_attaches_profile_name_metadata():
-    """`@model` records the profile name under the metadata "model_profile" key,
-    no matter where it sits relative to @infer."""
+def test_profile_attaches_name_metadata():
+    """`@profile` records the profile name under the metadata "profile" key, no
+    matter where it sits relative to @infer."""
 
     @infer
-    @model("fast")
+    @profile("fast")
     async def below(value: int) -> int:
         """Profile selected below @infer."""
         ...
 
-    @model("smart")
+    @profile("smart")
     @infer
     async def above(value: int) -> int:
         """Profile selected above @infer."""
         ...
 
-    assert get_metadata(below)[MODEL_PROFILE_KEY] == "fast"
-    assert get_metadata(above)[MODEL_PROFILE_KEY] == "smart"
+    assert get_metadata(below)[PROFILE_KEY] == "fast"
+    assert get_metadata(above)[PROFILE_KEY] == "smart"
 
 
-def test_model_rejects_non_string():
-    """@model raises a clear error when given something other than a name."""
+def test_profile_rejects_non_string():
+    """@profile raises a clear error when given something other than a name."""
     with pytest.raises(TypeError):
-        model(object())  # type: ignore
+        profile(object())  # type: ignore
+
+
+def test_model_profile_normalizes_policies_to_tuple():
+    """ModelProfile accepts a list of policies but stores an immutable tuple."""
+    p = _LabelPolicy(label="x", log=[])
+    prof = ModelProfile(name="p", client=MockLLMClient(responses=[]), policies=[p])
+    assert prof.policies == (p,)
 
 
 async def test_infer_uses_selected_profile_client(
     serializer: Serializer, hasher: ArgsHasher
 ):
-    """An @infer decorated with @model runs on the profile's client, while an
+    """An @infer decorated with @profile runs on the profile's client, while an
     undecorated @infer on the same agent uses the session default."""
 
     default_llm = MockLLMClient(responses=[_final_answer("from default")])
@@ -105,6 +126,43 @@ async def test_infer_uses_selected_profile_client(
     assert len(fast_llm.requests) == 1
 
 
+async def test_policy_layering_session_profile_function(
+    serializer: Serializer, hasher: ArgsHasher
+):
+    """Policies are collected most-general first: session -> profile -> function,
+    so the function's own @policy sits closest to the call."""
+
+    log: list[str] = []
+
+    class Agent:
+        @infer
+        @policy(_LabelPolicy(label="function", log=log))
+        @profile("fast")
+        async def step(self, topic: str) -> Report:
+            """Selects a profile and adds its own policy."""
+            ...
+
+    fast_llm = MockLLMClient(responses=[_final_answer("ok")])
+    glyff_store, sefia_store = _make_stores(serializer)
+    async with glyff.Session(id="layering", store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=fast_llm,
+            glyff_session=gs,
+            session_store=sefia_store,
+            policies=[_LabelPolicy(label="session", log=log)],
+            profiles=[
+                ModelProfile(
+                    name="fast",
+                    client=fast_llm,
+                    policies=[_LabelPolicy(label="profile", log=log)],
+                )
+            ],
+        ):
+            await Agent().step(topic="t")
+
+    assert log == ["session", "profile", "function"]
+
+
 async def test_unknown_profile_raises(serializer: Serializer, hasher: ArgsHasher):
     """Referencing a profile the session does not register fails fast at call
     time with the list of registered profiles."""
@@ -118,7 +176,7 @@ async def test_unknown_profile_raises(serializer: Serializer, hasher: ArgsHasher
             session_store=sefia_store,
             profiles=[ModelProfile(name="fast", client=default_llm)],
         ):
-            with pytest.raises(RuntimeError, match="Unknown model profile 'missing'"):
+            with pytest.raises(RuntimeError, match="Unknown profile 'missing'"):
                 await _MissingProfileAgent().step(topic="t")
 
 
@@ -129,7 +187,7 @@ def test_duplicate_profile_names_rejected(
     glyff_store, sefia_store = _make_stores(serializer)
     a = MockLLMClient(responses=[])
     b = MockLLMClient(responses=[])
-    with pytest.raises(ValueError, match="Duplicate model profile name: 'dup'"):
+    with pytest.raises(ValueError, match="Duplicate profile name: 'dup'"):
         Session(
             llm_client=a,
             glyff_session=glyff.Session(id="dup", store=glyff_store, hasher=hasher),

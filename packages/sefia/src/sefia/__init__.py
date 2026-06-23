@@ -1,5 +1,5 @@
 from ._context import SessionContext, get_context
-from ._decorators import infer, model, policy, tool
+from ._decorators import infer, policy, profile, tool
 from ._profiles import ModelProfile
 from ._interfaces import (
     InferenceContext,
@@ -21,7 +21,7 @@ __all__ = [
     "infer",
     "tool",
     "policy",
-    "model",
+    "profile",
     "ModelProfile",
     "toolify",
     "Toolset",

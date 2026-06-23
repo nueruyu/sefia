@@ -314,25 +314,27 @@ caller side (or stack multiple `@policy` decorators).
 Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
 added by implementing the `Policy` ABC.
 
-### Model profiles
+### Profiles
 
-By default every `@infer` call runs on the session's `llm_client`. To run a
-specific step on a different model, build a `ModelProfile` up front, register it
-on the `Session`, and select it per function with `@model`:
+A `ModelProfile` is a named, reusable bundle of inference configuration: the
+model (its `LLMClient`) plus any policies that should apply whenever it is
+selected. Build profiles up front, register them on the `Session`, and select
+one per function with `@profile`:
 
 ```python
-from sefia import ModelProfile, Session, infer, model
+from sefia import ModelProfile, Session, infer, profile
 from sefia_litellm import LiteLLMClient
+from sefios.policies import MaxRetries
 
 
 class MyAgent:
     @infer
     async def quick_step(self, request: Request) -> Draft:
-        """Runs on the session default model."""
+        """Runs on the session default model and policies."""
         ...
 
     @infer
-    @model("smart")
+    @profile("smart")
     async def hard_step(self, draft: Draft) -> Result:
         """Runs on the 'smart' profile instead."""
         ...
@@ -342,21 +344,38 @@ async with Session(
     llm_client=LiteLLMClient(model="gpt-4o-mini"),
     glyff_session=gs,
     session_store=sefia_store,
-    profiles=[ModelProfile(name="smart", client=LiteLLMClient(model="gpt-4o"))],
+    profiles=[
+        ModelProfile(
+            name="smart",
+            client=LiteLLMClient(model="gpt-4o"),
+            policies=[MaxRetries(count=5)],
+        )
+    ],
 ):
     ...
 ```
 
-`@model` records the profile **name** under the `"model_profile"` key of the
+`@profile` records the profile **name** under the `"profile"` key of the
 function's `__sefia_metadata__` (just like `@policy`), so its order relative to
 `@infer` does not matter. Selecting by name keeps the call site decoupled from
 the concrete client — a test can bind the same name to a mock. An unknown name
 fails fast at call time with the list of registered profiles.
 
-A `ModelProfile` pairs a name with the `LLMClient` used to run it; model
-settings (temperature, max tokens, ...) ride on how that client is constructed
-today, and the profile is the seam where first-class settings can be added
-later.
+Configuration is **layered, most specific wins**:
+
+```text
+function (@policy / @profile)  >  profile  >  session
+```
+
+- **Model/client:** the selected profile's `client` overrides the session's
+  default `llm_client`; with no `@profile`, the session default is used.
+- **Policies:** additive across layers and collected most-general first
+  (`session → profile → function`), so a function's own `@policy` decorators sit
+  closest to the call.
+
+Model settings (temperature, max tokens, ...) ride on how the profile's client
+is constructed today; the profile is the seam where first-class settings can be
+added later.
 
 ### Steps and the inference loop
 
