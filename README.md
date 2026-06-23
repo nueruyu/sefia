@@ -316,15 +316,22 @@ added by implementing the `Policy` ABC.
 
 ### Profiles
 
-A `Profile` is a named, reusable bundle of inference configuration: the
-model (its `LLMClient`) plus any policies that should apply whenever it is
-selected. Build profiles up front, register them on the `Session`, and select
-one per function with `@profile`:
+A `Profile` is a keyed, reusable bundle of inference configuration: the model
+(its `LLMClient`) plus any policies that should apply whenever it is selected.
+Build profiles up front, register them on the `Session`, and select one per
+function with `@profile`:
 
 ```python
+from enum import Enum, auto
+
 from sefia import Profile, Session, infer, profile
 from sefia_litellm import LiteLLMClient
 from sefios.policies import MaxRetries
+
+
+class Models(Enum):
+    FAST = auto()
+    SMART = auto()
 
 
 class MyAgent:
@@ -334,9 +341,9 @@ class MyAgent:
         ...
 
     @infer
-    @profile("smart")
+    @profile(Models.SMART)
     async def hard_step(self, draft: Draft) -> Result:
-        """Runs on the 'smart' profile instead."""
+        """Runs on the SMART profile instead."""
         ...
 
 
@@ -346,7 +353,7 @@ async with Session(
     session_store=sefia_store,
     profiles=[
         Profile(
-            name="smart",
+            key=Models.SMART,
             client=LiteLLMClient(model="gpt-4o"),
             policies=[MaxRetries(count=5)],
         )
@@ -355,11 +362,13 @@ async with Session(
     ...
 ```
 
-`@profile` records the profile **name** under the `"profile"` key of the
-function's `__sefia_metadata__` (just like `@policy`), so its order relative to
-`@infer` does not matter. Selecting by name keeps the call site decoupled from
-the concrete client — a test can bind the same name to a mock. An unknown name
-fails fast at call time with the list of registered profiles.
+A profile `key` is **any hashable value**, not just a string — an `Enum` member
+(shown above), an `int`, or a plain `"smart"` all work — so you can avoid
+stringly-typed configuration. `@profile` records the key under the `"profile"`
+slot of the function's `__sefia_metadata__` (just like `@policy`), so its order
+relative to `@infer` does not matter. Selecting by key keeps the call site
+decoupled from the concrete client — a test can bind the same key to a mock. An
+unknown key fails fast at call time with the list of registered profiles.
 
 Configuration is **layered, most specific wins**:
 

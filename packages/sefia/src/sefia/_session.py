@@ -1,3 +1,4 @@
+from collections.abc import Hashable
 from typing import Self, Type, TypeVar
 
 import glyff
@@ -63,15 +64,13 @@ class Session:
 
         self._inference_strategy = make_strategy(llm_client)
 
-        self._profile_strategies: dict[str, InferenceStrategy] = {}
-        self._profile_policies: dict[str, tuple[Policy, ...]] = {}
+        self._profile_strategies: dict[Hashable, InferenceStrategy] = {}
+        self._profile_policies: dict[Hashable, tuple[Policy, ...]] = {}
         for profile in profiles or []:
-            if profile.name in self._profile_strategies:
-                raise ValueError(
-                    f"Duplicate profile name: '{profile.name}'."
-                )
-            self._profile_strategies[profile.name] = make_strategy(profile.client)
-            self._profile_policies[profile.name] = tuple(profile.policies)
+            if profile.key in self._profile_strategies:
+                raise ValueError(f"Duplicate profile key: {profile.key!r}.")
+            self._profile_strategies[profile.key] = make_strategy(profile.client)
+            self._profile_policies[profile.key] = tuple(profile.policies)
 
         self._context: SessionContext | None = None
 

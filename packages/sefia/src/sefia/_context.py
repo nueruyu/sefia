@@ -1,6 +1,7 @@
 import contextvars
 import hashlib
 import json
+from collections.abc import Hashable
 from dataclasses import dataclass, field
 from typing import Type, TypeVar
 
@@ -41,39 +42,42 @@ class SessionContext:
     inference_strategy: InferenceStrategy
     policies: tuple[Policy, ...]
     tool_collector: ToolCollector
-    # Per-profile inference strategies and policies, keyed by profile name. An
-    # @infer function decorated with @profile("<name>") runs on the matching
+    # Per-profile inference strategies and policies, keyed by profile key. An
+    # @infer function decorated with @profile(<key>) runs on the matching
     # strategy and inherits its policies; functions without @profile use
     # ``inference_strategy`` (the session default) and only the session policies.
-    profile_strategies: dict[str, InferenceStrategy] = field(default_factory=dict)
-    profile_policies: dict[str, tuple[Policy, ...]] = field(default_factory=dict)
+    # Keys are any hashable value (e.g. a str or an Enum member).
+    profile_strategies: dict[Hashable, InferenceStrategy] = field(default_factory=dict)
+    profile_policies: dict[Hashable, tuple[Policy, ...]] = field(default_factory=dict)
     _state_stores: dict[str, StateStore] = field(
         default_factory=dict, init=False, repr=False
     )
 
     def resolve_profile(
-        self, profile_name: str | None
+        self, profile_key: Hashable | None
     ) -> tuple[InferenceStrategy, tuple[Policy, ...]]:
         """
         Resolve the inference strategy and policies for a selected profile.
 
         ``None`` (no ``@profile`` decorator) yields the session default strategy
-        and no extra policies. An unknown name raises with the list of registered
+        and no extra policies. An unknown key raises with the list of registered
         profiles, turning a typo into an immediate, actionable error instead of a
         silent fallback.
         """
-        if profile_name is None:
+        if profile_key is None:
             return self.inference_strategy, ()
         try:
-            strategy = self.profile_strategies[profile_name]
+            strategy = self.profile_strategies[profile_key]
         except KeyError:
-            available = ", ".join(sorted(self.profile_strategies)) or "(none)"
+            # Keys are arbitrary hashables (e.g. Enum members), which are not
+            # necessarily orderable, so list them by repr without sorting.
+            available = ", ".join(repr(k) for k in self.profile_strategies) or "(none)"
             raise RuntimeError(
-                f"Unknown profile '{profile_name}'. "
+                f"Unknown profile {profile_key!r}. "
                 f"Registered profiles: {available}. "
                 "Add it to the Session via profiles=[Profile(...)]."
             ) from None
-        return strategy, self.profile_policies.get(profile_name, ())
+        return strategy, self.profile_policies.get(profile_key, ())
 
     def get_call_state_store(
         self, key_suffix: str, state_type: Type[T]

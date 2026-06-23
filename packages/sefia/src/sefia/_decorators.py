@@ -1,5 +1,6 @@
 import functools
 import inspect
+from collections.abc import Hashable
 from typing import Callable, ParamSpec, Protocol, TypeVar, cast
 
 from glyff import engrave
@@ -79,20 +80,27 @@ def policy(p: Policy) -> _PolicyDecorator:
     return decorator
 
 
-def profile(profile_name: str) -> _PolicyDecorator:
+def profile(profile_key: Hashable) -> _PolicyDecorator:
     """
     Decorator that selects the profile an ``@infer`` function runs on.
 
     Instead of writing a raw model name at the call site, you reference a
-    :class:`~sefia.Profile` by name. A profile bundles the model (its
-    ``client``) and any policies that should apply whenever it is selected.
-    Profiles are built up front and registered on the :class:`~sefia.Session`
+    :class:`~sefia.Profile` by key. A profile bundles the model (its ``client``)
+    and any policies that should apply whenever it is selected. Profiles are
+    built up front and registered on the :class:`~sefia.Session`
     (``profiles=[...]``); this decorator only records which one to use, so the
     same code can bind to a different concrete client per session (e.g. a mock
     in tests)::
 
         @infer
         @profile("fast")
+        async def step(...): ...
+
+    The key is any hashable value, not just a string, so an ``Enum`` member (or
+    any other hashable) can be used to avoid stringly-typed configuration::
+
+        @infer
+        @profile(Models.SMART)
         async def step(...): ...
 
     Configuration is layered, most specific wins::
@@ -103,7 +111,7 @@ def profile(profile_name: str) -> _PolicyDecorator:
     policies are applied on top of the session policies and beneath the
     function's own ``@policy`` decorators.
 
-    The name is recorded under the ``"profile"`` key of the function's
+    The key is recorded under the ``"profile"`` key of the function's
     ``__sefia_metadata__`` dict, where ``@infer`` reads it. Like ``@policy``, the
     order relative to ``@infer`` does not matter, and any decorator stacked
     between the two must preserve the ``__wrapped__`` chain (``functools.wraps``)
@@ -111,21 +119,27 @@ def profile(profile_name: str) -> _PolicyDecorator:
     ``@profile`` decoration overrides an earlier one. When no ``@profile`` is
     present, the session's default ``llm_client`` and policies are used.
 
-    The referenced profile must exist on the session; an unknown name raises at
+    The referenced profile must exist on the session; an unknown key raises at
     call time with the list of registered profiles.
     """
 
-    if not isinstance(profile_name, str):
+    # ``None`` is the sentinel for "no @profile", and an unhashable key could
+    # never index the session registry — reject both up front.
+    if profile_key is None:
+        raise TypeError("@profile key must not be None.")
+    try:
+        hash(profile_key)
+    except TypeError as e:
         raise TypeError(
-            "@profile must be called with a profile name (str), "
-            'e.g. @profile("fast").'
-        )
+            "@profile must be called with a hashable key (e.g. a str or an Enum "
+            f"member), got {type(profile_key).__name__}."
+        ) from e
 
     def decorator(func: C) -> C:
         # Attach metadata to the innermost function so it lives in one place
         # regardless of decorator order or intermediate wrappers.
         metadata = _metadata.ensure_metadata(func)
-        metadata[_metadata.PROFILE_KEY] = profile_name
+        metadata[_metadata.PROFILE_KEY] = profile_key
         return func
 
     return decorator
@@ -175,8 +189,8 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
 
         # Resolve the profile selected by @profile, falling back to the session
         # default when none was attached.
-        profile_name = metadata.get(_metadata.PROFILE_KEY)
-        inference_strategy, profile_policies = context.resolve_profile(profile_name)
+        profile_key = metadata.get(_metadata.PROFILE_KEY)
+        inference_strategy, profile_policies = context.resolve_profile(profile_key)
 
         # Policies are additive across layers; collect them most-general first so
         # the most-specific (function) policies sit closest to the call:

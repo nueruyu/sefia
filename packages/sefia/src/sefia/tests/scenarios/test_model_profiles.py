@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from enum import Enum, auto
 
 import glyff
 import pytest
@@ -85,16 +86,24 @@ def test_profile_attaches_name_metadata():
     assert get_metadata(above)[PROFILE_KEY] == "smart"
 
 
-def test_profile_rejects_non_string():
-    """@profile raises a clear error when given something other than a name."""
-    with pytest.raises(TypeError):
-        profile(object())  # type: ignore
+def test_profile_rejects_unhashable_and_none_keys():
+    """@profile keys must be hashable and not the None sentinel."""
+    with pytest.raises(TypeError, match="hashable"):
+        profile(["not", "hashable"])  # type: ignore
+    with pytest.raises(TypeError, match="must not be None"):
+        profile(None)
+
+
+def test_profile_rejects_unhashable_profile_key():
+    """Profile rejects an unhashable key up front, with a clear message."""
+    with pytest.raises(TypeError, match="hashable"):
+        Profile(key=["x"], client=MockLLMClient(responses=[]))  # type: ignore
 
 
 def test_model_profile_normalizes_policies_to_tuple():
     """Profile accepts a list of policies but stores an immutable tuple."""
     p = _LabelPolicy(label="x", log=[])
-    prof = Profile(name="p", client=MockLLMClient(responses=[]), policies=[p])
+    prof = Profile(key="p", client=MockLLMClient(responses=[]), policies=[p])
     assert prof.policies == (p,)
 
 
@@ -113,7 +122,7 @@ async def test_infer_uses_selected_profile_client(
             llm_client=default_llm,
             glyff_session=gs,
             session_store=sefia_store,
-            profiles=[Profile(name="fast", client=fast_llm)],
+            profiles=[Profile(key="fast", client=fast_llm)],
         ):
             agent = _ProfileAgent()
             default_report = await agent.with_default(topic="t")
@@ -152,7 +161,7 @@ async def test_policy_layering_session_profile_function(
             policies=[_LabelPolicy(label="session", log=log)],
             profiles=[
                 Profile(
-                    name="fast",
+                    key="fast",
                     client=fast_llm,
                     policies=[_LabelPolicy(label="profile", log=log)],
                 )
@@ -174,7 +183,7 @@ async def test_unknown_profile_raises(serializer: Serializer, hasher: ArgsHasher
             llm_client=default_llm,
             glyff_session=gs,
             session_store=sefia_store,
-            profiles=[Profile(name="fast", client=default_llm)],
+            profiles=[Profile(key="fast", client=default_llm)],
         ):
             with pytest.raises(RuntimeError, match="Unknown profile 'missing'"):
                 await _MissingProfileAgent().step(topic="t")
@@ -187,13 +196,72 @@ def test_duplicate_profile_names_rejected(
     glyff_store, sefia_store = _make_stores(serializer)
     a = MockLLMClient(responses=[])
     b = MockLLMClient(responses=[])
-    with pytest.raises(ValueError, match="Duplicate profile name: 'dup'"):
+    with pytest.raises(ValueError, match="Duplicate profile key: 'dup'"):
         Session(
             llm_client=a,
             glyff_session=glyff.Session(id="dup", store=glyff_store, hasher=hasher),
             session_store=sefia_store,
             profiles=[
-                Profile(name="dup", client=a),
-                Profile(name="dup", client=b),
+                Profile(key="dup", client=a),
+                Profile(key="dup", client=b),
             ],
         )
+
+
+class _Models(Enum):
+    FAST = auto()
+    SMART = auto()
+
+
+async def test_enum_key_selects_profile(serializer: Serializer, hasher: ArgsHasher):
+    """A profile key can be any hashable, e.g. an Enum member."""
+
+    class Agent:
+        @infer
+        @profile(_Models.SMART)
+        async def step(self, topic: str) -> Report:
+            """Runs on the profile keyed by an enum member."""
+            ...
+
+    default_llm = MockLLMClient(responses=[_final_answer("default")])
+    smart_llm = MockLLMClient(responses=[_final_answer("from smart")])
+
+    glyff_store, sefia_store = _make_stores(serializer)
+    async with glyff.Session(id="enum-key", store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=default_llm,
+            glyff_session=gs,
+            session_store=sefia_store,
+            profiles=[Profile(key=_Models.SMART, client=smart_llm)],
+        ):
+            report = await Agent().step(topic="t")
+
+    assert report.summary == "from smart"
+    assert len(smart_llm.requests) == 1
+    assert len(default_llm.requests) == 0
+
+
+async def test_unknown_enum_key_lists_registered(
+    serializer: Serializer, hasher: ArgsHasher
+):
+    """An unknown key reports the registered profiles by repr (no sorting, since
+    arbitrary keys are not necessarily orderable)."""
+
+    class Agent:
+        @infer
+        @profile(_Models.FAST)
+        async def step(self, topic: str) -> Report:
+            """Selects a profile keyed by an enum member that is not registered."""
+            ...
+
+    default_llm = MockLLMClient(responses=[_final_answer("unused")])
+    glyff_store, sefia_store = _make_stores(serializer)
+    async with glyff.Session(id="enum-miss", store=glyff_store, hasher=hasher) as gs:
+        async with Session(
+            llm_client=default_llm,
+            glyff_session=gs,
+            session_store=sefia_store,
+            profiles=[Profile(key=_Models.SMART, client=default_llm)],
+        ):
+            with pytest.raises(RuntimeError, match=r"Unknown profile <_Models.FAST"):
+                await Agent().step(topic="t")
