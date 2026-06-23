@@ -7,7 +7,7 @@ import glyff_file_store
 import sefia
 import sefia.stores
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import Policy
+from sefia import ModelProfile, Policy
 from sefia.llm import LLMClient
 
 from .policies import DefaultPolicy
@@ -26,6 +26,7 @@ class SessionScope:
         model: str | None = None,
         llm_client: LLMClient | None = None,
         policies: list[Policy] | None = None,
+        profiles: list[ModelProfile] | None = None,
         stream: bool = False,
         max_steps: int | None = 25,
     ):
@@ -33,6 +34,7 @@ class SessionScope:
         self.model = model
         self.llm_client = llm_client
         self.policies = list(policies or [])
+        self.profiles = list(profiles or [])
         self.stream = stream
         self.max_steps = max_steps
 
@@ -44,6 +46,7 @@ class SessionScope:
         model: str | None = None,
         stream: bool | None = None,
         policies: list[Policy] | None = None,
+        profiles: list[ModelProfile] | None = None,
     ) -> AsyncIterator[sefia.Session]:
         """Run code within a configured Sefia session context."""
         llm_client = self.llm_client
@@ -84,12 +87,17 @@ class SessionScope:
             final_policies.extend(policies)
         final_policies.append(DefaultPolicy(max_steps=self.max_steps))
 
+        final_profiles: list[ModelProfile] = list(self.profiles)
+        if profiles is not None:
+            final_profiles.extend(profiles)
+
         async with gs:
             async with sefia.Session(
                 llm_client=llm_client,
                 glyff_session=gs,
                 session_store=session_store,
                 policies=final_policies,
+                profiles=final_profiles,
                 stream=resolved_stream,
             ) as session:
                 yield session

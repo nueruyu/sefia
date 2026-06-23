@@ -3,9 +3,10 @@ from typing import Self, Type, TypeVar
 import glyff
 
 from ._context import SessionContext, context_var
-from ._interfaces import Policy
+from ._interfaces import InferenceStrategy, Policy
 from ._interfaces.model_inspector import ModelInspector
 from ._interfaces.session_store import SessionStore
+from ._profiles import ModelProfile
 from ._state_store import StateStore
 from ._tool_system import ToolCollector
 from .llm._client import LLMClient
@@ -30,6 +31,7 @@ class Session:
         glyff_session: glyff.Session,
         session_store: SessionStore,
         policies: list[Policy] | None = None,
+        profiles: list[ModelProfile] | None = None,
         tool_collector: ToolCollector | None = None,
         model_inspector: ModelInspector | None = None,
         stream: bool = False,
@@ -46,13 +48,29 @@ class Session:
             model_inspector=model_inspector
         )
         prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
-        self._inference_strategy = LLMInferenceStrategy(
-            llm_client,
-            model_inspector=model_inspector,
-            prompt_formatter=prompt_formatter,
-            json_default=pydantic_json_default,
-            stream=stream,
-        )
+
+        # A profile only swaps the LLM client (the model and its settings); the
+        # rest of the strategy (inspector, formatter, streaming) is shared, so
+        # build each profile's strategy through the same factory as the default.
+        def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
+            return LLMInferenceStrategy(
+                client,
+                model_inspector=model_inspector,
+                prompt_formatter=prompt_formatter,
+                json_default=pydantic_json_default,
+                stream=stream,
+            )
+
+        self._inference_strategy = make_strategy(llm_client)
+
+        self._profile_strategies: dict[str, InferenceStrategy] = {}
+        for profile in profiles or []:
+            if profile.name in self._profile_strategies:
+                raise ValueError(
+                    f"Duplicate model profile name: '{profile.name}'."
+                )
+            self._profile_strategies[profile.name] = make_strategy(profile.client)
+
         self._context: SessionContext | None = None
 
     def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:
@@ -73,6 +91,7 @@ class Session:
             inference_strategy=self._inference_strategy,
             policies=tuple(self._policies),
             tool_collector=self._tool_collector,
+            profile_strategies=self._profile_strategies,
         )
         self._context_token = context_var.set(self._context)
         return self

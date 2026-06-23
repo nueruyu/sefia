@@ -314,6 +314,50 @@ caller side (or stack multiple `@policy` decorators).
 Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
 added by implementing the `Policy` ABC.
 
+### Model profiles
+
+By default every `@infer` call runs on the session's `llm_client`. To run a
+specific step on a different model, build a `ModelProfile` up front, register it
+on the `Session`, and select it per function with `@model`:
+
+```python
+from sefia import ModelProfile, Session, infer, model
+from sefia_litellm import LiteLLMClient
+
+
+class MyAgent:
+    @infer
+    async def quick_step(self, request: Request) -> Draft:
+        """Runs on the session default model."""
+        ...
+
+    @infer
+    @model("smart")
+    async def hard_step(self, draft: Draft) -> Result:
+        """Runs on the 'smart' profile instead."""
+        ...
+
+
+async with Session(
+    llm_client=LiteLLMClient(model="gpt-4o-mini"),
+    glyff_session=gs,
+    session_store=sefia_store,
+    profiles=[ModelProfile(name="smart", client=LiteLLMClient(model="gpt-4o"))],
+):
+    ...
+```
+
+`@model` records the profile **name** under the `"model_profile"` key of the
+function's `__sefia_metadata__` (just like `@policy`), so its order relative to
+`@infer` does not matter. Selecting by name keeps the call site decoupled from
+the concrete client — a test can bind the same name to a mock. An unknown name
+fails fast at call time with the list of registered profiles.
+
+A `ModelProfile` pairs a name with the `LLMClient` used to run it; model
+settings (temperature, max tokens, ...) ride on how that client is constructed
+today, and the profile is the seam where first-class settings can be added
+later.
+
 ### Steps and the inference loop
 
 The executor owns the inference lifecycle and the inner step loop, and wraps

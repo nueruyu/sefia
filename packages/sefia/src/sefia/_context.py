@@ -41,9 +41,35 @@ class SessionContext:
     inference_strategy: InferenceStrategy
     policies: tuple[Policy, ...]
     tool_collector: ToolCollector
+    # Per-profile inference strategies, keyed by profile name. An @infer function
+    # decorated with @model("<name>") runs on the matching strategy; functions
+    # without @model use ``inference_strategy`` (the session default).
+    profile_strategies: dict[str, InferenceStrategy] = field(default_factory=dict)
     _state_stores: dict[str, StateStore] = field(
         default_factory=dict, init=False, repr=False
     )
+
+    def resolve_inference_strategy(
+        self, profile_name: str | None
+    ) -> InferenceStrategy:
+        """
+        Resolve the inference strategy for a selected model profile.
+
+        ``None`` (no ``@model`` decorator) yields the session default. An unknown
+        name raises with the list of registered profiles, turning a typo into an
+        immediate, actionable error instead of a silent fallback.
+        """
+        if profile_name is None:
+            return self.inference_strategy
+        try:
+            return self.profile_strategies[profile_name]
+        except KeyError:
+            available = ", ".join(sorted(self.profile_strategies)) or "(none)"
+            raise RuntimeError(
+                f"Unknown model profile '{profile_name}'. "
+                f"Registered profiles: {available}. "
+                "Add it to the Session via profiles=[ModelProfile(...)]."
+            ) from None
 
     def get_call_state_store(
         self, key_suffix: str, state_type: Type[T]

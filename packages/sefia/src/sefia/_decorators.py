@@ -79,6 +79,48 @@ def policy(p: Policy) -> _PolicyDecorator:
     return decorator
 
 
+def model(profile_name: str) -> _PolicyDecorator:
+    """
+    Decorator that selects the model profile an ``@infer`` function runs on.
+
+    Instead of writing a raw model name at the call site, you reference a
+    :class:`~sefia.ModelProfile` by name. Profiles are built up front and
+    registered on the :class:`~sefia.Session` (``profiles=[...]``); this
+    decorator only records which one to use, so the same code can bind to a
+    different concrete client per session (e.g. a mock in tests)::
+
+        @infer
+        @model("fast")
+        async def step(...): ...
+
+    The name is recorded under the ``"model_profile"`` key of the function's
+    ``__sefia_metadata__`` dict, where ``@infer`` reads it. Like ``@policy``, the
+    order relative to ``@infer`` does not matter, and any decorator stacked
+    between the two must preserve the ``__wrapped__`` chain (``functools.wraps``)
+    for the selection to be found. A function has a single model profile; a later
+    ``@model`` decoration overrides an earlier one. When no ``@model`` is present,
+    the session's default ``llm_client`` is used.
+
+    The referenced profile must exist on the session; an unknown name raises at
+    call time with the list of registered profiles.
+    """
+
+    if not isinstance(profile_name, str):
+        raise TypeError(
+            "@model must be called with a profile name (str), "
+            'e.g. @model("fast").'
+        )
+
+    def decorator(func: C) -> C:
+        # Attach metadata to the innermost function so it lives in one place
+        # regardless of decorator order or intermediate wrappers.
+        metadata = _metadata.ensure_metadata(func)
+        metadata[_metadata.MODEL_PROFILE_KEY] = profile_name
+        return func
+
+    return decorator
+
+
 def _partition_middleware(
     middleware: list,
 ) -> tuple[list[InferenceMiddleware], list[StepMiddleware]]:
@@ -130,11 +172,16 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
         publisher = EventPublisher(all_handlers)
         inference_middlewares, step_middlewares = _partition_middleware(all_middleware)
 
+        # Resolve the model profile selected by @model, falling back to the
+        # session default when none was attached.
+        profile_name = metadata.get(_metadata.MODEL_PROFILE_KEY)
+        inference_strategy = context.resolve_inference_strategy(profile_name)
+
         executor = InferenceExecutor(
             func=unwrapped,
             args=args,
             kwargs=kwargs,
-            inference_strategy=context.inference_strategy,
+            inference_strategy=inference_strategy,
             tool_collector=context.tool_collector,
             engrave=engrave,
             publisher=publisher,
