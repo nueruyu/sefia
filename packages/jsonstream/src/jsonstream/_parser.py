@@ -57,7 +57,10 @@ class IncrementalJsonParser:
             yield from self._parse_string_char(char)
             return
 
-        if char.isspace():
+        # RFC 8259 only allows space, tab, line feed, and carriage return as
+        # structural whitespace; str.isspace() would also accept \v, \f, and
+        # other Unicode whitespace, which are invalid outside of strings.
+        if char in " \t\n\r":
             yield from self._flush_literal_buffer_if_any()
             return
 

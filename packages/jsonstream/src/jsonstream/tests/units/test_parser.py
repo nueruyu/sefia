@@ -59,6 +59,14 @@ def test_whitespace_only_is_fatal():
     assert_fatal_error(events, "Expected JSON value")
 
 
+@pytest.mark.parametrize("whitespace", ["\v", "\f", "\u00a0"])
+def test_non_rfc_whitespace_is_not_treated_as_whitespace(whitespace):
+    # Only space, tab, LF, and CR are JSON whitespace; other Unicode
+    # whitespace must be rejected rather than silently skipped.
+    events = run_parser([f"{whitespace}1"])
+    assert_fatal_error(events, "Invalid literal or number")
+
+
 def test_public_api_exports_parser_only():
     import jsonstream
 
