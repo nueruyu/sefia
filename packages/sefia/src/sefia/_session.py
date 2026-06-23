@@ -6,7 +6,7 @@ from ._context import SessionContext, context_var
 from ._interfaces import InferenceStrategy, Policy
 from ._interfaces.model_inspector import ModelInspector
 from ._interfaces.session_store import SessionStore
-from ._profiles import ModelProfile
+from ._profiles import Profile
 from ._state_store import StateStore
 from ._tool_system import ToolCollector
 from .llm._client import LLMClient
@@ -31,7 +31,7 @@ class Session:
         glyff_session: glyff.Session,
         session_store: SessionStore,
         policies: list[Policy] | None = None,
-        profiles: list[ModelProfile] | None = None,
+        profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
         model_inspector: ModelInspector | None = None,
         stream: bool = False,

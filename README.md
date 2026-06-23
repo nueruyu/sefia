@@ -316,13 +316,13 @@ added by implementing the `Policy` ABC.
 
 ### Profiles
 
-A `ModelProfile` is a named, reusable bundle of inference configuration: the
+A `Profile` is a named, reusable bundle of inference configuration: the
 model (its `LLMClient`) plus any policies that should apply whenever it is
 selected. Build profiles up front, register them on the `Session`, and select
 one per function with `@profile`:
 
 ```python
-from sefia import ModelProfile, Session, infer, profile
+from sefia import Profile, Session, infer, profile
 from sefia_litellm import LiteLLMClient
 from sefios.policies import MaxRetries
 
@@ -345,7 +345,7 @@ async with Session(
     glyff_session=gs,
     session_store=sefia_store,
     profiles=[
-        ModelProfile(
+        Profile(
             name="smart",
             client=LiteLLMClient(model="gpt-4o"),
             policies=[MaxRetries(count=5)],

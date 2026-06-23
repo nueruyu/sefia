@@ -84,7 +84,7 @@ def profile(profile_name: str) -> _PolicyDecorator:
     Decorator that selects the profile an ``@infer`` function runs on.
 
     Instead of writing a raw model name at the call site, you reference a
-    :class:`~sefia.ModelProfile` by name. A profile bundles the model (its
+    :class:`~sefia.Profile` by name. A profile bundles the model (its
     ``client``) and any policies that should apply whenever it is selected.
     Profiles are built up front and registered on the :class:`~sefia.Session`
     (``profiles=[...]``); this decorator only records which one to use, so the

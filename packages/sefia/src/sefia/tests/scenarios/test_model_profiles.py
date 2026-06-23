@@ -7,7 +7,7 @@ from glyff import ArgsHasher, Serializer
 from glyff.store import MemoryClient
 from glyff.store import MemorySessionStore as GlyffMemoryStore
 
-from sefia import ModelProfile, Policy, Session, infer, policy, profile
+from sefia import Profile, Policy, Session, infer, policy, profile
 from sefia._metadata import PROFILE_KEY, get_metadata
 from sefia.event_system import EventHandler
 from sefia.llm import LLMResponse
@@ -92,9 +92,9 @@ def test_profile_rejects_non_string():
 
 
 def test_model_profile_normalizes_policies_to_tuple():
-    """ModelProfile accepts a list of policies but stores an immutable tuple."""
+    """Profile accepts a list of policies but stores an immutable tuple."""
     p = _LabelPolicy(label="x", log=[])
-    prof = ModelProfile(name="p", client=MockLLMClient(responses=[]), policies=[p])
+    prof = Profile(name="p", client=MockLLMClient(responses=[]), policies=[p])
     assert prof.policies == (p,)
 
 
@@ -113,7 +113,7 @@ async def test_infer_uses_selected_profile_client(
             llm_client=default_llm,
             glyff_session=gs,
             session_store=sefia_store,
-            profiles=[ModelProfile(name="fast", client=fast_llm)],
+            profiles=[Profile(name="fast", client=fast_llm)],
         ):
             agent = _ProfileAgent()
             default_report = await agent.with_default(topic="t")
@@ -151,7 +151,7 @@ async def test_policy_layering_session_profile_function(
             session_store=sefia_store,
             policies=[_LabelPolicy(label="session", log=log)],
             profiles=[
-                ModelProfile(
+                Profile(
                     name="fast",
                     client=fast_llm,
                     policies=[_LabelPolicy(label="profile", log=log)],
@@ -174,7 +174,7 @@ async def test_unknown_profile_raises(serializer: Serializer, hasher: ArgsHasher
             llm_client=default_llm,
             glyff_session=gs,
             session_store=sefia_store,
-            profiles=[ModelProfile(name="fast", client=default_llm)],
+            profiles=[Profile(name="fast", client=default_llm)],
         ):
             with pytest.raises(RuntimeError, match="Unknown profile 'missing'"):
                 await _MissingProfileAgent().step(topic="t")
@@ -193,7 +193,7 @@ def test_duplicate_profile_names_rejected(
             glyff_session=glyff.Session(id="dup", store=glyff_store, hasher=hasher),
             session_store=sefia_store,
             profiles=[
-                ModelProfile(name="dup", client=a),
-                ModelProfile(name="dup", client=b),
+                Profile(name="dup", client=a),
+                Profile(name="dup", client=b),
             ],
         )

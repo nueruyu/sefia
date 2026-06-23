@@ -71,7 +71,7 @@ class SessionContext:
             raise RuntimeError(
                 f"Unknown profile '{profile_name}'. "
                 f"Registered profiles: {available}. "
-                "Add it to the Session via profiles=[ModelProfile(...)]."
+                "Add it to the Session via profiles=[Profile(...)]."
             ) from None
         return strategy, self.profile_policies.get(profile_name, ())
 

@@ -6,7 +6,7 @@ from .llm._client import LLMClient
 
 
 @dataclass(frozen=True)
-class ModelProfile:
+class Profile:
     """
     A named, reusable bundle of inference configuration for ``@infer`` functions.
 
