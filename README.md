@@ -293,13 +293,22 @@ either or both:
   step) and steers the executor's loops.
 
 ```python
-from sefia import infer, policy
-from sefios.policies import MaxRetries
+from sefia import InferenceMiddleware, Policy, infer, policy
+
+
+class Retry(Policy):
+    """A policy that retries a recoverable inference failure."""
+
+    def __init__(self, count: int):
+        self._count = count
+
+    def create_middleware(self) -> list[InferenceMiddleware]:
+        ...  # return a retry middleware bounded by self._count
 
 
 class MyAgent:
     @infer
-    @policy(MaxRetries(count=5))
+    @policy(Retry(count=5))
     async def critical_task(self, request: Request) -> Result:
         """Handle the request with retry behavior."""
         ...
@@ -311,8 +320,9 @@ records the policy under the `"policies"` key of the function's
 decorators does not matter. To apply more than one policy, merge them on the
 caller side (or stack multiple `@policy` decorators).
 
-Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
-added by implementing the `Policy` ABC.
+Custom policies are added by implementing the `Policy` ABC, as above. The
+`sefios` companion package ships ready-made ones such as `MaxRetries` and
+`MaxSteps`.
 
 ### Profiles
 
@@ -404,12 +414,21 @@ Two seams are available, exposed as ABCs from `sefia`:
   cap the loop, raising `MaxStepsExceededError` once the step limit is reached.
 
 The executor does not cap the loop on its own; without a `StepMiddleware` there
-is no default cap. The `sefios` session helpers add `MaxSteps(count=25)` by
-default; pass `max_steps=None` to opt out.
+is no default cap. The `sefios` session helpers add a 25-step cap by default;
+pass `max_steps=None` to opt out.
 
 ```python
-from sefia import infer, policy
-from sefios.policies import MaxSteps
+from sefia import Policy, StepMiddleware, infer, policy
+
+
+class MaxSteps(Policy):
+    """A policy that caps the inference loop at a fixed number of steps."""
+
+    def __init__(self, count: int):
+        self._count = count
+
+    def create_middleware(self) -> list[StepMiddleware]:
+        ...  # return a step middleware that raises once self._count is reached
 
 
 class MyAgent:
@@ -420,8 +439,8 @@ class MyAgent:
         ...
 ```
 
-`MaxSteps` can also be passed to `Session(policies=[...])` to apply across an
-entire session.
+A step-capping policy can also be passed to `Session(policies=[...])` to apply
+across an entire session.
 
 A failing tool is never treated as a retryable failure: the executor stringifies
 the error into the history and feeds it back to the model so it can recover,
