@@ -75,7 +75,7 @@ def policy(p: Policy) -> _PolicyDecorator:
         # Attach metadata to the innermost function so it lives in one place
         # regardless of decorator order or intermediate wrappers.
         metadata = _metadata.ensure_metadata(func)
-        metadata.setdefault(_metadata.POLICIES_KEY, []).append(p)
+        metadata.setdefault(_metadata.KEY_POLICIES, []).append(p)
         return func
 
     return decorator
@@ -116,7 +116,7 @@ def profile(profile_key: Hashable) -> _PolicyDecorator:
 
     def decorator(func: C) -> C:
         metadata = _metadata.ensure_metadata(func)
-        metadata[_metadata.PROFILE_KEY] = profile_key
+        metadata[_metadata.KEY_PROFILE_KEY] = profile_key
         return func
 
     return decorator
@@ -161,9 +161,9 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
         context = get_context()
         # From the innermost function, so decorator order does not matter.
         metadata = _metadata.get_metadata(unwrapped)
-        fn_policies = metadata.get(_metadata.POLICIES_KEY, [])
+        fn_policies = metadata.get(_metadata.KEY_POLICIES, [])
 
-        profile_key = metadata.get(_metadata.PROFILE_KEY)
+        profile_key = metadata.get(_metadata.KEY_PROFILE_KEY)
         inference_strategy, profile_policies = context.resolve_profile(profile_key)
 
         # Additive across layers, most-general first (session -> profile -> function).

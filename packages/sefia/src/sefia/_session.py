@@ -13,8 +13,8 @@ from ._tool_system import ToolCollector
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
 from .llm._xml_prompt_formatter import XmlPromptFormatter
-from .pydantic._model_inspector import PydanticModelInspector
 from .pydantic._json_utils import pydantic_json_default
+from .pydantic._model_inspector import PydanticModelInspector
 from .tool_collectors import DefaultToolCollector
 
 T = TypeVar("T")
@@ -91,7 +91,7 @@ class Session:
             inference_strategy=self._inference_strategy,
             policies=tuple(self._policies),
             tool_collector=self._tool_collector,
-            profiles=self._profiles,
+            _profiles=self._profiles,
         )
         self._context_token = context_var.set(self._context)
         return self

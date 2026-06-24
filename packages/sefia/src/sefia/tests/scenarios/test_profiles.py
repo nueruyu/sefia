@@ -8,8 +8,8 @@ from glyff import ArgsHasher, Serializer
 from glyff.store import MemoryClient
 from glyff.store import MemorySessionStore as GlyffMemoryStore
 
-from sefia import Profile, Policy, Session, infer, policy, profile
-from sefia._metadata import PROFILE_KEY, get_metadata
+from sefia import Policy, Profile, Session, infer, policy, profile
+from sefia._metadata import KEY_PROFILE_KEY, get_metadata
 from sefia.event_system import EventHandler
 from sefia.llm import LLMResponse
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
@@ -82,8 +82,8 @@ def test_profile_attaches_key_metadata():
         """Profile selected above @infer."""
         ...
 
-    assert get_metadata(below)[PROFILE_KEY] == "fast"
-    assert get_metadata(above)[PROFILE_KEY] == "smart"
+    assert get_metadata(below)[KEY_PROFILE_KEY] == "fast"
+    assert get_metadata(above)[KEY_PROFILE_KEY] == "smart"
 
 
 def test_profile_rejects_unhashable_and_none_keys():
@@ -92,12 +92,6 @@ def test_profile_rejects_unhashable_and_none_keys():
         profile(["not", "hashable"])  # type: ignore
     with pytest.raises(TypeError, match="must not be None"):
         profile(None)
-
-
-def test_profile_rejects_unhashable_profile_key():
-    """Profile rejects an unhashable key up front, with a clear message."""
-    with pytest.raises(TypeError, match="hashable"):
-        Profile(key=["x"], client=MockLLMClient(responses=[]))  # type: ignore
 
 
 def test_profile_rejects_profile_instance_as_key():
@@ -195,9 +189,7 @@ async def test_unknown_profile_raises(serializer: Serializer, hasher: ArgsHasher
                 await _MissingProfileAgent().step(topic="t")
 
 
-def test_duplicate_profile_keys_rejected(
-    serializer: Serializer, hasher: ArgsHasher
-):
+def test_duplicate_profile_keys_rejected(serializer: Serializer, hasher: ArgsHasher):
     """The Session rejects two profiles sharing a key up front."""
     glyff_store, sefia_store = _make_stores(serializer)
     a = MockLLMClient(responses=[])

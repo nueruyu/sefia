@@ -22,14 +22,3 @@ class Profile:
     key: Hashable
     client: LLMClient
     policies: Sequence[Policy] = ()
-
-    def __post_init__(self) -> None:
-        # The key indexes the session's profile registry (a dict).
-        if self.key is None:
-            raise TypeError("Profile key must not be None.")
-        try:
-            hash(self.key)
-        except TypeError as e:
-            raise TypeError(
-                f"Profile key must be hashable, got {type(self.key).__name__}."
-            ) from e

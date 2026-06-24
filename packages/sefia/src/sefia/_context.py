@@ -50,8 +50,7 @@ class SessionContext:
     inference_strategy: InferenceStrategy
     policies: tuple[Policy, ...]
     tool_collector: ToolCollector
-    # Registered profiles, keyed by @profile(<key>).
-    profiles: dict[Hashable, ProfileBinding] = field(default_factory=dict)
+    _profiles: dict[Hashable, ProfileBinding] = field(default_factory=dict)
     _state_stores: dict[str, StateStore] = field(
         default_factory=dict, init=False, repr=False
     )
@@ -68,10 +67,9 @@ class SessionContext:
         if profile_key is None:
             return self.inference_strategy, ()
         try:
-            binding = self.profiles[profile_key]
+            binding = self._profiles[profile_key]
         except KeyError:
-            # repr, not sorted: arbitrary keys (e.g. Enums) need not be orderable.
-            available = ", ".join(repr(k) for k in self.profiles) or "(none)"
+            available = ", ".join(repr(k) for k in self._profiles) or "(none)"
             raise RuntimeError(
                 f"Unknown profile {profile_key!r}. "
                 f"Registered profiles: {available}. "

@@ -4,8 +4,8 @@ from typing import Callable
 # Attribute that holds sefia's per-function metadata dict, and the keys under
 # which inference policies and the selected profile live inside it.
 METADATA_ATTR = "__sefia_metadata__"
-POLICIES_KEY = "policies"
-PROFILE_KEY = "profile"
+KEY_POLICIES = "policies"
+KEY_PROFILE_KEY = "profile_key"
 
 
 def get_metadata(func: Callable) -> dict:
