@@ -326,7 +326,6 @@ from enum import Enum, auto
 
 from sefia import Profile, Session, infer, profile
 from sefia_litellm import LiteLLMClient
-from sefios.policies import MaxRetries
 
 
 class Models(Enum):
@@ -355,7 +354,8 @@ async with Session(
         Profile(
             key=Models.SMART,
             client=LiteLLMClient(model="gpt-4o"),
-            policies=[MaxRetries(count=5)],
+            # policies=[...] may also be attached; any sefia Policy works
+            # (see "Policies" above) and applies whenever this profile is selected.
         )
     ],
 ):

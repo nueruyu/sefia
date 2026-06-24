@@ -100,6 +100,12 @@ def test_profile_rejects_unhashable_profile_key():
         Profile(key=["x"], client=MockLLMClient(responses=[]))  # type: ignore
 
 
+def test_profile_rejects_profile_instance_as_key():
+    """@profile rejects a Profile instance passed where its key is expected."""
+    with pytest.raises(TypeError, match="not the Profile instance itself"):
+        profile(Profile(key="fast", client=MockLLMClient(responses=[])))  # type: ignore
+
+
 def test_model_profile_normalizes_policies_to_tuple():
     """Profile accepts a list of policies but stores an immutable tuple."""
     p = _LabelPolicy(label="x", log=[])

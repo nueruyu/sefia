@@ -127,6 +127,16 @@ def profile(profile_key: Hashable) -> _PolicyDecorator:
     # never index the session registry — reject both up front.
     if profile_key is None:
         raise TypeError("@profile key must not be None.")
+    # A Profile is a frozen dataclass and therefore hashable, so passing the
+    # instance instead of its key would slip past the hash check and only fail
+    # later with a confusing lookup error — reject it explicitly here.
+    from ._profiles import Profile
+
+    if isinstance(profile_key, Profile):
+        raise TypeError(
+            "@profile must be called with the profile's key (e.g. a str or an "
+            "Enum member), not the Profile instance itself."
+        )
     try:
         hash(profile_key)
     except TypeError as e:
@@ -195,7 +205,7 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
         # Policies are additive across layers; collect them most-general first so
         # the most-specific (function) policies sit closest to the call:
         #   session  ->  profile  ->  function
-        all_policies = list(context.policies) + list(profile_policies) + fn_policies
+        all_policies = [*context.policies, *profile_policies, *fn_policies]
         all_handlers = [
             handler for p in all_policies for handler in p.create_handlers()
         ]
