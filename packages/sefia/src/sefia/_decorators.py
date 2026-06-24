@@ -1,5 +1,6 @@
 import functools
 import inspect
+from collections.abc import Hashable
 from typing import Callable, ParamSpec, Protocol, TypeVar, cast
 
 from glyff import engrave
@@ -8,6 +9,7 @@ from . import _metadata
 from ._context import get_context
 from ._executor import InferenceExecutor
 from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
+from ._profiles import Profile
 from .event_system import EventPublisher
 
 C = TypeVar("C", bound=Callable[..., object])
@@ -73,7 +75,48 @@ def policy(p: Policy) -> _PolicyDecorator:
         # Attach metadata to the innermost function so it lives in one place
         # regardless of decorator order or intermediate wrappers.
         metadata = _metadata.ensure_metadata(func)
-        metadata.setdefault(_metadata.POLICIES_KEY, []).append(p)
+        metadata.setdefault(_metadata.KEY_POLICIES, []).append(p)
+        return func
+
+    return decorator
+
+
+def profile(profile_key: Hashable) -> _PolicyDecorator:
+    """
+    Select the profile an ``@infer`` function runs on, by key.
+
+    A :class:`~sefia.Profile` bundles a model client and policies; it is
+    registered on the :class:`~sefia.Session` and referenced here by key, so the
+    call site stays decoupled from the concrete client (a test can rebind the
+    key to a mock). The key is any hashable — a string, an ``Enum`` member, ...::
+
+        @infer
+        @profile(Models.SMART)
+        async def step(...): ...
+
+    Configuration is layered, most specific wins:
+    ``function (@policy / @profile) > profile > session``. Order relative to
+    ``@infer`` does not matter; an unknown key raises at call time.
+    """
+
+    if profile_key is None:
+        raise TypeError("@profile key must not be None.")
+    # A Profile is itself hashable, so catch this mix-up before the hash check.
+    if isinstance(profile_key, Profile):
+        raise TypeError(
+            "@profile takes the profile's key (e.g. a str or Enum member), "
+            "not the Profile instance itself."
+        )
+    try:
+        hash(profile_key)
+    except TypeError as e:
+        raise TypeError(
+            f"@profile key must be hashable, got {type(profile_key).__name__}."
+        ) from e
+
+    def decorator(func: C) -> C:
+        metadata = _metadata.ensure_metadata(func)
+        metadata[_metadata.KEY_PROFILE_KEY] = profile_key
         return func
 
     return decorator
@@ -116,11 +159,15 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
     @functools.wraps(func)
     async def _run(*args, **kwargs):
         context = get_context()
-        # Read policy metadata from the innermost function so the decorator
-        # order does not matter and intermediate wrappers are handled.
+        # From the innermost function, so decorator order does not matter.
         metadata = _metadata.get_metadata(unwrapped)
-        fn_policies = metadata.get(_metadata.POLICIES_KEY, [])
-        all_policies = list(context.policies) + fn_policies
+        fn_policies = metadata.get(_metadata.KEY_POLICIES, [])
+
+        profile_key = metadata.get(_metadata.KEY_PROFILE_KEY)
+        inference_strategy, profile_policies = context.resolve_profile(profile_key)
+
+        # Additive across layers, most-general first (session -> profile -> function).
+        all_policies = [*context.policies, *profile_policies, *fn_policies]
         all_handlers = [
             handler for p in all_policies for handler in p.create_handlers()
         ]
@@ -134,7 +181,7 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
             func=unwrapped,
             args=args,
             kwargs=kwargs,
-            inference_strategy=context.inference_strategy,
+            inference_strategy=inference_strategy,
             tool_collector=context.tool_collector,
             engrave=engrave,
             publisher=publisher,
