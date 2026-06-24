@@ -1,12 +1,12 @@
 from typing import Any
 from unittest.mock import Mock
 
-from sefia._arg_stream import ArgStreamRouter
-from sefia.inference import FunctionInfo, ToolCallDecision
 from sefia.event_system import EventPublisher
+from sefia._arg_stream import ToolArgStreamer
+from sefia._tool_system import ToolRegistry
+from sefia.inference import FunctionInfo, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._client import LLMClient
-from sefia.llm.events import AfterLLMCall, BeforeLLMCall, LLMTokenReceived
 from sefia.pydantic import PydanticModelInspector
 from sefia.streaming import (
     ArgStream,
@@ -32,12 +32,11 @@ async def run_router(
     json_text: str, *, chunk_size: int = 10_000, tool: str = "ask_human"
 ) -> list[Any]:
     collector = Collector()
-    router = ArgStreamRouter({tool: collector})
+    streamer = ToolArgStreamer({tool: collector})
 
-    await router.handle(BeforeLLMCall(messages=[], tools=None, output_schema=None))
     for start in range(0, len(json_text), chunk_size):
-        await router.handle(LLMTokenReceived(token=json_text[start : start + chunk_size]))
-    await router.handle(AfterLLMCall(response=LLMResponse(content=json_text)))
+        streamer.on_token(json_text[start : start + chunk_size])
+    await streamer.close()
     return collector.events
 
 
@@ -45,12 +44,11 @@ async def run_router_handlers(
     json_text: str, tools: list[str], *, chunk_size: int = 10_000
 ) -> dict[str, list[Any]]:
     collectors = {name: Collector() for name in tools}
-    router = ArgStreamRouter(dict(collectors))
+    streamer = ToolArgStreamer(dict(collectors))
 
-    await router.handle(BeforeLLMCall(messages=[], tools=None, output_schema=None))
     for start in range(0, len(json_text), chunk_size):
-        await router.handle(LLMTokenReceived(token=json_text[start : start + chunk_size]))
-    await router.handle(AfterLLMCall(response=LLMResponse(content=json_text)))
+        streamer.on_token(json_text[start : start + chunk_size])
+    await streamer.close()
     return {name: collector.events for name, collector in collectors.items()}
 
 
@@ -222,8 +220,13 @@ async def test_arguments_stream_through_a_real_strategy():
     )
 
     collector = Collector()
-    publisher = EventPublisher([ArgStreamRouter({"ask_human": collector})])
-    tools = [{"type": "function", "function": {"name": "ask_human", "parameters": {}}}]
+    publisher = EventPublisher([])
+    tools = ToolRegistry()
+    tools.add(
+        lambda: None,
+        {"type": "function", "function": {"name": "ask_human", "parameters": {}}},
+        stream_handler=collector,
+    )
 
     decision = await strategy.decide_next_step(
         function_info=_function_info(),

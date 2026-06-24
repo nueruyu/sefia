@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .exceptions import ToolConflictError
+from .streaming import StreamHandler
 
 
 @dataclass(frozen=True)
@@ -11,7 +12,7 @@ class Tool:
 
     function: Callable[..., Any]
     schema: dict[str, Any]
-    stream_handler: Callable[..., Any] | None = None
+    stream_handler: StreamHandler | None = None
 
 
 class ToolRegistry:
@@ -24,7 +25,7 @@ class ToolRegistry:
         self,
         func: Callable[..., Any],
         schema: dict[str, Any],
-        stream_handler: Callable[..., Any] | None = None,
+        stream_handler: StreamHandler | None = None,
     ) -> None:
         tool_name = schema["function"]["name"]
         if tool_name in self._tools:

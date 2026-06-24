@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
@@ -54,6 +55,16 @@ def mock_llm_client():
 
 
 DUMMY_SCHEMA: dict = {}
+
+
+def _tool_registry(*names: str) -> ToolRegistry:
+    registry = ToolRegistry()
+    for name in names:
+        registry.add(
+            lambda: None,
+            {"type": "function", "function": {"name": name, "parameters": {}}},
+        )
+    return registry
 
 
 def _function_info(
@@ -182,7 +193,7 @@ class TestLLMInferenceStrategy:
         decision = await strategy.decide_next_step(
             _function_info(instructions="do it"),
             [],
-            [{"type": "function"}],
+            _tool_registry("my_tool"),
             MockEventPublisher(),
         )
 
@@ -207,7 +218,7 @@ class TestLLMInferenceStrategy:
         decision = await strategy.decide_next_step(
             _function_info(return_type=MyOutput, instructions="do it"),
             [],
-            [],
+            _tool_registry(),
             publisher,
         )
 
@@ -236,7 +247,7 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            _function_info(instructions="do it"), [], [], MockEventPublisher()
+            _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -255,7 +266,7 @@ class TestLLMInferenceStrategy:
             await strategy.decide_next_step(
                 _function_info(return_type=MyOutput, instructions="do it"),
                 [],
-                [],
+                _tool_registry(),
                 MockEventPublisher(),
             )
 
@@ -266,7 +277,7 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            _function_info(instructions="do it"), [], [], MockEventPublisher()
+            _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -282,7 +293,7 @@ class TestLLMInferenceStrategy:
             InvalidInferenceResponseError, match="non-null 'final_answer'"
         ):
             await strategy.decide_next_step(
-                _function_info(instructions="do it"), [], [], MockEventPublisher()
+                _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
             )
 
 
@@ -371,7 +382,7 @@ class TestToolOnlyDirector:
         result = await strategy.decide_next_step(
             _function_info(return_type=Never, instructions="chat"),
             [],
-            [{"type": "function"}],
+            _tool_registry("chat_tool"),
             MockEventPublisher(),
         )
 
@@ -396,7 +407,7 @@ class TestToolOnlyDirector:
             await strategy.decide_next_step(
                 _function_info(return_type=Never, instructions="chat"),
                 [],
-                [{"type": "function"}],
+                _tool_registry("chat_tool"),
                 MockEventPublisher(),
             )
 

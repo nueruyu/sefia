@@ -63,18 +63,26 @@ class _ArgStreamChannel:
 
     def __init__(self) -> None:
         self._queue: asyncio.Queue[ArgEvent | object] = asyncio.Queue()
+        self._closed = False
+        self._done = False
 
     def __aiter__(self) -> ArgStream:
         return self
 
     async def __anext__(self) -> ArgEvent:
+        if self._done:
+            raise StopAsyncIteration
         item = await self._queue.get()
         if item is _CLOSED:
+            self._done = True
             raise StopAsyncIteration
         return item  # type: ignore[return-value]
 
     def feed(self, event: ArgEvent) -> None:
-        self._queue.put_nowait(event)
+        if not self._closed:
+            self._queue.put_nowait(event)
 
     def close(self) -> None:
-        self._queue.put_nowait(_CLOSED)
+        if not self._closed:
+            self._closed = True
+            self._queue.put_nowait(_CLOSED)

@@ -88,6 +88,11 @@ def tool(func: Any) -> Any:
         return handler
 
     setattr(target, "stream", _register_stream)
+    if func is not target:
+        try:
+            setattr(func, "stream", _register_stream)
+        except AttributeError:
+            pass
     return func
 
 
