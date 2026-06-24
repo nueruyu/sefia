@@ -12,6 +12,7 @@ _UNCLAIMED_HUMAN_INPUTS_KEY = "unclaimed_human_inputs"
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 HumanInputRequestHandler = Callable[[HumanInputRequest], MaybeAwaitable[None]]
+HumanInputQuestionDeltaHandler = Callable[[str], MaybeAwaitable[None]]
 
 
 class AmbiguousHumanInputError(Exception):
@@ -148,15 +149,18 @@ class CLIHumanInputAdapter:
         *,
         store: HumanInputSessionStore | None = None,
         on_request: HumanInputRequestHandler | None = None,
+        on_question_delta: HumanInputQuestionDeltaHandler | None = None,
     ):
         self.store = store or HumanInputSessionStore()
         self._on_request = on_request
+        self._on_question_delta = on_question_delta
 
     def create_tool(self) -> HumanInputTool:
         return HumanInputTool(
             get_answer=self._get_answer,
             on_request=self._handle_request,
             on_complete=self._handle_complete,
+            on_question_delta=self._handle_question_delta,
         )
 
     async def _get_answer(self, request: HumanInputRequest) -> str | None:
@@ -184,6 +188,10 @@ class CLIHumanInputAdapter:
         pending = await self.store.pending_requests()
         pending.pop(result.interaction_id, None)
         await self.store.save_pending_requests(pending)
+
+    async def _handle_question_delta(self, text: str) -> None:
+        if self._on_question_delta is not None:
+            await _maybe_await(self._on_question_delta(text))
 
 
 async def _maybe_await(value: MaybeAwaitable[T]) -> T:

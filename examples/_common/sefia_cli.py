@@ -66,6 +66,9 @@ class DefaultCLIReporter(CLIReporter):
         typer.echo(f" {request.question}")
         typer.echo()
 
+    def on_human_input_question_delta(self, text: str) -> None:
+        typer.echo(text, nl=False)
+
     async def on_interrupted(self, session: ResolvedSession) -> None:
         typer.echo()
         typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
@@ -124,6 +127,7 @@ class SefiaCLI:
         self._session_manager = SessionManager(session_dir)
         self._human_input = human_input_adapter or CLIHumanInputAdapter(
             on_request=self._report_human_input_request,
+            on_question_delta=self._report_human_input_question_delta,
         )
         self._human_input_tool = self._human_input.create_tool()
         self._human_input_receiver = CLIHumanInputReceiver(self._human_input.store)
@@ -205,6 +209,12 @@ class SefiaCLI:
     async def _report_human_input_request(self, request: HumanInputRequest) -> None:
         if self._reporter is not None:
             await _maybe_await(self._reporter.on_human_input_request(request))
+
+    async def _report_human_input_question_delta(self, text: str) -> None:
+        if self._reporter is not None:
+            handler = getattr(self._reporter, "on_human_input_question_delta", None)
+            if handler is not None:
+                await _maybe_await(handler(text))
 
     async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
