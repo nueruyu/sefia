@@ -293,13 +293,22 @@ either or both:
   step) and steers the executor's loops.
 
 ```python
-from sefia import infer, policy
-from sefios.policies import MaxRetries
+from sefia import InferenceMiddleware, Policy, infer, policy
+
+
+class Retry(Policy):
+    """A policy that retries a recoverable inference failure."""
+
+    def __init__(self, count: int):
+        self._count = count
+
+    def create_middleware(self) -> list[InferenceMiddleware]:
+        ...  # return a retry middleware bounded by self._count
 
 
 class MyAgent:
     @infer
-    @policy(MaxRetries(count=5))
+    @policy(Retry(count=5))
     async def critical_task(self, request: Request) -> Result:
         """Handle the request with retry behavior."""
         ...
@@ -311,8 +320,81 @@ records the policy under the `"policies"` key of the function's
 decorators does not matter. To apply more than one policy, merge them on the
 caller side (or stack multiple `@policy` decorators).
 
-Built-in policies include `MaxRetries` and `MaxSteps`. Custom policies can be
-added by implementing the `Policy` ABC.
+Custom policies are added by implementing the `Policy` ABC, as above. The
+`sefios` companion package ships ready-made ones such as `MaxRetries` and
+`MaxSteps`.
+
+### Profiles
+
+A `Profile` is a keyed, reusable bundle of inference configuration: the model
+(its `LLMClient`) plus any policies that should apply whenever it is selected.
+Build profiles up front, register them on the `Session`, and select one per
+function with `@profile`:
+
+```python
+from enum import Enum, auto
+
+from sefia import Profile, Session, infer, profile
+from sefia_litellm import LiteLLMClient
+
+
+class Models(Enum):
+    FAST = auto()
+    SMART = auto()
+
+
+class MyAgent:
+    @infer
+    async def quick_step(self, request: Request) -> Draft:
+        """Runs on the session default model and policies."""
+        ...
+
+    @infer
+    @profile(Models.SMART)
+    async def hard_step(self, draft: Draft) -> Result:
+        """Runs on the SMART profile instead."""
+        ...
+
+
+async with Session(
+    llm_client=LiteLLMClient(model="gpt-4o-mini"),
+    glyff_session=gs,
+    session_store=sefia_store,
+    profiles=[
+        Profile(
+            key=Models.SMART,
+            client=LiteLLMClient(model="gpt-4o"),
+            # policies=[...] may also be attached; any sefia Policy works
+            # (see "Policies" above) and applies whenever this profile is selected.
+        )
+    ],
+):
+    ...
+```
+
+A profile `key` is **any hashable value**, not just a string — an `Enum` member
+(shown above), an `int`, or a plain `"smart"` all work — so you can avoid
+stringly-typed configuration. `@profile` records the key under the `"profile"`
+slot of the function's `__sefia_metadata__` (just like `@policy`), so its order
+relative to `@infer` does not matter. Selecting by key keeps the call site
+decoupled from the concrete client — a test can bind the same key to a mock. An
+unknown key fails fast at call time with the list of registered profiles.
+
+Configuration is **layered, most specific wins**:
+
+```text
+function (@policy / @profile)  >  profile  >  session
+```
+
+- **Model/client:** the selected profile's `client` overrides the session's
+  default `llm_client`; with no `@profile`, the session default is used.
+- **Policies:** additive across layers and collected most-general first
+  (`session → profile → function`), so a function's own `@policy` decorators sit
+  closest to the call.
+
+Model settings (temperature, max tokens, ...) ride on how the profile's client
+is constructed today; the profile is the seam where first-class settings can be
+added later.
 
 ### Steps and the inference loop
 
@@ -332,12 +414,21 @@ Two seams are available, exposed as ABCs from `sefia`:
   cap the loop, raising `MaxStepsExceededError` once the step limit is reached.
 
 The executor does not cap the loop on its own; without a `StepMiddleware` there
-is no default cap. The `sefios` session helpers add `MaxSteps(count=25)` by
-default; pass `max_steps=None` to opt out.
+is no default cap. The `sefios` session helpers add a 25-step cap by default;
+pass `max_steps=None` to opt out.
 
 ```python
-from sefia import infer, policy
-from sefios.policies import MaxSteps
+from sefia import Policy, StepMiddleware, infer, policy
+
+
+class MaxSteps(Policy):
+    """A policy that caps the inference loop at a fixed number of steps."""
+
+    def __init__(self, count: int):
+        self._count = count
+
+    def create_middleware(self) -> list[StepMiddleware]:
+        ...  # return a step middleware that raises once self._count is reached
 
 
 class MyAgent:
@@ -348,8 +439,8 @@ class MyAgent:
         ...
 ```
 
-`MaxSteps` can also be passed to `Session(policies=[...])` to apply across an
-entire session.
+A step-capping policy can also be passed to `Session(policies=[...])` to apply
+across an entire session.
 
 A failing tool is never treated as a retryable failure: the executor stringifies
 the error into the history and feeds it back to the model so it can recover,

@@ -1,18 +1,20 @@
+from collections.abc import Hashable
 from typing import Self, Type, TypeVar
 
 import glyff
 
-from ._context import SessionContext, context_var
+from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import Policy
 from ._interfaces.model_inspector import ModelInspector
 from ._interfaces.session_store import SessionStore
+from ._profiles import Profile
 from ._state_store import StateStore
 from ._tool_system import ToolCollector
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
 from .llm._xml_prompt_formatter import XmlPromptFormatter
-from .pydantic._model_inspector import PydanticModelInspector
 from .pydantic._json_utils import pydantic_json_default
+from .pydantic._model_inspector import PydanticModelInspector
 from .tool_collectors import DefaultToolCollector
 
 T = TypeVar("T")
@@ -30,6 +32,7 @@ class Session:
         glyff_session: glyff.Session,
         session_store: SessionStore,
         policies: list[Policy] | None = None,
+        profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
         model_inspector: ModelInspector | None = None,
         stream: bool = False,
@@ -46,13 +49,28 @@ class Session:
             model_inspector=model_inspector
         )
         prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
-        self._inference_strategy = LLMInferenceStrategy(
-            llm_client,
-            model_inspector=model_inspector,
-            prompt_formatter=prompt_formatter,
-            json_default=pydantic_json_default,
-            stream=stream,
-        )
+
+        # A profile only swaps the client; the rest of the strategy is shared.
+        def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
+            return LLMInferenceStrategy(
+                client,
+                model_inspector=model_inspector,
+                prompt_formatter=prompt_formatter,
+                json_default=pydantic_json_default,
+                stream=stream,
+            )
+
+        self._inference_strategy = make_strategy(llm_client)
+
+        self._profiles: dict[Hashable, ProfileBinding] = {}
+        for profile in profiles or []:
+            if profile.key in self._profiles:
+                raise ValueError(f"Duplicate profile key: {profile.key!r}.")
+            self._profiles[profile.key] = ProfileBinding(
+                strategy=make_strategy(profile.client),
+                policies=tuple(profile.policies),
+            )
+
         self._context: SessionContext | None = None
 
     def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:
@@ -73,6 +91,7 @@ class Session:
             inference_strategy=self._inference_strategy,
             policies=tuple(self._policies),
             tool_collector=self._tool_collector,
+            _profiles=self._profiles,
         )
         self._context_token = context_var.set(self._context)
         return self

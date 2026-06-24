@@ -1,6 +1,7 @@
 import contextvars
 import hashlib
 import json
+from collections.abc import Hashable
 from dataclasses import dataclass, field
 from typing import Type, TypeVar
 
@@ -33,6 +34,14 @@ def _execution_id_scope_key(execution_id: ExecutionId) -> str:
 
 
 @dataclass(frozen=True)
+class ProfileBinding:
+    """A registered profile's inference strategy and the policies it contributes."""
+
+    strategy: InferenceStrategy
+    policies: tuple[Policy, ...]
+
+
+@dataclass(frozen=True)
 class SessionContext:
     """Holds the context for an ongoing sefia inference session."""
 
@@ -41,9 +50,32 @@ class SessionContext:
     inference_strategy: InferenceStrategy
     policies: tuple[Policy, ...]
     tool_collector: ToolCollector
+    _profiles: dict[Hashable, ProfileBinding] = field(default_factory=dict)
     _state_stores: dict[str, StateStore] = field(
         default_factory=dict, init=False, repr=False
     )
+
+    def resolve_profile(
+        self, profile_key: Hashable | None
+    ) -> tuple[InferenceStrategy, tuple[Policy, ...]]:
+        """
+        Resolve a selected profile to its strategy and policies.
+
+        ``None`` (no ``@profile``) yields the session default and no extra
+        policies; an unknown key raises with the registered keys listed.
+        """
+        if profile_key is None:
+            return self.inference_strategy, ()
+        try:
+            binding = self._profiles[profile_key]
+        except KeyError:
+            available = ", ".join(repr(k) for k in self._profiles) or "(none)"
+            raise RuntimeError(
+                f"Unknown profile {profile_key!r}. "
+                f"Registered profiles: {available}. "
+                "Add it to the Session via profiles=[Profile(...)]."
+            ) from None
+        return binding.strategy, binding.policies
 
     def get_call_state_store(
         self, key_suffix: str, state_type: Type[T]
