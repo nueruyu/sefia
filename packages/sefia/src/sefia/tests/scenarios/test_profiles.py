@@ -66,8 +66,8 @@ class _MissingProfileAgent:
         ...
 
 
-def test_profile_attaches_name_metadata():
-    """`@profile` records the profile name under the metadata "profile" key, no
+def test_profile_attaches_key_metadata():
+    """`@profile` records the profile key under the metadata "profile" slot, no
     matter where it sits relative to @infer."""
 
     @infer
@@ -106,11 +106,11 @@ def test_profile_rejects_profile_instance_as_key():
         profile(Profile(key="fast", client=MockLLMClient(responses=[])))  # type: ignore
 
 
-def test_model_profile_normalizes_policies_to_tuple():
-    """Profile accepts a list of policies but stores an immutable tuple."""
+def test_profile_accepts_policy_sequence():
+    """Profile accepts a list (or any sequence) of policies at the call site."""
     p = _LabelPolicy(label="x", log=[])
     prof = Profile(key="p", client=MockLLMClient(responses=[]), policies=[p])
-    assert prof.policies == (p,)
+    assert list(prof.policies) == [p]
 
 
 async def test_infer_uses_selected_profile_client(
@@ -195,10 +195,10 @@ async def test_unknown_profile_raises(serializer: Serializer, hasher: ArgsHasher
                 await _MissingProfileAgent().step(topic="t")
 
 
-def test_duplicate_profile_names_rejected(
+def test_duplicate_profile_keys_rejected(
     serializer: Serializer, hasher: ArgsHasher
 ):
-    """The Session rejects two profiles sharing a name up front."""
+    """The Session rejects two profiles sharing a key up front."""
     glyff_store, sefia_store = _make_stores(serializer)
     a = MockLLMClient(responses=[])
     b = MockLLMClient(responses=[])

@@ -34,6 +34,15 @@ def _execution_id_scope_key(execution_id: ExecutionId) -> str:
 
 
 @dataclass(frozen=True)
+class ProfileBinding:
+    """A registered profile resolved to what the executor needs to run it: the
+    inference strategy (its client) and the policies it contributes."""
+
+    strategy: InferenceStrategy
+    policies: tuple[Policy, ...]
+
+
+@dataclass(frozen=True)
 class SessionContext:
     """Holds the context for an ongoing sefia inference session."""
 
@@ -42,13 +51,12 @@ class SessionContext:
     inference_strategy: InferenceStrategy
     policies: tuple[Policy, ...]
     tool_collector: ToolCollector
-    # Per-profile inference strategies and policies, keyed by profile key. An
-    # @infer function decorated with @profile(<key>) runs on the matching
-    # strategy and inherits its policies; functions without @profile use
-    # ``inference_strategy`` (the session default) and only the session policies.
-    # Keys are any hashable value (e.g. a str or an Enum member).
-    profile_strategies: dict[Hashable, InferenceStrategy] = field(default_factory=dict)
-    profile_policies: dict[Hashable, tuple[Policy, ...]] = field(default_factory=dict)
+    # Registered profiles, keyed by profile key. An @infer function decorated
+    # with @profile(<key>) runs on the matching binding's strategy and inherits
+    # its policies; functions without @profile use ``inference_strategy`` (the
+    # session default) and only the session policies. Keys are any hashable value
+    # (e.g. a str or an Enum member).
+    profiles: dict[Hashable, ProfileBinding] = field(default_factory=dict)
     _state_stores: dict[str, StateStore] = field(
         default_factory=dict, init=False, repr=False
     )
@@ -67,17 +75,17 @@ class SessionContext:
         if profile_key is None:
             return self.inference_strategy, ()
         try:
-            strategy = self.profile_strategies[profile_key]
+            binding = self.profiles[profile_key]
         except KeyError:
             # Keys are arbitrary hashables (e.g. Enum members), which are not
             # necessarily orderable, so list them by repr without sorting.
-            available = ", ".join(repr(k) for k in self.profile_strategies) or "(none)"
+            available = ", ".join(repr(k) for k in self.profiles) or "(none)"
             raise RuntimeError(
                 f"Unknown profile {profile_key!r}. "
                 f"Registered profiles: {available}. "
                 "Add it to the Session via profiles=[Profile(...)]."
             ) from None
-        return strategy, self.profile_policies.get(profile_key, ())
+        return binding.strategy, binding.policies
 
     def get_call_state_store(
         self, key_suffix: str, state_type: Type[T]

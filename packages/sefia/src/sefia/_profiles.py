@@ -1,5 +1,5 @@
 from collections.abc import Hashable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from ._interfaces import Policy
 from .llm._client import LLMClient
@@ -8,7 +8,7 @@ from .llm._client import LLMClient
 @dataclass(frozen=True)
 class Profile:
     """
-    A named, reusable bundle of inference configuration for ``@infer`` functions.
+    A keyed, reusable bundle of inference configuration for ``@infer`` functions.
 
     A profile pairs a ``key`` with the :class:`~sefia.llm.LLMClient` used to run
     inference, plus any :class:`~sefia.Policy` objects that should apply to every
@@ -47,12 +47,12 @@ class Profile:
 
     key: Hashable
     client: LLMClient
-    policies: Sequence[Policy] = field(default=())
+    policies: Sequence[Policy] = ()
 
     def __post_init__(self) -> None:
         # The key indexes the session's profile registry (a dict), so it must be
-        # hashable. Reject unhashable keys (and the None sentinel that marks "no
-        # @profile") up front with a clear message instead of a later TypeError.
+        # hashable and not the None sentinel that marks "no @profile". Validate
+        # up front with a clear message instead of a later, opaque TypeError.
         if self.key is None:
             raise TypeError("Profile key must not be None.")
         try:
@@ -61,7 +61,3 @@ class Profile:
             raise TypeError(
                 f"Profile key must be hashable, got {type(self.key).__name__}."
             ) from e
-        # Accept any sequence of policies (e.g. a list at the call site, like
-        # Session(policies=[...])) but store an immutable tuple so the profile
-        # never holds a shared, mutable reference.
-        object.__setattr__(self, "policies", tuple(self.policies))

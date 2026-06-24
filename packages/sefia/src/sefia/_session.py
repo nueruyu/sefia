@@ -3,8 +3,8 @@ from typing import Self, Type, TypeVar
 
 import glyff
 
-from ._context import SessionContext, context_var
-from ._interfaces import InferenceStrategy, Policy
+from ._context import ProfileBinding, SessionContext, context_var
+from ._interfaces import Policy
 from ._interfaces.model_inspector import ModelInspector
 from ._interfaces.session_store import SessionStore
 from ._profiles import Profile
@@ -64,13 +64,14 @@ class Session:
 
         self._inference_strategy = make_strategy(llm_client)
 
-        self._profile_strategies: dict[Hashable, InferenceStrategy] = {}
-        self._profile_policies: dict[Hashable, tuple[Policy, ...]] = {}
+        self._profiles: dict[Hashable, ProfileBinding] = {}
         for profile in profiles or []:
-            if profile.key in self._profile_strategies:
+            if profile.key in self._profiles:
                 raise ValueError(f"Duplicate profile key: {profile.key!r}.")
-            self._profile_strategies[profile.key] = make_strategy(profile.client)
-            self._profile_policies[profile.key] = tuple(profile.policies)
+            self._profiles[profile.key] = ProfileBinding(
+                strategy=make_strategy(profile.client),
+                policies=tuple(profile.policies),
+            )
 
         self._context: SessionContext | None = None
 
@@ -92,8 +93,7 @@ class Session:
             inference_strategy=self._inference_strategy,
             policies=tuple(self._policies),
             tool_collector=self._tool_collector,
-            profile_strategies=self._profile_strategies,
-            profile_policies=self._profile_policies,
+            profiles=self._profiles,
         )
         self._context_token = context_var.set(self._context)
         return self
