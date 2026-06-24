@@ -129,8 +129,6 @@ class JsonStringDecoder:
 
         codepoint = int(hex_digits, 16)
 
-        codepoint = int(hex_digits, 16)
-
         if 0xD800 <= codepoint <= 0xDBFF:
             if self._high_surrogate is not None:
                 yield JsonParseError("Unexpected high surrogate pair.", fatal=True)
