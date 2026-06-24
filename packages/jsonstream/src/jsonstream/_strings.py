@@ -76,6 +76,15 @@ class JsonStringDecoder:
 
     def _handle_escape_char(self, char: str) -> Generator[JsonParseError, None, None]:
         if self._unicode_buffer is not None:
+            # Validate each \u digit as it arrives so a stray non-hex character
+            # (e.g. a closing quote or comma) fails immediately instead of being
+            # swallowed into the buffer and desynchronising the parser.
+            if char not in "0123456789abcdefABCDEF":
+                yield JsonParseError(
+                    f"Invalid character {char!r} in unicode escape sequence",
+                    fatal=True,
+                )
+                return
             self._unicode_buffer.append(char)
             if len(self._unicode_buffer) == 4:
                 yield from self._decode_unicode()
@@ -112,18 +121,13 @@ class JsonStringDecoder:
         if self._unicode_buffer is None:
             return
 
+        # _handle_escape_char validates each digit as it arrives, so the buffer
+        # is guaranteed to hold exactly four hex digits here.
         hex_digits = "".join(self._unicode_buffer)
         self._unicode_buffer = None
         self._in_escape = False
 
-        # int(..., 16) also accepts signs and surrounding whitespace (e.g.
-        # "+12" or " 12"), but RFC 8259 requires exactly four hex digits, so
-        # validate the characters explicitly before decoding.
-        if not all(c in "0123456789abcdefABCDEF" for c in hex_digits):
-            yield JsonParseError(
-                f"Invalid unicode escape sequence '\\u{hex_digits}'", fatal=True
-            )
-            return
+        codepoint = int(hex_digits, 16)
 
         codepoint = int(hex_digits, 16)
 
