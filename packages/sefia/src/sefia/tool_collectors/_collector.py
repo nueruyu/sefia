@@ -99,7 +99,25 @@ class DefaultToolCollector(ToolCollector):
 
     def _add(self, func: Callable[..., Any], registry: ToolRegistry) -> None:
         schema = self._build_schema(func)
-        registry.add(func, schema)
+        stream_handler = self._resolve_stream_handler(func)
+        registry.add(func, schema, stream_handler=stream_handler)
+
+    @staticmethod
+    def _resolve_stream_handler(func: Callable[..., Any]) -> Callable[..., Any] | None:
+        """Bind a ``@<tool>.stream`` handler to the tool's instance, if present.
+
+        The handler is registered on the underlying function by the ``@tool``
+        decorator; here we resolve it for the bound method and bind it to the
+        same instance so it can be called as ``handler(stream)``.
+        """
+        underlying = getattr(func, "__func__", None)
+        instance = getattr(func, "__self__", None)
+        if underlying is None or instance is None:
+            return None
+        handler = getattr(underlying, "__sefia_stream_handler__", None)
+        if handler is None:
+            return None
+        return handler.__get__(instance, type(instance))
 
     def _build_schema(self, func: Callable[..., Any]) -> dict:
         """

@@ -90,8 +90,28 @@ class InferenceExecutor:
             t.schema for t in self._tool_registry.get_all()
         ]
 
+        self._install_arg_stream_router()
+
         self._next_step_engraved = _wrap(self._next_step, engrave)
         self._call_tools_engraved = _wrap(self._call_tools, engrave)
+
+    def _install_arg_stream_router(self) -> None:
+        """Route streamed tool arguments to handlers, when any tool wants them.
+
+        Only added when a tool registered a ``.stream`` handler. The router
+        observes the LLM token stream, so it is inert unless streaming is on.
+        """
+        handlers_by_tool = {
+            tool.schema["function"]["name"]: tool.stream_handler
+            for tool in self._tool_registry.get_all()
+            if tool.stream_handler is not None
+        }
+        if not handlers_by_tool:
+            return
+
+        from ._arg_stream import ArgStreamRouter
+
+        self.publisher.add_handler(ArgStreamRouter(handlers_by_tool))
 
     async def _next_step(self, history: list[HistoryItem]) -> InferenceDecision:
         """Internal engraved method for a single inference strategy call."""

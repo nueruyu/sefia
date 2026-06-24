@@ -127,6 +127,15 @@ class EventPublisher:
                 handler_map[event_type].append(handler)
         return handler_map
 
+    def add_handler(self, handler: EventHandler) -> None:
+        """Register an additional handler after construction.
+
+        Used by the execution layer to install internal handlers (such as the
+        tool argument-stream router) once the tool registry is known.
+        """
+        for event_type in handler.event_types:
+            self._handler_map[event_type].append(handler)
+
     async def publish(self, event: Event) -> None:
         """
         Dispatches an event to all handlers registered for its type.
