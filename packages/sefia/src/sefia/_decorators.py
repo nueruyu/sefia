@@ -9,6 +9,7 @@ from . import _metadata
 from ._context import get_context
 from ._executor import InferenceExecutor
 from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
+from ._profiles import Profile
 from .event_system import EventPublisher
 
 C = TypeVar("C", bound=Callable[..., object])
@@ -82,72 +83,38 @@ def policy(p: Policy) -> _PolicyDecorator:
 
 def profile(profile_key: Hashable) -> _PolicyDecorator:
     """
-    Decorator that selects the profile an ``@infer`` function runs on.
+    Select the profile an ``@infer`` function runs on, by key.
 
-    Instead of writing a raw model name at the call site, you reference a
-    :class:`~sefia.Profile` by key. A profile bundles the model (its ``client``)
-    and any policies that should apply whenever it is selected. Profiles are
-    built up front and registered on the :class:`~sefia.Session`
-    (``profiles=[...]``); this decorator only records which one to use, so the
-    same code can bind to a different concrete client per session (e.g. a mock
-    in tests)::
-
-        @infer
-        @profile("fast")
-        async def step(...): ...
-
-    The key is any hashable value, not just a string, so an ``Enum`` member (or
-    any other hashable) can be used to avoid stringly-typed configuration::
+    A :class:`~sefia.Profile` bundles a model client and policies; it is
+    registered on the :class:`~sefia.Session` and referenced here by key, so the
+    call site stays decoupled from the concrete client (a test can rebind the
+    key to a mock). The key is any hashable — a string, an ``Enum`` member, ...::
 
         @infer
         @profile(Models.SMART)
         async def step(...): ...
 
-    Configuration is layered, most specific wins::
-
-        function (@policy / @profile)  >  profile  >  session
-
-    The selected profile's client overrides the session default, and its
-    policies are applied on top of the session policies and beneath the
-    function's own ``@policy`` decorators.
-
-    The key is recorded under the ``"profile"`` key of the function's
-    ``__sefia_metadata__`` dict, where ``@infer`` reads it. Like ``@policy``, the
-    order relative to ``@infer`` does not matter, and any decorator stacked
-    between the two must preserve the ``__wrapped__`` chain (``functools.wraps``)
-    for the selection to be found. A function has a single profile; a later
-    ``@profile`` decoration overrides an earlier one. When no ``@profile`` is
-    present, the session's default ``llm_client`` and policies are used.
-
-    The referenced profile must exist on the session; an unknown key raises at
-    call time with the list of registered profiles.
+    Configuration is layered, most specific wins:
+    ``function (@policy / @profile) > profile > session``. Order relative to
+    ``@infer`` does not matter; an unknown key raises at call time.
     """
 
-    # ``None`` is the sentinel for "no @profile", and an unhashable key could
-    # never index the session registry — reject both up front.
     if profile_key is None:
         raise TypeError("@profile key must not be None.")
-    # A Profile is a frozen dataclass and therefore hashable, so passing the
-    # instance instead of its key would slip past the hash check and only fail
-    # later with a confusing lookup error — reject it explicitly here.
-    from ._profiles import Profile
-
+    # A Profile is itself hashable, so catch this mix-up before the hash check.
     if isinstance(profile_key, Profile):
         raise TypeError(
-            "@profile must be called with the profile's key (e.g. a str or an "
-            "Enum member), not the Profile instance itself."
+            "@profile takes the profile's key (e.g. a str or Enum member), "
+            "not the Profile instance itself."
         )
     try:
         hash(profile_key)
     except TypeError as e:
         raise TypeError(
-            "@profile must be called with a hashable key (e.g. a str or an Enum "
-            f"member), got {type(profile_key).__name__}."
+            f"@profile key must be hashable, got {type(profile_key).__name__}."
         ) from e
 
     def decorator(func: C) -> C:
-        # Attach metadata to the innermost function so it lives in one place
-        # regardless of decorator order or intermediate wrappers.
         metadata = _metadata.ensure_metadata(func)
         metadata[_metadata.PROFILE_KEY] = profile_key
         return func
@@ -192,19 +159,14 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
     @functools.wraps(func)
     async def _run(*args, **kwargs):
         context = get_context()
-        # Read metadata from the innermost function so the decorator order does
-        # not matter and intermediate wrappers are handled.
+        # From the innermost function, so decorator order does not matter.
         metadata = _metadata.get_metadata(unwrapped)
         fn_policies = metadata.get(_metadata.POLICIES_KEY, [])
 
-        # Resolve the profile selected by @profile, falling back to the session
-        # default when none was attached.
         profile_key = metadata.get(_metadata.PROFILE_KEY)
         inference_strategy, profile_policies = context.resolve_profile(profile_key)
 
-        # Policies are additive across layers; collect them most-general first so
-        # the most-specific (function) policies sit closest to the call:
-        #   session  ->  profile  ->  function
+        # Additive across layers, most-general first (session -> profile -> function).
         all_policies = [*context.policies, *profile_policies, *fn_policies]
         all_handlers = [
             handler for p in all_policies for handler in p.create_handlers()

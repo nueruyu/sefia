@@ -35,8 +35,7 @@ def _execution_id_scope_key(execution_id: ExecutionId) -> str:
 
 @dataclass(frozen=True)
 class ProfileBinding:
-    """A registered profile resolved to what the executor needs to run it: the
-    inference strategy (its client) and the policies it contributes."""
+    """A registered profile's inference strategy and the policies it contributes."""
 
     strategy: InferenceStrategy
     policies: tuple[Policy, ...]
@@ -51,11 +50,7 @@ class SessionContext:
     inference_strategy: InferenceStrategy
     policies: tuple[Policy, ...]
     tool_collector: ToolCollector
-    # Registered profiles, keyed by profile key. An @infer function decorated
-    # with @profile(<key>) runs on the matching binding's strategy and inherits
-    # its policies; functions without @profile use ``inference_strategy`` (the
-    # session default) and only the session policies. Keys are any hashable value
-    # (e.g. a str or an Enum member).
+    # Registered profiles, keyed by @profile(<key>).
     profiles: dict[Hashable, ProfileBinding] = field(default_factory=dict)
     _state_stores: dict[str, StateStore] = field(
         default_factory=dict, init=False, repr=False
@@ -65,20 +60,17 @@ class SessionContext:
         self, profile_key: Hashable | None
     ) -> tuple[InferenceStrategy, tuple[Policy, ...]]:
         """
-        Resolve the inference strategy and policies for a selected profile.
+        Resolve a selected profile to its strategy and policies.
 
-        ``None`` (no ``@profile`` decorator) yields the session default strategy
-        and no extra policies. An unknown key raises with the list of registered
-        profiles, turning a typo into an immediate, actionable error instead of a
-        silent fallback.
+        ``None`` (no ``@profile``) yields the session default and no extra
+        policies; an unknown key raises with the registered keys listed.
         """
         if profile_key is None:
             return self.inference_strategy, ()
         try:
             binding = self.profiles[profile_key]
         except KeyError:
-            # Keys are arbitrary hashables (e.g. Enum members), which are not
-            # necessarily orderable, so list them by repr without sorting.
+            # repr, not sorted: arbitrary keys (e.g. Enums) need not be orderable.
             available = ", ".join(repr(k) for k in self.profiles) or "(none)"
             raise RuntimeError(
                 f"Unknown profile {profile_key!r}. "

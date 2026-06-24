@@ -50,9 +50,7 @@ class Session:
         )
         prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
 
-        # A profile only swaps the LLM client (the model and its settings); the
-        # rest of the strategy (inspector, formatter, streaming) is shared, so
-        # build each profile's strategy through the same factory as the default.
+        # A profile only swaps the client; the rest of the strategy is shared.
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
