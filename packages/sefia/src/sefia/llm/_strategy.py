@@ -8,7 +8,6 @@ from typing import Any, Callable, Never, Union
 
 from pydantic import create_model
 
-from .._arg_stream import ToolArgStreamer
 from .._interfaces import InferenceStrategy, ModelInspector
 from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
@@ -24,6 +23,7 @@ from ..inference import (
 )
 from ..streaming import StreamHandler
 from . import events
+from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
 from ._messages import Message
 from ._prompt_formatter import PromptFormatter

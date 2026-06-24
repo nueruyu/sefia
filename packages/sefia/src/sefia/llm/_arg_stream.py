@@ -11,7 +11,7 @@ from typing import Literal, cast
 from jsonstream import IncrementalJsonParser
 from jsonstream import events as js
 
-from .streaming import (
+from ..streaming import (
     ArgEvent,
     Scalar,
     StreamHandler,
