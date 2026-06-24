@@ -35,6 +35,8 @@ class CLIReporter(Protocol):
         request: HumanInputRequest,
     ) -> MaybeAwaitable[None]: ...
 
+    def on_human_input_question_delta(self, text: str) -> MaybeAwaitable[None]: ...
+
     def on_interrupted(
         self,
         session: ResolvedSession,
@@ -212,9 +214,7 @@ class SefiaCLI:
 
     async def _report_human_input_question_delta(self, text: str) -> None:
         if self._reporter is not None:
-            handler = getattr(self._reporter, "on_human_input_question_delta", None)
-            if handler is not None:
-                await _maybe_await(handler(text))
+            await _maybe_await(self._reporter.on_human_input_question_delta(text))
 
     async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
