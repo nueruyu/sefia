@@ -19,7 +19,8 @@ class DefaultToolCollector(ToolCollector):
       contributes either its ``@tool``-marked methods, or — when it is a
       ``Toolset`` from ``toolify`` — every callable it bundles.
 
-    Schema generation is delegated to a ModelInspector.
+    The collector records neutral tool metadata. Strategy-specific schema
+    generation happens later in the inference strategy.
     """
 
     def __init__(self, model_inspector: ModelInspector | None = None):
@@ -99,9 +100,12 @@ class DefaultToolCollector(ToolCollector):
                 self._add(method, registry)
 
     def _add(self, func: Callable[..., Any], registry: ToolRegistry) -> None:
-        schema = self._build_schema(func)
         stream_handler = self._resolve_stream_handler(func)
-        registry.add(func, schema, stream_handler=stream_handler)
+        registry.add(
+            func,
+            name=self._model_inspector.get_function_name(func),
+            stream_handler=stream_handler,
+        )
 
     @staticmethod
     def _resolve_stream_handler(func: Callable[..., Any]) -> StreamHandler | None:
@@ -118,9 +122,3 @@ class DefaultToolCollector(ToolCollector):
             if handler is not None:
                 return handler.__get__(instance, type(instance))
         return getattr(func, "__sefia_stream_handler__", None)
-
-    def _build_schema(self, func: Callable[..., Any]) -> dict:
-        """
-        Generates a JSON schema for a function's parameters via ModelInspector.
-        """
-        return self._model_inspector.get_schema_for_function(func)

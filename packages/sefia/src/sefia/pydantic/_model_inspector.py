@@ -18,7 +18,7 @@ class PydanticModelInspector(ModelInspector):
         self._schema_cache: dict[Any, dict] = {}
         self._adapter_cache: dict[Any, TypeAdapter] = {}
 
-    def get_schema_for_type(self, model_type: Type[Any] | Any) -> dict:
+    def get_type_schema(self, model_type: Type[Any] | Any) -> dict:
         if model_type in self._schema_cache:
             return self._schema_cache[model_type]
 
@@ -26,14 +26,22 @@ class PydanticModelInspector(ModelInspector):
         self._schema_cache[model_type] = schema
         return schema
 
-    def get_schema_for_function(self, func: Callable[..., Any]) -> dict:
-        cache_key = self._cache_key(func)
+    def get_function_name(self, func: Callable[..., Any]) -> str:
+        return self._sanitize_function_name(self._get_callable_qualname(func))
+
+    def get_function_schema(
+        self,
+        func: Callable[..., Any],
+        *,
+        name: str | None = None,
+    ) -> dict:
+        schema_name = name or self.get_function_name(func)
+        cache_key = ("function_schema", self._cache_key(func), schema_name)
         if cache_key in self._schema_cache:
             return self._schema_cache[cache_key]
 
         sig = inspect.signature(func)
         type_hints = self._get_callable_annotations(func)
-        name = self._get_callable_name(func)
         qualname = self._get_callable_qualname(func)
 
         params: dict[str, tuple[Any, Any]] = {}
@@ -57,15 +65,13 @@ class PydanticModelInspector(ModelInspector):
             )
 
         field_definitions = cast(dict[str, Any], params)
-        param_model = create_model(f"{name}Params", **field_definitions)
+        param_model = create_model(f"{schema_name}Params", **field_definitions)
         schema = TypeAdapter(param_model).json_schema()
-
-        sanitized_name = re.sub(r"[^a-zA-Z0-9_-]", "_", qualname.replace(".", "_"))
 
         result = {
             "type": "function",
             "function": {
-                "name": sanitized_name,
+                "name": schema_name,
                 "description": self._get_callable_doc(func),
                 "parameters": schema,
             },
@@ -73,7 +79,7 @@ class PydanticModelInspector(ModelInspector):
         self._schema_cache[cache_key] = result
         return result
 
-    def validate_and_create(self, model_type: Type[Any] | Any, data: Any) -> Any:
+    def validate(self, model_type: Type[Any] | Any, data: Any) -> Any:
         try:
             return self._get_adapter(model_type).validate_python(data)
         except ValidationError as e:
@@ -93,9 +99,9 @@ class PydanticModelInspector(ModelInspector):
             return id(func)
         return func
 
-    def _get_callable_name(self, func: Callable[..., Any]) -> str:
-        qualname = self._get_callable_qualname(func)
-        return re.sub(r"[^a-zA-Z0-9_]", "_", qualname.replace(".", "_"))
+    @staticmethod
+    def _sanitize_function_name(name: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9_-]", "_", name.replace(".", "_"))
 
     def _get_callable_qualname(self, func: Callable[..., Any]) -> str:
         if isinstance(func, functools.partial):
