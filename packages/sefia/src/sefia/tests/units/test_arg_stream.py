@@ -1,11 +1,14 @@
+import logging
 from typing import Any
 from unittest.mock import Mock
+
+import pytest
 
 from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.inference import FunctionInfo, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
-from sefia.llm._arg_stream import ToolArgStreamer
+from sefia.llm._arg_stream import ToolArgStreamer, parse_tool_call_path
 from sefia.llm._client import LLMClient
 from sefia.pydantic import PydanticModelInspector
 from sefia.streaming import (
@@ -120,6 +123,43 @@ async def test_unregistered_tool_is_ignored():
     events = await run_router(text)  # router only knows ask_human
 
     assert events == []
+
+
+def test_malformed_tool_call_index_is_ignored():
+    assert parse_tool_call_path(("tool_calls", "0", "name")) is None
+
+
+async def test_logs_token_processing_exception_and_closes_channels(caplog):
+    channel = _ArgStreamChannel()
+    streamer = ToolArgStreamer({})
+    streamer._channels[0] = channel
+    streamer._dispatch = Mock(side_effect=RuntimeError("boom"))  # type: ignore[method-assign]
+
+    with caplog.at_level(logging.ERROR, logger="sefia.llm._arg_stream"):
+        streamer.on_token('{"tool_calls":[]}')
+
+    assert streamer._stopped is True
+    assert streamer._channels == {}
+    assert "Error processing token in ToolArgStreamer" in caplog.text
+    with pytest.raises(StopAsyncIteration):
+        await anext(channel)
+
+
+async def test_duplicate_tool_name_resolution_is_ignored():
+    async def handler(stream: ArgStream) -> None:
+        async for _ in stream:
+            pass
+
+    streamer = ToolArgStreamer({"ask_human": handler})
+    streamer._resolve_tool_name(0, "ask_human")
+    first_channel = streamer._channels[0]
+    first_tasks = list(streamer._tasks)
+
+    streamer._resolve_tool_name(0, "ask_human")
+
+    assert streamer._channels[0] is first_channel
+    assert streamer._tasks == first_tasks
+    await streamer.close()
 
 
 async def test_final_answer_is_not_streamed():

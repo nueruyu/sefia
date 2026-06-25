@@ -38,7 +38,7 @@ def parse_tool_call_path(path: js.JsonPath) -> ToolCallPath | None:
 
     index = path[1]
     if not isinstance(index, int):
-        raise TypeError(f"Expected integer tool call index, got {type(index).__name__}")
+        return None
 
     field = path[2]
     if len(path) == 3 and field == "name":
@@ -86,6 +86,7 @@ class ToolArgStreamer:
                     self._close_all_channels()
                     break
         except Exception:
+            logger.exception("Error processing token in ToolArgStreamer")
             self._stopped = True
             self._close_all_channels()
 
@@ -133,6 +134,8 @@ class ToolArgStreamer:
             self._buffers.setdefault(tool_path.index, []).append(arg_event)
 
     def _resolve_tool_name(self, index: int, name: str) -> None:
+        if index in self._index_to_name:
+            return
         self._index_to_name[index] = name
         buffered = self._buffers.pop(index, [])
 
