@@ -80,7 +80,7 @@ class _ToolOnlyDirector(_ExecutionDirector):
             "LLMDecision",
             tool_calls=(list[LLMToolCall], ...),
         )
-        schema = self.model_inspector.get_schema_for_type(decision_model)
+        schema = self.model_inspector.get_type_schema(decision_model)
         schema["description"] = "The model for the LLM's decision on the next action."
         return schema
 
@@ -128,7 +128,7 @@ class _ToolEnabledDirector(_ExecutionDirector):
             final_answer=(Union[self.output_type, None], ...),
             tool_calls=(Union[list[LLMToolCall], None], ...),
         )
-        schema = self.model_inspector.get_schema_for_type(decision_model)
+        schema = self.model_inspector.get_type_schema(decision_model)
         schema["description"] = "The model for the LLM's decision on the next action."
         return schema
 
@@ -166,7 +166,7 @@ class _ToolEnabledDirector(_ExecutionDirector):
                 ]
             )
         if decision.final_answer is not None:
-            validated_answer = self.model_inspector.validate_and_create(
+            validated_answer = self.model_inspector.validate(
                 self.output_type, decision.final_answer
             )
             return FinalAnswerDecision(answer=validated_answer)
@@ -183,7 +183,7 @@ class _OutputOnlyDirector(_ExecutionDirector):
             "LLMDecision",
             final_answer=(self.output_type, ...),
         )
-        schema = self.model_inspector.get_schema_for_type(decision_model)
+        schema = self.model_inspector.get_type_schema(decision_model)
         schema["description"] = "The model for the LLM's decision on the next action."
         return schema
 
@@ -203,7 +203,7 @@ class _OutputOnlyDirector(_ExecutionDirector):
 
     def process_decision(self, decision: _LLMDecision) -> InferenceDecision:
         if decision.final_answer is not None:
-            validated_answer = self.model_inspector.validate_and_create(
+            validated_answer = self.model_inspector.validate(
                 self.output_type, decision.final_answer
             )
             return FinalAnswerDecision(answer=validated_answer)
@@ -263,7 +263,10 @@ class LLMInferenceStrategy(InferenceStrategy):
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
-        tool_schemas = [tool.schema for tool in tools.get_all()]
+        tool_schemas = [
+            self.model_inspector.get_function_schema(tool.function, name=tool.name)
+            for tool in tools.get_all()
+        ]
         director = self._create_director(function_info.return_type, tool_schemas)
         output_schema = director.build_decision_schema()
         messages = self._build_messages(
@@ -319,7 +322,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 raw = "\n".join(lines[1:-1]).strip()
 
             decision_data = json.loads(raw)
-            decision: _LLMDecision = self.model_inspector.validate_and_create(
+            decision: _LLMDecision = self.model_inspector.validate(
                 _LLMDecision, decision_data
             )
             return director.process_decision(decision)
@@ -395,7 +398,7 @@ class LLMInferenceStrategy(InferenceStrategy):
 
 def _tool_stream_handlers(tools: ToolRegistry) -> dict[str, StreamHandler]:
     return {
-        tool.schema["function"]["name"]: tool.stream_handler
+        tool.name: tool.stream_handler
         for tool in tools.get_all()
         if tool.stream_handler is not None
     }

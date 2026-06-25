@@ -82,9 +82,7 @@ async def test_static_tool_stream_handler_is_collected():
                 received.append(event)
 
     registry = DefaultToolCollector().collect(Agent())
-    registered = next(
-        tool for tool in registry.get_all() if "ask_human" in tool.schema["function"]["name"]
-    )
+    registered = next(tool for tool in registry.get_all() if "ask_human" in tool.name)
     assert registered.stream_handler is not None
 
     channel = _ArgStreamChannel()
@@ -111,9 +109,7 @@ async def test_class_tool_stream_handler_is_bound_to_class():
                 pass
 
     registry = DefaultToolCollector().collect(Agent())
-    registered = next(
-        tool for tool in registry.get_all() if "ask_human" in tool.schema["function"]["name"]
-    )
+    registered = next(tool for tool in registry.get_all() if "ask_human" in tool.name)
     assert registered.stream_handler is not None
 
     channel = _ArgStreamChannel()
@@ -140,9 +136,7 @@ async def test_toolified_standalone_stream_handler_is_collected():
             self._tools = toolify(ask_human)
 
     registry = DefaultToolCollector().collect(Agent())
-    registered = next(
-        tool for tool in registry.get_all() if "ask_human" in tool.schema["function"]["name"]
-    )
+    registered = next(tool for tool in registry.get_all() if "ask_human" in tool.name)
     assert registered.stream_handler is not None
 
     channel = _ArgStreamChannel()
