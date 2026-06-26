@@ -8,6 +8,7 @@ from glyff import engrave
 from glyff.exceptions import YieldException
 from pydantic import Field
 from sefia import get_context, tool
+from sefia.streaming import ArgStream, StringDelta
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -33,6 +34,7 @@ class HumanInputResult:
 HumanInputAnswerProvider = Callable[[HumanInputRequest], MaybeAwaitable[str | None]]
 HumanInputRequestCallback = Callable[[HumanInputRequest], MaybeAwaitable[None]]
 HumanInputCompleteCallback = Callable[[HumanInputResult], MaybeAwaitable[None]]
+HumanInputQuestionDeltaCallback = Callable[[str], MaybeAwaitable[None]]
 
 
 @dataclass
@@ -58,10 +60,12 @@ class HumanInputTool:
         get_answer: HumanInputAnswerProvider = _no_answer,
         on_request: HumanInputRequestCallback | None = None,
         on_complete: HumanInputCompleteCallback | None = None,
+        on_question_delta: HumanInputQuestionDeltaCallback | None = None,
     ) -> None:
         self._get_answer = get_answer
         self._on_request = on_request
         self._on_complete = on_complete
+        self._on_question_delta = on_question_delta
 
     async def _notify_request(self, request: HumanInputRequest) -> None:
         if self._on_request is not None:
@@ -70,6 +74,10 @@ class HumanInputTool:
     async def _notify_complete(self, result: HumanInputResult) -> None:
         if self._on_complete is not None:
             await _maybe_await(self._on_complete(result))
+
+    async def _notify_question_delta(self, text: str) -> None:
+        if self._on_question_delta is not None:
+            await _maybe_await(self._on_question_delta(text))
 
     @tool
     @engrave
@@ -109,3 +117,9 @@ class HumanInputTool:
 
         await self._notify_request(request)
         raise YieldException()
+
+    @get_human_input.stream
+    async def _stream_get_human_input(self, events: ArgStream) -> None:
+        async for event in events:
+            if isinstance(event, StringDelta) and event.name == "question":
+                await self._notify_question_delta(event.text)

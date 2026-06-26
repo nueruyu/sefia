@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
@@ -17,11 +18,10 @@ from sefia.inference import (
 )
 from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._strategy import (
-    LLMToolCall,
-    _LLMDecision,
     _OutputOnlyDirector,
     _ToolEnabledDirector,
     _ToolOnlyDirector,
+    _ToolSpec,
 )
 from sefia.llm.events import LLMTokenReceived
 from sefia.pydantic import PydanticModelInspector
@@ -46,6 +46,40 @@ class MyOutput:
 @dataclass(frozen=True)
 class MyIssue:
     description: str
+
+
+def search(q: str) -> str:
+    """Search for something."""
+    raise NotImplementedError
+
+
+def my_tool(param: int) -> str:
+    """A tool taking a single integer parameter."""
+    raise NotImplementedError
+
+
+def chat_tool() -> str:
+    """A tool taking no arguments."""
+    raise NotImplementedError
+
+
+_INSPECTOR = PydanticModelInspector()
+
+
+def _spec(func: Callable[..., Any]) -> _ToolSpec:
+    name = _INSPECTOR.get_function_name(func)
+    return _ToolSpec(
+        name=name,
+        schema=_INSPECTOR.get_function_schema(func, name=name),
+        arguments_model=_INSPECTOR.get_arguments_model(func, name=name),
+    )
+
+
+def _tool_registry(*funcs: Callable[..., Any]) -> ToolRegistry:
+    registry = ToolRegistry()
+    for func in funcs:
+        registry.add(func)
+    return registry
 
 
 @pytest.fixture
@@ -100,8 +134,7 @@ class TestLLMInferenceStrategy:
             ToolCallResult(tool_call_id="1", result="見つかりました"),
         ]
 
-        dummy_tools = [{"function": {"name": "search"}}]
-        director = strategy._create_director(str, dummy_tools)
+        director = strategy._create_director(str, [_spec(search)])
         messages = strategy._build_messages(
             _function_info(arguments={"arg": "val"}),
             history,
@@ -127,16 +160,23 @@ class TestLLMInferenceStrategy:
     def test_build_decision_schema_hoists_nested_definitions(self):
         strategy = self._strategy(AsyncMock())
 
-        director = strategy._create_director(list[MyIssue], [{"type": "function"}])
+        director = strategy._create_director(list[MyIssue], [_spec(search)])
         schema = director.build_decision_schema()
 
         assert "MyIssue" in schema["$defs"]
         final_answer_schema = schema["properties"]["final_answer"]["anyOf"][0]
         assert "$defs" not in final_answer_schema
         assert final_answer_schema["items"]["$ref"] == "#/$defs/MyIssue"
-        tool_call_schema = schema["properties"]["tool_calls"]["anyOf"][0]["items"]
-        assert "$defs" not in tool_call_schema
-        assert tool_call_schema["$ref"] == "#/$defs/LLMToolCall"
+        # tool_calls items reference a per-tool call model in $defs, not an inline
+        # blob, so each tool's arguments stay constrained by its own schema.
+        tool_calls_array = next(
+            candidate
+            for candidate in schema["properties"]["tool_calls"]["anyOf"]
+            if candidate.get("type") == "array"
+        )
+        tool_call_ref = tool_calls_array["items"]["$ref"].split("/")[-1]
+        assert tool_call_ref in schema["$defs"]
+        assert tool_call_ref.endswith("ToolCall")
 
     def test_build_decision_schema_requires_non_null_answer_without_tools(self):
         strategy = self._strategy(AsyncMock())
@@ -152,7 +192,7 @@ class TestLLMInferenceStrategy:
     def test_build_decision_schema_requires_nullable_fields_with_tools(self):
         strategy = self._strategy(AsyncMock())
 
-        director = strategy._create_director(list[MyIssue], [{"type": "function"}])
+        director = strategy._create_director(list[MyIssue], [_spec(search)])
         schema = director.build_decision_schema()
 
         assert schema["required"] == ["final_answer", "tool_calls"]
@@ -174,7 +214,10 @@ class TestLLMInferenceStrategy:
 
     async def test_decide_next_step_handles_tool_calls(self, mock_llm_client):
         tool_calls_payload = json.dumps(
-            {"tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}]}
+            {
+                "final_answer": None,
+                "tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}],
+            }
         )
         mock_llm_client.complete.return_value = LLMResponse(content=tool_calls_payload)
         strategy = self._strategy(mock_llm_client, stream=True)
@@ -182,7 +225,7 @@ class TestLLMInferenceStrategy:
         decision = await strategy.decide_next_step(
             _function_info(instructions="do it"),
             [],
-            [{"type": "function"}],
+            _tool_registry(my_tool),
             MockEventPublisher(),
         )
 
@@ -207,7 +250,7 @@ class TestLLMInferenceStrategy:
         decision = await strategy.decide_next_step(
             _function_info(return_type=MyOutput, instructions="do it"),
             [],
-            [],
+            _tool_registry(),
             publisher,
         )
 
@@ -236,7 +279,7 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            _function_info(instructions="do it"), [], [], MockEventPublisher()
+            _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -255,7 +298,7 @@ class TestLLMInferenceStrategy:
             await strategy.decide_next_step(
                 _function_info(return_type=MyOutput, instructions="do it"),
                 [],
-                [],
+                _tool_registry(),
                 MockEventPublisher(),
             )
 
@@ -266,23 +309,23 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            _function_info(instructions="do it"), [], [], MockEventPublisher()
+            _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
         )
 
         assert isinstance(decision, FinalAnswerDecision)
         assert decision.answer == "Hello, world!"
 
-    async def test_decide_next_step_raises_when_both_fields_null(self, mock_llm_client):
+    async def test_decide_next_step_raises_when_final_answer_null(self, mock_llm_client):
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"final_answer": null}'
         )
         strategy = self._strategy(mock_llm_client)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="non-null 'final_answer'"
+            InvalidInferenceResponseError, match="LLM output failed validation"
         ):
             await strategy.decide_next_step(
-                _function_info(instructions="do it"), [], [], MockEventPublisher()
+                _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
             )
 
 
@@ -301,7 +344,7 @@ class TestToolOnlyDirector:
 
     def test_create_director_returns_tool_only_for_never(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
+        director = strategy._create_director(Never, [_spec(chat_tool)])
         assert isinstance(director, _ToolOnlyDirector)
 
     def test_create_director_raises_for_never_without_tools(self):
@@ -311,7 +354,7 @@ class TestToolOnlyDirector:
 
     def test_build_decision_schema_has_no_final_answer_field(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
+        director = strategy._create_director(Never, [_spec(chat_tool)])
         schema = director.build_decision_schema()
 
         assert "final_answer" not in schema.get("properties", {})
@@ -320,7 +363,7 @@ class TestToolOnlyDirector:
 
     def test_build_system_prompt_instructs_tool_only(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
+        director = strategy._create_director(Never, [_spec(chat_tool)])
         schema = director.build_decision_schema()
         prompt = director.build_system_prompt_addition(schema)
 
@@ -329,31 +372,15 @@ class TestToolOnlyDirector:
 
     def test_process_decision_accepts_tool_calls(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
+        director = strategy._create_director(Never, [_spec(chat_tool)])
 
-        decision = _LLMDecision(
-            tool_calls=[LLMToolCall(name="my_tool", arguments={"x": 1})]
+        decision = director.parse_model.model_validate(
+            {"tool_calls": [{"name": "chat_tool", "arguments": {}}]}
         )
         result = director.process_decision(decision)
 
         assert isinstance(result, ToolCallDecision)
-        assert result.calls[0].name == "my_tool"
-
-    def test_process_decision_raises_on_final_answer(self):
-        strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
-
-        decision = _LLMDecision(final_answer="oops")
-        with pytest.raises(InvalidInferenceResponseError, match="Never"):
-            director.process_decision(decision)
-
-    def test_process_decision_raises_when_no_tool_calls_and_no_final_answer(self):
-        strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
-
-        decision = _LLMDecision()
-        with pytest.raises(InvalidInferenceResponseError, match="tool_calls"):
-            director.process_decision(decision)
+        assert result.calls[0].name == "chat_tool"
 
     async def test_decide_next_step_returns_tool_call_decision_for_never(self):
         mock_client = AsyncMock()
@@ -371,7 +398,7 @@ class TestToolOnlyDirector:
         result = await strategy.decide_next_step(
             _function_info(return_type=Never, instructions="chat"),
             [],
-            [{"type": "function"}],
+            _tool_registry(chat_tool),
             MockEventPublisher(),
         )
 
@@ -392,11 +419,13 @@ class TestToolOnlyDirector:
             prompt_formatter=mock_formatter,
         )
 
-        with pytest.raises(InvalidInferenceResponseError, match="Never"):
+        with pytest.raises(
+            InvalidInferenceResponseError, match="must contain 'tool_calls'"
+        ):
             await strategy.decide_next_step(
                 _function_info(return_type=Never, instructions="chat"),
                 [],
-                [{"type": "function"}],
+                _tool_registry(chat_tool),
                 MockEventPublisher(),
             )
 
@@ -406,7 +435,10 @@ class TestToolEnabledDirector:
 
     def _director(self, output_type: Any = str):
         inspector = PydanticModelInspector()
-        return _ToolEnabledDirector(inspector, output_type, [{"type": "function"}])
+        return _ToolEnabledDirector(inspector, output_type, [_spec(search)])
+
+    def _decision(self, director, data):
+        return director.parse_model.model_validate(data)
 
     def test_build_decision_schema_has_nullable_final_answer_and_tool_calls(self):
         schema = self._director().build_decision_schema()
@@ -424,17 +456,22 @@ class TestToolEnabledDirector:
 
     def test_process_decision_returns_tool_call_decision(self):
         director = self._director()
-        decision = _LLMDecision(
-            tool_calls=[LLMToolCall(name="search", arguments={"q": "x"})]
+        decision = self._decision(
+            director,
+            {
+                "final_answer": None,
+                "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
+            },
         )
         result = director.process_decision(decision)
 
         assert isinstance(result, ToolCallDecision)
         assert result.calls[0].name == "search"
+        assert result.calls[0].arguments == {"q": "x"}
 
     def test_process_decision_returns_final_answer_decision(self):
         director = self._director(output_type=str)
-        decision = _LLMDecision(final_answer="done")
+        decision = self._decision(director, {"final_answer": "done", "tool_calls": None})
         result = director.process_decision(decision)
 
         assert isinstance(result, FinalAnswerDecision)
@@ -442,7 +479,9 @@ class TestToolEnabledDirector:
 
     def test_process_decision_validates_final_answer_type(self):
         director = self._director(output_type=MyOutput)
-        decision = _LLMDecision(final_answer={"name": "ok", "value": 7})
+        decision = self._decision(
+            director, {"final_answer": {"name": "ok", "value": 7}, "tool_calls": None}
+        )
         result = director.process_decision(decision)
 
         assert isinstance(result, FinalAnswerDecision)
@@ -451,7 +490,7 @@ class TestToolEnabledDirector:
 
     def test_process_decision_raises_when_both_null(self):
         director = self._director()
-        decision = _LLMDecision()
+        decision = self._decision(director, {"final_answer": None, "tool_calls": None})
         with pytest.raises(
             InvalidInferenceResponseError,
             match="tool_calls.*final_answer|final_answer.*tool_calls",
@@ -460,9 +499,12 @@ class TestToolEnabledDirector:
 
     def test_tool_calls_take_priority_over_final_answer(self):
         director = self._director()
-        decision = _LLMDecision(
-            tool_calls=[LLMToolCall(name="t", arguments={})],
-            final_answer="ignored",
+        decision = self._decision(
+            director,
+            {
+                "final_answer": "ignored",
+                "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
+            },
         )
         result = director.process_decision(decision)
 
@@ -491,24 +533,25 @@ class TestOutputOnlyDirector:
 
     def test_process_decision_returns_final_answer(self):
         director = self._director(output_type=str)
-        result = director.process_decision(_LLMDecision(final_answer="hello"))
+        decision = director.parse_model.model_validate({"final_answer": "hello"})
+        result = director.process_decision(decision)
 
         assert isinstance(result, FinalAnswerDecision)
         assert result.answer == "hello"
 
     def test_process_decision_validates_structured_output(self):
         director = self._director(output_type=MyOutput)
-        result = director.process_decision(
-            _LLMDecision(final_answer={"name": "test", "value": 99})
+        decision = director.parse_model.model_validate(
+            {"final_answer": {"name": "test", "value": 99}}
         )
+        result = director.process_decision(decision)
 
         assert isinstance(result, FinalAnswerDecision)
         assert isinstance(result.answer, MyOutput)
         assert result.answer.name == "test"
 
-    def test_process_decision_raises_when_final_answer_is_null(self):
+    def test_decision_model_rejects_null_final_answer(self):
         director = self._director()
-        with pytest.raises(
-            InvalidInferenceResponseError, match="non-null 'final_answer'"
-        ):
-            director.process_decision(_LLMDecision())
+        inspector = PydanticModelInspector()
+        with pytest.raises(ValueError, match="Model validation failed"):
+            inspector.validate(director.parse_model, {"final_answer": None})

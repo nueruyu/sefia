@@ -1,16 +1,16 @@
-from typing import Annotated, Never
+import json
+from typing import Annotated, Any, Never
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pydantic import Field
 
+from sefia._tool_system import ToolRegistry
+from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
-from sefia.inference import ToolCallDecision
-from sefia.llm._strategy import (
-    LLMToolCall,
-    _LLMDecision,
-    _ToolEnabledDirector,
-    _ToolOnlyDirector,
-)
+from sefia.inference import FunctionInfo, ToolCallDecision
+from sefia.llm import LLMInferenceStrategy, LLMResponse
+from sefia.llm._strategy import _ToolOnlyDirector, _ToolSpec
 from sefia.pydantic import PydanticModelInspector
 
 
@@ -19,88 +19,142 @@ async def ask_user(question: Annotated[str, Field(min_length=1)]) -> str:
     raise NotImplementedError
 
 
-def _tool_schema() -> dict:
-    return PydanticModelInspector().get_schema_for_function(ask_user)
+class _MockPublisher(EventPublisher):
+    def __init__(self):
+        super().__init__(handlers=[])
+
+    async def publish(self, event):
+        pass
+
+
+def _spec() -> _ToolSpec:
+    inspector = PydanticModelInspector()
+    name = inspector.get_function_name(ask_user)
+    return _ToolSpec(
+        name=name,
+        schema=inspector.get_function_schema(ask_user, name=name),
+        arguments_model=inspector.get_arguments_model(ask_user, name=name),
+    )
+
+
+def _resolve(schema: dict, root: dict) -> dict:
+    """Follow a top-level ``$ref`` into ``$defs`` so assertions can inspect the
+    embedded per-tool schemas regardless of how Pydantic hoists definitions."""
+    if "$ref" in schema:
+        key = schema["$ref"].split("/")[-1]
+        return root["$defs"][key]
+    return schema
+
+
+def _tool_calls_array(schema: dict) -> dict:
+    tool_calls = schema["properties"]["tool_calls"]
+    if "anyOf" in tool_calls:
+        return next(
+            candidate
+            for candidate in tool_calls["anyOf"]
+            if candidate.get("type") == "array"
+        )
+    return tool_calls
 
 
 def _tool_call_item(schema: dict) -> dict:
-    items = schema["properties"]["tool_calls"]["items"]
-    alternatives = items.get("anyOf")
-    return alternatives[0] if alternatives else items
+    return _resolve(_tool_calls_array(schema)["items"], schema)
+
+
+def _name_constraint(name_schema: dict) -> Any:
+    # A single Literal renders as `const`; multiple values render as `enum`.
+    if "const" in name_schema:
+        return name_schema["const"]
+    return name_schema.get("enum")
 
 
 def test_tool_only_schema_embeds_tool_argument_schema() -> None:
-    director = _ToolOnlyDirector(PydanticModelInspector(), Never, [_tool_schema()])
+    director = _ToolOnlyDirector(PydanticModelInspector(), Never, [_spec()])
 
     schema = director.build_decision_schema()
 
-    tool_calls = schema["properties"]["tool_calls"]
-    assert tool_calls["minItems"] == 1
+    assert _tool_calls_array(schema)["minItems"] == 1
     item = _tool_call_item(schema)
-    assert item["properties"]["name"]["enum"] == ["ask_user"]
-    arguments = item["properties"]["arguments"]
+    assert _name_constraint(item["properties"]["name"]) in ("ask_user", ["ask_user"])
+    arguments = _resolve(item["properties"]["arguments"], schema)
     assert arguments["required"] == ["question"]
     assert arguments["additionalProperties"] is False
     assert arguments["properties"]["question"]["minLength"] == 1
 
 
-def test_tool_enabled_schema_embeds_tool_argument_schema() -> None:
-    director = _ToolEnabledDirector(PydanticModelInspector(), str, [_tool_schema()])
+class TestToolCallValidation:
+    """The decision model validates tool arguments end-to-end via the inspector."""
 
-    schema = director.build_decision_schema()
+    def _strategy(self, content: str) -> LLMInferenceStrategy:
+        client = AsyncMock()
+        client.complete.return_value = LLMResponse(content=content)
+        formatter = Mock()
+        formatter.format_arguments.return_value = "<arguments/>"
+        return LLMInferenceStrategy(
+            llm_client=client,
+            model_inspector=PydanticModelInspector(),
+            prompt_formatter=formatter,
+        )
 
-    tool_calls_schema = schema["properties"]["tool_calls"]
-    array_schema = next(
-        candidate
-        for candidate in tool_calls_schema["anyOf"]
-        if candidate.get("type") == "array"
-    )
-    assert array_schema["minItems"] == 1
-    item = array_schema["items"]
-    assert item["properties"]["name"]["enum"] == ["ask_user"]
-    assert item["properties"]["arguments"]["required"] == ["question"]
+    def _registry(self) -> ToolRegistry:
+        registry = ToolRegistry()
+        registry.add(ask_user, name="ask_user")
+        return registry
 
+    async def _decide(self, payload: dict):
+        strategy = self._strategy(json.dumps(payload))
+        return await strategy.decide_next_step(
+            FunctionInfo(
+                qualname="test",
+                instructions="chat",
+                bound_arguments={},
+                type_hints={},
+                return_type=Never,
+                args=(),
+                kwargs={},
+            ),
+            [],
+            self._registry(),
+            _MockPublisher(),
+        )
 
-def test_tool_call_validation_rejects_unknown_tool() -> None:
-    director = _ToolOnlyDirector(PydanticModelInspector(), Never, [_tool_schema()])
+    async def test_unknown_tool_passes_through_to_executor(self) -> None:
+        # An unknown tool name is not a schema-validation failure; it flows to the
+        # executor, which reports it as "tool not found".
+        decision = await self._decide(
+            {"tool_calls": [{"name": "unknown", "arguments": {}}]}
+        )
 
-    with pytest.raises(InvalidInferenceResponseError, match="unknown tool"):
-        director.process_decision(
-            _LLMDecision(
-                tool_calls=[LLMToolCall(name="unknown", arguments={"question": "Hi"})]
+        assert isinstance(decision, ToolCallDecision)
+        assert decision.calls[0].name == "unknown"
+
+    async def test_rejects_missing_required_argument(self) -> None:
+        with pytest.raises(InvalidInferenceResponseError, match="question"):
+            await self._decide(
+                {"tool_calls": [{"name": "ask_user", "arguments": {}}]}
             )
-        )
 
-
-def test_tool_call_validation_rejects_missing_required_argument() -> None:
-    director = _ToolOnlyDirector(PydanticModelInspector(), Never, [_tool_schema()])
-
-    with pytest.raises(InvalidInferenceResponseError, match="question"):
-        director.process_decision(
-            _LLMDecision(tool_calls=[LLMToolCall(name="ask_user", arguments={})])
-        )
-
-
-def test_tool_call_validation_rejects_empty_min_length_argument() -> None:
-    director = _ToolOnlyDirector(PydanticModelInspector(), Never, [_tool_schema()])
-
-    with pytest.raises(InvalidInferenceResponseError, match="at least 1"):
-        director.process_decision(
-            _LLMDecision(
-                tool_calls=[LLMToolCall(name="ask_user", arguments={"question": ""})]
+    async def test_rejects_empty_min_length_argument(self) -> None:
+        with pytest.raises(InvalidInferenceResponseError, match="at least 1"):
+            await self._decide(
+                {"tool_calls": [{"name": "ask_user", "arguments": {"question": ""}}]}
             )
+
+    async def test_rejects_unknown_argument(self) -> None:
+        with pytest.raises(InvalidInferenceResponseError, match="LLM output failed"):
+            await self._decide(
+                {
+                    "tool_calls": [
+                        {"name": "ask_user", "arguments": {"question": "Hi", "extra": 1}}
+                    ]
+                }
+            )
+
+    async def test_accepts_valid_arguments(self) -> None:
+        decision = await self._decide(
+            {"tool_calls": [{"name": "ask_user", "arguments": {"question": "Hello"}}]}
         )
 
-
-def test_tool_call_validation_accepts_valid_arguments() -> None:
-    director = _ToolOnlyDirector(PydanticModelInspector(), Never, [_tool_schema()])
-
-    result = director.process_decision(
-        _LLMDecision(
-            tool_calls=[LLMToolCall(name="ask_user", arguments={"question": "Hello"})]
-        )
-    )
-
-    assert isinstance(result, ToolCallDecision)
-    assert result.calls[0].name == "ask_user"
-    assert result.calls[0].arguments == {"question": "Hello"}
+        assert isinstance(decision, ToolCallDecision)
+        assert decision.calls[0].name == "ask_user"
+        assert decision.calls[0].arguments == {"question": "Hello"}

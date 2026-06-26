@@ -136,6 +136,16 @@ class TestCLIHumanInputAdapter:
         assert "x" in pending
         assert seen == [request]
 
+    async def test_handle_question_delta_notifies(self, session_store):
+        seen: list[str] = []
+        adapter = CLIHumanInputAdapter(on_question_delta=seen.append)
+
+        with adapter.store.use_session_store(session_store):
+            await adapter._handle_question_delta("What ")
+            await adapter._handle_question_delta("topic?")
+
+        assert seen == ["What ", "topic?"]
+
     async def test_handle_complete_removes_pending(self, adapter):
         await adapter.store.save_pending_requests({"x": _request("x")})
 
