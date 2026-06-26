@@ -83,12 +83,13 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
+                        "final_answer": None,
                         "tool_calls": [
                             {
                                 "name": "HumanInputTool_ask_user",
                                 "arguments": {"question": "What is your name?"},
                             }
-                        ]
+                        ],
                     }
                 )
             ),
@@ -99,7 +100,8 @@ class TestStatefulTool:
                             "topic": "User Info",
                             "summary": "The user's name is Alice.",
                             "sources": [],
-                        }
+                        },
+                        "tool_calls": None,
                     }
                 )
             ),
@@ -169,24 +171,26 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
+                        "final_answer": None,
                         "tool_calls": [
                             {
                                 "name": "HumanInputTool_ask_user",
                                 "arguments": {"question": "Name?"},
                             }
-                        ]
+                        ],
                     }
                 )
             ),
             LLMResponse(
                 content=json.dumps(
                     {
+                        "final_answer": None,
                         "tool_calls": [
                             {
                                 "name": "HumanInputTool_ask_user",
                                 "arguments": {"question": "Age?"},
                             }
-                        ]
+                        ],
                     }
                 )
             ),
@@ -197,7 +201,8 @@ class TestStatefulTool:
                             "topic": "Profile",
                             "summary": "Alice is 99.",
                             "sources": [],
-                        }
+                        },
+                        "tool_calls": None,
                     }
                 )
             ),

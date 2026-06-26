@@ -1,3 +1,10 @@
+from .decision_model import (
+    DecisionModel,
+    DecisionModelBuilder,
+    DecisionToolCall,
+    DecisionToolSpec,
+    LLMDecision,
+)
 from .inference_strategy import InferenceStrategy
 from .middleware import (
     InferenceContext,
@@ -18,4 +25,9 @@ __all__ = [
     "ModelInspector",
     "Policy",
     "SessionStore",
+    "DecisionModel",
+    "DecisionModelBuilder",
+    "DecisionToolCall",
+    "DecisionToolSpec",
+    "LLMDecision",
 ]

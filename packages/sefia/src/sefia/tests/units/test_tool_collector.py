@@ -249,9 +249,17 @@ class BadToolifyAgent:
         self._tools = toolify(BadCallable())
 
 
-def test_function_schema_generation_raises_for_unannotated_callable():
+def test_tool_schema_generation_requires_type_annotations():
+    # Collection records neutral metadata and succeeds; the missing annotation is
+    # only surfaced later, when the strategy asks the inspector for a schema.
+    registry = DefaultToolCollector().collect(BadToolifyAgent())
+    tool_info = registry.get("BadCallable")
+    assert tool_info is not None
+
     with pytest.raises(ValueError, match="must have a type annotation"):
-        PydanticModelInspector().get_function_schema(BadCallable())
+        PydanticModelInspector().get_function_schema(
+            tool_info.function, name=tool_info.name
+        )
 
 
 class CallableToolkit:

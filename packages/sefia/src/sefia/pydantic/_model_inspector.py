@@ -1,11 +1,15 @@
-import functools
-import inspect
-import re
-from typing import Any, Callable, Type, cast
+from typing import Any, Callable, Type
 
-from pydantic import TypeAdapter, ValidationError, create_model
+from pydantic import TypeAdapter, ValidationError
 
 from .._interfaces.model_inspector import ModelInspector
+from ._function_models import (
+    cache_key,
+    create_params_model,
+    get_callable_doc,
+    get_callable_qualname,
+    sanitize_function_name,
+)
 
 
 class PydanticModelInspector(ModelInspector):
@@ -27,7 +31,7 @@ class PydanticModelInspector(ModelInspector):
         return schema
 
     def get_function_name(self, func: Callable[..., Any]) -> str:
-        return self._sanitize_function_name(self._get_callable_qualname(func))
+        return sanitize_function_name(get_callable_qualname(func))
 
     def get_function_schema(
         self,
@@ -36,47 +40,26 @@ class PydanticModelInspector(ModelInspector):
         name: str | None = None,
     ) -> dict:
         schema_name = name or self.get_function_name(func)
-        cache_key = ("function_schema", self._cache_key(func), schema_name)
-        if cache_key in self._schema_cache:
-            return self._schema_cache[cache_key]
+        cache_key_value = ("function_schema", cache_key(func), schema_name)
+        if cache_key_value in self._schema_cache:
+            return self._schema_cache[cache_key_value]
 
-        sig = inspect.signature(func)
-        type_hints = self._get_callable_annotations(func)
-        qualname = self._get_callable_qualname(func)
-
-        params: dict[str, tuple[Any, Any]] = {}
-        for param_name, param in sig.parameters.items():
-            if param.kind not in [
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                inspect.Parameter.KEYWORD_ONLY,
-                inspect.Parameter.POSITIONAL_ONLY,
-            ] or param_name in ("self", "cls"):
-                continue
-
-            if param_name not in type_hints:
-                raise ValueError(
-                    f"Tool parameter '{param_name}' on '{qualname}' must have "
-                    "a type annotation."
-                )
-
-            params[param_name] = (
-                type_hints[param_name],
-                param.default if param.default is not inspect.Parameter.empty else ...,
-            )
-
-        field_definitions = cast(dict[str, Any], params)
-        param_model = create_model(f"{schema_name}Params", **field_definitions)
+        param_model = create_params_model(
+            func,
+            name=schema_name,
+            forbid_extra=True,
+        )
         schema = TypeAdapter(param_model).json_schema()
 
         result = {
             "type": "function",
             "function": {
                 "name": schema_name,
-                "description": self._get_callable_doc(func),
+                "description": get_callable_doc(func),
                 "parameters": schema,
             },
         }
-        self._schema_cache[cache_key] = result
+        self._schema_cache[cache_key_value] = result
         return result
 
     def validate(self, model_type: Type[Any] | Any, data: Any) -> Any:
@@ -90,74 +73,3 @@ class PydanticModelInspector(ModelInspector):
         if model_type not in self._adapter_cache:
             self._adapter_cache[model_type] = TypeAdapter(model_type)
         return self._adapter_cache[model_type]
-
-    @staticmethod
-    def _cache_key(func: Callable[..., Any]) -> Any:
-        try:
-            hash(func)
-        except TypeError:
-            return id(func)
-        return func
-
-    @staticmethod
-    def _sanitize_function_name(name: str) -> str:
-        return re.sub(r"[^a-zA-Z0-9_-]", "_", name.replace(".", "_"))
-
-    def _get_callable_qualname(self, func: Callable[..., Any]) -> str:
-        if isinstance(func, functools.partial):
-            return f"partial_{self._get_callable_qualname(func.func)}"
-
-        qualname = getattr(func, "__qualname__", None)
-        if qualname:
-            return qualname
-
-        if not inspect.isclass(func) and callable(func):
-            return type(func).__qualname__
-
-        name = getattr(func, "__name__", None)
-        if name:
-            return name
-
-        return type(func).__qualname__
-
-    def _get_callable_annotations(self, func: Callable[..., Any]) -> dict[str, Any]:
-        annotation_source = self._get_annotation_source(func)
-        if annotation_source is None:
-            return {}
-        return inspect.get_annotations(annotation_source, eval_str=True)
-
-    def _get_annotation_source(
-        self, func: Callable[..., Any]
-    ) -> Callable[..., Any] | None:
-        if isinstance(func, functools.partial):
-            return self._get_annotation_source(func.func)
-
-        if inspect.isfunction(func) or inspect.ismethod(func):
-            return inspect.unwrap(func)
-
-        if not inspect.isclass(func) and callable(func):
-            call = getattr(func, "__call__", None)
-            if call is not None:
-                return inspect.unwrap(call)
-
-        return func
-
-    def _get_callable_doc(self, func: Callable[..., Any]) -> str:
-        if isinstance(func, functools.partial):
-            return self._get_callable_doc(func.func)
-
-        if (
-            not inspect.isclass(func)
-            and not (inspect.isfunction(func) or inspect.ismethod(func))
-            and callable(func)
-        ):
-            return (
-                inspect.getdoc(getattr(func, "__call__", None))
-                or inspect.getdoc(func)
-                or ""
-            )
-
-        if inspect.getdoc(func):
-            return inspect.getdoc(func) or ""
-
-        return ""

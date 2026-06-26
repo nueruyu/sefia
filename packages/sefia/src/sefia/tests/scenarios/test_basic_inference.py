@@ -44,6 +44,7 @@ async def test_inference_with_tool_calls(
         LLMResponse(
             content=json.dumps(
                 {
+                    "final_answer": None,
                     "tool_calls": [
                         {
                             "name": "WebToolkit_search",
@@ -57,6 +58,7 @@ async def test_inference_with_tool_calls(
         LLMResponse(
             content=json.dumps(
                 {
+                    "final_answer": None,
                     "tool_calls": [
                         {
                             "name": "WebToolkit_fetch_content",
@@ -74,7 +76,8 @@ async def test_inference_with_tool_calls(
                         "topic": "sefia",
                         "summary": "Sefia is a framework for building LLM agents.",
                         "sources": ["https://example.com/sefia"],
-                    }
+                    },
+                    "tool_calls": None,
                 }
             )
         ),
@@ -145,6 +148,7 @@ async def test_inference_with_tool_exception(
         LLMResponse(
             content=json.dumps(
                 {
+                    "final_answer": None,
                     "tool_calls": [
                         {
                             "name": "BrokenToolkit_always_fail",
@@ -162,7 +166,8 @@ async def test_inference_with_tool_exception(
                         "topic": "failure",
                         "summary": "The tool failed with a ValueError.",
                         "sources": ["error: ValueError(Failed because: test)"],
-                    }
+                    },
+                    "tool_calls": None,
                 }
             )
         ),
@@ -207,6 +212,7 @@ async def test_inference_with_nonexistent_tool_call(
         LLMResponse(
             content=json.dumps(
                 {
+                    "final_answer": None,
                     "tool_calls": [
                         {
                             "name": "NonExistent_tool",
@@ -223,7 +229,8 @@ async def test_inference_with_nonexistent_tool_call(
                         "topic": "tool_not_found",
                         "summary": "Tried to call a tool that does not exist.",
                         "sources": [],
-                    }
+                    },
+                    "tool_calls": None,
                 }
             )
         ),

@@ -13,6 +13,7 @@ from ._tool_system import ToolCollector
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
 from .llm._xml_prompt_formatter import XmlPromptFormatter
+from .pydantic._decision_model import PydanticDecisionModelBuilder
 from .pydantic._json_utils import pydantic_json_default
 from .pydantic._model_inspector import PydanticModelInspector
 from .tool_collectors import DefaultToolCollector
@@ -44,6 +45,7 @@ class Session:
         self._policies: list[Policy] = list(policies) if policies is not None else []
 
         model_inspector = model_inspector or PydanticModelInspector()
+        decision_model_builder = PydanticDecisionModelBuilder()
 
         self._tool_collector = tool_collector or DefaultToolCollector(
             model_inspector=model_inspector
@@ -55,6 +57,7 @@ class Session:
             return LLMInferenceStrategy(
                 client,
                 model_inspector=model_inspector,
+                decision_model_builder=decision_model_builder,
                 prompt_formatter=prompt_formatter,
                 json_default=pydantic_json_default,
                 stream=stream,

@@ -1,0 +1,120 @@
+import functools
+import inspect
+import re
+from collections.abc import Callable
+from typing import Any, cast
+
+from pydantic import ConfigDict, create_model
+
+
+def cache_key(func: Callable[..., Any]) -> Any:
+    try:
+        hash(func)
+    except TypeError:
+        return id(func)
+    return func
+
+
+def sanitize_function_name(name: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", name.replace(".", "_"))
+
+
+def get_callable_qualname(func: Callable[..., Any]) -> str:
+    if isinstance(func, functools.partial):
+        return f"partial_{get_callable_qualname(func.func)}"
+
+    qualname = getattr(func, "__qualname__", None)
+    if qualname:
+        return qualname
+
+    if not inspect.isclass(func) and callable(func):
+        return type(func).__qualname__
+
+    name = getattr(func, "__name__", None)
+    if name:
+        return name
+
+    return type(func).__qualname__
+
+
+def get_callable_annotations(func: Callable[..., Any]) -> dict[str, Any]:
+    annotation_source = get_annotation_source(func)
+    if annotation_source is None:
+        return {}
+    return inspect.get_annotations(annotation_source, eval_str=True)
+
+
+def get_annotation_source(func: Callable[..., Any]) -> Callable[..., Any] | None:
+    if isinstance(func, functools.partial):
+        return get_annotation_source(func.func)
+
+    if inspect.isfunction(func) or inspect.ismethod(func):
+        return inspect.unwrap(func)
+
+    if not inspect.isclass(func) and callable(func):
+        call = getattr(func, "__call__", None)
+        if call is not None:
+            return inspect.unwrap(call)
+
+    return func
+
+
+def get_callable_doc(func: Callable[..., Any]) -> str:
+    if isinstance(func, functools.partial):
+        return get_callable_doc(func.func)
+
+    if (
+        not inspect.isclass(func)
+        and not (inspect.isfunction(func) or inspect.ismethod(func))
+        and callable(func)
+    ):
+        return inspect.getdoc(getattr(func, "__call__", None)) or inspect.getdoc(func) or ""
+
+    if inspect.getdoc(func):
+        return inspect.getdoc(func) or ""
+
+    return ""
+
+
+def create_params_model(
+    func: Callable[..., Any],
+    *,
+    name: str,
+    forbid_extra: bool,
+) -> type:
+    field_definitions = build_param_fields(func)
+    if forbid_extra:
+        return create_model(
+            f"{name}Params",
+            __config__=ConfigDict(extra="forbid"),
+            **field_definitions,
+        )
+    return create_model(f"{name}Params", **field_definitions)
+
+
+def build_param_fields(func: Callable[..., Any]) -> dict[str, Any]:
+    sig = inspect.signature(func)
+    type_hints = get_callable_annotations(func)
+    qualname = get_callable_qualname(func)
+
+    params: dict[str, tuple[Any, Any]] = {}
+    for param_name, param in sig.parameters.items():
+        if param.kind not in [
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+            inspect.Parameter.POSITIONAL_ONLY,
+        ] or param_name in ("self", "cls"):
+            continue
+
+        if param_name not in type_hints:
+            raise ValueError(
+                f"Tool parameter '{param_name}' on '{qualname}' must have "
+                "a type annotation."
+            )
+
+        params[param_name] = (
+            type_hints[param_name],
+            param.default if param.default is not inspect.Parameter.empty else ...,
+        )
+
+    return cast(dict[str, Any], params)

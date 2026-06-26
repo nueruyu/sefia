@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-import copy
 import json
 import uuid
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Callable, Never, Union
+from dataclasses import dataclass
+from typing import Any, Callable, Never
 
-from pydantic import create_model
-
-from .._interfaces import InferenceStrategy, ModelInspector
+from .._interfaces import (
+    DecisionModel,
+    DecisionModelBuilder,
+    DecisionToolCall,
+    DecisionToolSpec,
+    InferenceStrategy,
+    LLMDecision,
+    ModelInspector,
+)
 from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError
@@ -32,185 +37,39 @@ from ._prompt_formatter import PromptFormatter
 JsonDefault = Callable[[Any], Any]
 
 
-def _inline_local_refs(schema: dict[str, Any]) -> dict[str, Any]:
-    schema = copy.deepcopy(schema)
-    defs = schema.get("$defs", {})
-
-    def resolve(value: Any, seen: frozenset[str] = frozenset()) -> Any:
-        if isinstance(value, list):
-            return [resolve(item, seen) for item in value]
-        if not isinstance(value, dict):
-            return value
-        ref = value.get("$ref")
-        if isinstance(ref, str) and ref.startswith("#/$defs/"):
-            key = ref.removeprefix("#/$defs/")
-            if key not in defs or key in seen:
-                return {k: resolve(v, seen) for k, v in value.items()}
-            resolved = resolve(copy.deepcopy(defs[key]), seen | {key})
-            if isinstance(resolved, dict):
-                resolved.update({k: resolve(v, seen) for k, v in value.items() if k != "$ref"})
-            return resolved
-        return {k: resolve(v, seen) for k, v in value.items() if k != "$defs"}
-
-    return resolve(schema)
-
-
-def _tool_name(tool: dict[str, Any]) -> str | None:
-    fn = tool.get("function")
-    if not isinstance(fn, dict):
-        return None
-    name = fn.get("name")
-    return name if isinstance(name, str) and name else None
-
-
-def _tool_arguments_schema(tool: dict[str, Any]) -> dict[str, Any]:
-    fn = tool.get("function") if isinstance(tool.get("function"), dict) else {}
-    parameters = fn.get("parameters") if isinstance(fn, dict) else None
-    if not isinstance(parameters, dict):
-        parameters = {"type": "object", "properties": {}, "required": []}
-    schema = _inline_local_refs(parameters)
-    schema.setdefault("type", "object")
-    schema.setdefault("properties", {})
-    schema.setdefault("required", [])
-    if schema.get("type") == "object":
-        schema.setdefault("additionalProperties", False)
-    return schema
-
-
-def _tool_call_item_schema(tools: list[dict[str, Any]]) -> dict[str, Any]:
-    variants = []
-    for tool in tools:
-        name = _tool_name(tool)
-        if name is None:
-            continue
-        variants.append(
-            {
-                "type": "object",
-                "properties": {
-                    "name": {"enum": [name]},
-                    "arguments": _tool_arguments_schema(tool),
-                },
-                "required": ["name", "arguments"],
-                "additionalProperties": False,
-            }
-        )
-    if not variants:
-        return {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "arguments": {"type": "object"},
-            },
-            "required": ["name", "arguments"],
-            "additionalProperties": False,
-        }
-    if len(variants) == 1:
-        return variants[0]
-    return {"anyOf": variants}
-
-
-def _tool_calls_schema(tools: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"type": "array", "minItems": 1, "items": _tool_call_item_schema(tools)}
-
-
-def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
-    return {"anyOf": [schema, {"type": "null"}]}
-
-
-def _validate_value(value: Any, schema: dict[str, Any], path: str) -> None:
-    if "enum" in schema and value not in schema["enum"]:
-        raise InvalidInferenceResponseError(f"LLM tool call value at {path} must be one of {schema['enum']!r}.")
-    alternatives = schema.get("anyOf") or schema.get("oneOf")
-    if isinstance(alternatives, list):
-        errors = []
-        for alternative in alternatives:
-            if not isinstance(alternative, dict):
-                continue
-            try:
-                _validate_value(value, alternative, path)
-                return
-            except InvalidInferenceResponseError as e:
-                errors.append(e)
-        raise InvalidInferenceResponseError(f"LLM tool call value at {path} did not match schema: {errors[0] if errors else 'no alternatives matched'}")
-
-    schema_type = schema.get("type")
-    if schema_type == "object":
-        if not isinstance(value, dict):
-            raise InvalidInferenceResponseError(f"LLM tool call value at {path} must be an object.")
-        properties = schema.get("properties") or {}
-        for name in schema.get("required") or []:
-            if name not in value:
-                raise InvalidInferenceResponseError(f"LLM tool call value at {path} is missing required property {name!r}.")
-        if schema.get("additionalProperties") is False:
-            unknown = set(value) - set(properties)
-            if unknown:
-                raise InvalidInferenceResponseError(f"LLM tool call value at {path} has unknown properties: {sorted(unknown)!r}.")
-        for name, subschema in properties.items():
-            if name in value and isinstance(subschema, dict):
-                _validate_value(value[name], subschema, f"{path}.{name}")
-    elif schema_type == "array":
-        if not isinstance(value, list):
-            raise InvalidInferenceResponseError(f"LLM tool call value at {path} must be an array.")
-        min_items = schema.get("minItems")
-        if isinstance(min_items, int) and len(value) < min_items:
-            raise InvalidInferenceResponseError(f"LLM tool call value at {path} must contain at least {min_items} item(s).")
-        item_schema = schema.get("items")
-        if isinstance(item_schema, dict):
-            for index, item in enumerate(value):
-                _validate_value(item, item_schema, f"{path}[{index}]")
-    elif schema_type == "string":
-        if not isinstance(value, str):
-            raise InvalidInferenceResponseError(f"LLM tool call value at {path} must be a string.")
-        min_length = schema.get("minLength")
-        if isinstance(min_length, int) and len(value) < min_length:
-            raise InvalidInferenceResponseError(f"LLM tool call value at {path} must contain at least {min_length} character(s).")
-    elif schema_type == "integer":
-        if not isinstance(value, int) or isinstance(value, bool):
-            raise InvalidInferenceResponseError(f"LLM tool call value at {path} must be an integer.")
-    elif schema_type == "number":
-        if not isinstance(value, (int, float)) or isinstance(value, bool):
-            raise InvalidInferenceResponseError(f"LLM tool call value at {path} must be a number.")
-    elif schema_type == "boolean":
-        if not isinstance(value, bool):
-            raise InvalidInferenceResponseError(f"LLM tool call value at {path} must be a boolean.")
-    elif schema_type == "null" and value is not None:
-        raise InvalidInferenceResponseError(f"LLM tool call value at {path} must be null.")
-
-
-@dataclass
-class LLMToolCall:
-    """A tool call requested by the inference strategy before an ID is assigned."""
+@dataclass(frozen=True)
+class _ToolSpec:
+    """A tool prepared for the prompt and decision model."""
 
     name: str
-    arguments: dict[str, Any] = field(default_factory=dict)
+    function: Callable[..., Any]
+    schema: dict
 
 
 class _ExecutionDirector(ABC):
     """
     Abstract base class for directing the LLM's execution flow.
-    Encapsulates the logic for building schemas, prompts, and processing
-    decisions for a specific mode of operation.
     """
 
     def __init__(
         self,
-        model_inspector: ModelInspector,
+        decision_model_builder: DecisionModelBuilder,
         output_type: Any,
-        tools: list[dict],
+        tool_specs: list[_ToolSpec],
     ):
-        self.model_inspector = model_inspector
+        self.decision_model_builder = decision_model_builder
         self.output_type = output_type
-        self.tools = tools
-        self._tool_argument_schemas = {
-            name: _tool_arguments_schema(tool)
-            for tool in tools
-            if (name := _tool_name(tool)) is not None
-        }
+        self.tool_specs = tool_specs
+        self.decision_model = self._build_decision_model()
 
     @abstractmethod
+    def _build_decision_model(self) -> DecisionModel:
+        """Builds the model for the LLM's decision."""
+        raise NotImplementedError
+
     def build_decision_schema(self) -> dict:
         """Builds the JSON schema for the LLM's decision."""
-        raise NotImplementedError
+        return self.decision_model.schema()
 
     @abstractmethod
     def build_system_prompt_addition(self, output_schema: dict) -> str:
@@ -218,83 +77,92 @@ class _ExecutionDirector(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def process_decision(self, decision: _LLMDecision) -> InferenceDecision:
-        """Processes the LLM's decision and returns an InferenceDecision."""
+    def process_decision(self, decision: LLMDecision) -> InferenceDecision:
+        """Processes the validated decision and returns an InferenceDecision."""
         raise NotImplementedError
 
-    def _build_tool_call_requests(self, tool_calls: list[LLMToolCall]) -> list[ToolCallRequest]:
-        requests = []
+    def _tool_definitions(self) -> list[dict]:
+        return [spec.schema.get("function", {}) for spec in self.tool_specs]
+
+    def _tool_call_decision(
+        self, tool_calls: list[DecisionToolCall]
+    ) -> ToolCallDecision:
+        calls = []
         for tc in tool_calls:
-            self._validate_tool_call(tc)
-            requests.append(
+            calls.append(
                 ToolCallRequest(
                     id=f"call_{uuid.uuid4().hex[:12]}",
                     name=tc.name,
                     arguments=tc.arguments,
                 )
             )
-        return requests
+        return ToolCallDecision(calls=calls)
 
-    def _validate_tool_call(self, tool_call: LLMToolCall) -> None:
-        if not self._tool_argument_schemas:
-            return
-        arguments_schema = self._tool_argument_schemas.get(tool_call.name)
-        if arguments_schema is None:
-            raise InvalidInferenceResponseError(f"LLM requested unknown tool: {tool_call.name!r}.")
-        _validate_value(tool_call.arguments, arguments_schema, f"{tool_call.name}.arguments")
+
+def _decision_tool_specs(tool_specs: list[_ToolSpec]) -> list[DecisionToolSpec]:
+    return [
+        DecisionToolSpec(name=spec.name, function=spec.function, schema=spec.schema)
+        for spec in tool_specs
+    ]
+
+
+_TOOL_DEFINITIONS_HEADER = (
+    "\n### Available Tools\n"
+    "Here is a list of tools you can call. Use their `name` in the `tool_calls` field.\n"
+)
+_RESPONSE_SCHEMA_HEADER = (
+    "\n### Response Schema\n"
+    "Your response MUST be a single, valid, raw JSON object that strictly "
+    "conforms to this JSON Schema:\n"
+)
 
 
 class _ToolOnlyDirector(_ExecutionDirector):
     """Director for tool-only execution mode."""
 
-    def build_decision_schema(self) -> dict:
-        return {
-            "type": "object",
-            "description": "The model for the LLM's decision on the next action.",
-            "properties": {"tool_calls": _tool_calls_schema(self.tools)},
-            "required": ["tool_calls"],
-            "additionalProperties": False,
-        }
+    def _build_decision_model(self) -> DecisionModel:
+        return self.decision_model_builder.build(
+            name="LLMDecision",
+            output_type=self.output_type,
+            tools=_decision_tool_specs(self.tool_specs),
+            include_final_answer=False,
+            include_tool_calls=True,
+            final_answer_nullable=False,
+            tool_calls_nullable=True,
+        )
 
     def build_system_prompt_addition(self, output_schema: dict) -> str:
         core_instruction = (
             "Your task is to call tools. You MUST always populate the `tool_calls` "
             "field. There is no `final_answer` — you must never stop calling tools."
         )
-        tool_definitions = [t.get("function", {}) for t in self.tools]
         return (
             f"\n\n### Response Instructions\n{core_instruction}\n"
-            "\n### Available Tools\n"
-            "Here is a list of tools you can call. Use their `name` in the `tool_calls` field.\n"
-            f"{json.dumps(tool_definitions, indent=2, ensure_ascii=False)}\n"
-            f"\n### Response Schema\n"
-            f"Your response MUST be a single, valid, raw JSON object that strictly conforms to this JSON Schema:\n"
+            f"{_TOOL_DEFINITIONS_HEADER}"
+            f"{json.dumps(self._tool_definitions(), indent=2, ensure_ascii=False)}\n"
+            f"{_RESPONSE_SCHEMA_HEADER}"
             f"{json.dumps(output_schema, ensure_ascii=False)}"
         )
 
-    def process_decision(self, decision: _LLMDecision) -> InferenceDecision:
+    def process_decision(self, decision: LLMDecision) -> InferenceDecision:
         if decision.tool_calls:
-            return ToolCallDecision(calls=self._build_tool_call_requests(decision.tool_calls))
-        if decision.final_answer is not None:
-            raise InvalidInferenceResponseError(
-                "Return type is Never but LLM returned a final answer."
-            )
+            return self._tool_call_decision(decision.tool_calls)
         raise InvalidInferenceResponseError("LLM response must contain 'tool_calls'.")
 
 
 class _ToolEnabledDirector(_ExecutionDirector):
     """Director for tool-enabled execution mode (tools or final answer)."""
 
-    def build_decision_schema(self) -> dict:
-        decision_model = create_model(
-            "LLMDecision",
-            final_answer=(Union[self.output_type, None], ...),
-            tool_calls=(Union[list[LLMToolCall], None], ...),
+    def _build_decision_model(self) -> DecisionModel:
+        return self.decision_model_builder.build(
+            name="LLMDecision",
+            output_type=self.output_type,
+            tools=_decision_tool_specs(self.tool_specs),
+            include_final_answer=True,
+            include_tool_calls=True,
+            final_answer_nullable=True,
+            tool_calls_nullable=True,
         )
-        schema = self.model_inspector.get_type_schema(decision_model)
-        schema["description"] = "The model for the LLM's decision on the next action."
-        schema.setdefault("properties", {})["tool_calls"] = _nullable(_tool_calls_schema(self.tools))
-        return schema
 
     def build_system_prompt_addition(self, output_schema: dict) -> str:
         core_instruction = (
@@ -306,25 +174,19 @@ class _ToolEnabledDirector(_ExecutionDirector):
             "Use `tool_calls` to gather more information, and use `final_answer` "
             "only when you have enough information to complete the entire task."
         )
-        tool_definitions = [t.get("function", {}) for t in self.tools]
         return (
             f"\n\n### Response Instructions\n{core_instruction}\n"
-            "\n### Available Tools\n"
-            "Here is a list of tools you can call. Use their `name` in the `tool_calls` field.\n"
-            f"{json.dumps(tool_definitions, indent=2, ensure_ascii=False)}\n"
-            f"\n### Response Schema\n"
-            f"Your response MUST be a single, valid, raw JSON object that strictly conforms to this JSON Schema:\n"
+            f"{_TOOL_DEFINITIONS_HEADER}"
+            f"{json.dumps(self._tool_definitions(), indent=2, ensure_ascii=False)}\n"
+            f"{_RESPONSE_SCHEMA_HEADER}"
             f"{json.dumps(output_schema, ensure_ascii=False)}"
         )
 
-    def process_decision(self, decision: _LLMDecision) -> InferenceDecision:
+    def process_decision(self, decision: LLMDecision) -> InferenceDecision:
         if decision.tool_calls:
-            return ToolCallDecision(calls=self._build_tool_call_requests(decision.tool_calls))
+            return self._tool_call_decision(decision.tool_calls)
         if decision.final_answer is not None:
-            validated_answer = self.model_inspector.validate(
-                self.output_type, decision.final_answer
-            )
-            return FinalAnswerDecision(answer=validated_answer)
+            return FinalAnswerDecision(answer=decision.final_answer)
         raise InvalidInferenceResponseError(
             "LLM response must contain either 'tool_calls' or a non-null 'final_answer'."
         )
@@ -333,14 +195,16 @@ class _ToolEnabledDirector(_ExecutionDirector):
 class _OutputOnlyDirector(_ExecutionDirector):
     """Director for final-answer-only execution mode."""
 
-    def build_decision_schema(self) -> dict:
-        decision_model = create_model(
-            "LLMDecision",
-            final_answer=(self.output_type, ...),
+    def _build_decision_model(self) -> DecisionModel:
+        return self.decision_model_builder.build(
+            name="LLMDecision",
+            output_type=self.output_type,
+            tools=_decision_tool_specs(self.tool_specs),
+            include_final_answer=True,
+            include_tool_calls=False,
+            final_answer_nullable=False,
+            tool_calls_nullable=False,
         )
-        schema = self.model_inspector.get_type_schema(decision_model)
-        schema["description"] = "The model for the LLM's decision on the next action."
-        return schema
 
     def build_system_prompt_addition(self, output_schema: dict) -> str:
         core_instruction = (
@@ -351,28 +215,16 @@ class _OutputOnlyDirector(_ExecutionDirector):
         )
         return (
             f"\n\n### Response Instructions\n{core_instruction}\n"
-            f"\n### Response Schema\n"
-            f"Your response MUST be a single, valid, raw JSON object that strictly conforms to this JSON Schema:\n"
+            f"{_RESPONSE_SCHEMA_HEADER}"
             f"{json.dumps(output_schema, ensure_ascii=False)}"
         )
 
-    def process_decision(self, decision: _LLMDecision) -> InferenceDecision:
+    def process_decision(self, decision: LLMDecision) -> InferenceDecision:
         if decision.final_answer is not None:
-            validated_answer = self.model_inspector.validate(
-                self.output_type, decision.final_answer
-            )
-            return FinalAnswerDecision(answer=validated_answer)
+            return FinalAnswerDecision(answer=decision.final_answer)
         raise InvalidInferenceResponseError(
             "LLM response must contain a non-null 'final_answer'."
         )
-
-
-@dataclass
-class _LLMDecision:
-    """Typed stub for the dynamically created decision model."""
-
-    final_answer: Any = None
-    tool_calls: list[LLMToolCall] | None = None
 
 
 class LLMInferenceStrategy(InferenceStrategy):
@@ -386,30 +238,50 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         llm_client: LLMClient,
         model_inspector: ModelInspector,
+        decision_model_builder: DecisionModelBuilder,
         prompt_formatter: PromptFormatter,
         json_default: JsonDefault | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
         self.model_inspector = model_inspector
+        self.decision_model_builder = decision_model_builder
         self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
 
+    def _build_tool_specs(self, tools: ToolRegistry) -> list[_ToolSpec]:
+        return [
+            _ToolSpec(
+                name=tool.name,
+                function=tool.function,
+                schema=self.model_inspector.get_function_schema(
+                    tool.function, name=tool.name
+                ),
+            )
+            for tool in tools.get_all()
+        ]
+
     def _create_director(
-        self, output_type: Any, tools: list[dict]
+        self, output_type: Any, tool_specs: list[_ToolSpec]
     ) -> _ExecutionDirector:
         """Creates the appropriate execution director based on the context."""
         if output_type is Never:
-            if not tools:
+            if not tool_specs:
                 raise ValueError(
                     "An @infer function returning Never must have tools available, "
                     "otherwise the inference loop can never make progress."
                 )
-            return _ToolOnlyDirector(self.model_inspector, output_type, tools)
-        if tools:
-            return _ToolEnabledDirector(self.model_inspector, output_type, tools)
-        return _OutputOnlyDirector(self.model_inspector, output_type, tools)
+            return _ToolOnlyDirector(
+                self.decision_model_builder, output_type, tool_specs
+            )
+        if tool_specs:
+            return _ToolEnabledDirector(
+                self.decision_model_builder, output_type, tool_specs
+            )
+        return _OutputOnlyDirector(
+            self.decision_model_builder, output_type, tool_specs
+        )
 
     async def decide_next_step(
         self,
@@ -418,11 +290,8 @@ class LLMInferenceStrategy(InferenceStrategy):
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
-        tool_schemas = [
-            self.model_inspector.get_function_schema(tool.function, name=tool.name)
-            for tool in tools.get_all()
-        ]
-        director = self._create_director(function_info.return_type, tool_schemas)
+        tool_specs = self._build_tool_specs(tools)
+        director = self._create_director(function_info.return_type, tool_specs)
         output_schema = director.build_decision_schema()
         messages = self._build_messages(
             function_info,
@@ -477,9 +346,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 raw = "\n".join(lines[1:-1]).strip()
 
             decision_data = json.loads(raw)
-            decision: _LLMDecision = self.model_inspector.validate(
-                _LLMDecision, decision_data
-            )
+            decision = director.decision_model.validate(decision_data)
             return director.process_decision(decision)
 
         except (json.JSONDecodeError, ValueError) as e:

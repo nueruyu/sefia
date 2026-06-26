@@ -86,11 +86,11 @@ class HumanInputTool:
         question: Annotated[str, Field(min_length=1)],
     ) -> str:
         """
-        Display ``question`` to the user as the visible assistant message, then
-        interrupt the session and wait for the user's answer.
+        Request external human input for ``question`` and return the answer.
 
-        Use ``question`` for the full message that should be shown to the user.
-        Do not call this tool with an empty question.
+        The question is emitted to the configured human-input callbacks. If no
+        answer is immediately available, the current session is interrupted until
+        input is provided.
         """
         ctx = get_context()
         call_store = ctx.get_call_state_store("internal_state", _AskUserState)

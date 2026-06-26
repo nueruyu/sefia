@@ -43,6 +43,30 @@ class TestPydanticModelInspector:
         assert fn["name"] == "_sample_func"
         assert fn["description"] == "Sample function."
         assert fn["parameters"]["properties"]["a"]["type"] == "integer"
+        assert fn["parameters"]["properties"]["b"]["type"] == "string"
+        assert fn["parameters"]["properties"]["b"]["default"] == "x"
+        assert fn["parameters"]["required"] == ["a"]
+        assert fn["parameters"]["additionalProperties"] is False
+
+    def test_get_function_name_sanitizes_complex_names(self):
+        class Outer:
+            class Inner:
+                def my_method(self):
+                    pass
+
+        name = PydanticModelInspector().get_function_name(Outer.Inner.my_method)
+
+        assert name.endswith("Outer_Inner_my_method")
+        assert "." not in name
+        assert "<" not in name
+
+    def test_get_function_schema_is_cached(self):
+        inspector = PydanticModelInspector()
+
+        schema1 = inspector.get_function_schema(_sample_func)
+        schema2 = inspector.get_function_schema(_sample_func)
+
+        assert schema1 is schema2
 
     def test_validate_dataclass(self):
         inspector = PydanticModelInspector()
