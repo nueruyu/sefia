@@ -9,9 +9,7 @@ async def test_human_input_tool_streams_question_deltas():
     tool = HumanInputTool(on_question_delta=seen.append)
     registry = DefaultToolCollector().collect(tool)
     registered = next(
-        tool
-        for tool in registry.get_all()
-        if "get_human_input" in tool.schema["function"]["name"]
+        tool for tool in registry.get_all() if "get_human_input" in tool.name
     )
     assert registered.stream_handler is not None
 

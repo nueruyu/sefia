@@ -86,9 +86,6 @@ class InferenceExecutor:
             self._tool_registry: ToolRegistry = tool_collector.collect(instance)
         else:
             self._tool_registry = ToolRegistry()
-        self._tool_schemas: list[dict] = [
-            t.schema for t in self._tool_registry.get_all()
-        ]
 
         self._next_step_engraved = _wrap(self._next_step, engrave)
         self._call_tools_engraved = _wrap(self._call_tools, engrave)
@@ -96,7 +93,10 @@ class InferenceExecutor:
     async def _next_step(self, history: list[HistoryItem]) -> InferenceDecision:
         """Internal engraved method for a single inference strategy call."""
         await self.publisher.publish(
-            events.BeforeInferenceStep(history=history, tools=self._tool_schemas)
+            events.BeforeInferenceStep(
+                history=history,
+                tool_names=self._tool_registry.get_names(),
+            )
         )
 
         try:

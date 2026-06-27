@@ -60,10 +60,7 @@ DUMMY_SCHEMA: dict = {}
 def _tool_registry(*names: str) -> ToolRegistry:
     registry = ToolRegistry()
     for name in names:
-        registry.add(
-            lambda: None,
-            {"type": "function", "function": {"name": name, "parameters": {}}},
-        )
+        registry.add(lambda: None, name=name)
     return registry
 
 

@@ -267,7 +267,7 @@ async def test_arguments_stream_through_a_real_strategy():
     tools = ToolRegistry()
     tools.add(
         lambda: None,
-        {"type": "function", "function": {"name": "ask_human", "parameters": {}}},
+        name="ask_human",
         stream_handler=collector,
     )
 

@@ -8,10 +8,10 @@ from .streaming import StreamHandler
 
 @dataclass(frozen=True)
 class Tool:
-    """Represents a callable tool with its schema."""
+    """Represents a callable tool registered for inference."""
 
+    name: str
     function: Callable[..., Any]
-    schema: dict[str, Any]
     stream_handler: StreamHandler | None = None
 
 
@@ -24,16 +24,18 @@ class ToolRegistry:
     def add(
         self,
         func: Callable[..., Any],
-        schema: dict[str, Any],
+        *,
+        name: str,
         stream_handler: StreamHandler | None = None,
     ) -> None:
-        tool_name = schema["function"]["name"]
-        if tool_name in self._tools:
+        if name in self._tools:
             raise ToolConflictError(
-                f"A tool with the name '{tool_name}' already exists."
+                f"A tool with the name '{name}' already exists."
             )
-        self._tools[tool_name] = Tool(
-            function=func, schema=schema, stream_handler=stream_handler
+        self._tools[name] = Tool(
+            name=name,
+            function=func,
+            stream_handler=stream_handler,
         )
 
     def get(self, name: str) -> Tool | None:
