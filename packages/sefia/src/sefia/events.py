@@ -21,7 +21,7 @@ class BeforeInferenceStep(Event):
     """Event fired just before a call to the inference strategy."""
 
     history: list[HistoryItem]
-    tools: list[str]
+    tool_names: list[str]
 
 
 @dataclass(frozen=True)

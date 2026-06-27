@@ -93,7 +93,10 @@ class InferenceExecutor:
     async def _next_step(self, history: list[HistoryItem]) -> InferenceDecision:
         """Internal engraved method for a single inference strategy call."""
         await self.publisher.publish(
-            events.BeforeInferenceStep(history=history, tools=self._tool_registry.get_names())
+            events.BeforeInferenceStep(
+                history=history,
+                tool_names=self._tool_registry.get_names(),
+            )
         )
 
         try:

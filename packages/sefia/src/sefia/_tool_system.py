@@ -25,16 +25,15 @@ class ToolRegistry:
         self,
         func: Callable[..., Any],
         *,
-        name: str | None = None,
+        name: str,
         stream_handler: StreamHandler | None = None,
     ) -> None:
-        tool_name = name or getattr(func, "__name__", type(func).__qualname__)
-        if tool_name in self._tools:
+        if name in self._tools:
             raise ToolConflictError(
-                f"A tool with the name '{tool_name}' already exists."
+                f"A tool with the name '{name}' already exists."
             )
-        self._tools[tool_name] = Tool(
-            name=tool_name,
+        self._tools[name] = Tool(
+            name=name,
             function=func,
             stream_handler=stream_handler,
         )
