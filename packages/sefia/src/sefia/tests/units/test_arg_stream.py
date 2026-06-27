@@ -8,7 +8,11 @@ from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.inference import FunctionInfo, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
-from sefia.llm._arg_stream import ToolArgStreamer, parse_tool_call_path
+from sefia.llm._arg_stream import (
+    ToolArgStreamer,
+    _ArgStreamChannel,
+    parse_tool_call_path,
+)
 from sefia.llm._client import LLMClient
 from sefia.pydantic import PydanticModelInspector
 from sefia.streaming import (
@@ -16,7 +20,6 @@ from sefia.streaming import (
     Scalar,
     StringDelta,
     StringEnd,
-    _ArgStreamChannel,
 )
 
 
@@ -276,9 +279,10 @@ async def test_arguments_stream_through_a_real_strategy():
     )
 
     assert isinstance(decision, ToolCallDecision)
-    assert "".join(
-        e.text for e in collector.events if isinstance(e, StringDelta)
-    ) == "What is your name?"
+    assert (
+        "".join(e.text for e in collector.events if isinstance(e, StringDelta))
+        == "What is your name?"
+    )
     assert StringEnd(name="question", value="What is your name?") in collector.events
 
 

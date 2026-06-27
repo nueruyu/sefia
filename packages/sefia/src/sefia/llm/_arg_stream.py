@@ -11,13 +11,14 @@ from typing import Literal, cast
 from jsonstream import IncrementalJsonParser
 from jsonstream import events as js
 
+from sefia.streaming import ArgStream
+
 from ..streaming import (
     ArgEvent,
     Scalar,
     StreamHandler,
     StringDelta,
     StringEnd,
-    _ArgStreamChannel,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,44 @@ def parse_tool_call_path(path: js.JsonPath) -> ToolCallPath | None:
             )
 
     return None
+
+
+_CLOSED = object()
+
+
+class _ArgStreamChannel:
+    """An async iterator the router feeds while the stream handler consumes it.
+
+    Backed by an unbounded queue so the (synchronous) parser can push events
+    without awaiting. ``close`` ends iteration once every queued event has been
+    delivered.
+    """
+
+    def __init__(self) -> None:
+        self._queue: asyncio.Queue[ArgEvent | object] = asyncio.Queue()
+        self._closed = False
+        self._done = False
+
+    def __aiter__(self) -> ArgStream:
+        return self
+
+    async def __anext__(self) -> ArgEvent:
+        if self._done:
+            raise StopAsyncIteration
+        item = await self._queue.get()
+        if item is _CLOSED:
+            self._done = True
+            raise StopAsyncIteration
+        return item  # type: ignore[return-value]
+
+    def feed(self, event: ArgEvent) -> None:
+        if not self._closed:
+            self._queue.put_nowait(event)
+
+    def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            self._queue.put_nowait(_CLOSED)
 
 
 async def _run_handler(handler: StreamHandler, channel: _ArgStreamChannel) -> None:

@@ -1,4 +1,5 @@
-from sefia.streaming import StringDelta, _ArgStreamChannel
+from sefia.llm._arg_stream import _ArgStreamChannel
+from sefia.streaming import StringDelta
 from sefia.tool_collectors import DefaultToolCollector
 from sefios.tools import HumanInputTool
 

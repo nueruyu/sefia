@@ -15,7 +15,6 @@ so live output is never replayed.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import TypeAlias
@@ -48,41 +47,3 @@ class Scalar:
 ArgEvent: TypeAlias = StringDelta | StringEnd | Scalar
 ArgStream: TypeAlias = AsyncIterator[ArgEvent]
 StreamHandler: TypeAlias = Callable[[ArgStream], Awaitable[None]]
-
-
-_CLOSED = object()
-
-
-class _ArgStreamChannel:
-    """An async iterator the router feeds while the stream handler consumes it.
-
-    Backed by an unbounded queue so the (synchronous) parser can push events
-    without awaiting. ``close`` ends iteration once every queued event has been
-    delivered.
-    """
-
-    def __init__(self) -> None:
-        self._queue: asyncio.Queue[ArgEvent | object] = asyncio.Queue()
-        self._closed = False
-        self._done = False
-
-    def __aiter__(self) -> ArgStream:
-        return self
-
-    async def __anext__(self) -> ArgEvent:
-        if self._done:
-            raise StopAsyncIteration
-        item = await self._queue.get()
-        if item is _CLOSED:
-            self._done = True
-            raise StopAsyncIteration
-        return item  # type: ignore[return-value]
-
-    def feed(self, event: ArgEvent) -> None:
-        if not self._closed:
-            self._queue.put_nowait(event)
-
-    def close(self) -> None:
-        if not self._closed:
-            self._closed = True
-            self._queue.put_nowait(_CLOSED)

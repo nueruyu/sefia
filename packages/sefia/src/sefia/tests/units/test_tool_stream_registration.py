@@ -1,6 +1,7 @@
 from sefia import tool, toolify
+from sefia.llm._arg_stream import _ArgStreamChannel
+from sefia.streaming import ArgStream, StringDelta
 from sefia.tool_collectors import DefaultToolCollector
-from sefia.streaming import ArgStream, StringDelta, _ArgStreamChannel
 
 
 async def test_stream_handler_is_collected_and_bound_to_instance():
@@ -83,7 +84,9 @@ async def test_static_tool_stream_handler_is_collected():
 
     registry = DefaultToolCollector().collect(Agent())
     registered = next(
-        tool for tool in registry.get_all() if "ask_human" in tool.schema["function"]["name"]
+        tool
+        for tool in registry.get_all()
+        if "ask_human" in tool.schema["function"]["name"]
     )
     assert registered.stream_handler is not None
 
@@ -112,7 +115,9 @@ async def test_class_tool_stream_handler_is_bound_to_class():
 
     registry = DefaultToolCollector().collect(Agent())
     registered = next(
-        tool for tool in registry.get_all() if "ask_human" in tool.schema["function"]["name"]
+        tool
+        for tool in registry.get_all()
+        if "ask_human" in tool.schema["function"]["name"]
     )
     assert registered.stream_handler is not None
 
@@ -141,7 +146,9 @@ async def test_toolified_standalone_stream_handler_is_collected():
 
     registry = DefaultToolCollector().collect(Agent())
     registered = next(
-        tool for tool in registry.get_all() if "ask_human" in tool.schema["function"]["name"]
+        tool
+        for tool in registry.get_all()
+        if "ask_human" in tool.schema["function"]["name"]
     )
     assert registered.stream_handler is not None
 
