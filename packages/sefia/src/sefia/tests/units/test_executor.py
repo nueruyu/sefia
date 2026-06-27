@@ -112,11 +112,7 @@ class TestInferenceExecutor:
 
         tool_registry = ToolRegistry()
         mock_tool_func = AsyncMock(return_value="tool result")
-        tool_schema = {
-            "type": "function",
-            "function": {"name": "my_tool", "description": "", "parameters": {}},
-        }
-        tool_registry.add(mock_tool_func, tool_schema)
+        tool_registry.add(mock_tool_func, name="my_tool")
         mock_collector.collect.return_value = tool_registry
 
         executor = InferenceExecutor(
@@ -309,13 +305,7 @@ class TestInferenceExecutor:
 
         tool_registry = ToolRegistry()
         failing_tool = AsyncMock(side_effect=ValueError("kaboom"))
-        tool_registry.add(
-            failing_tool,
-            {
-                "type": "function",
-                "function": {"name": "boom_tool", "description": "", "parameters": {}},
-            },
-        )
+        tool_registry.add(failing_tool, name="boom_tool")
         mock_collector.collect.return_value = tool_registry
 
         executor = InferenceExecutor(
