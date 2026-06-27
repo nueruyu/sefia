@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+
+from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..inference import FunctionInfo, HistoryItem, InferenceDecision
 
@@ -13,7 +15,7 @@ class InferenceStrategy(ABC):
         self,
         function_info: FunctionInfo,
         history: list[HistoryItem],
-        tools: list[dict],
+        tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
         """Decides the next action, either calling tools or returning a final answer."""

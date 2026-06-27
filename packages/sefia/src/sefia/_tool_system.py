@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .exceptions import ToolConflictError
+from .streaming import StreamHandler
 
 
 @dataclass(frozen=True)
@@ -11,6 +12,7 @@ class Tool:
 
     function: Callable[..., Any]
     schema: dict[str, Any]
+    stream_handler: StreamHandler | None = None
 
 
 class ToolRegistry:
@@ -19,13 +21,20 @@ class ToolRegistry:
     def __init__(self):
         self._tools: dict[str, Tool] = {}
 
-    def add(self, func: Callable[..., Any], schema: dict[str, Any]) -> None:
+    def add(
+        self,
+        func: Callable[..., Any],
+        schema: dict[str, Any],
+        stream_handler: StreamHandler | None = None,
+    ) -> None:
         tool_name = schema["function"]["name"]
         if tool_name in self._tools:
             raise ToolConflictError(
                 f"A tool with the name '{tool_name}' already exists."
             )
-        self._tools[tool_name] = Tool(function=func, schema=schema)
+        self._tools[tool_name] = Tool(
+            function=func, schema=schema, stream_handler=stream_handler
+        )
 
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)

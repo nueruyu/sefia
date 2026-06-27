@@ -9,6 +9,7 @@ from typing import Any, Callable, Never, Union
 from pydantic import create_model
 
 from .._interfaces import InferenceStrategy, ModelInspector
+from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError
 from ..inference import (
@@ -20,7 +21,9 @@ from ..inference import (
     ToolCallRequest,
     ToolCallResult,
 )
+from ..streaming import StreamHandler
 from . import events
+from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
 from ._messages import Message
 from ._prompt_formatter import PromptFormatter
@@ -257,10 +260,11 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         function_info: FunctionInfo,
         history: list[HistoryItem],
-        tools: list[dict],
+        tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
-        director = self._create_director(function_info.return_type, tools)
+        tool_schemas = [tool.schema for tool in tools.get_all()]
+        director = self._create_director(function_info.return_type, tool_schemas)
         output_schema = director.build_decision_schema()
         messages = self._build_messages(
             function_info,
@@ -278,19 +282,29 @@ class LLMInferenceStrategy(InferenceStrategy):
         )
 
         stream_callback = None
+        tool_stream_handlers = _tool_stream_handlers(tools)
+        tool_arg_streamer = None
+        if self._stream and tool_stream_handlers:
+            tool_arg_streamer = ToolArgStreamer(tool_stream_handlers)
         if self._stream:
 
             async def on_token(token: str):
+                if tool_arg_streamer is not None:
+                    tool_arg_streamer.on_token(token)
                 await publisher.publish(events.LLMTokenReceived(token=token))
 
             stream_callback = on_token
 
-        response = await self.llm_client.complete(
-            messages=messages,
-            tools=None,
-            output_schema=output_schema,
-            stream_callback=stream_callback,
-        )
+        try:
+            response = await self.llm_client.complete(
+                messages=messages,
+                tools=None,
+                output_schema=output_schema,
+                stream_callback=stream_callback,
+            )
+        finally:
+            if tool_arg_streamer is not None:
+                await tool_arg_streamer.close()
         await publisher.publish(events.AfterLLMCall(response))
 
         if response.content is None:
@@ -377,3 +391,11 @@ class LLMInferenceStrategy(InferenceStrategy):
                 )
 
         return messages
+
+
+def _tool_stream_handlers(tools: ToolRegistry) -> dict[str, StreamHandler]:
+    return {
+        tool.schema["function"]["name"]: tool.stream_handler
+        for tool in tools.get_all()
+        if tool.stream_handler is not None
+    }

@@ -1,7 +1,20 @@
+from __future__ import annotations
+
 import functools
 import inspect
 from collections.abc import Hashable
-from typing import Callable, ParamSpec, Protocol, TypeVar, cast
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Concatenate,
+    ParamSpec,
+    Protocol,
+    Self,
+    TypeVar,
+    cast,
+    overload,
+)
 
 from glyff import engrave
 
@@ -14,8 +27,12 @@ from .event_system import EventPublisher
 
 C = TypeVar("C", bound=Callable[..., object])
 P = ParamSpec("P")
+_BoundP = ParamSpec("_BoundP")
 R = TypeVar("R")
 T = TypeVar("T")
+_R_co = TypeVar("_R_co", covariant=True)
+_SelfT = TypeVar("_SelfT")
+_StreamH = TypeVar("_StreamH", bound=Callable[..., Awaitable[None]])
 
 
 class _PolicyDecorator(Protocol):
@@ -24,18 +41,82 @@ class _PolicyDecorator(Protocol):
     def __call__(self, func: C) -> C: ...
 
 
-def tool(func: T) -> T:
+class StreamableTool(Protocol[P, _R_co]):
+    """A ``@tool``-marked method that also exposes a ``.stream`` decorator.
+
+    Accessing it on an instance binds ``self`` (via ``__get__``), so the tool is
+    called with its normal signature; accessing ``.stream`` on the marker itself
+    registers a side-channel handler for the tool's streamed arguments.
+    """
+
+    def stream(self, handler: _StreamH, /) -> _StreamH:
+        """Register a handler that receives this tool's streamed arguments."""
+        ...
+
+    @overload
+    def __get__(
+        self: StreamableTool[Concatenate[type[_SelfT], _BoundP], _R_co],
+        instance: None,
+        owner: type[_SelfT],
+        /,
+    ) -> Callable[_BoundP, _R_co]: ...
+    @overload
+    def __get__(self, instance: None, owner: type | None = None, /) -> Self: ...
+    @overload
+    def __get__(
+        self: StreamableTool[Concatenate[_SelfT, _BoundP], _R_co],
+        instance: _SelfT,
+        owner: type[_SelfT] | None = None,
+        /,
+    ) -> Callable[_BoundP, _R_co]: ...
+    @overload
+    def __get__(
+        self, instance: object, owner: type | None = None, /
+    ) -> Callable[..., _R_co]: ...
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> _R_co: ...
+
+
+@overload
+def tool(func: Callable[P, R]) -> StreamableTool[P, R]: ...
+@overload
+def tool(func: T) -> T: ...
+def tool(func: Any) -> Any:
     """
     Mark a method as a tool available to an @infer step.
 
     This is a pure marker: the inference executor normalizes sync/async return
     values, so the wrapped function is returned unchanged to preserve its
     signature for schema generation.
+
+    The returned tool exposes a ``.stream`` decorator to register a side-channel
+    handler that receives the tool's arguments incrementally as the model emits
+    them (see :mod:`sefia.streaming`)::
+
+        @tool
+        async def ask_human(self, question: str) -> str: ...
+
+        @ask_human.stream
+        async def _(self, events): ...  # async for ev in events: ...
+
+    The handler is best-effort live preview; the tool still runs with the fully
+    decoded arguments.
     """
     # When @tool is applied over @classmethod/@staticmethod, mark the underlying
     # function — those descriptor objects may reject attribute assignment.
     target = func.__func__ if isinstance(func, (classmethod, staticmethod)) else func
     setattr(target, "__sefia_tool__", True)
+
+    def _register_stream(handler: _StreamH) -> _StreamH:
+        setattr(target, "__sefia_stream_handler__", handler)
+        return handler
+
+    setattr(target, "stream", _register_stream)
+    if func is not target:
+        try:
+            setattr(func, "stream", _register_stream)
+        except AttributeError:
+            pass
     return func
 
 

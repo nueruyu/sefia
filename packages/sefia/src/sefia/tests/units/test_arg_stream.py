@@ -1,0 +1,300 @@
+import logging
+from typing import Any
+from unittest.mock import Mock
+
+import pytest
+
+from sefia._tool_system import ToolRegistry
+from sefia.event_system import EventPublisher
+from sefia.inference import FunctionInfo, ToolCallDecision
+from sefia.llm import LLMInferenceStrategy, LLMResponse
+from sefia.llm._arg_stream import (
+    ToolArgStreamer,
+    _ArgStreamChannel,
+    parse_tool_call_path,
+)
+from sefia.llm._client import LLMClient
+from sefia.pydantic import PydanticModelInspector
+from sefia.streaming import (
+    ArgStream,
+    Scalar,
+    StringDelta,
+    StringEnd,
+)
+
+
+class Collector:
+    """A stream handler that records every event it receives."""
+
+    def __init__(self) -> None:
+        self.events: list[Any] = []
+
+    async def __call__(self, stream: ArgStream) -> None:
+        async for event in stream:
+            self.events.append(event)
+
+
+async def run_router(
+    json_text: str, *, chunk_size: int = 10_000, tool: str = "ask_human"
+) -> list[Any]:
+    collector = Collector()
+    streamer = ToolArgStreamer({tool: collector})
+
+    for start in range(0, len(json_text), chunk_size):
+        streamer.on_token(json_text[start : start + chunk_size])
+    await streamer.close()
+    return collector.events
+
+
+async def run_router_handlers(
+    json_text: str, tools: list[str], *, chunk_size: int = 10_000
+) -> dict[str, list[Any]]:
+    collectors = {name: Collector() for name in tools}
+    streamer = ToolArgStreamer(dict(collectors))
+
+    for start in range(0, len(json_text), chunk_size):
+        streamer.on_token(json_text[start : start + chunk_size])
+    await streamer.close()
+    return {name: collector.events for name, collector in collectors.items()}
+
+
+def _delta_text(events: list[Any]) -> str:
+    return "".join(e.text for e in events if isinstance(e, StringDelta))
+
+
+# --- router unit tests --------------------------------------------------------
+
+
+async def test_streams_string_argument():
+    text = (
+        '{"tool_calls":[{"name":"ask_human",'
+        '"arguments":{"question":"Hello world"}}],"final_answer":null}'
+    )
+    events = await run_router(text)
+
+    assert _delta_text(events) == "Hello world"
+    assert all(
+        isinstance(e, StringDelta) and e.name == "question"
+        for e in events
+        if isinstance(e, StringDelta)
+    )
+    assert events[-1] == StringEnd(name="question", value="Hello world")
+
+
+async def test_streams_string_argument_character_by_character():
+    text = (
+        '{"tool_calls":[{"name":"ask_human",'
+        '"arguments":{"question":"Hello world"}}],"final_answer":null}'
+    )
+    events = await run_router(text, chunk_size=1)
+
+    assert _delta_text(events) == "Hello world"
+    assert events[-1] == StringEnd(name="question", value="Hello world")
+
+
+async def test_streams_scalar_arguments_whole():
+    text = (
+        '{"tool_calls":[{"name":"ask_human",'
+        '"arguments":{"count":42,"ok":true,"note":null}}],"final_answer":null}'
+    )
+    events = await run_router(text)
+
+    assert Scalar(name="count", value=42) in events
+    assert Scalar(name="ok", value=True) in events
+    assert Scalar(name="note", value=None) in events
+    assert not any(isinstance(e, StringDelta) for e in events)
+
+
+async def test_resolves_when_arguments_precede_name():
+    # JSON member order is the model's choice; routing must not depend on the
+    # name arriving before the arguments.
+    text = (
+        '{"tool_calls":[{"arguments":{"question":"Hi there"},'
+        '"name":"ask_human"}],"final_answer":null}'
+    )
+    events = await run_router(text)
+
+    assert _delta_text(events) == "Hi there"
+    assert StringEnd(name="question", value="Hi there") in events
+
+
+async def test_unregistered_tool_is_ignored():
+    text = (
+        '{"tool_calls":[{"name":"other",'
+        '"arguments":{"question":"Hi"}}],"final_answer":null}'
+    )
+    events = await run_router(text)  # router only knows ask_human
+
+    assert events == []
+
+
+def test_malformed_tool_call_index_is_ignored():
+    assert parse_tool_call_path(("tool_calls", "0", "name")) is None
+
+
+async def test_logs_token_processing_exception_and_closes_channels(caplog):
+    channel = _ArgStreamChannel()
+    streamer = ToolArgStreamer({})
+    streamer._channels[0] = channel
+    streamer._dispatch = Mock(side_effect=RuntimeError("boom"))  # type: ignore[method-assign]
+
+    with caplog.at_level(logging.ERROR, logger="sefia.llm._arg_stream"):
+        streamer.on_token('{"tool_calls":[]}')
+
+    assert streamer._stopped is True
+    assert streamer._channels == {}
+    assert "Error processing token in ToolArgStreamer" in caplog.text
+    with pytest.raises(StopAsyncIteration):
+        await anext(channel)
+
+
+async def test_duplicate_tool_name_resolution_is_ignored():
+    async def handler(stream: ArgStream) -> None:
+        async for _ in stream:
+            pass
+
+    streamer = ToolArgStreamer({"ask_human": handler})
+    streamer._resolve_tool_name(0, "ask_human")
+    first_channel = streamer._channels[0]
+    first_tasks = list(streamer._tasks)
+
+    streamer._resolve_tool_name(0, "ask_human")
+
+    assert streamer._channels[0] is first_channel
+    assert streamer._tasks == first_tasks
+    await streamer.close()
+
+
+async def test_final_answer_is_not_streamed():
+    text = '{"tool_calls":null,"final_answer":"the answer"}'
+    events = await run_router(text)
+
+    assert events == []
+
+
+async def test_fenced_response_is_ignored_gracefully():
+    # A markdown-fenced response is not the bare JSON the side channel parses;
+    # it must stop quietly rather than raise.
+    text = (
+        "```json\n"
+        '{"tool_calls":[{"name":"ask_human","arguments":{"question":"Hi"}}]}\n'
+        "```"
+    )
+    events = await run_router(text)
+
+    assert events == []
+
+
+async def test_routes_multiple_tool_calls_independently():
+    text = (
+        '{"tool_calls":['
+        '{"name":"ask_a","arguments":{"question":"A?"}},'
+        '{"name":"ask_b","arguments":{"question":"B?"}}'
+        '],"final_answer":null}'
+    )
+    events = await run_router_handlers(text, ["ask_a", "ask_b"], chunk_size=3)
+
+    assert StringEnd(name="question", value="A?") in events["ask_a"]
+    assert StringEnd(name="question", value="B?") in events["ask_b"]
+    # No cross-talk between the two calls' streams.
+    assert _delta_text(events["ask_a"]) == "A?"
+    assert _delta_text(events["ask_b"]) == "B?"
+
+
+async def test_routes_multiple_arguments_of_one_call():
+    text = (
+        '{"tool_calls":[{"name":"ask",'
+        '"arguments":{"question":"Hi","count":3}}],"final_answer":null}'
+    )
+    events = (await run_router_handlers(text, ["ask"], chunk_size=4))["ask"]
+
+    # A single multiplexed stream carries both arguments, distinguished by name.
+    assert _delta_text(events) == "Hi"
+    assert StringEnd(name="question", value="Hi") in events
+    assert Scalar(name="count", value=3) in events
+
+
+# --- strategy integration -----------------------------------------------------
+
+
+class StreamingClient(LLMClient):
+    """A fake client that streams its fixed content one character at a time."""
+
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+    async def complete(
+        self,
+        messages,
+        tools=None,
+        output_schema=None,
+        stream_callback=None,
+    ) -> LLMResponse:
+        if stream_callback is not None:
+            for char in self.content:
+                await stream_callback(char)
+        return LLMResponse(content=self.content)
+
+
+def _function_info() -> FunctionInfo:
+    return FunctionInfo(
+        qualname="step",
+        instructions="do it",
+        bound_arguments={},
+        type_hints={},
+        return_type=str,
+        args=(),
+        kwargs={},
+    )
+
+
+async def test_arguments_stream_through_a_real_strategy():
+    content = (
+        '{"final_answer": null, "tool_calls": [{"name": "ask_human", '
+        '"arguments": {"question": "What is your name?"}}]}'
+    )
+    formatter = Mock()
+    formatter.format_arguments.return_value = "<arguments/>"
+    strategy = LLMInferenceStrategy(
+        llm_client=StreamingClient(content),
+        model_inspector=PydanticModelInspector(),
+        prompt_formatter=formatter,
+        stream=True,
+    )
+
+    collector = Collector()
+    publisher = EventPublisher([])
+    tools = ToolRegistry()
+    tools.add(
+        lambda: None,
+        {"type": "function", "function": {"name": "ask_human", "parameters": {}}},
+        stream_handler=collector,
+    )
+
+    decision = await strategy.decide_next_step(
+        function_info=_function_info(),
+        history=[],
+        tools=tools,
+        publisher=publisher,
+    )
+
+    assert isinstance(decision, ToolCallDecision)
+    assert (
+        "".join(e.text for e in collector.events if isinstance(e, StringDelta))
+        == "What is your name?"
+    )
+    assert StringEnd(name="question", value="What is your name?") in collector.events
+
+
+async def test_channel_delivers_in_order_then_stops():
+    channel = _ArgStreamChannel()
+    channel.feed(StringDelta(name="q", text="a"))
+    channel.feed(StringDelta(name="q", text="b"))
+    channel.close()
+
+    seen = [event async for event in channel]
+
+    assert seen == [
+        StringDelta(name="q", text="a"),
+        StringDelta(name="q", text="b"),
+    ]

@@ -3,6 +3,7 @@ from typing import Any, Callable
 from .._interfaces import ModelInspector
 from .._tool_system import ToolCollector, ToolRegistry
 from .._toolify import Toolset
+from ..streaming import StreamHandler
 
 
 class DefaultToolCollector(ToolCollector):
@@ -99,7 +100,24 @@ class DefaultToolCollector(ToolCollector):
 
     def _add(self, func: Callable[..., Any], registry: ToolRegistry) -> None:
         schema = self._build_schema(func)
-        registry.add(func, schema)
+        stream_handler = self._resolve_stream_handler(func)
+        registry.add(func, schema, stream_handler=stream_handler)
+
+    @staticmethod
+    def _resolve_stream_handler(func: Callable[..., Any]) -> StreamHandler | None:
+        """Bind a ``@<tool>.stream`` handler to the tool's instance, if present.
+
+        The handler is registered on the underlying function by the ``@tool``
+        decorator; here we resolve it for the bound method and bind it to the
+        same instance so it can be called as ``handler(stream)``.
+        """
+        underlying = getattr(func, "__func__", None)
+        instance = getattr(func, "__self__", None)
+        if underlying is not None and instance is not None:
+            handler = getattr(underlying, "__sefia_stream_handler__", None)
+            if handler is not None:
+                return handler.__get__(instance, type(instance))
+        return getattr(func, "__sefia_stream_handler__", None)
 
     def _build_schema(self, func: Callable[..., Any]) -> dict:
         """

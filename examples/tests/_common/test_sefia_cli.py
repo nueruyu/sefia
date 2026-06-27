@@ -153,3 +153,11 @@ class TestDefaultCLIReporter:
         output = capsys.readouterr().out
         assert "USER_INPUT_REQUIRED:xyz" in output
         assert "What topic?" in output
+
+    def test_human_input_question_delta_is_printed_without_newline(self, capsys):
+        reporter = DefaultCLIReporter()
+
+        reporter.on_human_input_question_delta("What ")
+        reporter.on_human_input_question_delta("topic?")
+
+        assert capsys.readouterr().out == "What topic?"

@@ -2098,6 +2098,7 @@ dependencies = [
     { name = "glyff" },
     { name = "glyff-file-store" },
     { name = "glyff-pydantic" },
+    { name = "jsonstream" },
     { name = "pydantic" },
 ]
 
@@ -2113,6 +2114,7 @@ requires-dist = [
     { name = "glyff", specifier = ">=0.11.0" },
     { name = "glyff-file-store", specifier = ">=0.11.0" },
     { name = "glyff-pydantic", specifier = ">=0.11.0" },
+    { name = "jsonstream", editable = "packages/jsonstream" },
     { name = "pydantic", specifier = ">=2.0" },
 ]
 

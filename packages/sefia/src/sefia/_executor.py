@@ -103,7 +103,7 @@ class InferenceExecutor:
             decision = await self.strategy.decide_next_step(
                 function_info=self.func_info,
                 history=history,
-                tools=self._tool_schemas,
+                tools=self._tool_registry,
                 publisher=self.publisher,
             )
         except Exception as e:
