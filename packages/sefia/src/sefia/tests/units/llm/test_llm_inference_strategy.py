@@ -10,8 +10,8 @@ from sefia._tool_system import Tool, ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
-    ResultDecision,
     FunctionInfo,
+    ResultDecision,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
@@ -270,9 +270,7 @@ class TestLLMInferenceStrategy:
                 "result": {"name": "test", "value": 42},
             }
         )
-        mock_llm_client.complete.return_value = LLMResponse(
-            content=result_payload
-        )
+        mock_llm_client.complete.return_value = LLMResponse(content=result_payload)
         strategy = self._strategy(mock_llm_client, stream=True)
         publisher = MockEventPublisher()
 
@@ -350,9 +348,7 @@ class TestLLMInferenceStrategy:
         assert isinstance(decision, ResultDecision)
         assert decision.result == "Hello, world!"
 
-    async def test_decide_next_step_raises_when_result_null(
-        self, mock_llm_client
-    ):
+    async def test_decide_next_step_raises_when_result_null(self, mock_llm_client):
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": null}'
         )
@@ -410,6 +406,8 @@ class TestToolOnlyDirector:
 
         assert "result" not in prompt or "There is no `result`" in prompt
         assert "tool_calls" in prompt
+        assert "### Response Format" in prompt
+        assert '"$defs"' not in prompt
 
     def test_process_decision_accepts_tool_calls(self):
         strategy = self._strategy()
@@ -604,6 +602,4 @@ class TestOutputOnlyDirector:
     def test_decision_model_rejects_null_result(self):
         director = self._director()
         with pytest.raises(ValueError, match="Decision validation failed"):
-            director.process_response_data(
-                {"decision": "result", "result": None}
-            )
+            director.process_response_data({"decision": "result", "result": None})

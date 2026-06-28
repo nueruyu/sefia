@@ -104,10 +104,17 @@ _TOOL_DEFINITIONS_HEADER = (
     "\n### Available Tools\n"
     "Here is a list of tools you can call. Use their `name` in the `tool_calls` field.\n"
 )
-_RESPONSE_SCHEMA_HEADER = (
-    "\n### Response Schema\n"
-    "Your response MUST be a single, valid, raw JSON object that strictly "
-    "conforms to this JSON Schema:\n"
+_RESPONSE_FORMAT_HEADER = (
+    "\n### Response Format\n"
+    "Your response MUST be a single, valid, raw JSON object. Do not include "
+    "prose, markdown, or code fences.\n"
+)
+_TOOL_CALLS_RESPONSE_FORMAT = (
+    'Use this shape to call tools: {"decision":"tool_calls",'
+    '"tool_calls":[{"name":"<tool name>","arguments":{...}}]}.'
+)
+_RESULT_RESPONSE_FORMAT = (
+    'Use this shape to complete the task: {"decision":"result","result":...}.'
 )
 
 
@@ -133,8 +140,8 @@ class _ToolOnlyDirector(_ExecutionDirector):
             f"\n\n### Response Instructions\n{core_instruction}\n"
             f"{_TOOL_DEFINITIONS_HEADER}"
             f"{json.dumps(self._tool_definitions(), indent=2, ensure_ascii=False)}\n"
-            f"{_RESPONSE_SCHEMA_HEADER}"
-            f"{json.dumps(output_schema, ensure_ascii=False)}"
+            f"{_RESPONSE_FORMAT_HEADER}"
+            f"{_TOOL_CALLS_RESPONSE_FORMAT}"
         )
 
     def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
@@ -169,8 +176,9 @@ class _ToolEnabledDirector(_ExecutionDirector):
             f"\n\n### Response Instructions\n{core_instruction}\n"
             f"{_TOOL_DEFINITIONS_HEADER}"
             f"{json.dumps(self._tool_definitions(), indent=2, ensure_ascii=False)}\n"
-            f"{_RESPONSE_SCHEMA_HEADER}"
-            f"{json.dumps(output_schema, ensure_ascii=False)}"
+            f"{_RESPONSE_FORMAT_HEADER}"
+            f"{_TOOL_CALLS_RESPONSE_FORMAT}\n"
+            f"{_RESULT_RESPONSE_FORMAT}"
         )
 
     def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
@@ -200,8 +208,8 @@ class _OutputOnlyDirector(_ExecutionDirector):
         )
         return (
             f"\n\n### Response Instructions\n{core_instruction}\n"
-            f"{_RESPONSE_SCHEMA_HEADER}"
-            f"{json.dumps(output_schema, ensure_ascii=False)}"
+            f"{_RESPONSE_FORMAT_HEADER}"
+            f"{_RESULT_RESPONSE_FORMAT}"
         )
 
     def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
