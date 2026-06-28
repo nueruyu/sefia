@@ -68,7 +68,11 @@ def get_callable_doc(func: Callable[..., Any]) -> str:
         and not (inspect.isfunction(func) or inspect.ismethod(func))
         and callable(func)
     ):
-        return inspect.getdoc(getattr(func, "__call__", None)) or inspect.getdoc(func) or ""
+        return (
+            inspect.getdoc(getattr(func, "__call__", None))
+            or inspect.getdoc(func)
+            or ""
+        )
 
     if inspect.getdoc(func):
         return inspect.getdoc(func) or ""
@@ -122,11 +126,20 @@ def build_param_fields(func: Callable[..., Any]) -> dict[str, Any]:
 
     params: dict[str, tuple[Any, Any]] = {}
     for param_name, param in sig.parameters.items():
+        if param_name in ("self", "cls"):
+            continue
+
+        if param.kind is inspect.Parameter.POSITIONAL_ONLY:
+            raise ValueError(
+                f"Tool parameter '{param_name}' on '{qualname}' is "
+                "positional-only, but tools must be callable with keyword "
+                "arguments."
+            )
+
         if param.kind not in [
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
             inspect.Parameter.KEYWORD_ONLY,
-            inspect.Parameter.POSITIONAL_ONLY,
-        ] or param_name in ("self", "cls"):
+        ]:
             continue
 
         if param_name not in type_hints:

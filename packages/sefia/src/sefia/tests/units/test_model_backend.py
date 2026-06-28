@@ -17,6 +17,10 @@ def _sample_func(a: int, b: str = "x") -> bool:
     return True
 
 
+def _positional_only_func(value: int, /) -> bool:
+    return True
+
+
 class TestPydanticModelBackend:
     def test_get_schema_for_primitive_type(self):
         backend = PydanticModelBackend()
@@ -68,6 +72,12 @@ class TestPydanticModelBackend:
         schema2 = backend.get_function_schema(_sample_func)
 
         assert schema1 is schema2
+
+    def test_get_function_schema_rejects_positional_only_parameters(self):
+        backend = PydanticModelBackend()
+
+        with pytest.raises(ValueError, match="positional-only.*keyword arguments"):
+            backend.get_function_schema(_positional_only_func)
 
     def test_function_model_factory_reuses_params_model(self):
         factory = PydanticFunctionModelFactory()
