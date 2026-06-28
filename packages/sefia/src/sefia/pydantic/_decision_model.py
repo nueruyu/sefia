@@ -14,7 +14,7 @@ from .._interfaces.decision_model import (
     DecisionToolSpec,
     LLMDecision,
 )
-from ._function_models import cache_key, create_params_model
+from ._function_models import PydanticFunctionModelFactory
 
 
 class _RuntimeToolCall(BaseModel):
@@ -24,7 +24,7 @@ class _RuntimeToolCall(BaseModel):
 
 @dataclass(frozen=True)
 class _ToolArgumentValidator:
-    model_type: type
+    model_type: type[BaseModel]
     adapter: TypeAdapter
 
 
@@ -85,8 +85,13 @@ class PydanticDecisionModel(DecisionModel):
 
 
 class PydanticDecisionModelBuilder(DecisionModelBuilder):
-    def __init__(self):
-        self._argument_model_cache: dict[Any, type] = {}
+    def __init__(
+        self,
+        function_model_factory: PydanticFunctionModelFactory | None = None,
+    ):
+        self._function_model_factory = (
+            function_model_factory or PydanticFunctionModelFactory()
+        )
 
     def build(self, spec: DecisionModelSpec) -> DecisionModel:
         argument_validators = self._build_argument_validators(spec.tools)
@@ -103,14 +108,11 @@ class PydanticDecisionModelBuilder(DecisionModelBuilder):
     ) -> dict[str, _ToolArgumentValidator]:
         validators = {}
         for tool in tools:
-            cache_key_value = ("arguments_model", cache_key(tool.function), tool.name)
-            if cache_key_value not in self._argument_model_cache:
-                self._argument_model_cache[cache_key_value] = create_params_model(
-                    tool.function,
-                    name=tool.name,
-                    forbid_extra=True,
-                )
-            model_type = self._argument_model_cache[cache_key_value]
+            model_type = self._function_model_factory.params_model(
+                tool.function,
+                name=tool.name,
+                forbid_extra=True,
+            )
             validators[tool.name] = _ToolArgumentValidator(
                 model_type=model_type,
                 adapter=TypeAdapter(model_type),

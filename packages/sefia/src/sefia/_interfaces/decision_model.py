@@ -11,7 +11,6 @@ class DecisionToolSpec:
 
     name: str
     function: Callable[..., Any]
-    schema: dict
 
 
 class DecisionMode(Enum):

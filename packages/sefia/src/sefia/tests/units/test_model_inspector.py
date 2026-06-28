@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import pytest
 
 from sefia.pydantic import PydanticModelInspector
+from sefia.pydantic._function_models import PydanticFunctionModelFactory
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,22 @@ class TestPydanticModelInspector:
         schema2 = inspector.get_function_schema(_sample_func)
 
         assert schema1 is schema2
+
+    def test_function_model_factory_reuses_params_model(self):
+        factory = PydanticFunctionModelFactory()
+
+        model1 = factory.params_model(
+            _sample_func,
+            name="_sample_func",
+            forbid_extra=True,
+        )
+        model2 = factory.params_model(
+            _sample_func,
+            name="_sample_func",
+            forbid_extra=True,
+        )
+
+        assert model1 is model2
 
     def test_validate_dataclass(self):
         inspector = PydanticModelInspector()

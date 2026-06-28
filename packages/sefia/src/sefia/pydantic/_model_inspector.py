@@ -5,9 +5,9 @@ from pydantic import TypeAdapter, ValidationError
 from .._interfaces.model_inspector import ModelInspector
 from ._function_models import (
     cache_key,
-    create_params_model,
     get_callable_doc,
     get_callable_qualname,
+    PydanticFunctionModelFactory,
     sanitize_function_name,
 )
 
@@ -18,7 +18,13 @@ class PydanticModelInspector(ModelInspector):
     Supports dataclasses, Pydantic models, primitives, and typing constructs.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        function_model_factory: PydanticFunctionModelFactory | None = None,
+    ):
+        self._function_model_factory = (
+            function_model_factory or PydanticFunctionModelFactory()
+        )
         self._schema_cache: dict[Any, dict] = {}
         self._adapter_cache: dict[Any, TypeAdapter] = {}
 
@@ -44,7 +50,7 @@ class PydanticModelInspector(ModelInspector):
         if cache_key_value in self._schema_cache:
             return self._schema_cache[cache_key_value]
 
-        param_model = create_params_model(
+        param_model = self._function_model_factory.params_model(
             func,
             name=schema_name,
             forbid_extra=True,

@@ -102,7 +102,7 @@ class _ExecutionDirector(ABC):
 
 def _decision_tool_specs(tool_specs: list[_ToolSpec]) -> list[DecisionToolSpec]:
     return [
-        DecisionToolSpec(name=spec.name, function=spec.function, schema=spec.schema)
+        DecisionToolSpec(name=spec.name, function=spec.function)
         for spec in tool_specs
     ]
 

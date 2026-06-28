@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 from typing import Any, cast
 
-from pydantic import ConfigDict, create_model
+from pydantic import BaseModel, ConfigDict, create_model
 
 
 def cache_key(func: Callable[..., Any]) -> Any:
@@ -81,7 +81,7 @@ def create_params_model(
     *,
     name: str,
     forbid_extra: bool,
-) -> type:
+) -> type[BaseModel]:
     field_definitions = build_param_fields(func)
     if forbid_extra:
         return create_model(
@@ -90,6 +90,29 @@ def create_params_model(
             **field_definitions,
         )
     return create_model(f"{name}Params", **field_definitions)
+
+
+class PydanticFunctionModelFactory:
+    """Creates and caches Pydantic models derived from callable signatures."""
+
+    def __init__(self):
+        self._params_model_cache: dict[Any, type[BaseModel]] = {}
+
+    def params_model(
+        self,
+        func: Callable[..., Any],
+        *,
+        name: str,
+        forbid_extra: bool,
+    ) -> type[BaseModel]:
+        key = ("params_model", cache_key(func), name, forbid_extra)
+        if key not in self._params_model_cache:
+            self._params_model_cache[key] = create_params_model(
+                func,
+                name=name,
+                forbid_extra=forbid_extra,
+            )
+        return self._params_model_cache[key]
 
 
 def build_param_fields(func: Callable[..., Any]) -> dict[str, Any]:
