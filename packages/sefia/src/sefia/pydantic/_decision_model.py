@@ -9,8 +9,8 @@ from .._interfaces.decision_model import (
     DecisionModel,
     DecisionModelSpec,
     DecisionToolCall,
-    ResultLLMDecision,
     LLMDecision,
+    ResultLLMDecision,
     ToolCallsLLMDecision,
 )
 from .._tool_system import Tool
@@ -80,7 +80,7 @@ def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
     return None
 
 
-class _PydanticDecisionModelFactory:
+class PydanticDecisionModelFactory:
     def __init__(
         self,
         function_model_factory: PydanticFunctionModelFactory | None = None,

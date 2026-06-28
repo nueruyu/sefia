@@ -76,7 +76,7 @@ def _tool(func: Callable[..., Any]) -> Tool:
 def _tool_registry(*funcs: Callable[..., Any]) -> ToolRegistry:
     registry = ToolRegistry()
     for func in funcs:
-        registry.add(func)
+        registry.add(func, name=_BACKEND.get_function_name(func))
     return registry
 
 

@@ -9,20 +9,20 @@ from .._interfaces import (
     DecisionModel,
     DecisionModelSpec,
     DecisionToolCall,
-    ResultLLMDecision,
     InferenceStrategy,
     LLMDecision,
     ModelBackend,
+    ResultLLMDecision,
     ToolCallsLLMDecision,
 )
 from .._tool_system import Tool, ToolRegistry
 from ..event_system import EventPublisher
-from ..exceptions import InvalidInferenceResponseError
+from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from ..inference import (
-    ResultDecision,
     FunctionInfo,
     HistoryItem,
     InferenceDecision,
+    ResultDecision,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
@@ -312,6 +312,10 @@ class LLMInferenceStrategy(InferenceStrategy):
             decision_data = json.loads(raw)
             return director.process_response_data(decision_data)
 
+        except UnknownToolDecisionError as e:
+            raise InvalidInferenceResponseError(
+                f"LLM output requested an unknown tool: {e.tool_name!r}, content: {response.content}"
+            ) from e
         except (json.JSONDecodeError, ValueError) as e:
             raise InvalidInferenceResponseError(
                 f"LLM output failed validation against the master schema: {e}, content: {response.content}"

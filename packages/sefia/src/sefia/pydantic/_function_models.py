@@ -37,16 +37,16 @@ def get_callable_qualname(func: Callable[..., Any]) -> str:
     return type(func).__qualname__
 
 
-def get_callable_annotations(func: Callable[..., Any]) -> dict[str, Any]:
-    annotation_source = get_annotation_source(func)
+def _get_callable_annotations(func: Callable[..., Any]) -> dict[str, Any]:
+    annotation_source = _get_annotation_source(func)
     if annotation_source is None:
         return {}
     return inspect.get_annotations(annotation_source, eval_str=True)
 
 
-def get_annotation_source(func: Callable[..., Any]) -> Callable[..., Any] | None:
+def _get_annotation_source(func: Callable[..., Any]) -> Callable[..., Any] | None:
     if isinstance(func, functools.partial):
-        return get_annotation_source(func.func)
+        return _get_annotation_source(func.func)
 
     if inspect.isfunction(func) or inspect.ismethod(func):
         return inspect.unwrap(func)
@@ -80,13 +80,13 @@ def get_callable_doc(func: Callable[..., Any]) -> str:
     return ""
 
 
-def create_params_model(
+def _create_params_model(
     func: Callable[..., Any],
     *,
     name: str,
     forbid_extra: bool,
 ) -> type[BaseModel]:
-    field_definitions = build_param_fields(func)
+    field_definitions = _build_param_fields(func)
     if forbid_extra:
         return create_model(
             f"{name}Params",
@@ -111,7 +111,7 @@ class PydanticFunctionModelFactory:
     ) -> type[BaseModel]:
         key = ("params_model", cache_key(func), name, forbid_extra)
         if key not in self._params_model_cache:
-            self._params_model_cache[key] = create_params_model(
+            self._params_model_cache[key] = _create_params_model(
                 func,
                 name=name,
                 forbid_extra=forbid_extra,
@@ -119,9 +119,9 @@ class PydanticFunctionModelFactory:
         return self._params_model_cache[key]
 
 
-def build_param_fields(func: Callable[..., Any]) -> dict[str, Any]:
+def _build_param_fields(func: Callable[..., Any]) -> dict[str, Any]:
     sig = inspect.signature(func)
-    type_hints = get_callable_annotations(func)
+    type_hints = _get_callable_annotations(func)
     qualname = get_callable_qualname(func)
 
     params: dict[str, tuple[Any, Any]] = {}

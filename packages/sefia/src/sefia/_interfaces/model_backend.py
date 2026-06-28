@@ -1,18 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Type
+from typing import Any, Callable
 
 from .decision_model import DecisionModel, DecisionModelSpec
 
 
 class ModelBackend(ABC):
     """
-    Interface for schema generation and model validation.
+    Interface for tool schema generation and LLM decision model construction.
     """
-
-    @abstractmethod
-    def get_type_schema(self, model_type: Type[Any] | Any) -> dict:
-        """Generate a JSON schema for a target type."""
-        ...
 
     @abstractmethod
     def get_function_name(self, func: Callable[..., Any]) -> str:
@@ -27,14 +22,6 @@ class ModelBackend(ABC):
         name: str | None = None,
     ) -> dict:
         """Generate a tool-call schema for a function signature."""
-        ...
-
-    @abstractmethod
-    def validate(self, model_type: Type[Any] | Any, data: Any) -> Any:
-        """
-        Validate arbitrary input data against a target type and return
-        the validated/coerced value or instance.
-        """
         ...
 
     @abstractmethod
