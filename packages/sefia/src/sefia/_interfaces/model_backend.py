@@ -4,7 +4,7 @@ from typing import Any, Callable, Type
 from .decision_model import DecisionModel, DecisionModelSpec
 
 
-class ModelInspector(ABC):
+class ModelBackend(ABC):
     """
     Interface for schema generation and model validation.
     """

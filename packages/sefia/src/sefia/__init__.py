@@ -4,7 +4,7 @@ from ._interfaces import (
     InferenceContext,
     InferenceMiddleware,
     InferenceStrategy,
-    ModelInspector,
+    ModelBackend,
     Policy,
     SessionStore,
     StepContext,
@@ -38,7 +38,7 @@ __all__ = [
     "Tool",
     "ToolCollector",
     "ToolRegistry",
-    "ModelInspector",
+    "ModelBackend",
     "SessionContext",
     "get_context",
 ]

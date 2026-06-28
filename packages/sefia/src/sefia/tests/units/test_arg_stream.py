@@ -14,7 +14,7 @@ from sefia.llm._arg_stream import (
     parse_tool_call_path,
 )
 from sefia.llm._client import LLMClient
-from sefia.pydantic import PydanticModelInspector
+from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import (
     ArgStream,
     Scalar,
@@ -257,7 +257,7 @@ async def test_arguments_stream_through_a_real_strategy():
     formatter.format_arguments.return_value = "<arguments/>"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
-        model_inspector=PydanticModelInspector(),
+        model_backend=PydanticModelBackend(),
         prompt_formatter=formatter,
         stream=True,
     )

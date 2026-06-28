@@ -5,7 +5,7 @@ import pytest
 
 from sefia import Toolset, infer, tool, toolify
 from sefia.exceptions import ToolConflictError
-from sefia.pydantic import PydanticModelInspector
+from sefia.pydantic import PydanticModelBackend
 from sefia.tool_collectors import DefaultToolCollector
 
 from ..conftest import WebToolkit
@@ -17,7 +17,7 @@ def example_func(a: int, b: str = "default") -> bool:
 
 
 def test_create_tool_schema_from_function():
-    schema = PydanticModelInspector().get_function_schema(example_func)
+    schema = PydanticModelBackend().get_function_schema(example_func)
 
     assert schema["type"] == "function"
     function_spec = schema["function"]
@@ -37,14 +37,14 @@ def test_create_tool_schema_from_function():
 
 
 def test_schema_builder_sanitizes_complex_names():
-    inspector = PydanticModelInspector()
+    backend = PydanticModelBackend()
 
     class Outer:
         class Inner:
             def my_method(self):
                 pass
 
-    name = inspector.get_function_name(Outer.Inner.my_method)
+    name = backend.get_function_name(Outer.Inner.my_method)
     # __qualname__ includes enclosing scope; verify it ends with the expected suffix
     assert name.endswith("Outer_Inner_my_method")
     # verify no dots or other unsafe characters remain
@@ -53,9 +53,9 @@ def test_schema_builder_sanitizes_complex_names():
 
 
 def test_schema_builder_caches_results():
-    inspector = PydanticModelInspector()
-    schema1 = inspector.get_function_schema(example_func)
-    schema2 = inspector.get_function_schema(example_func)
+    backend = PydanticModelBackend()
+    schema1 = backend.get_function_schema(example_func)
+    schema2 = backend.get_function_schema(example_func)
     assert schema1 is schema2
 
 
@@ -206,7 +206,7 @@ def test_collect_registers_partial_tool():
 
     tool_info = registry.get("partial_prefixed_search")
     assert tool_info is not None
-    tool_schema = PydanticModelInspector().get_function_schema(
+    tool_schema = PydanticModelBackend().get_function_schema(
         tool_info.function,
         name=tool_info.name,
     )
@@ -231,7 +231,7 @@ def test_collect_registers_callable_object_tool():
 
     tool_info = registry.get("CallableSearch")
     assert tool_info is not None
-    tool_schema = PydanticModelInspector().get_function_schema(
+    tool_schema = PydanticModelBackend().get_function_schema(
         tool_info.function,
         name=tool_info.name,
     )
@@ -251,13 +251,13 @@ class BadToolifyAgent:
 
 def test_tool_schema_generation_requires_type_annotations():
     # Collection records neutral metadata and succeeds; the missing annotation is
-    # only surfaced later, when the strategy asks the inspector for a schema.
+    # only surfaced later, when the strategy asks the backend for a schema.
     registry = DefaultToolCollector().collect(BadToolifyAgent())
     tool_info = registry.get("BadCallable")
     assert tool_info is not None
 
     with pytest.raises(ValueError, match="must have a type annotation"):
-        PydanticModelInspector().get_function_schema(
+        PydanticModelBackend().get_function_schema(
             tool_info.function, name=tool_info.name
         )
 

@@ -15,7 +15,7 @@ from .middleware import (
     StepContext,
     StepMiddleware,
 )
-from .model_inspector import ModelInspector
+from .model_backend import ModelBackend
 from .policy import Policy
 from .session_store import SessionStore
 
@@ -25,7 +25,7 @@ __all__ = [
     "StepMiddleware",
     "InferenceContext",
     "StepContext",
-    "ModelInspector",
+    "ModelBackend",
     "Policy",
     "SessionStore",
     "DecisionModel",

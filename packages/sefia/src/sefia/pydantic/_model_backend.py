@@ -3,18 +3,18 @@ from typing import Any, Callable, Type
 from pydantic import TypeAdapter, ValidationError
 
 from .._interfaces.decision_model import DecisionModel, DecisionModelSpec
-from .._interfaces.model_inspector import ModelInspector
+from .._interfaces.model_backend import ModelBackend
 from ._decision_model import _PydanticDecisionModelFactory
 from ._function_models import (
+    PydanticFunctionModelFactory,
     cache_key,
     get_callable_doc,
     get_callable_qualname,
-    PydanticFunctionModelFactory,
     sanitize_function_name,
 )
 
 
-class PydanticModelInspector(ModelInspector):
+class PydanticModelBackend(ModelBackend):
     """
     Pydantic-backed implementation for schema generation and validation.
     Supports dataclasses, Pydantic models, primitives, and typing constructs.

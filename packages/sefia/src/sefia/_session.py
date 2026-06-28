@@ -5,7 +5,7 @@ import glyff
 
 from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import Policy
-from ._interfaces.model_inspector import ModelInspector
+from ._interfaces.model_backend import ModelBackend
 from ._interfaces.session_store import SessionStore
 from ._profiles import Profile
 from ._state_store import StateStore
@@ -14,7 +14,7 @@ from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
 from .llm._xml_prompt_formatter import XmlPromptFormatter
 from .pydantic._json_utils import pydantic_json_default
-from .pydantic._model_inspector import PydanticModelInspector
+from .pydantic._model_backend import PydanticModelBackend
 from .tool_collectors import DefaultToolCollector
 
 T = TypeVar("T")
@@ -34,7 +34,7 @@ class Session:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
-        model_inspector: ModelInspector | None = None,
+        model_backend: ModelBackend | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
@@ -43,10 +43,10 @@ class Session:
         self._context_token = None
         self._policies: list[Policy] = list(policies) if policies is not None else []
 
-        model_inspector = model_inspector or PydanticModelInspector()
+        model_backend = model_backend or PydanticModelBackend()
 
         self._tool_collector = tool_collector or DefaultToolCollector(
-            model_inspector=model_inspector
+            model_backend=model_backend
         )
         prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
 
@@ -54,7 +54,7 @@ class Session:
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
-                model_inspector=model_inspector,
+                model_backend=model_backend,
                 prompt_formatter=prompt_formatter,
                 json_default=pydantic_json_default,
                 stream=stream,

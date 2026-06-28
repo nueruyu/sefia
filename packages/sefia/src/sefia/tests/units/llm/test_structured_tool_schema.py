@@ -12,7 +12,7 @@ from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import FunctionInfo, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._strategy import _ToolOnlyDirector, _ToolSpec
-from sefia.pydantic import PydanticModelInspector
+from sefia.pydantic import PydanticModelBackend
 
 
 async def ask_user(question: Annotated[str, Field(min_length=1)]) -> str:
@@ -29,12 +29,12 @@ class _MockPublisher(EventPublisher):
 
 
 def _spec() -> _ToolSpec:
-    inspector = PydanticModelInspector()
-    name = inspector.get_function_name(ask_user)
+    backend = PydanticModelBackend()
+    name = backend.get_function_name(ask_user)
     return _ToolSpec(
         name=name,
         function=ask_user,
-        schema=inspector.get_function_schema(ask_user, name=name),
+        schema=backend.get_function_schema(ask_user, name=name),
     )
 
 
@@ -70,7 +70,7 @@ def _name_constraint(name_schema: dict) -> Any:
 
 
 def test_tool_only_schema_embeds_tool_argument_schema() -> None:
-    director = _ToolOnlyDirector(PydanticModelInspector(), Never, [_spec()])
+    director = _ToolOnlyDirector(PydanticModelBackend(), Never, [_spec()])
 
     schema = director.build_decision_schema()
 
@@ -100,7 +100,7 @@ def test_decision_model_spec_rejects_tool_modes_without_tools() -> None:
 
 
 class TestToolCallValidation:
-    """The decision model validates tool arguments end-to-end via the inspector."""
+    """The decision model validates tool arguments end-to-end via the backend."""
 
     def _strategy(self, content: str) -> LLMInferenceStrategy:
         client = AsyncMock()
@@ -109,7 +109,7 @@ class TestToolCallValidation:
         formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=client,
-            model_inspector=PydanticModelInspector(),
+            model_backend=PydanticModelBackend(),
             prompt_formatter=formatter,
         )
 

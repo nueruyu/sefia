@@ -14,7 +14,7 @@ from .._interfaces import (
     FinalAnswerLLMDecision,
     InferenceStrategy,
     LLMDecision,
-    ModelInspector,
+    ModelBackend,
     ToolCallsLLMDecision,
 )
 from .._tool_system import ToolRegistry
@@ -55,11 +55,11 @@ class _ExecutionDirector(ABC):
 
     def __init__(
         self,
-        model_inspector: ModelInspector,
+        model_backend: ModelBackend,
         output_type: Any,
         tool_specs: list[_ToolSpec],
     ):
-        self.model_inspector = model_inspector
+        self.model_backend = model_backend
         self.output_type = output_type
         self.tool_specs = tool_specs
         self.decision_model = self._build_decision_model()
@@ -122,7 +122,7 @@ class _ToolOnlyDirector(_ExecutionDirector):
     """Director for tool-only execution mode."""
 
     def _build_decision_model(self) -> DecisionModel:
-        return self.model_inspector.build_decision_model(
+        return self.model_backend.build_decision_model(
             DecisionModelSpec.tool_only(
                 name="LLMDecision",
                 output_type=self.output_type,
@@ -153,7 +153,7 @@ class _ToolEnabledDirector(_ExecutionDirector):
     """Director for tool-enabled execution mode (tools or final answer)."""
 
     def _build_decision_model(self) -> DecisionModel:
-        return self.model_inspector.build_decision_model(
+        return self.model_backend.build_decision_model(
             DecisionModelSpec.tool_enabled(
                 name="LLMDecision",
                 output_type=self.output_type,
@@ -190,7 +190,7 @@ class _OutputOnlyDirector(_ExecutionDirector):
     """Director for final-answer-only execution mode."""
 
     def _build_decision_model(self) -> DecisionModel:
-        return self.model_inspector.build_decision_model(
+        return self.model_backend.build_decision_model(
             DecisionModelSpec.output_only(
                 name="LLMDecision",
                 output_type=self.output_type,
@@ -228,13 +228,13 @@ class LLMInferenceStrategy(InferenceStrategy):
     def __init__(
         self,
         llm_client: LLMClient,
-        model_inspector: ModelInspector,
+        model_backend: ModelBackend,
         prompt_formatter: PromptFormatter,
         json_default: JsonDefault | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
-        self.model_inspector = model_inspector
+        self.model_backend = model_backend
         self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
@@ -244,7 +244,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             _ToolSpec(
                 name=tool.name,
                 function=tool.function,
-                schema=self.model_inspector.get_function_schema(
+                schema=self.model_backend.get_function_schema(
                     tool.function, name=tool.name
                 ),
             )
@@ -261,14 +261,10 @@ class LLMInferenceStrategy(InferenceStrategy):
                     "An @infer function returning Never must have tools available, "
                     "otherwise the inference loop can never make progress."
                 )
-            return _ToolOnlyDirector(
-                self.model_inspector, output_type, tool_specs
-            )
+            return _ToolOnlyDirector(self.model_backend, output_type, tool_specs)
         if tool_specs:
-            return _ToolEnabledDirector(
-                self.model_inspector, output_type, tool_specs
-            )
-        return _OutputOnlyDirector(self.model_inspector, output_type, tool_specs)
+            return _ToolEnabledDirector(self.model_backend, output_type, tool_specs)
+        return _OutputOnlyDirector(self.model_backend, output_type, tool_specs)
 
     async def decide_next_step(
         self,
