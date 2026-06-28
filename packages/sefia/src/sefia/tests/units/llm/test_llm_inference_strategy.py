@@ -280,7 +280,10 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
+            _function_info(instructions="do it"),
+            [],
+            _tool_registry(),
+            MockEventPublisher(),
         )
 
         assert isinstance(decision, FinalAnswerDecision)
@@ -310,13 +313,18 @@ class TestLLMInferenceStrategy:
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
+            _function_info(instructions="do it"),
+            [],
+            _tool_registry(),
+            MockEventPublisher(),
         )
 
         assert isinstance(decision, FinalAnswerDecision)
         assert decision.answer == "Hello, world!"
 
-    async def test_decide_next_step_raises_when_final_answer_null(self, mock_llm_client):
+    async def test_decide_next_step_raises_when_final_answer_null(
+        self, mock_llm_client
+    ):
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"final_answer": null}'
         )
@@ -326,7 +334,10 @@ class TestLLMInferenceStrategy:
             InvalidInferenceResponseError, match="LLM output failed validation"
         ):
             await strategy.decide_next_step(
-                _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
+                _function_info(instructions="do it"),
+                [],
+                _tool_registry(),
+                MockEventPublisher(),
             )
 
 
@@ -476,7 +487,9 @@ class TestToolEnabledDirector:
 
     def test_process_decision_returns_final_answer_decision(self):
         director = self._director(output_type=str)
-        decision = self._decision(director, {"final_answer": "done", "tool_calls": None})
+        decision = self._decision(
+            director, {"final_answer": "done", "tool_calls": None}
+        )
         result = director.process_decision(decision)
 
         assert isinstance(result, FinalAnswerDecision)
@@ -495,25 +508,22 @@ class TestToolEnabledDirector:
 
     def test_process_decision_raises_when_both_null(self):
         director = self._director()
-        decision = self._decision(director, {"final_answer": None, "tool_calls": None})
         with pytest.raises(
-            InvalidInferenceResponseError,
+            ValueError,
             match="tool_calls.*final_answer|final_answer.*tool_calls",
         ):
-            director.process_decision(decision)
+            self._decision(director, {"final_answer": None, "tool_calls": None})
 
-    def test_tool_calls_take_priority_over_final_answer(self):
+    def test_decision_validation_rejects_both_tool_calls_and_final_answer(self):
         director = self._director()
-        decision = self._decision(
-            director,
-            {
-                "final_answer": "ignored",
-                "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
-            },
-        )
-        result = director.process_decision(decision)
-
-        assert isinstance(result, ToolCallDecision)
+        with pytest.raises(ValueError, match="must not contain both"):
+            self._decision(
+                director,
+                {
+                    "final_answer": "ignored",
+                    "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
+                },
+            )
 
 
 class TestOutputOnlyDirector:

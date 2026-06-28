@@ -95,12 +95,21 @@ class DecisionToolCall:
     arguments: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass
-class LLMDecision:
-    """The validated decision returned by an LLM response."""
+@dataclass(frozen=True)
+class FinalAnswerLLMDecision:
+    """A validated decision to return a final answer."""
 
-    final_answer: Any = None
-    tool_calls: list[DecisionToolCall] | None = None
+    final_answer: Any
+
+
+@dataclass(frozen=True)
+class ToolCallsLLMDecision:
+    """A validated decision to call one or more tools."""
+
+    tool_calls: list[DecisionToolCall]
+
+
+LLMDecision = FinalAnswerLLMDecision | ToolCallsLLMDecision
 
 
 class DecisionModel(ABC):

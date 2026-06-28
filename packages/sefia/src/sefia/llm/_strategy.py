@@ -12,9 +12,11 @@ from .._interfaces import (
     DecisionModelSpec,
     DecisionToolCall,
     DecisionToolSpec,
+    FinalAnswerLLMDecision,
     InferenceStrategy,
     LLMDecision,
     ModelInspector,
+    ToolCallsLLMDecision,
 )
 from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
@@ -102,8 +104,7 @@ class _ExecutionDirector(ABC):
 
 def _decision_tool_specs(tool_specs: list[_ToolSpec]) -> list[DecisionToolSpec]:
     return [
-        DecisionToolSpec(name=spec.name, function=spec.function)
-        for spec in tool_specs
+        DecisionToolSpec(name=spec.name, function=spec.function) for spec in tool_specs
     ]
 
 
@@ -144,7 +145,7 @@ class _ToolOnlyDirector(_ExecutionDirector):
         )
 
     def process_decision(self, decision: LLMDecision) -> InferenceDecision:
-        if decision.tool_calls:
+        if isinstance(decision, ToolCallsLLMDecision):
             return self._tool_call_decision(decision.tool_calls)
         raise InvalidInferenceResponseError("LLM response must contain 'tool_calls'.")
 
@@ -180,13 +181,10 @@ class _ToolEnabledDirector(_ExecutionDirector):
         )
 
     def process_decision(self, decision: LLMDecision) -> InferenceDecision:
-        if decision.tool_calls:
+        if isinstance(decision, ToolCallsLLMDecision):
             return self._tool_call_decision(decision.tool_calls)
-        if decision.final_answer is not None:
+        if isinstance(decision, FinalAnswerLLMDecision):
             return FinalAnswerDecision(answer=decision.final_answer)
-        raise InvalidInferenceResponseError(
-            "LLM response must contain either 'tool_calls' or a non-null 'final_answer'."
-        )
 
 
 class _OutputOnlyDirector(_ExecutionDirector):
@@ -214,7 +212,7 @@ class _OutputOnlyDirector(_ExecutionDirector):
         )
 
     def process_decision(self, decision: LLMDecision) -> InferenceDecision:
-        if decision.final_answer is not None:
+        if isinstance(decision, FinalAnswerLLMDecision):
             return FinalAnswerDecision(answer=decision.final_answer)
         raise InvalidInferenceResponseError(
             "LLM response must contain a non-null 'final_answer'."
@@ -273,9 +271,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             return _ToolEnabledDirector(
                 self.decision_model_builder, output_type, tool_specs
             )
-        return _OutputOnlyDirector(
-            self.decision_model_builder, output_type, tool_specs
-        )
+        return _OutputOnlyDirector(self.decision_model_builder, output_type, tool_specs)
 
     async def decide_next_step(
         self,

@@ -1,11 +1,13 @@
 from .decision_model import (
+    DecisionMode,
     DecisionModel,
     DecisionModelBuilder,
     DecisionModelSpec,
-    DecisionMode,
     DecisionToolCall,
     DecisionToolSpec,
+    FinalAnswerLLMDecision,
     LLMDecision,
+    ToolCallsLLMDecision,
 )
 from .inference_strategy import InferenceStrategy
 from .middleware import (
@@ -33,5 +35,7 @@ __all__ = [
     "DecisionMode",
     "DecisionToolCall",
     "DecisionToolSpec",
+    "FinalAnswerLLMDecision",
     "LLMDecision",
+    "ToolCallsLLMDecision",
 ]

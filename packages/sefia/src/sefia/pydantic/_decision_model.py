@@ -12,7 +12,9 @@ from .._interfaces.decision_model import (
     DecisionMode,
     DecisionToolCall,
     DecisionToolSpec,
+    FinalAnswerLLMDecision,
     LLMDecision,
+    ToolCallsLLMDecision,
 )
 from ._function_models import PydanticFunctionModelFactory
 
@@ -34,10 +36,12 @@ class PydanticDecisionModel(DecisionModel):
         *,
         schema_model: type,
         runtime_model: type,
+        mode: DecisionMode,
         argument_validators: dict[str, _ToolArgumentValidator],
     ):
         self._schema_adapter = TypeAdapter(schema_model)
         self._runtime_adapter = TypeAdapter(runtime_model)
+        self._mode = mode
         self._argument_validators = argument_validators
 
     def schema(self) -> dict:
@@ -51,12 +55,45 @@ class PydanticDecisionModel(DecisionModel):
             tool_calls = self._validate_tool_calls(
                 getattr(decision, "tool_calls", None)
             )
-            return LLMDecision(
-                final_answer=getattr(decision, "final_answer", None),
+            final_answer = getattr(decision, "final_answer", None)
+            return self._normalize_decision(
+                final_answer=final_answer,
                 tool_calls=tool_calls,
             )
         except ValidationError as e:
             raise ValueError(f"Decision validation failed: {e}") from e
+
+    def _normalize_decision(
+        self,
+        *,
+        final_answer: Any,
+        tool_calls: list[DecisionToolCall] | None,
+    ) -> LLMDecision:
+        has_tool_calls = bool(tool_calls)
+        has_final_answer = final_answer is not None
+
+        if self._mode is DecisionMode.TOOL_ONLY:
+            if not has_tool_calls:
+                raise ValueError("Decision must contain 'tool_calls'.")
+            return ToolCallsLLMDecision(tool_calls=tool_calls)
+
+        if self._mode is DecisionMode.OUTPUT_ONLY:
+            return FinalAnswerLLMDecision(final_answer=final_answer)
+
+        if self._mode is DecisionMode.TOOL_ENABLED:
+            if has_tool_calls and has_final_answer:
+                raise ValueError(
+                    "Decision must not contain both 'tool_calls' and 'final_answer'."
+                )
+            if has_tool_calls:
+                return ToolCallsLLMDecision(tool_calls=tool_calls)
+            if has_final_answer:
+                return FinalAnswerLLMDecision(final_answer=final_answer)
+            raise ValueError(
+                "Decision must contain either 'tool_calls' or 'final_answer'."
+            )
+
+        raise ValueError(f"Unsupported decision mode: {self._mode!r}")
 
     def _validate_tool_calls(
         self, tool_calls: list[_RuntimeToolCall] | None
@@ -100,6 +137,7 @@ class PydanticDecisionModelBuilder(DecisionModelBuilder):
         return PydanticDecisionModel(
             schema_model=create_model(f"{spec.name}Schema", **schema_fields),
             runtime_model=create_model(f"{spec.name}Runtime", **runtime_fields),
+            mode=spec.mode,
             argument_validators=argument_validators,
         )
 
