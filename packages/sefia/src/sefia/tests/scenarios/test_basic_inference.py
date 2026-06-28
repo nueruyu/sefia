@@ -72,8 +72,8 @@ async def test_inference_with_tool_calls(
         LLMResponse(
             content=json.dumps(
                 {
-                    "decision": "final_answer",
-                    "final_answer": {
+                    "decision": "result",
+                    "result": {
                         "topic": "sefia",
                         "summary": "Sefia is a framework for building LLM agents.",
                         "sources": ["https://example.com/sefia"],
@@ -99,7 +99,7 @@ async def test_inference_with_tool_calls(
     assert "framework" in report.summary
     assert report.sources == ["https://example.com/sefia"]
 
-    # LLM was called 3 times (search, fetch, final output)
+    # LLM was called 3 times (search, fetch, result)
     assert len(mock_llm.requests) == 3
 
     # 3rd call receives 6 messages: system, user, assistant(search), tool(search result),
@@ -115,8 +115,8 @@ async def test_inference_without_tool_calls(serializer: Serializer, hasher: Args
     mock_response = LLMResponse(
         content=json.dumps(
             {
-                "decision": "final_answer",
-                "final_answer": {
+                "decision": "result",
+                "result": {
                     "topic": "direct",
                     "summary": "This is a direct answer.",
                     "sources": [],
@@ -163,8 +163,8 @@ async def test_inference_with_tool_exception(
         LLMResponse(
             content=json.dumps(
                 {
-                    "decision": "final_answer",
-                    "final_answer": {
+                    "decision": "result",
+                    "result": {
                         "topic": "failure",
                         "summary": "The tool failed with a ValueError.",
                         "sources": ["error: ValueError(Failed because: test)"],
@@ -245,15 +245,15 @@ async def test_inference_with_nonexistent_tool_call(
 async def test_inference_with_invalid_output_schema(
     serializer: Serializer, hasher: ArgsHasher
 ):
-    # Scenario: The LLM returns a final_answer that doesn't match the schema.
+    # Scenario: The LLM returns a result that doesn't match the schema.
     # An invalid response is recoverable, so it is NOT engraved as a permanent
     # failure: it surfaces as an InvalidInferenceResponseError (a YieldException),
     # leaving the step resumable on re-invocation.
     mock_response = LLMResponse(
         content=json.dumps(
             {
-                "decision": "final_answer",
-                "final_answer": {"summary": "This is missing the topic field."},
+                "decision": "result",
+                "result": {"summary": "This is missing the topic field."},
             }
         )
     )
@@ -284,7 +284,7 @@ async def test_inference_on_standalone_function(
 
     mock_response = LLMResponse(
         content=json.dumps(
-            {"decision": "final_answer", "final_answer": "This is a summary."}
+            {"decision": "result", "result": "This is a summary."}
         )
     )
     mock_llm = MockLLMClient(responses=[mock_response])

@@ -3,7 +3,7 @@ from .decision_model import (
     DecisionModel,
     DecisionModelSpec,
     DecisionToolCall,
-    FinalAnswerLLMDecision,
+    ResultLLMDecision,
     LLMDecision,
     ToolCallsLLMDecision,
 )
@@ -31,7 +31,7 @@ __all__ = [
     "DecisionModelSpec",
     "DecisionMode",
     "DecisionToolCall",
-    "FinalAnswerLLMDecision",
+    "ResultLLMDecision",
     "LLMDecision",
     "ToolCallsLLMDecision",
 ]

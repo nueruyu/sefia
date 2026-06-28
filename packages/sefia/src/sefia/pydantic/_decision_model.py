@@ -9,7 +9,7 @@ from .._interfaces.decision_model import (
     DecisionModel,
     DecisionModelSpec,
     DecisionToolCall,
-    FinalAnswerLLMDecision,
+    ResultLLMDecision,
     LLMDecision,
     ToolCallsLLMDecision,
 )
@@ -38,8 +38,8 @@ class PydanticDecisionModel(DecisionModel):
                 return ToolCallsLLMDecision(
                     tool_calls=self._extract_tool_calls(decision.tool_calls)
                 )
-            if decision.decision == "final_answer":
-                return FinalAnswerLLMDecision(final_answer=decision.final_answer)
+            if decision.decision == "result":
+                return ResultLLMDecision(result=decision.result)
             raise ValueError(f"Unsupported decision type: {decision.decision!r}")
         except ValidationError as e:
             unknown_tool_name = _unknown_tool_name_from_error(e)
@@ -124,14 +124,14 @@ class _PydanticDecisionModelFactory:
         if spec.mode is DecisionMode.TOOL_ENABLED:
             branch_models = [
                 self._tool_calls_model(spec),
-                self._final_answer_model(spec),
+                self._result_model(spec),
             ]
             return Annotated[
                 Union[tuple(branch_models)],
                 Field(discriminator="decision"),
             ]
         if spec.mode is DecisionMode.OUTPUT_ONLY:
-            return self._final_answer_model(spec)
+            return self._result_model(spec)
         raise ValueError(f"Unsupported decision mode: {spec.mode!r}")
 
     def _tool_calls_model(self, spec: DecisionModelSpec) -> type:
@@ -147,15 +147,15 @@ class _PydanticDecisionModelFactory:
             tool_calls=(self._tool_calls_type(spec.tools), ...),
         )
 
-    def _final_answer_model(self, spec: DecisionModelSpec) -> type:
+    def _result_model(self, spec: DecisionModelSpec) -> type:
         if spec.mode is DecisionMode.OUTPUT_ONLY:
             name = spec.name
         else:
-            name = f"{spec.name}FinalAnswer"
+            name = f"{spec.name}Result"
 
         return create_model(
             name,
             __config__=ConfigDict(extra="forbid"),
-            decision=(Literal["final_answer"], ...),
-            final_answer=(spec.output_type, ...),
+            decision=(Literal["result"], ...),
+            result=(spec.output_type, ...),
         )

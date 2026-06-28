@@ -96,8 +96,8 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
-                        "decision": "final_answer",
-                        "final_answer": {
+                        "decision": "result",
+                        "result": {
                             "topic": "User Info",
                             "summary": "The user's name is Alice.",
                             "sources": [],
@@ -197,8 +197,8 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
-                        "decision": "final_answer",
-                        "final_answer": {
+                        "decision": "result",
+                        "result": {
                             "topic": "Profile",
                             "summary": "Alice is 99.",
                             "sources": [],

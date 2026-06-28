@@ -165,8 +165,8 @@ async def test_duplicate_tool_name_resolution_is_ignored():
     await streamer.close()
 
 
-async def test_final_answer_is_not_streamed():
-    text = '{"decision":"final_answer","final_answer":"the answer"}'
+async def test_result_is_not_streamed():
+    text = '{"decision":"result","result":"the answer"}'
     events = await run_router(text)
 
     assert events == []

@@ -89,10 +89,10 @@ class DecisionToolCall:
 
 
 @dataclass(frozen=True)
-class FinalAnswerLLMDecision:
-    """A validated decision to return a final answer."""
+class ResultLLMDecision:
+    """A validated decision to return the inference result."""
 
-    final_answer: Any
+    result: Any
 
 
 @dataclass(frozen=True)
@@ -102,7 +102,7 @@ class ToolCallsLLMDecision:
     tool_calls: list[DecisionToolCall]
 
 
-LLMDecision = FinalAnswerLLMDecision | ToolCallsLLMDecision
+LLMDecision = ResultLLMDecision | ToolCallsLLMDecision
 
 
 class DecisionModel(ABC):

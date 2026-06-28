@@ -28,13 +28,13 @@ class ToolCallDecision:
 
 
 @dataclass
-class FinalAnswerDecision:
-    """A decision to return the final answer."""
+class ResultDecision:
+    """A decision to return the inference result."""
 
-    answer: Any
+    result: Any
 
 
-InferenceDecision = ToolCallDecision | FinalAnswerDecision
+InferenceDecision = ToolCallDecision | ResultDecision
 HistoryItem = ToolCallDecision | ToolCallResult
 
 
@@ -82,7 +82,7 @@ __all__ = [
     "ToolCallRequest",
     "ToolCallResult",
     "ToolCallDecision",
-    "FinalAnswerDecision",
+    "ResultDecision",
     "InferenceDecision",
     "HistoryItem",
     "FunctionInfo",

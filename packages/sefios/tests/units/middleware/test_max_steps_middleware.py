@@ -1,6 +1,6 @@
 import pytest
 from sefia import StepContext
-from sefia.inference import FinalAnswerDecision
+from sefia.inference import ResultDecision
 from sefios.middleware import MaxStepsExceededError, StepLimiter
 
 
@@ -9,7 +9,7 @@ def _ctx(step: int) -> StepContext:
 
 
 async def _decision():
-    return FinalAnswerDecision(answer="done")
+    return ResultDecision(result="done")
 
 
 class TestStepLimiter:
@@ -25,7 +25,7 @@ class TestStepLimiter:
 
         for step in (0, 1, 2):
             decision = await middleware.wrap(_ctx(step), _decision)
-            assert isinstance(decision, FinalAnswerDecision)
+            assert isinstance(decision, ResultDecision)
 
     async def test_raises_once_limit_is_reached(self):
         middleware = StepLimiter(max_steps=3)
@@ -40,7 +40,7 @@ class TestStepLimiter:
         async def nxt():
             nonlocal called
             called = True
-            return FinalAnswerDecision(answer="done")
+            return ResultDecision(result="done")
 
         with pytest.raises(MaxStepsExceededError):
             await middleware.wrap(_ctx(1), nxt)
@@ -50,4 +50,4 @@ class TestStepLimiter:
         middleware = StepLimiter(max_steps=None)
 
         decision = await middleware.wrap(_ctx(1000), _decision)
-        assert isinstance(decision, FinalAnswerDecision)
+        assert isinstance(decision, ResultDecision)

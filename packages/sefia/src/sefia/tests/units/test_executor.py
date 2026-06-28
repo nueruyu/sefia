@@ -18,7 +18,7 @@ from sefia._executor import InferenceExecutor
 from sefia.event_system import EventHandler, EventPublisher
 from sefia.events import AttemptStart, StepStarted
 from sefia.inference import (
-    FinalAnswerDecision,
+    ResultDecision,
     InferenceDecision,
     ToolCallDecision,
     ToolCallRequest,
@@ -92,7 +92,7 @@ def executor_dependencies(mocker: MockerFixture):
 
 
 class TestInferenceExecutor:
-    async def test_run_loop_with_tool_call_and_final_answer(
+    async def test_run_loop_with_tool_call_and_result(
         self, executor_dependencies
     ):
         # Arrange
@@ -107,7 +107,7 @@ class TestInferenceExecutor:
             ToolCallDecision(
                 calls=[ToolCallRequest(id="1", name="my_tool", arguments={"a": 1})]
             ),
-            FinalAnswerDecision(answer="final result"),
+            ResultDecision(result="final result"),
         ]
 
         tool_registry = ToolRegistry()
@@ -145,7 +145,7 @@ class TestInferenceExecutor:
             ToolCallDecision(
                 calls=[ToolCallRequest(id="1", name="nonexistent_tool", arguments={})]
             ),
-            FinalAnswerDecision(answer="recovered"),
+            ResultDecision(result="recovered"),
         ]
 
         executor = InferenceExecutor(
@@ -180,7 +180,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
             ToolCallDecision(calls=[]),
-            FinalAnswerDecision(answer="done"),
+            ResultDecision(result="done"),
         ]
 
         executor = InferenceExecutor(
@@ -243,7 +243,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
             ToolCallDecision(calls=[]),
-            FinalAnswerDecision(answer="done"),
+            ResultDecision(result="done"),
         ]
 
         calls: list[str] = []
@@ -300,7 +300,7 @@ class TestInferenceExecutor:
             ToolCallDecision(
                 calls=[ToolCallRequest(id="1", name="boom_tool", arguments={})]
             ),
-            FinalAnswerDecision(answer="recovered"),
+            ResultDecision(result="recovered"),
         ]
 
         tool_registry = ToolRegistry()
@@ -323,7 +323,7 @@ class TestInferenceExecutor:
 
         assert result == "recovered"
         # No retry: the strategy was consulted exactly twice (tool call, then
-        # the final answer informed by the error).
+        # the result informed by the error).
         assert mock_strategy.decide_next_step.call_count == 2
         history = mock_strategy.decide_next_step.call_args_list[1].kwargs["history"]
         assert isinstance(history[-1], ToolCallResult)
@@ -343,7 +343,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
             ValueError("flaky inference"),
-            FinalAnswerDecision(answer="second attempt"),
+            ResultDecision(result="second attempt"),
         ]
 
         executor = InferenceExecutor(
@@ -507,7 +507,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
             ValueError("flaky inference"),
-            FinalAnswerDecision(answer="attempt 2 succeeds"),
+            ResultDecision(result="attempt 2 succeeds"),
         ]
 
         executor = InferenceExecutor(
