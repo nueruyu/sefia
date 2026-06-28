@@ -9,6 +9,7 @@ from typing import Any, Callable, Never
 from .._interfaces import (
     DecisionModel,
     DecisionModelBuilder,
+    DecisionModelSpec,
     DecisionToolCall,
     DecisionToolSpec,
     InferenceStrategy,
@@ -122,13 +123,11 @@ class _ToolOnlyDirector(_ExecutionDirector):
 
     def _build_decision_model(self) -> DecisionModel:
         return self.decision_model_builder.build(
-            name="LLMDecision",
-            output_type=self.output_type,
-            tools=_decision_tool_specs(self.tool_specs),
-            include_final_answer=False,
-            include_tool_calls=True,
-            final_answer_nullable=False,
-            tool_calls_nullable=True,
+            DecisionModelSpec.tool_only(
+                name="LLMDecision",
+                output_type=self.output_type,
+                tools=_decision_tool_specs(self.tool_specs),
+            )
         )
 
     def build_system_prompt_addition(self, output_schema: dict) -> str:
@@ -155,13 +154,11 @@ class _ToolEnabledDirector(_ExecutionDirector):
 
     def _build_decision_model(self) -> DecisionModel:
         return self.decision_model_builder.build(
-            name="LLMDecision",
-            output_type=self.output_type,
-            tools=_decision_tool_specs(self.tool_specs),
-            include_final_answer=True,
-            include_tool_calls=True,
-            final_answer_nullable=True,
-            tool_calls_nullable=True,
+            DecisionModelSpec.tool_enabled(
+                name="LLMDecision",
+                output_type=self.output_type,
+                tools=_decision_tool_specs(self.tool_specs),
+            )
         )
 
     def build_system_prompt_addition(self, output_schema: dict) -> str:
@@ -197,13 +194,10 @@ class _OutputOnlyDirector(_ExecutionDirector):
 
     def _build_decision_model(self) -> DecisionModel:
         return self.decision_model_builder.build(
-            name="LLMDecision",
-            output_type=self.output_type,
-            tools=_decision_tool_specs(self.tool_specs),
-            include_final_answer=True,
-            include_tool_calls=False,
-            final_answer_nullable=False,
-            tool_calls_nullable=False,
+            DecisionModelSpec.output_only(
+                name="LLMDecision",
+                output_type=self.output_type,
+            )
         )
 
     def build_system_prompt_addition(self, output_schema: dict) -> str:

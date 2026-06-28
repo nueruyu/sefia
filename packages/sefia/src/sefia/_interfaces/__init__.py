@@ -1,6 +1,8 @@
 from .decision_model import (
     DecisionModel,
     DecisionModelBuilder,
+    DecisionModelSpec,
+    DecisionMode,
     DecisionToolCall,
     DecisionToolSpec,
     LLMDecision,
@@ -27,6 +29,8 @@ __all__ = [
     "SessionStore",
     "DecisionModel",
     "DecisionModelBuilder",
+    "DecisionModelSpec",
+    "DecisionMode",
     "DecisionToolCall",
     "DecisionToolSpec",
     "LLMDecision",

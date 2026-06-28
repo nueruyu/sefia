@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError, create_mode
 from .._interfaces.decision_model import (
     DecisionModel,
     DecisionModelBuilder,
+    DecisionModelSpec,
+    DecisionMode,
     DecisionToolCall,
     DecisionToolSpec,
     LLMDecision,
@@ -86,43 +88,13 @@ class PydanticDecisionModelBuilder(DecisionModelBuilder):
     def __init__(self):
         self._argument_model_cache: dict[Any, type] = {}
 
-    def build(
-        self,
-        *,
-        name: str,
-        output_type: Any,
-        tools: list[DecisionToolSpec],
-        include_final_answer: bool,
-        include_tool_calls: bool,
-        final_answer_nullable: bool,
-        tool_calls_nullable: bool,
-    ) -> DecisionModel:
-        argument_validators = self._build_argument_validators(tools)
-        schema_tool_calls_type = (
-            self._schema_tool_calls_type(tools, argument_validators)
-            if include_tool_calls
-            else Any
-        )
-        runtime_tool_calls_type = list[_RuntimeToolCall] if include_tool_calls else Any
-        schema_fields = self._build_fields(
-            output_type=output_type,
-            tool_calls_type=schema_tool_calls_type,
-            include_final_answer=include_final_answer,
-            include_tool_calls=include_tool_calls,
-            final_answer_nullable=final_answer_nullable,
-            tool_calls_nullable=tool_calls_nullable,
-        )
-        runtime_fields = self._build_fields(
-            output_type=output_type,
-            tool_calls_type=runtime_tool_calls_type,
-            include_final_answer=include_final_answer,
-            include_tool_calls=include_tool_calls,
-            final_answer_nullable=final_answer_nullable,
-            tool_calls_nullable=tool_calls_nullable,
-        )
+    def build(self, spec: DecisionModelSpec) -> DecisionModel:
+        argument_validators = self._build_argument_validators(spec.tools)
+        schema_fields = self._schema_fields(spec, argument_validators)
+        runtime_fields = self._runtime_fields(spec)
         return PydanticDecisionModel(
-            schema_model=create_model(f"{name}Schema", **schema_fields),
-            runtime_model=create_model(f"{name}Runtime", **runtime_fields),
+            schema_model=create_model(f"{spec.name}Schema", **schema_fields),
+            runtime_model=create_model(f"{spec.name}Runtime", **runtime_fields),
             argument_validators=argument_validators,
         )
 
@@ -164,25 +136,42 @@ class PydanticDecisionModelBuilder(DecisionModelBuilder):
             item_type = Annotated[Union[tuple(call_models)], Field(discriminator="name")]
         return Annotated[list[item_type], Field(min_length=1)]
 
-    def _build_fields(
+    def _schema_fields(
         self,
-        *,
-        output_type: Any,
-        tool_calls_type: Any,
-        include_final_answer: bool,
-        include_tool_calls: bool,
-        final_answer_nullable: bool,
-        tool_calls_nullable: bool,
+        spec: DecisionModelSpec,
+        argument_validators: dict[str, _ToolArgumentValidator],
     ) -> dict[str, Any]:
-        fields: dict[str, Any] = {}
-        if include_final_answer:
-            fields["final_answer"] = (
-                Optional[output_type] if final_answer_nullable else output_type,
-                ...,
-            )
-        if include_tool_calls:
-            fields["tool_calls"] = (
-                Optional[tool_calls_type] if tool_calls_nullable else tool_calls_type,
-                ...,
-            )
-        return fields
+        if spec.mode is DecisionMode.TOOL_ONLY:
+            return {
+                "tool_calls": (
+                    Optional[
+                        self._schema_tool_calls_type(spec.tools, argument_validators)
+                    ],
+                    ...,
+                )
+            }
+        if spec.mode is DecisionMode.TOOL_ENABLED:
+            return {
+                "final_answer": (Optional[spec.output_type], ...),
+                "tool_calls": (
+                    Optional[
+                        self._schema_tool_calls_type(spec.tools, argument_validators)
+                    ],
+                    ...,
+                ),
+            }
+        if spec.mode is DecisionMode.OUTPUT_ONLY:
+            return {"final_answer": (spec.output_type, ...)}
+        raise ValueError(f"Unsupported decision mode: {spec.mode!r}")
+
+    def _runtime_fields(self, spec: DecisionModelSpec) -> dict[str, Any]:
+        if spec.mode is DecisionMode.TOOL_ONLY:
+            return {"tool_calls": (Optional[list[_RuntimeToolCall]], ...)}
+        if spec.mode is DecisionMode.TOOL_ENABLED:
+            return {
+                "final_answer": (Optional[spec.output_type], ...),
+                "tool_calls": (Optional[list[_RuntimeToolCall]], ...),
+            }
+        if spec.mode is DecisionMode.OUTPUT_ONLY:
+            return {"final_answer": (spec.output_type, ...)}
+        raise ValueError(f"Unsupported decision mode: {spec.mode!r}")

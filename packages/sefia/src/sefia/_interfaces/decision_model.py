@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 
@@ -11,6 +12,80 @@ class DecisionToolSpec:
     name: str
     function: Callable[..., Any]
     schema: dict
+
+
+class DecisionMode(Enum):
+    """The shape of decision a model is allowed to return."""
+
+    TOOL_ONLY = "tool_only"
+    TOOL_ENABLED = "tool_enabled"
+    OUTPUT_ONLY = "output_only"
+
+
+@dataclass(frozen=True)
+class DecisionModelSpec:
+    """Requested decision contract for an inference strategy."""
+
+    name: str
+    output_type: Any
+    tools: list[DecisionToolSpec]
+    mode: DecisionMode
+
+    def __post_init__(self) -> None:
+        if self.mode in (DecisionMode.TOOL_ONLY, DecisionMode.TOOL_ENABLED):
+            if not self.tools:
+                raise ValueError(
+                    f"{self.mode.value} decisions require at least one tool."
+                )
+        elif self.mode is DecisionMode.OUTPUT_ONLY:
+            if self.tools:
+                raise ValueError("output_only decisions cannot include tools.")
+        else:
+            raise ValueError(f"Unsupported decision mode: {self.mode!r}")
+
+    @classmethod
+    def tool_only(
+        cls,
+        *,
+        name: str,
+        output_type: Any,
+        tools: list[DecisionToolSpec],
+    ) -> "DecisionModelSpec":
+        return cls(
+            name=name,
+            output_type=output_type,
+            tools=tools,
+            mode=DecisionMode.TOOL_ONLY,
+        )
+
+    @classmethod
+    def tool_enabled(
+        cls,
+        *,
+        name: str,
+        output_type: Any,
+        tools: list[DecisionToolSpec],
+    ) -> "DecisionModelSpec":
+        return cls(
+            name=name,
+            output_type=output_type,
+            tools=tools,
+            mode=DecisionMode.TOOL_ENABLED,
+        )
+
+    @classmethod
+    def output_only(
+        cls,
+        *,
+        name: str,
+        output_type: Any,
+    ) -> "DecisionModelSpec":
+        return cls(
+            name=name,
+            output_type=output_type,
+            tools=[],
+            mode=DecisionMode.OUTPUT_ONLY,
+        )
 
 
 @dataclass
@@ -47,16 +122,6 @@ class DecisionModelBuilder(ABC):
     """Builds decision models for an inference strategy."""
 
     @abstractmethod
-    def build(
-        self,
-        *,
-        name: str,
-        output_type: Any,
-        tools: list[DecisionToolSpec],
-        include_final_answer: bool,
-        include_tool_calls: bool,
-        final_answer_nullable: bool,
-        tool_calls_nullable: bool,
-    ) -> DecisionModel:
-        """Build a decision model with the requested fields."""
+    def build(self, spec: DecisionModelSpec) -> DecisionModel:
+        """Build a decision model with the requested decision contract."""
         ...

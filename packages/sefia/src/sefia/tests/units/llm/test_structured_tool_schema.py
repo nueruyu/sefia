@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from pydantic import Field
 
+from sefia._interfaces import DecisionModelSpec
 from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
@@ -80,6 +81,22 @@ def test_tool_only_schema_embeds_tool_argument_schema() -> None:
     assert arguments["required"] == ["question"]
     assert arguments["additionalProperties"] is False
     assert arguments["properties"]["question"]["minLength"] == 1
+
+
+def test_decision_model_spec_rejects_tool_modes_without_tools() -> None:
+    with pytest.raises(ValueError, match="require at least one tool"):
+        DecisionModelSpec.tool_only(
+            name="LLMDecision",
+            output_type=Never,
+            tools=[],
+        )
+
+    with pytest.raises(ValueError, match="require at least one tool"):
+        DecisionModelSpec.tool_enabled(
+            name="LLMDecision",
+            output_type=str,
+            tools=[],
+        )
 
 
 class TestToolCallValidation:
