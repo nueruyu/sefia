@@ -6,10 +6,9 @@ from typing import Annotated, Any, Literal, Optional, Union, cast
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, create_model
 
 from .._interfaces.decision_model import (
-    DecisionModel,
-    DecisionModelBuilder,
-    DecisionModelSpec,
     DecisionMode,
+    DecisionModel,
+    DecisionModelSpec,
     DecisionToolCall,
     DecisionToolSpec,
     FinalAnswerLLMDecision,
@@ -121,7 +120,7 @@ class PydanticDecisionModel(DecisionModel):
         return validated_calls
 
 
-class PydanticDecisionModelBuilder(DecisionModelBuilder):
+class _PydanticDecisionModelFactory:
     def __init__(
         self,
         function_model_factory: PydanticFunctionModelFactory | None = None,
@@ -173,7 +172,9 @@ class PydanticDecisionModelBuilder(DecisionModelBuilder):
         if len(call_models) == 1:
             item_type: Any = call_models[0]
         else:
-            item_type = Annotated[Union[tuple(call_models)], Field(discriminator="name")]
+            item_type = Annotated[
+                Union[tuple(call_models)], Field(discriminator="name")
+            ]
         return Annotated[list[item_type], Field(min_length=1)]
 
     def _schema_fields(

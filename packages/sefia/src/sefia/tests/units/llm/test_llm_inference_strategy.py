@@ -24,7 +24,7 @@ from sefia.llm._strategy import (
     _ToolSpec,
 )
 from sefia.llm.events import LLMTokenReceived
-from sefia.pydantic import PydanticDecisionModelBuilder, PydanticModelInspector
+from sefia.pydantic import PydanticModelInspector
 from sefia.pydantic._json_utils import pydantic_json_default
 
 
@@ -114,7 +114,6 @@ class TestLLMInferenceStrategy:
         return LLMInferenceStrategy(
             llm_client=llm_client,
             model_inspector=PydanticModelInspector(),
-            decision_model_builder=PydanticDecisionModelBuilder(),
             prompt_formatter=mock_formatter,
             json_default=pydantic_json_default,
             stream=stream,
@@ -350,7 +349,6 @@ class TestToolOnlyDirector:
         return LLMInferenceStrategy(
             llm_client=AsyncMock(),
             model_inspector=PydanticModelInspector(),
-            decision_model_builder=PydanticDecisionModelBuilder(),
             prompt_formatter=mock_formatter,
             json_default=pydantic_json_default,
         )
@@ -405,7 +403,6 @@ class TestToolOnlyDirector:
         strategy = LLMInferenceStrategy(
             llm_client=mock_client,
             model_inspector=PydanticModelInspector(),
-            decision_model_builder=PydanticDecisionModelBuilder(),
             prompt_formatter=mock_formatter,
         )
 
@@ -430,7 +427,6 @@ class TestToolOnlyDirector:
         strategy = LLMInferenceStrategy(
             llm_client=mock_client,
             model_inspector=PydanticModelInspector(),
-            decision_model_builder=PydanticDecisionModelBuilder(),
             prompt_formatter=mock_formatter,
         )
 
@@ -450,7 +446,7 @@ class TestToolEnabledDirector:
 
     def _director(self, output_type: Any = str):
         return _ToolEnabledDirector(
-            PydanticDecisionModelBuilder(), output_type, [_spec(search)]
+            PydanticModelInspector(), output_type, [_spec(search)]
         )
 
     def _decision(self, director, data):
@@ -530,7 +526,7 @@ class TestOutputOnlyDirector:
     """Tests for _OutputOnlyDirector — no tools, final answer required."""
 
     def _director(self, output_type: Any = str):
-        return _OutputOnlyDirector(PydanticDecisionModelBuilder(), output_type, [])
+        return _OutputOnlyDirector(PydanticModelInspector(), output_type, [])
 
     def test_build_decision_schema_has_only_final_answer(self):
         schema = self._director().build_decision_schema()

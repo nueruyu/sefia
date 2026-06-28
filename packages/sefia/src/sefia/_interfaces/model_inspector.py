@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Type
 
+from .decision_model import DecisionModel, DecisionModelSpec
+
 
 class ModelInspector(ABC):
     """
@@ -33,4 +35,9 @@ class ModelInspector(ABC):
         Validate arbitrary input data against a target type and return
         the validated/coerced value or instance.
         """
+        ...
+
+    @abstractmethod
+    def build_decision_model(self, spec: DecisionModelSpec) -> DecisionModel:
+        """Build a decision model for a structured LLM response."""
         ...

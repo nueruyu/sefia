@@ -124,12 +124,3 @@ class DecisionModel(ABC):
     def validate(self, data: Any) -> LLMDecision:
         """Validate raw response data and return a normalized decision."""
         ...
-
-
-class DecisionModelBuilder(ABC):
-    """Builds decision models for an inference strategy."""
-
-    @abstractmethod
-    def build(self, spec: DecisionModelSpec) -> DecisionModel:
-        """Build a decision model with the requested decision contract."""
-        ...

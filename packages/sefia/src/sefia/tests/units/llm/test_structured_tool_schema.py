@@ -12,7 +12,7 @@ from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import FunctionInfo, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._strategy import _ToolOnlyDirector, _ToolSpec
-from sefia.pydantic import PydanticDecisionModelBuilder, PydanticModelInspector
+from sefia.pydantic import PydanticModelInspector
 
 
 async def ask_user(question: Annotated[str, Field(min_length=1)]) -> str:
@@ -70,7 +70,7 @@ def _name_constraint(name_schema: dict) -> Any:
 
 
 def test_tool_only_schema_embeds_tool_argument_schema() -> None:
-    director = _ToolOnlyDirector(PydanticDecisionModelBuilder(), Never, [_spec()])
+    director = _ToolOnlyDirector(PydanticModelInspector(), Never, [_spec()])
 
     schema = director.build_decision_schema()
 
@@ -110,7 +110,6 @@ class TestToolCallValidation:
         return LLMInferenceStrategy(
             llm_client=client,
             model_inspector=PydanticModelInspector(),
-            decision_model_builder=PydanticDecisionModelBuilder(),
             prompt_formatter=formatter,
         )
 
@@ -148,9 +147,7 @@ class TestToolCallValidation:
 
     async def test_rejects_missing_required_argument(self) -> None:
         with pytest.raises(InvalidInferenceResponseError, match="question"):
-            await self._decide(
-                {"tool_calls": [{"name": "ask_user", "arguments": {}}]}
-            )
+            await self._decide({"tool_calls": [{"name": "ask_user", "arguments": {}}]})
 
     async def test_rejects_empty_min_length_argument(self) -> None:
         with pytest.raises(InvalidInferenceResponseError, match="at least 1"):
@@ -163,7 +160,10 @@ class TestToolCallValidation:
             await self._decide(
                 {
                     "tool_calls": [
-                        {"name": "ask_user", "arguments": {"question": "Hi", "extra": 1}}
+                        {
+                            "name": "ask_user",
+                            "arguments": {"question": "Hi", "extra": 1},
+                        }
                     ]
                 }
             )

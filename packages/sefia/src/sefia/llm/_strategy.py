@@ -8,7 +8,6 @@ from typing import Any, Callable, Never
 
 from .._interfaces import (
     DecisionModel,
-    DecisionModelBuilder,
     DecisionModelSpec,
     DecisionToolCall,
     DecisionToolSpec,
@@ -56,11 +55,11 @@ class _ExecutionDirector(ABC):
 
     def __init__(
         self,
-        decision_model_builder: DecisionModelBuilder,
+        model_inspector: ModelInspector,
         output_type: Any,
         tool_specs: list[_ToolSpec],
     ):
-        self.decision_model_builder = decision_model_builder
+        self.model_inspector = model_inspector
         self.output_type = output_type
         self.tool_specs = tool_specs
         self.decision_model = self._build_decision_model()
@@ -123,7 +122,7 @@ class _ToolOnlyDirector(_ExecutionDirector):
     """Director for tool-only execution mode."""
 
     def _build_decision_model(self) -> DecisionModel:
-        return self.decision_model_builder.build(
+        return self.model_inspector.build_decision_model(
             DecisionModelSpec.tool_only(
                 name="LLMDecision",
                 output_type=self.output_type,
@@ -154,7 +153,7 @@ class _ToolEnabledDirector(_ExecutionDirector):
     """Director for tool-enabled execution mode (tools or final answer)."""
 
     def _build_decision_model(self) -> DecisionModel:
-        return self.decision_model_builder.build(
+        return self.model_inspector.build_decision_model(
             DecisionModelSpec.tool_enabled(
                 name="LLMDecision",
                 output_type=self.output_type,
@@ -191,7 +190,7 @@ class _OutputOnlyDirector(_ExecutionDirector):
     """Director for final-answer-only execution mode."""
 
     def _build_decision_model(self) -> DecisionModel:
-        return self.decision_model_builder.build(
+        return self.model_inspector.build_decision_model(
             DecisionModelSpec.output_only(
                 name="LLMDecision",
                 output_type=self.output_type,
@@ -230,14 +229,12 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         llm_client: LLMClient,
         model_inspector: ModelInspector,
-        decision_model_builder: DecisionModelBuilder,
         prompt_formatter: PromptFormatter,
         json_default: JsonDefault | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
         self.model_inspector = model_inspector
-        self.decision_model_builder = decision_model_builder
         self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
@@ -265,13 +262,13 @@ class LLMInferenceStrategy(InferenceStrategy):
                     "otherwise the inference loop can never make progress."
                 )
             return _ToolOnlyDirector(
-                self.decision_model_builder, output_type, tool_specs
+                self.model_inspector, output_type, tool_specs
             )
         if tool_specs:
             return _ToolEnabledDirector(
-                self.decision_model_builder, output_type, tool_specs
+                self.model_inspector, output_type, tool_specs
             )
-        return _OutputOnlyDirector(self.decision_model_builder, output_type, tool_specs)
+        return _OutputOnlyDirector(self.model_inspector, output_type, tool_specs)
 
     async def decide_next_step(
         self,

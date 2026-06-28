@@ -14,7 +14,7 @@ from sefia.llm._arg_stream import (
     parse_tool_call_path,
 )
 from sefia.llm._client import LLMClient
-from sefia.pydantic import PydanticDecisionModelBuilder, PydanticModelInspector
+from sefia.pydantic import PydanticModelInspector
 from sefia.streaming import (
     ArgStream,
     Scalar,
@@ -258,7 +258,6 @@ async def test_arguments_stream_through_a_real_strategy():
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
         model_inspector=PydanticModelInspector(),
-        decision_model_builder=PydanticDecisionModelBuilder(),
         prompt_formatter=formatter,
         stream=True,
     )
@@ -279,9 +278,10 @@ async def test_arguments_stream_through_a_real_strategy():
     )
 
     assert isinstance(decision, ToolCallDecision)
-    assert "".join(
-        e.text for e in collector.events if isinstance(e, StringDelta)
-    ) == "What is your name?"
+    assert (
+        "".join(e.text for e in collector.events if isinstance(e, StringDelta))
+        == "What is your name?"
+    )
     assert StringEnd(name="question", value="What is your name?") in collector.events
 
 

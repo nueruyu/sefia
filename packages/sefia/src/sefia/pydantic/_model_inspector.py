@@ -2,7 +2,9 @@ from typing import Any, Callable, Type
 
 from pydantic import TypeAdapter, ValidationError
 
+from .._interfaces.decision_model import DecisionModel, DecisionModelSpec
 from .._interfaces.model_inspector import ModelInspector
+from ._decision_model import _PydanticDecisionModelFactory
 from ._function_models import (
     cache_key,
     get_callable_doc,
@@ -24,6 +26,9 @@ class PydanticModelInspector(ModelInspector):
     ):
         self._function_model_factory = (
             function_model_factory or PydanticFunctionModelFactory()
+        )
+        self._decision_model_factory = _PydanticDecisionModelFactory(
+            function_model_factory=self._function_model_factory
         )
         self._schema_cache: dict[Any, dict] = {}
         self._adapter_cache: dict[Any, TypeAdapter] = {}
@@ -74,6 +79,9 @@ class PydanticModelInspector(ModelInspector):
         except ValidationError as e:
             type_name = getattr(model_type, "__name__", str(model_type))
             raise ValueError(f"Model validation failed for {type_name}: {e}") from e
+
+    def build_decision_model(self, spec: DecisionModelSpec) -> DecisionModel:
+        return self._decision_model_factory.build(spec)
 
     def _get_adapter(self, model_type: Type[Any] | Any) -> TypeAdapter:
         if model_type not in self._adapter_cache:
