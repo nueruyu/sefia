@@ -10,11 +10,11 @@ from .._interfaces.decision_model import (
     DecisionModel,
     DecisionModelSpec,
     DecisionToolCall,
-    DecisionToolSpec,
     FinalAnswerLLMDecision,
     LLMDecision,
     ToolCallsLLMDecision,
 )
+from .._tool_system import Tool
 from ._function_models import PydanticFunctionModelFactory
 
 
@@ -141,7 +141,7 @@ class _PydanticDecisionModelFactory:
         )
 
     def _build_argument_validators(
-        self, tools: list[DecisionToolSpec]
+        self, tools: list[Tool]
     ) -> dict[str, _ToolArgumentValidator]:
         validators = {}
         for tool in tools:
@@ -158,7 +158,7 @@ class _PydanticDecisionModelFactory:
 
     def _schema_tool_calls_type(
         self,
-        tools: list[DecisionToolSpec],
+        tools: list[Tool],
         argument_validators: dict[str, _ToolArgumentValidator],
     ) -> Any:
         call_models = [

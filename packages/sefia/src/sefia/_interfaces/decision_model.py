@@ -1,16 +1,9 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-
-@dataclass(frozen=True)
-class DecisionToolSpec:
-    """A tool available to the decision model."""
-
-    name: str
-    function: Callable[..., Any]
+from .._tool_system import Tool
 
 
 class DecisionMode(Enum):
@@ -27,7 +20,7 @@ class DecisionModelSpec:
 
     name: str
     output_type: Any
-    tools: list[DecisionToolSpec]
+    tools: list[Tool]
     mode: DecisionMode
 
     def __post_init__(self) -> None:
@@ -48,7 +41,7 @@ class DecisionModelSpec:
         *,
         name: str,
         output_type: Any,
-        tools: list[DecisionToolSpec],
+        tools: list[Tool],
     ) -> "DecisionModelSpec":
         return cls(
             name=name,
@@ -63,7 +56,7 @@ class DecisionModelSpec:
         *,
         name: str,
         output_type: Any,
-        tools: list[DecisionToolSpec],
+        tools: list[Tool],
     ) -> "DecisionModelSpec":
         return cls(
             name=name,

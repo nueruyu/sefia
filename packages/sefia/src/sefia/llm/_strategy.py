@@ -3,21 +3,19 @@ from __future__ import annotations
 import json
 import uuid
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Any, Callable, Never
 
 from .._interfaces import (
     DecisionModel,
     DecisionModelSpec,
     DecisionToolCall,
-    DecisionToolSpec,
     FinalAnswerLLMDecision,
     InferenceStrategy,
     LLMDecision,
     ModelBackend,
     ToolCallsLLMDecision,
 )
-from .._tool_system import ToolRegistry
+from .._tool_system import Tool, ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError
 from ..inference import (
@@ -39,15 +37,6 @@ from ._prompt_formatter import PromptFormatter
 JsonDefault = Callable[[Any], Any]
 
 
-@dataclass(frozen=True)
-class _ToolSpec:
-    """A tool prepared for the prompt and decision model."""
-
-    name: str
-    function: Callable[..., Any]
-    schema: dict
-
-
 class _ExecutionDirector(ABC):
     """
     Abstract base class for directing the LLM's execution flow.
@@ -57,11 +46,11 @@ class _ExecutionDirector(ABC):
         self,
         model_backend: ModelBackend,
         output_type: Any,
-        tool_specs: list[_ToolSpec],
+        tools: list[Tool],
     ):
         self.model_backend = model_backend
         self.output_type = output_type
-        self.tool_specs = tool_specs
+        self.tools = tools
         self.decision_model = self._build_decision_model()
 
     @abstractmethod
@@ -88,7 +77,13 @@ class _ExecutionDirector(ABC):
         raise NotImplementedError
 
     def _tool_definitions(self) -> list[dict]:
-        return [spec.schema.get("function", {}) for spec in self.tool_specs]
+        return [
+            self.model_backend.get_function_schema(
+                tool.function,
+                name=tool.name,
+            ).get("function", {})
+            for tool in self.tools
+        ]
 
     def _tool_call_decision(
         self, tool_calls: list[DecisionToolCall]
@@ -103,12 +98,6 @@ class _ExecutionDirector(ABC):
                 )
             )
         return ToolCallDecision(calls=calls)
-
-
-def _decision_tool_specs(tool_specs: list[_ToolSpec]) -> list[DecisionToolSpec]:
-    return [
-        DecisionToolSpec(name=spec.name, function=spec.function) for spec in tool_specs
-    ]
 
 
 _TOOL_DEFINITIONS_HEADER = (
@@ -130,7 +119,7 @@ class _ToolOnlyDirector(_ExecutionDirector):
             DecisionModelSpec.tool_only(
                 name="LLMDecision",
                 output_type=self.output_type,
-                tools=_decision_tool_specs(self.tool_specs),
+                tools=self.tools,
             )
         )
 
@@ -161,7 +150,7 @@ class _ToolEnabledDirector(_ExecutionDirector):
             DecisionModelSpec.tool_enabled(
                 name="LLMDecision",
                 output_type=self.output_type,
-                tools=_decision_tool_specs(self.tool_specs),
+                tools=self.tools,
             )
         )
 
@@ -243,32 +232,20 @@ class LLMInferenceStrategy(InferenceStrategy):
         self._json_default = json_default
         self._stream = stream
 
-    def _build_tool_specs(self, tools: ToolRegistry) -> list[_ToolSpec]:
-        return [
-            _ToolSpec(
-                name=tool.name,
-                function=tool.function,
-                schema=self.model_backend.get_function_schema(
-                    tool.function, name=tool.name
-                ),
-            )
-            for tool in tools.get_all()
-        ]
-
     def _create_director(
-        self, output_type: Any, tool_specs: list[_ToolSpec]
+        self, output_type: Any, tools: list[Tool]
     ) -> _ExecutionDirector:
         """Creates the appropriate execution director based on the context."""
         if output_type is Never:
-            if not tool_specs:
+            if not tools:
                 raise ValueError(
                     "An @infer function returning Never must have tools available, "
                     "otherwise the inference loop can never make progress."
                 )
-            return _ToolOnlyDirector(self.model_backend, output_type, tool_specs)
-        if tool_specs:
-            return _ToolEnabledDirector(self.model_backend, output_type, tool_specs)
-        return _OutputOnlyDirector(self.model_backend, output_type, tool_specs)
+            return _ToolOnlyDirector(self.model_backend, output_type, tools)
+        if tools:
+            return _ToolEnabledDirector(self.model_backend, output_type, tools)
+        return _OutputOnlyDirector(self.model_backend, output_type, tools)
 
     async def decide_next_step(
         self,
@@ -277,8 +254,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
-        tool_specs = self._build_tool_specs(tools)
-        director = self._create_director(function_info.return_type, tool_specs)
+        director = self._create_director(function_info.return_type, tools.get_all())
         output_schema = director.build_decision_schema()
         messages = self._build_messages(
             function_info,

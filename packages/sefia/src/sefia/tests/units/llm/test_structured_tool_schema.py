@@ -6,12 +6,12 @@ import pytest
 from pydantic import Field
 
 from sefia._interfaces import DecisionModelSpec
-from sefia._tool_system import ToolRegistry
+from sefia._tool_system import Tool, ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import FunctionInfo, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
-from sefia.llm._strategy import _ToolOnlyDirector, _ToolSpec
+from sefia.llm._strategy import _ToolOnlyDirector
 from sefia.pydantic import PydanticModelBackend
 
 
@@ -28,13 +28,12 @@ class _MockPublisher(EventPublisher):
         pass
 
 
-def _spec() -> _ToolSpec:
+def _tool() -> Tool:
     backend = PydanticModelBackend()
     name = backend.get_function_name(ask_user)
-    return _ToolSpec(
+    return Tool(
         name=name,
         function=ask_user,
-        schema=backend.get_function_schema(ask_user, name=name),
     )
 
 
@@ -70,7 +69,7 @@ def _name_constraint(name_schema: dict) -> Any:
 
 
 def test_tool_only_schema_embeds_tool_argument_schema() -> None:
-    director = _ToolOnlyDirector(PydanticModelBackend(), Never, [_spec()])
+    director = _ToolOnlyDirector(PydanticModelBackend(), Never, [_tool()])
 
     schema = director.build_decision_schema()
 

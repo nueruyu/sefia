@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from sefia._tool_system import ToolRegistry
+from sefia._tool_system import Tool, ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
@@ -21,7 +21,6 @@ from sefia.llm._strategy import (
     _OutputOnlyDirector,
     _ToolEnabledDirector,
     _ToolOnlyDirector,
-    _ToolSpec,
 )
 from sefia.llm.events import LLMTokenReceived
 from sefia.pydantic import PydanticModelBackend
@@ -66,12 +65,11 @@ def chat_tool() -> str:
 _BACKEND = PydanticModelBackend()
 
 
-def _spec(func: Callable[..., Any]) -> _ToolSpec:
+def _tool(func: Callable[..., Any]) -> Tool:
     name = _BACKEND.get_function_name(func)
-    return _ToolSpec(
+    return Tool(
         name=name,
         function=func,
-        schema=_BACKEND.get_function_schema(func, name=name),
     )
 
 
@@ -134,7 +132,7 @@ class TestLLMInferenceStrategy:
             ToolCallResult(tool_call_id="1", result="見つかりました"),
         ]
 
-        director = strategy._create_director(str, [_spec(search)])
+        director = strategy._create_director(str, [_tool(search)])
         messages = strategy._build_messages(
             _function_info(arguments={"arg": "val"}),
             history,
@@ -160,7 +158,7 @@ class TestLLMInferenceStrategy:
     def test_build_decision_schema_hoists_nested_definitions(self):
         strategy = self._strategy(AsyncMock())
 
-        director = strategy._create_director(list[MyIssue], [_spec(search)])
+        director = strategy._create_director(list[MyIssue], [_tool(search)])
         schema = director.build_decision_schema()
 
         assert "MyIssue" in schema["$defs"]
@@ -192,7 +190,7 @@ class TestLLMInferenceStrategy:
     def test_build_decision_schema_requires_nullable_fields_with_tools(self):
         strategy = self._strategy(AsyncMock())
 
-        director = strategy._create_director(list[MyIssue], [_spec(search)])
+        director = strategy._create_director(list[MyIssue], [_tool(search)])
         schema = director.build_decision_schema()
 
         assert schema["required"] == ["final_answer", "tool_calls"]
@@ -355,7 +353,7 @@ class TestToolOnlyDirector:
 
     def test_create_director_returns_tool_only_for_never(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [_spec(chat_tool)])
+        director = strategy._create_director(Never, [_tool(chat_tool)])
         assert isinstance(director, _ToolOnlyDirector)
 
     def test_create_director_raises_for_never_without_tools(self):
@@ -365,7 +363,7 @@ class TestToolOnlyDirector:
 
     def test_build_decision_schema_has_no_final_answer_field(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [_spec(chat_tool)])
+        director = strategy._create_director(Never, [_tool(chat_tool)])
         schema = director.build_decision_schema()
 
         assert "final_answer" not in schema.get("properties", {})
@@ -374,7 +372,7 @@ class TestToolOnlyDirector:
 
     def test_build_system_prompt_instructs_tool_only(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [_spec(chat_tool)])
+        director = strategy._create_director(Never, [_tool(chat_tool)])
         schema = director.build_decision_schema()
         prompt = director.build_system_prompt_addition(schema)
 
@@ -383,7 +381,7 @@ class TestToolOnlyDirector:
 
     def test_process_decision_accepts_tool_calls(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [_spec(chat_tool)])
+        director = strategy._create_director(Never, [_tool(chat_tool)])
 
         result = director.process_response_data(
             {"tool_calls": [{"name": "chat_tool", "arguments": {}}]}
@@ -445,7 +443,7 @@ class TestToolEnabledDirector:
 
     def _director(self, output_type: Any = str):
         return _ToolEnabledDirector(
-            PydanticModelBackend(), output_type, [_spec(search)]
+            PydanticModelBackend(), output_type, [_tool(search)]
         )
 
     def test_build_decision_schema_has_nullable_final_answer_and_tool_calls(self):
