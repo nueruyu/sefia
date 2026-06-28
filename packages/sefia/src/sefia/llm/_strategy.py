@@ -78,9 +78,13 @@ class _ExecutionDirector(ABC):
         """Builds the core instruction part of the system prompt."""
         raise NotImplementedError
 
+    def process_response_data(self, data: Any) -> InferenceDecision:
+        """Validate raw decision data and convert it to an inference decision."""
+        return self._process_decision(self.decision_model.validate(data))
+
     @abstractmethod
-    def process_decision(self, decision: LLMDecision) -> InferenceDecision:
-        """Processes the validated decision and returns an InferenceDecision."""
+    def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
+        """Convert a validated decision to an inference decision."""
         raise NotImplementedError
 
     def _tool_definitions(self) -> list[dict]:
@@ -143,7 +147,7 @@ class _ToolOnlyDirector(_ExecutionDirector):
             f"{json.dumps(output_schema, ensure_ascii=False)}"
         )
 
-    def process_decision(self, decision: LLMDecision) -> InferenceDecision:
+    def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
         if isinstance(decision, ToolCallsLLMDecision):
             return self._tool_call_decision(decision.tool_calls)
         raise InvalidInferenceResponseError("LLM response must contain 'tool_calls'.")
@@ -179,7 +183,7 @@ class _ToolEnabledDirector(_ExecutionDirector):
             f"{json.dumps(output_schema, ensure_ascii=False)}"
         )
 
-    def process_decision(self, decision: LLMDecision) -> InferenceDecision:
+    def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
         if isinstance(decision, ToolCallsLLMDecision):
             return self._tool_call_decision(decision.tool_calls)
         if isinstance(decision, FinalAnswerLLMDecision):
@@ -210,7 +214,7 @@ class _OutputOnlyDirector(_ExecutionDirector):
             f"{json.dumps(output_schema, ensure_ascii=False)}"
         )
 
-    def process_decision(self, decision: LLMDecision) -> InferenceDecision:
+    def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
         if isinstance(decision, FinalAnswerLLMDecision):
             return FinalAnswerDecision(answer=decision.final_answer)
         raise InvalidInferenceResponseError(
@@ -329,8 +333,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 raw = "\n".join(lines[1:-1]).strip()
 
             decision_data = json.loads(raw)
-            decision = director.decision_model.validate(decision_data)
-            return director.process_decision(decision)
+            return director.process_response_data(decision_data)
 
         except (json.JSONDecodeError, ValueError) as e:
             raise InvalidInferenceResponseError(

@@ -385,10 +385,9 @@ class TestToolOnlyDirector:
         strategy = self._strategy()
         director = strategy._create_director(Never, [_spec(chat_tool)])
 
-        decision = director.decision_model.validate(
+        result = director.process_response_data(
             {"tool_calls": [{"name": "chat_tool", "arguments": {}}]}
         )
-        result = director.process_decision(decision)
 
         assert isinstance(result, ToolCallDecision)
         assert result.calls[0].name == "chat_tool"
@@ -449,9 +448,6 @@ class TestToolEnabledDirector:
             PydanticModelBackend(), output_type, [_spec(search)]
         )
 
-    def _decision(self, director, data):
-        return director.decision_model.validate(data)
-
     def test_build_decision_schema_has_nullable_final_answer_and_tool_calls(self):
         schema = self._director().build_decision_schema()
 
@@ -468,14 +464,12 @@ class TestToolEnabledDirector:
 
     def test_process_decision_returns_tool_call_decision(self):
         director = self._director()
-        decision = self._decision(
-            director,
+        result = director.process_response_data(
             {
                 "final_answer": None,
                 "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
             },
         )
-        result = director.process_decision(decision)
 
         assert isinstance(result, ToolCallDecision)
         assert result.calls[0].name == "search"
@@ -483,20 +477,18 @@ class TestToolEnabledDirector:
 
     def test_process_decision_returns_final_answer_decision(self):
         director = self._director(output_type=str)
-        decision = self._decision(
-            director, {"final_answer": "done", "tool_calls": None}
+        result = director.process_response_data(
+            {"final_answer": "done", "tool_calls": None}
         )
-        result = director.process_decision(decision)
 
         assert isinstance(result, FinalAnswerDecision)
         assert result.answer == "done"
 
     def test_process_decision_validates_final_answer_type(self):
         director = self._director(output_type=MyOutput)
-        decision = self._decision(
-            director, {"final_answer": {"name": "ok", "value": 7}, "tool_calls": None}
+        result = director.process_response_data(
+            {"final_answer": {"name": "ok", "value": 7}, "tool_calls": None}
         )
-        result = director.process_decision(decision)
 
         assert isinstance(result, FinalAnswerDecision)
         assert isinstance(result.answer, MyOutput)
@@ -508,13 +500,12 @@ class TestToolEnabledDirector:
             ValueError,
             match="tool_calls.*final_answer|final_answer.*tool_calls",
         ):
-            self._decision(director, {"final_answer": None, "tool_calls": None})
+            director.process_response_data({"final_answer": None, "tool_calls": None})
 
     def test_decision_validation_rejects_both_tool_calls_and_final_answer(self):
         director = self._director()
         with pytest.raises(ValueError, match="must not contain both"):
-            self._decision(
-                director,
+            director.process_response_data(
                 {
                     "final_answer": "ignored",
                     "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
@@ -543,18 +534,16 @@ class TestOutputOnlyDirector:
 
     def test_process_decision_returns_final_answer(self):
         director = self._director(output_type=str)
-        decision = director.decision_model.validate({"final_answer": "hello"})
-        result = director.process_decision(decision)
+        result = director.process_response_data({"final_answer": "hello"})
 
         assert isinstance(result, FinalAnswerDecision)
         assert result.answer == "hello"
 
     def test_process_decision_validates_structured_output(self):
         director = self._director(output_type=MyOutput)
-        decision = director.decision_model.validate(
+        result = director.process_response_data(
             {"final_answer": {"name": "test", "value": 99}}
         )
-        result = director.process_decision(decision)
 
         assert isinstance(result, FinalAnswerDecision)
         assert isinstance(result.answer, MyOutput)
@@ -563,4 +552,4 @@ class TestOutputOnlyDirector:
     def test_decision_model_rejects_null_final_answer(self):
         director = self._director()
         with pytest.raises(ValueError, match="Decision validation failed"):
-            director.decision_model.validate({"final_answer": None})
+            director.process_response_data({"final_answer": None})
