@@ -67,8 +67,8 @@ def _delta_text(events: list[Any]) -> str:
 
 async def test_streams_string_argument():
     text = (
-        '{"tool_calls":[{"name":"ask_human",'
-        '"arguments":{"question":"Hello world"}}],"final_answer":null}'
+        '{"decision":"tool_calls","tool_calls":[{"name":"ask_human",'
+        '"arguments":{"question":"Hello world"}}]}'
     )
     events = await run_router(text)
 
@@ -83,8 +83,8 @@ async def test_streams_string_argument():
 
 async def test_streams_string_argument_character_by_character():
     text = (
-        '{"tool_calls":[{"name":"ask_human",'
-        '"arguments":{"question":"Hello world"}}],"final_answer":null}'
+        '{"decision":"tool_calls","tool_calls":[{"name":"ask_human",'
+        '"arguments":{"question":"Hello world"}}]}'
     )
     events = await run_router(text, chunk_size=1)
 
@@ -94,8 +94,8 @@ async def test_streams_string_argument_character_by_character():
 
 async def test_streams_scalar_arguments_whole():
     text = (
-        '{"tool_calls":[{"name":"ask_human",'
-        '"arguments":{"count":42,"ok":true,"note":null}}],"final_answer":null}'
+        '{"decision":"tool_calls","tool_calls":[{"name":"ask_human",'
+        '"arguments":{"count":42,"ok":true,"note":null}}]}'
     )
     events = await run_router(text)
 
@@ -109,8 +109,8 @@ async def test_resolves_when_arguments_precede_name():
     # JSON member order is the model's choice; routing must not depend on the
     # name arriving before the arguments.
     text = (
-        '{"tool_calls":[{"arguments":{"question":"Hi there"},'
-        '"name":"ask_human"}],"final_answer":null}'
+        '{"decision":"tool_calls","tool_calls":[{"arguments":{"question":"Hi there"},'
+        '"name":"ask_human"}]}'
     )
     events = await run_router(text)
 
@@ -120,8 +120,8 @@ async def test_resolves_when_arguments_precede_name():
 
 async def test_unregistered_tool_is_ignored():
     text = (
-        '{"tool_calls":[{"name":"other",'
-        '"arguments":{"question":"Hi"}}],"final_answer":null}'
+        '{"decision":"tool_calls","tool_calls":[{"name":"other",'
+        '"arguments":{"question":"Hi"}}]}'
     )
     events = await run_router(text)  # router only knows ask_human
 
@@ -166,7 +166,7 @@ async def test_duplicate_tool_name_resolution_is_ignored():
 
 
 async def test_final_answer_is_not_streamed():
-    text = '{"tool_calls":null,"final_answer":"the answer"}'
+    text = '{"decision":"final_answer","final_answer":"the answer"}'
     events = await run_router(text)
 
     assert events == []
@@ -177,7 +177,7 @@ async def test_fenced_response_is_ignored_gracefully():
     # it must stop quietly rather than raise.
     text = (
         "```json\n"
-        '{"tool_calls":[{"name":"ask_human","arguments":{"question":"Hi"}}]}\n'
+        '{"decision":"tool_calls","tool_calls":[{"name":"ask_human","arguments":{"question":"Hi"}}]}\n'
         "```"
     )
     events = await run_router(text)
@@ -187,10 +187,10 @@ async def test_fenced_response_is_ignored_gracefully():
 
 async def test_routes_multiple_tool_calls_independently():
     text = (
-        '{"tool_calls":['
+        '{"decision":"tool_calls","tool_calls":['
         '{"name":"ask_a","arguments":{"question":"A?"}},'
         '{"name":"ask_b","arguments":{"question":"B?"}}'
-        '],"final_answer":null}'
+        "]}"
     )
     events = await run_router_handlers(text, ["ask_a", "ask_b"], chunk_size=3)
 
@@ -203,8 +203,8 @@ async def test_routes_multiple_tool_calls_independently():
 
 async def test_routes_multiple_arguments_of_one_call():
     text = (
-        '{"tool_calls":[{"name":"ask",'
-        '"arguments":{"question":"Hi","count":3}}],"final_answer":null}'
+        '{"decision":"tool_calls","tool_calls":[{"name":"ask",'
+        '"arguments":{"question":"Hi","count":3}}]}'
     )
     events = (await run_router_handlers(text, ["ask"], chunk_size=4))["ask"]
 
@@ -250,7 +250,7 @@ def _function_info() -> FunctionInfo:
 
 async def test_arguments_stream_through_a_real_strategy():
     content = (
-        '{"final_answer": null, "tool_calls": [{"name": "ask_human", '
+        '{"decision": "tool_calls", "tool_calls": [{"name": "ask_human", '
         '"arguments": {"question": "What is your name?"}}]}'
     )
     formatter = Mock()

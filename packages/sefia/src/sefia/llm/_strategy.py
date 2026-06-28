@@ -125,8 +125,9 @@ class _ToolOnlyDirector(_ExecutionDirector):
 
     def build_system_prompt_addition(self, output_schema: dict) -> str:
         core_instruction = (
-            "Your task is to call tools. You MUST always populate the `tool_calls` "
-            "field. There is no `final_answer` — you must never stop calling tools."
+            "Your task is to call tools. You MUST set `decision` to `tool_calls` "
+            "and populate the `tool_calls` field. There is no `final_answer` — "
+            "you must never stop calling tools."
         )
         return (
             f"\n\n### Response Instructions\n{core_instruction}\n"
@@ -157,10 +158,10 @@ class _ToolEnabledDirector(_ExecutionDirector):
     def build_system_prompt_addition(self, output_schema: dict) -> str:
         core_instruction = (
             "Your task is to decide the next step. You have two options:\n"
-            "1. Call one or more tools by populating the `tool_calls` field.\n"
-            "2. Provide the final answer by populating the `final_answer` field.\n\n"
-            "You MUST populate both fields and set the unused field to null. "
-            "Exactly one field must be non-null. "
+            "1. Call one or more tools by setting `decision` to `tool_calls` "
+            "and populating the `tool_calls` field.\n"
+            "2. Provide the final answer by setting `decision` to `final_answer` "
+            "and populating the `final_answer` field.\n\n"
             "Use `tool_calls` to gather more information, and use `final_answer` "
             "only when you have enough information to complete the entire task."
         )
@@ -192,10 +193,11 @@ class _OutputOnlyDirector(_ExecutionDirector):
 
     def build_system_prompt_addition(self, output_schema: dict) -> str:
         core_instruction = (
-            "Your task is to provide a non-null final answer by populating the "
-            "`final_answer` field. No tools are available. If the requested "
-            "result is a collection and there are no results, return an empty "
-            "collection instead of null."
+            "Your task is to provide a non-null final answer by setting "
+            "`decision` to `final_answer` and populating the `final_answer` "
+            "field. No tools are available. If the requested result is a "
+            "collection and there are no results, return an empty collection "
+            "instead of null."
         )
         return (
             f"\n\n### Response Instructions\n{core_instruction}\n"

@@ -44,7 +44,7 @@ async def test_inference_with_tool_calls(
         LLMResponse(
             content=json.dumps(
                 {
-                    "final_answer": None,
+                    "decision": "tool_calls",
                     "tool_calls": [
                         {
                             "name": "WebToolkit_search",
@@ -58,7 +58,7 @@ async def test_inference_with_tool_calls(
         LLMResponse(
             content=json.dumps(
                 {
-                    "final_answer": None,
+                    "decision": "tool_calls",
                     "tool_calls": [
                         {
                             "name": "WebToolkit_fetch_content",
@@ -72,12 +72,12 @@ async def test_inference_with_tool_calls(
         LLMResponse(
             content=json.dumps(
                 {
+                    "decision": "final_answer",
                     "final_answer": {
                         "topic": "sefia",
                         "summary": "Sefia is a framework for building LLM agents.",
                         "sources": ["https://example.com/sefia"],
                     },
-                    "tool_calls": None,
                 }
             )
         ),
@@ -115,11 +115,12 @@ async def test_inference_without_tool_calls(serializer: Serializer, hasher: Args
     mock_response = LLMResponse(
         content=json.dumps(
             {
+                "decision": "final_answer",
                 "final_answer": {
                     "topic": "direct",
                     "summary": "This is a direct answer.",
                     "sources": [],
-                }
+                },
             }
         )
     )
@@ -148,7 +149,7 @@ async def test_inference_with_tool_exception(
         LLMResponse(
             content=json.dumps(
                 {
-                    "final_answer": None,
+                    "decision": "tool_calls",
                     "tool_calls": [
                         {
                             "name": "BrokenToolkit_always_fail",
@@ -162,12 +163,12 @@ async def test_inference_with_tool_exception(
         LLMResponse(
             content=json.dumps(
                 {
+                    "decision": "final_answer",
                     "final_answer": {
                         "topic": "failure",
                         "summary": "The tool failed with a ValueError.",
                         "sources": ["error: ValueError(Failed because: test)"],
                     },
-                    "tool_calls": None,
                 }
             )
         ),
@@ -213,7 +214,7 @@ async def test_inference_with_nonexistent_tool_call(
         LLMResponse(
             content=json.dumps(
                 {
-                    "final_answer": None,
+                    "decision": "tool_calls",
                     "tool_calls": [
                         {
                             "name": "NonExistent_tool",
@@ -250,7 +251,10 @@ async def test_inference_with_invalid_output_schema(
     # leaving the step resumable on re-invocation.
     mock_response = LLMResponse(
         content=json.dumps(
-            {"final_answer": {"summary": "This is missing the topic field."}}
+            {
+                "decision": "final_answer",
+                "final_answer": {"summary": "This is missing the topic field."},
+            }
         )
     )
     mock_llm = MockLLMClient(responses=[mock_response])
@@ -279,7 +283,9 @@ async def test_inference_on_standalone_function(
         ...
 
     mock_response = LLMResponse(
-        content=json.dumps({"final_answer": "This is a summary."})
+        content=json.dumps(
+            {"decision": "final_answer", "final_answer": "This is a summary."}
+        )
     )
     mock_llm = MockLLMClient(responses=[mock_response])
     session_id = "standalone-function-test"

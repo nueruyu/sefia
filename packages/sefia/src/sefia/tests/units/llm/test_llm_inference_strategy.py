@@ -88,6 +88,25 @@ def mock_llm_client():
 DUMMY_SCHEMA: dict = {}
 
 
+def _resolve(schema: dict, root: dict) -> dict:
+    if "$ref" in schema:
+        key = schema["$ref"].split("/")[-1]
+        return root["$defs"][key]
+    return schema
+
+
+def _decision_branch(schema: dict, decision: str) -> dict:
+    if schema.get("properties", {}).get("decision", {}).get("const") == decision:
+        return schema
+
+    for candidate in schema["oneOf"]:
+        branch = _resolve(candidate, schema)
+        if branch["properties"]["decision"]["const"] == decision:
+            return branch
+
+    raise AssertionError(f"Decision branch not found: {decision}")
+
+
 def _function_info(
     return_type: Any = str,
     arguments: dict[str, Any] | None = None,
@@ -162,16 +181,14 @@ class TestLLMInferenceStrategy:
         schema = director.build_decision_schema()
 
         assert "MyIssue" in schema["$defs"]
-        final_answer_schema = schema["properties"]["final_answer"]["anyOf"][0]
+        final_answer_branch = _decision_branch(schema, "final_answer")
+        final_answer_schema = final_answer_branch["properties"]["final_answer"]
         assert "$defs" not in final_answer_schema
         assert final_answer_schema["items"]["$ref"] == "#/$defs/MyIssue"
         # tool_calls items reference a per-tool call model in $defs, not an inline
         # blob, so each tool's arguments stay constrained by its own schema.
-        tool_calls_array = next(
-            candidate
-            for candidate in schema["properties"]["tool_calls"]["anyOf"]
-            if candidate.get("type") == "array"
-        )
+        tool_calls_branch = _decision_branch(schema, "tool_calls")
+        tool_calls_array = tool_calls_branch["properties"]["tool_calls"]
         tool_call_ref = tool_calls_array["items"]["$ref"].split("/")[-1]
         assert tool_call_ref in schema["$defs"]
         assert tool_call_ref.endswith("ToolCall")
@@ -182,20 +199,31 @@ class TestLLMInferenceStrategy:
         director = strategy._create_director(list[MyIssue], [])
         schema = director.build_decision_schema()
 
-        assert schema["required"] == ["final_answer"]
+        assert schema["required"] == ["decision", "final_answer"]
+        assert schema["properties"]["decision"]["const"] == "final_answer"
         final_answer_schema = schema["properties"]["final_answer"]
         assert final_answer_schema["type"] == "array"
         assert "oneOf" not in final_answer_schema
 
-    def test_build_decision_schema_requires_nullable_fields_with_tools(self):
+    def test_build_decision_schema_uses_decision_discriminator_with_tools(self):
         strategy = self._strategy(AsyncMock())
 
         director = strategy._create_director(list[MyIssue], [_tool(search)])
         schema = director.build_decision_schema()
 
-        assert schema["required"] == ["final_answer", "tool_calls"]
-        assert {"type": "null"} in schema["properties"]["final_answer"]["anyOf"]
-        assert {"type": "null"} in schema["properties"]["tool_calls"]["anyOf"]
+        assert schema["discriminator"]["propertyName"] == "decision"
+        assert set(schema["discriminator"]["mapping"]) == {
+            "tool_calls",
+            "final_answer",
+        }
+        assert _decision_branch(schema, "tool_calls")["required"] == [
+            "decision",
+            "tool_calls",
+        ]
+        assert _decision_branch(schema, "final_answer")["required"] == [
+            "decision",
+            "final_answer",
+        ]
 
     def test_build_messages_tells_no_tool_agent_to_return_empty_collection(self):
         strategy = self._strategy(AsyncMock())
@@ -213,7 +241,7 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_handles_tool_calls(self, mock_llm_client):
         tool_calls_payload = json.dumps(
             {
-                "final_answer": None,
+                "decision": "tool_calls",
                 "tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}],
             }
         )
@@ -237,7 +265,10 @@ class TestLLMInferenceStrategy:
         self, mock_llm_client
     ):
         final_answer_payload = json.dumps(
-            {"final_answer": {"name": "test", "value": 42}}
+            {
+                "decision": "final_answer",
+                "final_answer": {"name": "test", "value": 42},
+            }
         )
         mock_llm_client.complete.return_value = LLMResponse(
             content=final_answer_payload
@@ -272,7 +303,7 @@ class TestLLMInferenceStrategy:
         self, mock_llm_client
     ):
         mock_llm_client.complete.return_value = LLMResponse(
-            content='{"final_answer": "done"}'
+            content='{"decision": "final_answer", "final_answer": "done"}'
         )
         strategy = self._strategy(mock_llm_client)
 
@@ -289,7 +320,7 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_raises_on_validation_error(self, mock_llm_client):
         # final_answer is missing required 'value' field — Pydantic should reject it
         mock_llm_client.complete.return_value = LLMResponse(
-            content='{"final_answer": {"name": "test"}}'
+            content='{"decision": "final_answer", "final_answer": {"name": "test"}}'
         )
         strategy = self._strategy(mock_llm_client)
 
@@ -305,7 +336,7 @@ class TestLLMInferenceStrategy:
 
     async def test_decide_next_step_handles_plain_string_output(self, mock_llm_client):
         mock_llm_client.complete.return_value = LLMResponse(
-            content='{"final_answer": "Hello, world!"}'
+            content='{"decision": "final_answer", "final_answer": "Hello, world!"}'
         )
         strategy = self._strategy(mock_llm_client)
 
@@ -323,7 +354,7 @@ class TestLLMInferenceStrategy:
         self, mock_llm_client
     ):
         mock_llm_client.complete.return_value = LLMResponse(
-            content='{"final_answer": null}'
+            content='{"decision": "final_answer", "final_answer": null}'
         )
         strategy = self._strategy(mock_llm_client)
 
@@ -367,8 +398,9 @@ class TestToolOnlyDirector:
         schema = director.build_decision_schema()
 
         assert "final_answer" not in schema.get("properties", {})
+        assert schema["properties"]["decision"]["const"] == "tool_calls"
         assert "tool_calls" in schema["properties"]
-        assert schema["required"] == ["tool_calls"]
+        assert schema["required"] == ["decision", "tool_calls"]
 
     def test_build_system_prompt_instructs_tool_only(self):
         strategy = self._strategy()
@@ -384,7 +416,10 @@ class TestToolOnlyDirector:
         director = strategy._create_director(Never, [_tool(chat_tool)])
 
         result = director.process_response_data(
-            {"tool_calls": [{"name": "chat_tool", "arguments": {}}]}
+            {
+                "decision": "tool_calls",
+                "tool_calls": [{"name": "chat_tool", "arguments": {}}],
+            }
         )
 
         assert isinstance(result, ToolCallDecision)
@@ -393,7 +428,10 @@ class TestToolOnlyDirector:
     async def test_decide_next_step_returns_tool_call_decision_for_never(self):
         mock_client = AsyncMock()
         mock_client.complete.return_value = LLMResponse(
-            content='{"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
+            content=(
+                '{"decision": "tool_calls", '
+                '"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
+            )
         )
         mock_formatter = Mock()
         mock_formatter.format_arguments.return_value = "<arguments/>"
@@ -417,7 +455,7 @@ class TestToolOnlyDirector:
     ):
         mock_client = AsyncMock()
         mock_client.complete.return_value = LLMResponse(
-            content='{"tool_calls": null, "final_answer": "bye"}'
+            content='{"decision": "final_answer", "final_answer": "bye"}'
         )
         mock_formatter = Mock()
         mock_formatter.format_arguments.return_value = "<arguments/>"
@@ -428,7 +466,7 @@ class TestToolOnlyDirector:
         )
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="must contain 'tool_calls'"
+            InvalidInferenceResponseError, match="LLM output failed validation"
         ):
             await strategy.decide_next_step(
                 _function_info(return_type=Never, instructions="chat"),
@@ -446,12 +484,18 @@ class TestToolEnabledDirector:
             PydanticModelBackend(), output_type, [_tool(search)]
         )
 
-    def test_build_decision_schema_has_nullable_final_answer_and_tool_calls(self):
+    def test_build_decision_schema_has_decision_branches(self):
         schema = self._director().build_decision_schema()
 
-        assert {"type": "null"} in schema["properties"]["final_answer"]["anyOf"]
-        assert {"type": "null"} in schema["properties"]["tool_calls"]["anyOf"]
-        assert schema["required"] == ["final_answer", "tool_calls"]
+        assert schema["discriminator"]["propertyName"] == "decision"
+        assert _decision_branch(schema, "tool_calls")["required"] == [
+            "decision",
+            "tool_calls",
+        ]
+        assert _decision_branch(schema, "final_answer")["required"] == [
+            "decision",
+            "final_answer",
+        ]
 
     def test_build_system_prompt_mentions_both_options(self):
         director = self._director()
@@ -464,7 +508,7 @@ class TestToolEnabledDirector:
         director = self._director()
         result = director.process_response_data(
             {
-                "final_answer": None,
+                "decision": "tool_calls",
                 "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
             },
         )
@@ -476,7 +520,7 @@ class TestToolEnabledDirector:
     def test_process_decision_returns_final_answer_decision(self):
         director = self._director(output_type=str)
         result = director.process_response_data(
-            {"final_answer": "done", "tool_calls": None}
+            {"decision": "final_answer", "final_answer": "done"}
         )
 
         assert isinstance(result, FinalAnswerDecision)
@@ -485,27 +529,31 @@ class TestToolEnabledDirector:
     def test_process_decision_validates_final_answer_type(self):
         director = self._director(output_type=MyOutput)
         result = director.process_response_data(
-            {"final_answer": {"name": "ok", "value": 7}, "tool_calls": None}
+            {
+                "decision": "final_answer",
+                "final_answer": {"name": "ok", "value": 7},
+            }
         )
 
         assert isinstance(result, FinalAnswerDecision)
         assert isinstance(result.answer, MyOutput)
         assert result.answer.value == 7
 
-    def test_process_decision_raises_when_both_null(self):
+    def test_process_decision_raises_when_decision_branch_is_incomplete(self):
         director = self._director()
         with pytest.raises(
             ValueError,
-            match="tool_calls.*final_answer|final_answer.*tool_calls",
+            match="Decision validation failed",
         ):
-            director.process_response_data({"final_answer": None, "tool_calls": None})
+            director.process_response_data({"decision": "tool_calls"})
 
-    def test_decision_validation_rejects_both_tool_calls_and_final_answer(self):
+    def test_decision_validation_rejects_fields_from_other_branch(self):
         director = self._director()
-        with pytest.raises(ValueError, match="must not contain both"):
+        with pytest.raises(ValueError, match="Decision validation failed"):
             director.process_response_data(
                 {
-                    "final_answer": "ignored",
+                    "decision": "tool_calls",
+                    "final_answer": "extra",
                     "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
                 },
             )
@@ -522,7 +570,8 @@ class TestOutputOnlyDirector:
 
         assert "tool_calls" not in schema.get("properties", {})
         assert "final_answer" in schema["properties"]
-        assert schema["required"] == ["final_answer"]
+        assert schema["properties"]["decision"]["const"] == "final_answer"
+        assert schema["required"] == ["decision", "final_answer"]
 
     def test_build_system_prompt_mentions_no_tools(self):
         director = self._director()
@@ -532,7 +581,9 @@ class TestOutputOnlyDirector:
 
     def test_process_decision_returns_final_answer(self):
         director = self._director(output_type=str)
-        result = director.process_response_data({"final_answer": "hello"})
+        result = director.process_response_data(
+            {"decision": "final_answer", "final_answer": "hello"}
+        )
 
         assert isinstance(result, FinalAnswerDecision)
         assert result.answer == "hello"
@@ -540,7 +591,10 @@ class TestOutputOnlyDirector:
     def test_process_decision_validates_structured_output(self):
         director = self._director(output_type=MyOutput)
         result = director.process_response_data(
-            {"final_answer": {"name": "test", "value": 99}}
+            {
+                "decision": "final_answer",
+                "final_answer": {"name": "test", "value": 99},
+            }
         )
 
         assert isinstance(result, FinalAnswerDecision)
@@ -550,4 +604,6 @@ class TestOutputOnlyDirector:
     def test_decision_model_rejects_null_final_answer(self):
         director = self._director()
         with pytest.raises(ValueError, match="Decision validation failed"):
-            director.process_response_data({"final_answer": None})
+            director.process_response_data(
+                {"decision": "final_answer", "final_answer": None}
+            )

@@ -83,7 +83,7 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
-                        "final_answer": None,
+                        "decision": "tool_calls",
                         "tool_calls": [
                             {
                                 "name": "HumanInputTool_ask_user",
@@ -96,12 +96,12 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
+                        "decision": "final_answer",
                         "final_answer": {
                             "topic": "User Info",
                             "summary": "The user's name is Alice.",
                             "sources": [],
                         },
-                        "tool_calls": None,
                     }
                 )
             ),
@@ -171,7 +171,7 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
-                        "final_answer": None,
+                        "decision": "tool_calls",
                         "tool_calls": [
                             {
                                 "name": "HumanInputTool_ask_user",
@@ -184,7 +184,7 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
-                        "final_answer": None,
+                        "decision": "tool_calls",
                         "tool_calls": [
                             {
                                 "name": "HumanInputTool_ask_user",
@@ -197,12 +197,12 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
+                        "decision": "final_answer",
                         "final_answer": {
                             "topic": "Profile",
                             "summary": "Alice is 99.",
                             "sources": [],
                         },
-                        "tool_calls": None,
                     }
                 )
             ),

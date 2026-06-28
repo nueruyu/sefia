@@ -96,22 +96,22 @@ async def test_stagnation_state_is_isolated_between_infer_calls():
     repeated_call_response = LLMResponse(
         content=json.dumps(
             {
-                "final_answer": None,
+                "decision": "tool_calls",
                 "tool_calls": [
                     {"name": "WebToolkit_search", "arguments": {"query": "sefia"}}
-                ]
+                ],
             }
         )
     )
     final_response = LLMResponse(
         content=json.dumps(
             {
+                "decision": "final_answer",
                 "final_answer": {
                     "topic": "sefia",
                     "summary": "Sefia is a framework for building LLM agents.",
                     "sources": [],
                 },
-                "tool_calls": None,
             }
         )
     )
@@ -122,15 +122,15 @@ async def test_stagnation_state_is_isolated_between_infer_calls():
             LLMResponse(
                 content=json.dumps(
                     {
+                        "decision": "final_answer",
                         "final_answer": {
                             "topic": "sefia",
-                        "summary": "first call done",
-                        "sources": [],
-                    },
-                    "tool_calls": None,
-                }
-            )
-        ),
+                            "summary": "first call done",
+                            "sources": [],
+                        },
+                    }
+                )
+            ),
             # The second @infer call repeats the same tool call twice before
             # finishing. If the StagnationDetector were shared across calls,
             # this would combine with the first call's history and raise.

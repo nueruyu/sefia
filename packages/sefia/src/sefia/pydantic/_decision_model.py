@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Union
 
-from pydantic import Field, TypeAdapter, ValidationError, create_model
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, create_model
 
 from .._interfaces.decision_model import (
     DecisionMode,
@@ -22,11 +22,9 @@ class PydanticDecisionModel(DecisionModel):
     def __init__(
         self,
         *,
-        model: type,
-        mode: DecisionMode,
+        model: Any,
     ):
         self._adapter = TypeAdapter(model)
-        self._mode = mode
 
     def schema(self) -> dict:
         schema = dict(self._adapter.json_schema())
@@ -36,56 +34,20 @@ class PydanticDecisionModel(DecisionModel):
     def validate(self, data: Any) -> LLMDecision:
         try:
             decision = self._adapter.validate_python(data)
-            tool_calls = self._extract_tool_calls(getattr(decision, "tool_calls", None))
-            final_answer = getattr(decision, "final_answer", None)
-            return self._normalize_decision(
-                final_answer=final_answer,
-                tool_calls=tool_calls,
-            )
+            if decision.decision == "tool_calls":
+                return ToolCallsLLMDecision(
+                    tool_calls=self._extract_tool_calls(decision.tool_calls)
+                )
+            if decision.decision == "final_answer":
+                return FinalAnswerLLMDecision(final_answer=decision.final_answer)
+            raise ValueError(f"Unsupported decision type: {decision.decision!r}")
         except ValidationError as e:
             unknown_tool_name = _unknown_tool_name_from_error(e)
             if unknown_tool_name is not None:
                 raise UnknownToolDecisionError(unknown_tool_name) from e
             raise ValueError(f"Decision validation failed: {e}") from e
 
-    def _normalize_decision(
-        self,
-        *,
-        final_answer: Any,
-        tool_calls: list[DecisionToolCall] | None,
-    ) -> LLMDecision:
-        has_tool_calls = bool(tool_calls)
-        has_final_answer = final_answer is not None
-
-        if self._mode is DecisionMode.TOOL_ONLY:
-            if not has_tool_calls:
-                raise ValueError("Decision must contain 'tool_calls'.")
-            return ToolCallsLLMDecision(tool_calls=tool_calls)
-
-        if self._mode is DecisionMode.OUTPUT_ONLY:
-            return FinalAnswerLLMDecision(final_answer=final_answer)
-
-        if self._mode is DecisionMode.TOOL_ENABLED:
-            if has_tool_calls and has_final_answer:
-                raise ValueError(
-                    "Decision must not contain both 'tool_calls' and 'final_answer'."
-                )
-            if has_tool_calls:
-                return ToolCallsLLMDecision(tool_calls=tool_calls)
-            if has_final_answer:
-                return FinalAnswerLLMDecision(final_answer=final_answer)
-            raise ValueError(
-                "Decision must contain either 'tool_calls' or 'final_answer'."
-            )
-
-        raise ValueError(f"Unsupported decision mode: {self._mode!r}")
-
-    def _extract_tool_calls(
-        self, tool_calls: list[Any] | None
-    ) -> list[DecisionToolCall] | None:
-        if tool_calls is None:
-            return None
-
+    def _extract_tool_calls(self, tool_calls: list[Any]) -> list[DecisionToolCall]:
         calls: list[DecisionToolCall] = []
         for tool_call in tool_calls:
             calls.append(
@@ -100,6 +62,9 @@ class PydanticDecisionModel(DecisionModel):
 def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
     for item in error.errors():
         if item.get("type") == "union_tag_invalid":
+            loc = item.get("loc")
+            if not isinstance(loc, tuple) or "tool_calls" not in loc:
+                continue
             ctx = item.get("ctx") or {}
             tag = ctx.get("tag")
             if isinstance(tag, str):
@@ -125,10 +90,8 @@ class _PydanticDecisionModelFactory:
         )
 
     def build(self, spec: DecisionModelSpec) -> DecisionModel:
-        fields = self._fields(spec)
         return PydanticDecisionModel(
-            model=create_model(spec.name, **fields),
-            mode=spec.mode,
+            model=self._model(spec),
         )
 
     def _tool_calls_type(self, tools: list[Tool]) -> Any:
@@ -155,22 +118,44 @@ class _PydanticDecisionModelFactory:
             ]
         return Annotated[list[item_type], Field(min_length=1)]
 
-    def _fields(self, spec: DecisionModelSpec) -> dict[str, Any]:
+    def _model(self, spec: DecisionModelSpec) -> Any:
         if spec.mode is DecisionMode.TOOL_ONLY:
-            return {
-                "tool_calls": (
-                    Optional[self._tool_calls_type(spec.tools)],
-                    ...,
-                )
-            }
+            return self._tool_calls_model(spec)
         if spec.mode is DecisionMode.TOOL_ENABLED:
-            return {
-                "final_answer": (Optional[spec.output_type], ...),
-                "tool_calls": (
-                    Optional[self._tool_calls_type(spec.tools)],
-                    ...,
-                ),
-            }
+            branch_models = [
+                self._tool_calls_model(spec),
+                self._final_answer_model(spec),
+            ]
+            return Annotated[
+                Union[tuple(branch_models)],
+                Field(discriminator="decision"),
+            ]
         if spec.mode is DecisionMode.OUTPUT_ONLY:
-            return {"final_answer": (spec.output_type, ...)}
+            return self._final_answer_model(spec)
         raise ValueError(f"Unsupported decision mode: {spec.mode!r}")
+
+    def _tool_calls_model(self, spec: DecisionModelSpec) -> type:
+        if spec.mode is DecisionMode.TOOL_ONLY:
+            name = spec.name
+        else:
+            name = f"{spec.name}ToolCalls"
+
+        return create_model(
+            name,
+            __config__=ConfigDict(extra="forbid"),
+            decision=(Literal["tool_calls"], ...),
+            tool_calls=(self._tool_calls_type(spec.tools), ...),
+        )
+
+    def _final_answer_model(self, spec: DecisionModelSpec) -> type:
+        if spec.mode is DecisionMode.OUTPUT_ONLY:
+            name = spec.name
+        else:
+            name = f"{spec.name}FinalAnswer"
+
+        return create_model(
+            name,
+            __config__=ConfigDict(extra="forbid"),
+            decision=(Literal["final_answer"], ...),
+            final_answer=(spec.output_type, ...),
+        )

@@ -28,7 +28,10 @@ def _make_stores(serializer):
 def _final_answer(summary: str) -> LLMResponse:
     return LLMResponse(
         content=json.dumps(
-            {"final_answer": {"topic": "t", "summary": summary, "sources": []}}
+            {
+                "decision": "final_answer",
+                "final_answer": {"topic": "t", "summary": summary, "sources": []},
+            }
         )
     )
 

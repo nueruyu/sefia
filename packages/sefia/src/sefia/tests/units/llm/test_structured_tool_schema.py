@@ -136,37 +136,56 @@ class TestToolCallValidation:
 
     async def test_rejects_unknown_tool_with_specific_cause(self) -> None:
         with pytest.raises(InvalidInferenceResponseError) as exc_info:
-            await self._decide({"tool_calls": [{"name": "unknown", "arguments": {}}]})
+            await self._decide(
+                {
+                    "decision": "tool_calls",
+                    "tool_calls": [{"name": "unknown", "arguments": {}}],
+                }
+            )
 
         assert isinstance(exc_info.value.__cause__, UnknownToolDecisionError)
         assert exc_info.value.__cause__.tool_name == "unknown"
 
     async def test_rejects_missing_required_argument(self) -> None:
         with pytest.raises(InvalidInferenceResponseError, match="question"):
-            await self._decide({"tool_calls": [{"name": "ask_user", "arguments": {}}]})
+            await self._decide(
+                {
+                    "decision": "tool_calls",
+                    "tool_calls": [{"name": "ask_user", "arguments": {}}],
+                }
+            )
 
     async def test_rejects_empty_min_length_argument(self) -> None:
         with pytest.raises(InvalidInferenceResponseError, match="at least 1"):
             await self._decide(
-                {"tool_calls": [{"name": "ask_user", "arguments": {"question": ""}}]}
+                {
+                    "decision": "tool_calls",
+                    "tool_calls": [{"name": "ask_user", "arguments": {"question": ""}}],
+                }
             )
 
     async def test_rejects_unknown_argument(self) -> None:
         with pytest.raises(InvalidInferenceResponseError, match="LLM output failed"):
             await self._decide(
                 {
+                    "decision": "tool_calls",
                     "tool_calls": [
                         {
                             "name": "ask_user",
                             "arguments": {"question": "Hi", "extra": 1},
                         }
-                    ]
+                    ],
                 }
             )
 
     async def test_accepts_valid_arguments(self) -> None:
         decision = await self._decide(
-            {"tool_calls": [{"name": "ask_user", "arguments": {"question": "Hello"}}]}
+            {
+                "decision": "tool_calls",
+                "tool_calls": [
+                    {"name": "ask_user", "arguments": {"question": "Hello"}}
+                ],
+            }
         )
 
         assert isinstance(decision, ToolCallDecision)
