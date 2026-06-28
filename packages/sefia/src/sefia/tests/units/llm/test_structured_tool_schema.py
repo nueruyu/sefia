@@ -8,7 +8,7 @@ from pydantic import Field
 from sefia._interfaces import DecisionModelSpec
 from sefia._tool_system import Tool, ToolRegistry
 from sefia.event_system import EventPublisher
-from sefia.exceptions import InvalidInferenceResponseError
+from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.inference import FunctionInfo, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._strategy import _ToolOnlyDirector
@@ -134,15 +134,12 @@ class TestToolCallValidation:
             _MockPublisher(),
         )
 
-    async def test_unknown_tool_passes_through_to_executor(self) -> None:
-        # An unknown tool name is not a schema-validation failure; it flows to the
-        # executor, which reports it as "tool not found".
-        decision = await self._decide(
-            {"tool_calls": [{"name": "unknown", "arguments": {}}]}
-        )
+    async def test_rejects_unknown_tool_with_specific_cause(self) -> None:
+        with pytest.raises(InvalidInferenceResponseError) as exc_info:
+            await self._decide({"tool_calls": [{"name": "unknown", "arguments": {}}]})
 
-        assert isinstance(decision, ToolCallDecision)
-        assert decision.calls[0].name == "unknown"
+        assert isinstance(exc_info.value.__cause__, UnknownToolDecisionError)
+        assert exc_info.value.__cause__.tool_name == "unknown"
 
     async def test_rejects_missing_required_argument(self) -> None:
         with pytest.raises(InvalidInferenceResponseError, match="question"):

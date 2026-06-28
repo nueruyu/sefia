@@ -9,7 +9,7 @@ from glyff.store import MemorySessionStore as GlyffMemoryStore
 
 from sefia import Policy, Session, infer, policy
 from sefia._metadata import get_metadata
-from sefia.exceptions import InvalidInferenceResponseError
+from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.llm import LLMResponse
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
@@ -50,7 +50,7 @@ async def test_inference_with_tool_calls(
                             "name": "WebToolkit_search",
                             "arguments": {"query": "sefia"},
                         }
-                    ]
+                    ],
                 }
             )
         ),
@@ -64,7 +64,7 @@ async def test_inference_with_tool_calls(
                             "name": "WebToolkit_fetch_content",
                             "arguments": {"url": "https://example.com/sefia"},
                         }
-                    ]
+                    ],
                 }
             )
         ),
@@ -154,7 +154,7 @@ async def test_inference_with_tool_exception(
                             "name": "BrokenToolkit_always_fail",
                             "arguments": {"reason": "test"},
                         }
-                    ]
+                    ],
                 }
             )
         ),
@@ -207,7 +207,8 @@ async def test_inference_with_tool_exception(
 async def test_inference_with_nonexistent_tool_call(
     web_toolkit: WebToolkit, serializer: Serializer, hasher: ArgsHasher
 ):
-    # Scenario: LLM calls a tool that does not exist.
+    # Scenario: LLM calls a tool that does not exist. This is a recoverable
+    # malformed decision, not an executor-level tool failure.
     mock_responses = [
         LLMResponse(
             content=json.dumps(
@@ -218,19 +219,7 @@ async def test_inference_with_nonexistent_tool_call(
                             "name": "NonExistent_tool",
                             "arguments": {},
                         }
-                    ]
-                }
-            )
-        ),
-        LLMResponse(
-            content=json.dumps(
-                {
-                    "final_answer": {
-                        "topic": "tool_not_found",
-                        "summary": "Tried to call a tool that does not exist.",
-                        "sources": [],
-                    },
-                    "tool_calls": None,
+                    ],
                 }
             )
         ),
@@ -244,13 +233,12 @@ async def test_inference_with_nonexistent_tool_call(
             llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
             researcher = Researcher(web_toolkit)
-            await researcher.generate_report(topic="sefia")
+            with pytest.raises(InvalidInferenceResponseError) as exc_info:
+                await researcher.generate_report(topic="sefia")
 
-    messages = mock_llm.requests[1]["messages"]
-    assert messages[3]["role"] == "tool"
-    assert "Error: Tool 'NonExistent_tool' not found" in json.loads(
-        messages[3]["content"]
-    )
+    assert isinstance(exc_info.value.__cause__, UnknownToolDecisionError)
+    assert exc_info.value.__cause__.tool_name == "NonExistent_tool"
+    assert len(mock_llm.requests) == 1
 
 
 async def test_inference_with_invalid_output_schema(

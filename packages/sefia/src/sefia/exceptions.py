@@ -49,3 +49,11 @@ class InvalidInferenceResponseError(InferenceError):
     Treated as recoverable: LLM output is non-deterministic, so re-running the
     step (on resume, or via an in-loop retry) may yield a conforming response.
     """
+
+
+class UnknownToolDecisionError(ValueError):
+    """Raised when an LLM decision calls a tool that is not available."""
+
+    def __init__(self, tool_name: str):
+        super().__init__(f"Unknown tool call: {tool_name}")
+        self.tool_name = tool_name
