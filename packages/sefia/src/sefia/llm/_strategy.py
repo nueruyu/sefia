@@ -344,7 +344,11 @@ class LLMInferenceStrategy(InferenceStrategy):
             "CDATA and should be read as raw text.\n\n"
             f"{self._prompt_formatter.format_arguments(prompt_arguments, function_info.type_hints)}"
             if prompt_arguments
-            else "No arguments provided."
+            else (
+                "This inference call has no direct function arguments. "
+                "Follow the system instructions and use the conversation/tool "
+                "history for any available context."
+            )
         )
         messages.append(Message(role="user", content=user_prompt))
 
