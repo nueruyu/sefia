@@ -14,7 +14,7 @@ from ._interfaces.middleware import (
 from ._tool_system import ToolCollector, ToolRegistry
 from .event_system import EventPublisher
 from .inference import (
-    FinalAnswerDecision,
+    ResultDecision,
     FunctionInfo,
     HistoryItem,
     InferenceDecision,
@@ -222,8 +222,8 @@ class InferenceExecutor:
             decision = await step_chain()
             step += 1
 
-            if isinstance(decision, FinalAnswerDecision):
-                return decision.answer
+            if isinstance(decision, ResultDecision):
+                return decision.result
 
             if isinstance(decision, ToolCallDecision):
                 history.append(decision)

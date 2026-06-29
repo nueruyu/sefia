@@ -1,6 +1,6 @@
 from typing import Any, Callable
 
-from .._interfaces import ModelInspector
+from .._interfaces import ModelBackend
 from .._tool_system import ToolCollector, ToolRegistry
 from .._toolify import Toolset
 from ..streaming import StreamHandler
@@ -23,12 +23,12 @@ class DefaultToolCollector(ToolCollector):
     generation happens later in the inference strategy.
     """
 
-    def __init__(self, model_inspector: ModelInspector | None = None):
-        if model_inspector is None:
-            from ..pydantic._model_inspector import PydanticModelInspector
+    def __init__(self, model_backend: ModelBackend | None = None):
+        if model_backend is None:
+            from ..pydantic._model_backend import PydanticModelBackend
 
-            model_inspector = PydanticModelInspector()
-        self._model_inspector = model_inspector
+            model_backend = PydanticModelBackend()
+        self._model_backend = model_backend
 
     def collect(self, instance: object) -> ToolRegistry:
         registry = ToolRegistry()
@@ -103,7 +103,7 @@ class DefaultToolCollector(ToolCollector):
         stream_handler = self._resolve_stream_handler(func)
         registry.add(
             func,
-            name=self._model_inspector.get_function_name(func),
+            name=self._model_backend.get_function_name(func),
             stream_handler=stream_handler,
         )
 

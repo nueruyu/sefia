@@ -7,12 +7,12 @@ from typing import Protocol, TypeVar, cast
 import typer
 from glyff.exceptions import YieldException
 from sefia import Policy
+from sefia.exceptions import InferenceError
 from sefios import SessionScope, get_state
 from sefios.handlers import CostCalculator, CostState
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputRequest, HumanInputTool
 
-from .handlers import StreamingPrintHandler
 from .human_input import CLIHumanInputAdapter, CLIHumanInputReceiver
 from .policies import VerbosePolicy
 from .session import ResolvedSession, SessionManager
@@ -41,6 +41,8 @@ class CLIReporter(Protocol):
         self,
         session: ResolvedSession,
     ) -> MaybeAwaitable[None]: ...
+
+    def on_inference_error(self, error: InferenceError) -> MaybeAwaitable[None]: ...
 
     def on_session_finished(self) -> MaybeAwaitable[None]: ...
 
@@ -76,6 +78,12 @@ class DefaultCLIReporter(CLIReporter):
         typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
         typer.echo("Session interrupted to wait for your input.")
         typer.echo("To resume, run the script again with your answer.")
+        await self._echo_total_cost()
+
+    async def on_inference_error(self, error: InferenceError) -> None:
+        typer.echo()
+        typer.secho("INFERENCE ERROR", fg=typer.colors.RED, bold=True)
+        typer.echo(str(error))
         await self._echo_total_cost()
 
     async def on_session_finished(self) -> None:
@@ -138,10 +146,6 @@ class SefiaCLI:
         scope_policies: list[Policy] = [
             CustomPolicy(handlers=lambda: [CostCalculator()])
         ]
-        if stream:
-            scope_policies.append(
-                CustomPolicy(handlers=lambda: [StreamingPrintHandler()])
-            )
         self._session_scope = SessionScope(
             session_dir=session_dir,
             model=model,
@@ -194,6 +198,9 @@ class SefiaCLI:
                 with self._human_input.store.use_session_store(session.session_store):
                     try:
                         yield SefiaCLISession(human_input=self._human_input_receiver)
+                    except InferenceError as e:
+                        await self._report_inference_error(e)
+                        raise
                     except YieldException:
                         # The session context is still alive here, so reporters
                         # may read running state (e.g. cost) via get_state().
@@ -201,6 +208,8 @@ class SefiaCLI:
                         raise
                     else:
                         await self._report_session_finished()
+        except InferenceError:
+            raise typer.Exit(code=1) from None
         except YieldException:
             raise typer.Exit(code=0)
 
@@ -219,6 +228,10 @@ class SefiaCLI:
     async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
             await _maybe_await(self._reporter.on_interrupted(session))
+
+    async def _report_inference_error(self, error: InferenceError) -> None:
+        if self._reporter is not None:
+            await _maybe_await(self._reporter.on_inference_error(error))
 
     async def _report_session_finished(self) -> None:
         if self._reporter is not None:

@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 from sefia import StepContext
-from sefia.inference import FinalAnswerDecision, ToolCallDecision, ToolCallRequest
+from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
 from sefios.middleware import StagnationDetector, StagnationError
 
 
@@ -58,14 +58,14 @@ class TestStagnationDetector:
         await _step(middleware, "test_tool", {"a": 1}, step=0)
         await _step(middleware, "test_tool", {"a": 1}, step=0)
 
-    async def test_ignores_final_answer_decisions(self):
+    async def test_ignores_result_decisions(self):
         middleware = StagnationDetector(max_repeats=2)
 
         async def nxt():
-            return FinalAnswerDecision(answer="done")
+            return ResultDecision(result="done")
 
         decision = await middleware.wrap(StepContext(step=0, history=[]), nxt)
-        assert isinstance(decision, FinalAnswerDecision)
+        assert isinstance(decision, ResultDecision)
 
     async def test_records_each_call_in_a_multi_call_decision(self):
         middleware = StagnationDetector(max_repeats=3)

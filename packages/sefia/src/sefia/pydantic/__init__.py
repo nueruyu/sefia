@@ -1,5 +1,5 @@
 """Pydantic-backed implementations for sefia extension points."""
 
-from ._model_inspector import PydanticModelInspector
+from ._model_backend import PydanticModelBackend
 
-__all__ = ["PydanticModelInspector"]
+__all__ = ["PydanticModelBackend"]

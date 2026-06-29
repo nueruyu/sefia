@@ -6,26 +6,24 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from sefia._tool_system import ToolRegistry
+from sefia._tool_system import Tool, ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
-    FinalAnswerDecision,
     FunctionInfo,
+    ResultDecision,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
 )
 from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._strategy import (
-    LLMToolCall,
-    _LLMDecision,
     _OutputOnlyDirector,
     _ToolEnabledDirector,
     _ToolOnlyDirector,
 )
 from sefia.llm.events import LLMTokenReceived
-from sefia.pydantic import PydanticModelInspector
+from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
 
@@ -49,6 +47,39 @@ class MyIssue:
     description: str
 
 
+def search(q: str) -> str:
+    """Search for something."""
+    raise NotImplementedError
+
+
+def my_tool(param: int) -> str:
+    """A tool taking a single integer parameter."""
+    raise NotImplementedError
+
+
+def chat_tool() -> str:
+    """A tool taking no arguments."""
+    raise NotImplementedError
+
+
+_BACKEND = PydanticModelBackend()
+
+
+def _tool(func: Callable[..., Any]) -> Tool:
+    name = _BACKEND.get_function_name(func)
+    return Tool(
+        name=name,
+        function=func,
+    )
+
+
+def _tool_registry(*funcs: Callable[..., Any]) -> ToolRegistry:
+    registry = ToolRegistry()
+    for func in funcs:
+        registry.add(func, name=_BACKEND.get_function_name(func))
+    return registry
+
+
 @pytest.fixture
 def mock_llm_client():
     return AsyncMock()
@@ -57,11 +88,23 @@ def mock_llm_client():
 DUMMY_SCHEMA: dict = {}
 
 
-def _tool_registry(*names: str) -> ToolRegistry:
-    registry = ToolRegistry()
-    for name in names:
-        registry.add(lambda: None, name=name)
-    return registry
+def _resolve(schema: dict, root: dict) -> dict:
+    if "$ref" in schema:
+        key = schema["$ref"].split("/")[-1]
+        return root["$defs"][key]
+    return schema
+
+
+def _decision_branch(schema: dict, decision: str) -> dict:
+    if schema.get("properties", {}).get("decision", {}).get("const") == decision:
+        return schema
+
+    for candidate in schema["oneOf"]:
+        branch = _resolve(candidate, schema)
+        if branch["properties"]["decision"]["const"] == decision:
+            return branch
+
+    raise AssertionError(f"Decision branch not found: {decision}")
 
 
 def _function_info(
@@ -87,7 +130,7 @@ class TestLLMInferenceStrategy:
         mock_formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=llm_client,
-            model_inspector=PydanticModelInspector(),
+            model_backend=PydanticModelBackend(),
             prompt_formatter=mock_formatter,
             json_default=pydantic_json_default,
             stream=stream,
@@ -108,8 +151,7 @@ class TestLLMInferenceStrategy:
             ToolCallResult(tool_call_id="1", result="見つかりました"),
         ]
 
-        dummy_tools = [{"function": {"name": "search"}}]
-        director = strategy._create_director(str, dummy_tools)
+        director = strategy._create_director(str, [_tool(search)])
         messages = strategy._build_messages(
             _function_info(arguments={"arg": "val"}),
             history,
@@ -135,37 +177,53 @@ class TestLLMInferenceStrategy:
     def test_build_decision_schema_hoists_nested_definitions(self):
         strategy = self._strategy(AsyncMock())
 
-        director = strategy._create_director(list[MyIssue], [{"type": "function"}])
+        director = strategy._create_director(list[MyIssue], [_tool(search)])
         schema = director.build_decision_schema()
 
         assert "MyIssue" in schema["$defs"]
-        final_answer_schema = schema["properties"]["final_answer"]["anyOf"][0]
-        assert "$defs" not in final_answer_schema
-        assert final_answer_schema["items"]["$ref"] == "#/$defs/MyIssue"
-        tool_call_schema = schema["properties"]["tool_calls"]["anyOf"][0]["items"]
-        assert "$defs" not in tool_call_schema
-        assert tool_call_schema["$ref"] == "#/$defs/LLMToolCall"
+        result_branch = _decision_branch(schema, "result")
+        result_schema = result_branch["properties"]["result"]
+        assert "$defs" not in result_schema
+        assert result_schema["items"]["$ref"] == "#/$defs/MyIssue"
+        # tool_calls items reference a per-tool call model in $defs, not an inline
+        # blob, so each tool's arguments stay constrained by its own schema.
+        tool_calls_branch = _decision_branch(schema, "tool_calls")
+        tool_calls_array = tool_calls_branch["properties"]["tool_calls"]
+        tool_call_ref = tool_calls_array["items"]["$ref"].split("/")[-1]
+        assert tool_call_ref in schema["$defs"]
+        assert tool_call_ref.endswith("ToolCall")
 
-    def test_build_decision_schema_requires_non_null_answer_without_tools(self):
+    def test_build_decision_schema_requires_non_null_result_without_tools(self):
         strategy = self._strategy(AsyncMock())
 
         director = strategy._create_director(list[MyIssue], [])
         schema = director.build_decision_schema()
 
-        assert schema["required"] == ["final_answer"]
-        final_answer_schema = schema["properties"]["final_answer"]
-        assert final_answer_schema["type"] == "array"
-        assert "oneOf" not in final_answer_schema
+        assert schema["required"] == ["decision", "result"]
+        assert schema["properties"]["decision"]["const"] == "result"
+        result_schema = schema["properties"]["result"]
+        assert result_schema["type"] == "array"
+        assert "oneOf" not in result_schema
 
-    def test_build_decision_schema_requires_nullable_fields_with_tools(self):
+    def test_build_decision_schema_uses_decision_discriminator_with_tools(self):
         strategy = self._strategy(AsyncMock())
 
-        director = strategy._create_director(list[MyIssue], [{"type": "function"}])
+        director = strategy._create_director(list[MyIssue], [_tool(search)])
         schema = director.build_decision_schema()
 
-        assert schema["required"] == ["final_answer", "tool_calls"]
-        assert {"type": "null"} in schema["properties"]["final_answer"]["anyOf"]
-        assert {"type": "null"} in schema["properties"]["tool_calls"]["anyOf"]
+        assert schema["discriminator"]["propertyName"] == "decision"
+        assert set(schema["discriminator"]["mapping"]) == {
+            "tool_calls",
+            "result",
+        }
+        assert _decision_branch(schema, "tool_calls")["required"] == [
+            "decision",
+            "tool_calls",
+        ]
+        assert _decision_branch(schema, "result")["required"] == [
+            "decision",
+            "result",
+        ]
 
     def test_build_messages_tells_no_tool_agent_to_return_empty_collection(self):
         strategy = self._strategy(AsyncMock())
@@ -182,7 +240,10 @@ class TestLLMInferenceStrategy:
 
     async def test_decide_next_step_handles_tool_calls(self, mock_llm_client):
         tool_calls_payload = json.dumps(
-            {"tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}]}
+            {
+                "decision": "tool_calls",
+                "tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}],
+            }
         )
         mock_llm_client.complete.return_value = LLMResponse(content=tool_calls_payload)
         strategy = self._strategy(mock_llm_client, stream=True)
@@ -190,7 +251,7 @@ class TestLLMInferenceStrategy:
         decision = await strategy.decide_next_step(
             _function_info(instructions="do it"),
             [],
-            _tool_registry("my_tool"),
+            _tool_registry(my_tool),
             MockEventPublisher(),
         )
 
@@ -200,15 +261,16 @@ class TestLLMInferenceStrategy:
         assert decision.calls[0].arguments == {"param": 1}
         assert decision.calls[0].id.startswith("call_")
 
-    async def test_decide_next_step_handles_final_answer_with_validation(
+    async def test_decide_next_step_handles_result_with_validation(
         self, mock_llm_client
     ):
-        final_answer_payload = json.dumps(
-            {"final_answer": {"name": "test", "value": 42}}
+        result_payload = json.dumps(
+            {
+                "decision": "result",
+                "result": {"name": "test", "value": 42},
+            }
         )
-        mock_llm_client.complete.return_value = LLMResponse(
-            content=final_answer_payload
-        )
+        mock_llm_client.complete.return_value = LLMResponse(content=result_payload)
         strategy = self._strategy(mock_llm_client, stream=True)
         publisher = MockEventPublisher()
 
@@ -219,10 +281,10 @@ class TestLLMInferenceStrategy:
             publisher,
         )
 
-        assert isinstance(decision, FinalAnswerDecision)
-        assert isinstance(decision.answer, MyOutput)
-        assert decision.answer.name == "test"
-        assert decision.answer.value == 42
+        assert isinstance(decision, ResultDecision)
+        assert isinstance(decision.result, MyOutput)
+        assert decision.result.name == "test"
+        assert decision.result.value == 42
 
         stream_callback_obj = mock_llm_client.complete.await_args.kwargs[
             "stream_callback"
@@ -239,21 +301,24 @@ class TestLLMInferenceStrategy:
         self, mock_llm_client
     ):
         mock_llm_client.complete.return_value = LLMResponse(
-            content='{"final_answer": "done"}'
+            content='{"decision": "result", "result": "done"}'
         )
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
+            _function_info(instructions="do it"),
+            [],
+            _tool_registry(),
+            MockEventPublisher(),
         )
 
-        assert isinstance(decision, FinalAnswerDecision)
+        assert isinstance(decision, ResultDecision)
         assert mock_llm_client.complete.await_args.kwargs["stream_callback"] is None
 
     async def test_decide_next_step_raises_on_validation_error(self, mock_llm_client):
-        # final_answer is missing required 'value' field — Pydantic should reject it
+        # result is missing required 'value' field — Pydantic should reject it
         mock_llm_client.complete.return_value = LLMResponse(
-            content='{"final_answer": {"name": "test"}}'
+            content='{"decision": "result", "result": {"name": "test"}}'
         )
         strategy = self._strategy(mock_llm_client)
 
@@ -269,28 +334,34 @@ class TestLLMInferenceStrategy:
 
     async def test_decide_next_step_handles_plain_string_output(self, mock_llm_client):
         mock_llm_client.complete.return_value = LLMResponse(
-            content='{"final_answer": "Hello, world!"}'
+            content='{"decision": "result", "result": "Hello, world!"}'
         )
         strategy = self._strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
-            _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
+            _function_info(instructions="do it"),
+            [],
+            _tool_registry(),
+            MockEventPublisher(),
         )
 
-        assert isinstance(decision, FinalAnswerDecision)
-        assert decision.answer == "Hello, world!"
+        assert isinstance(decision, ResultDecision)
+        assert decision.result == "Hello, world!"
 
-    async def test_decide_next_step_raises_when_both_fields_null(self, mock_llm_client):
+    async def test_decide_next_step_raises_when_result_null(self, mock_llm_client):
         mock_llm_client.complete.return_value = LLMResponse(
-            content='{"final_answer": null}'
+            content='{"decision": "result", "result": null}'
         )
         strategy = self._strategy(mock_llm_client)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="non-null 'final_answer'"
+            InvalidInferenceResponseError, match="LLM output failed validation"
         ):
             await strategy.decide_next_step(
-                _function_info(instructions="do it"), [], _tool_registry(), MockEventPublisher()
+                _function_info(instructions="do it"),
+                [],
+                _tool_registry(),
+                MockEventPublisher(),
             )
 
 
@@ -302,14 +373,14 @@ class TestToolOnlyDirector:
         mock_formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=AsyncMock(),
-            model_inspector=PydanticModelInspector(),
+            model_backend=PydanticModelBackend(),
             prompt_formatter=mock_formatter,
             json_default=pydantic_json_default,
         )
 
     def test_create_director_returns_tool_only_for_never(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
+        director = strategy._create_director(Never, [_tool(chat_tool)])
         assert isinstance(director, _ToolOnlyDirector)
 
     def test_create_director_raises_for_never_without_tools(self):
@@ -317,179 +388,188 @@ class TestToolOnlyDirector:
         with pytest.raises(ValueError, match="must have tools available"):
             strategy._create_director(Never, [])
 
-    def test_build_decision_schema_has_no_final_answer_field(self):
+    def test_build_decision_schema_has_no_result_field(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
+        director = strategy._create_director(Never, [_tool(chat_tool)])
         schema = director.build_decision_schema()
 
-        assert "final_answer" not in schema.get("properties", {})
+        assert "result" not in schema.get("properties", {})
+        assert schema["properties"]["decision"]["const"] == "tool_calls"
         assert "tool_calls" in schema["properties"]
-        assert schema["required"] == ["tool_calls"]
+        assert schema["required"] == ["decision", "tool_calls"]
 
     def test_build_system_prompt_instructs_tool_only(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
+        director = strategy._create_director(Never, [_tool(chat_tool)])
         schema = director.build_decision_schema()
         prompt = director.build_system_prompt_addition(schema)
 
-        assert "final_answer" not in prompt or "There is no `final_answer`" in prompt
+        assert "result" not in prompt or "There is no `result`" in prompt
         assert "tool_calls" in prompt
+        assert "### Response Format" in prompt
+        assert '"$defs"' not in prompt
 
     def test_process_decision_accepts_tool_calls(self):
         strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
+        director = strategy._create_director(Never, [_tool(chat_tool)])
 
-        decision = _LLMDecision(
-            tool_calls=[LLMToolCall(name="my_tool", arguments={"x": 1})]
+        result = director.process_response_data(
+            {
+                "decision": "tool_calls",
+                "tool_calls": [{"name": "chat_tool", "arguments": {}}],
+            }
         )
-        result = director.process_decision(decision)
 
         assert isinstance(result, ToolCallDecision)
-        assert result.calls[0].name == "my_tool"
-
-    def test_process_decision_raises_on_final_answer(self):
-        strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
-
-        decision = _LLMDecision(final_answer="oops")
-        with pytest.raises(InvalidInferenceResponseError, match="Never"):
-            director.process_decision(decision)
-
-    def test_process_decision_raises_when_no_tool_calls_and_no_final_answer(self):
-        strategy = self._strategy()
-        director = strategy._create_director(Never, [{"type": "function"}])
-
-        decision = _LLMDecision()
-        with pytest.raises(InvalidInferenceResponseError, match="tool_calls"):
-            director.process_decision(decision)
+        assert result.calls[0].name == "chat_tool"
 
     async def test_decide_next_step_returns_tool_call_decision_for_never(self):
         mock_client = AsyncMock()
         mock_client.complete.return_value = LLMResponse(
-            content='{"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
+            content=(
+                '{"decision": "tool_calls", '
+                '"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
+            )
         )
         mock_formatter = Mock()
         mock_formatter.format_arguments.return_value = "<arguments/>"
         strategy = LLMInferenceStrategy(
             llm_client=mock_client,
-            model_inspector=PydanticModelInspector(),
+            model_backend=PydanticModelBackend(),
             prompt_formatter=mock_formatter,
         )
 
         result = await strategy.decide_next_step(
             _function_info(return_type=Never, instructions="chat"),
             [],
-            _tool_registry("chat_tool"),
+            _tool_registry(chat_tool),
             MockEventPublisher(),
         )
 
         assert isinstance(result, ToolCallDecision)
 
-    async def test_decide_next_step_raises_when_llm_returns_final_answer_for_never(
+    async def test_decide_next_step_raises_when_llm_returns_result_for_never(
         self,
     ):
         mock_client = AsyncMock()
         mock_client.complete.return_value = LLMResponse(
-            content='{"tool_calls": null, "final_answer": "bye"}'
+            content='{"decision": "result", "result": "bye"}'
         )
         mock_formatter = Mock()
         mock_formatter.format_arguments.return_value = "<arguments/>"
         strategy = LLMInferenceStrategy(
             llm_client=mock_client,
-            model_inspector=PydanticModelInspector(),
+            model_backend=PydanticModelBackend(),
             prompt_formatter=mock_formatter,
         )
 
-        with pytest.raises(InvalidInferenceResponseError, match="Never"):
+        with pytest.raises(
+            InvalidInferenceResponseError, match="LLM output failed validation"
+        ):
             await strategy.decide_next_step(
                 _function_info(return_type=Never, instructions="chat"),
                 [],
-                _tool_registry("chat_tool"),
+                _tool_registry(chat_tool),
                 MockEventPublisher(),
             )
 
 
 class TestToolEnabledDirector:
-    """Tests for _ToolEnabledDirector — tools available, final answer also allowed."""
+    """Tests for _ToolEnabledDirector — tools and result are both allowed."""
 
     def _director(self, output_type: Any = str):
-        inspector = PydanticModelInspector()
-        return _ToolEnabledDirector(inspector, output_type, [{"type": "function"}])
+        return _ToolEnabledDirector(
+            PydanticModelBackend(), output_type, [_tool(search)]
+        )
 
-    def test_build_decision_schema_has_nullable_final_answer_and_tool_calls(self):
+    def test_build_decision_schema_has_decision_branches(self):
         schema = self._director().build_decision_schema()
 
-        assert {"type": "null"} in schema["properties"]["final_answer"]["anyOf"]
-        assert {"type": "null"} in schema["properties"]["tool_calls"]["anyOf"]
-        assert schema["required"] == ["final_answer", "tool_calls"]
+        assert schema["discriminator"]["propertyName"] == "decision"
+        assert _decision_branch(schema, "tool_calls")["required"] == [
+            "decision",
+            "tool_calls",
+        ]
+        assert _decision_branch(schema, "result")["required"] == [
+            "decision",
+            "result",
+        ]
 
     def test_build_system_prompt_mentions_both_options(self):
         director = self._director()
         prompt = director.build_system_prompt_addition(director.build_decision_schema())
 
         assert "tool_calls" in prompt
-        assert "final_answer" in prompt
+        assert "result" in prompt
 
     def test_process_decision_returns_tool_call_decision(self):
         director = self._director()
-        decision = _LLMDecision(
-            tool_calls=[LLMToolCall(name="search", arguments={"q": "x"})]
+        result = director.process_response_data(
+            {
+                "decision": "tool_calls",
+                "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
+            },
         )
-        result = director.process_decision(decision)
 
         assert isinstance(result, ToolCallDecision)
         assert result.calls[0].name == "search"
+        assert result.calls[0].arguments == {"q": "x"}
 
-    def test_process_decision_returns_final_answer_decision(self):
+    def test_process_decision_returns_result_decision(self):
         director = self._director(output_type=str)
-        decision = _LLMDecision(final_answer="done")
-        result = director.process_decision(decision)
-
-        assert isinstance(result, FinalAnswerDecision)
-        assert result.answer == "done"
-
-    def test_process_decision_validates_final_answer_type(self):
-        director = self._director(output_type=MyOutput)
-        decision = _LLMDecision(final_answer={"name": "ok", "value": 7})
-        result = director.process_decision(decision)
-
-        assert isinstance(result, FinalAnswerDecision)
-        assert isinstance(result.answer, MyOutput)
-        assert result.answer.value == 7
-
-    def test_process_decision_raises_when_both_null(self):
-        director = self._director()
-        decision = _LLMDecision()
-        with pytest.raises(
-            InvalidInferenceResponseError,
-            match="tool_calls.*final_answer|final_answer.*tool_calls",
-        ):
-            director.process_decision(decision)
-
-    def test_tool_calls_take_priority_over_final_answer(self):
-        director = self._director()
-        decision = _LLMDecision(
-            tool_calls=[LLMToolCall(name="t", arguments={})],
-            final_answer="ignored",
+        result = director.process_response_data(
+            {"decision": "result", "result": "done"}
         )
-        result = director.process_decision(decision)
 
-        assert isinstance(result, ToolCallDecision)
+        assert isinstance(result, ResultDecision)
+        assert result.result == "done"
+
+    def test_process_decision_validates_result_type(self):
+        director = self._director(output_type=MyOutput)
+        result = director.process_response_data(
+            {
+                "decision": "result",
+                "result": {"name": "ok", "value": 7},
+            }
+        )
+
+        assert isinstance(result, ResultDecision)
+        assert isinstance(result.result, MyOutput)
+        assert result.result.value == 7
+
+    def test_process_decision_raises_when_decision_branch_is_incomplete(self):
+        director = self._director()
+        with pytest.raises(
+            ValueError,
+            match="Decision validation failed",
+        ):
+            director.process_response_data({"decision": "tool_calls"})
+
+    def test_decision_validation_rejects_fields_from_other_branch(self):
+        director = self._director()
+        with pytest.raises(ValueError, match="Decision validation failed"):
+            director.process_response_data(
+                {
+                    "decision": "tool_calls",
+                    "result": "extra",
+                    "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
+                },
+            )
 
 
 class TestOutputOnlyDirector:
-    """Tests for _OutputOnlyDirector — no tools, final answer required."""
+    """Tests for _OutputOnlyDirector — no tools, result required."""
 
     def _director(self, output_type: Any = str):
-        inspector = PydanticModelInspector()
-        return _OutputOnlyDirector(inspector, output_type, [])
+        return _OutputOnlyDirector(PydanticModelBackend(), output_type, [])
 
-    def test_build_decision_schema_has_only_final_answer(self):
+    def test_build_decision_schema_has_only_result(self):
         schema = self._director().build_decision_schema()
 
         assert "tool_calls" not in schema.get("properties", {})
-        assert "final_answer" in schema["properties"]
-        assert schema["required"] == ["final_answer"]
+        assert "result" in schema["properties"]
+        assert schema["properties"]["decision"]["const"] == "result"
+        assert schema["required"] == ["decision", "result"]
 
     def test_build_system_prompt_mentions_no_tools(self):
         director = self._director()
@@ -497,26 +577,29 @@ class TestOutputOnlyDirector:
 
         assert "No tools are available" in prompt
 
-    def test_process_decision_returns_final_answer(self):
+    def test_process_decision_returns_result(self):
         director = self._director(output_type=str)
-        result = director.process_decision(_LLMDecision(final_answer="hello"))
+        result = director.process_response_data(
+            {"decision": "result", "result": "hello"}
+        )
 
-        assert isinstance(result, FinalAnswerDecision)
-        assert result.answer == "hello"
+        assert isinstance(result, ResultDecision)
+        assert result.result == "hello"
 
     def test_process_decision_validates_structured_output(self):
         director = self._director(output_type=MyOutput)
-        result = director.process_decision(
-            _LLMDecision(final_answer={"name": "test", "value": 99})
+        result = director.process_response_data(
+            {
+                "decision": "result",
+                "result": {"name": "test", "value": 99},
+            }
         )
 
-        assert isinstance(result, FinalAnswerDecision)
-        assert isinstance(result.answer, MyOutput)
-        assert result.answer.name == "test"
+        assert isinstance(result, ResultDecision)
+        assert isinstance(result.result, MyOutput)
+        assert result.result.name == "test"
 
-    def test_process_decision_raises_when_final_answer_is_null(self):
+    def test_decision_model_rejects_null_result(self):
         director = self._director()
-        with pytest.raises(
-            InvalidInferenceResponseError, match="non-null 'final_answer'"
-        ):
-            director.process_decision(_LLMDecision())
+        with pytest.raises(ValueError, match="Decision validation failed"):
+            director.process_response_data({"decision": "result", "result": None})

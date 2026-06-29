@@ -83,23 +83,25 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
+                        "decision": "tool_calls",
                         "tool_calls": [
                             {
                                 "name": "HumanInputTool_ask_user",
                                 "arguments": {"question": "What is your name?"},
                             }
-                        ]
+                        ],
                     }
                 )
             ),
             LLMResponse(
                 content=json.dumps(
                     {
-                        "final_answer": {
+                        "decision": "result",
+                        "result": {
                             "topic": "User Info",
                             "summary": "The user's name is Alice.",
                             "sources": [],
-                        }
+                        },
                     }
                 )
             ),
@@ -169,35 +171,38 @@ class TestStatefulTool:
             LLMResponse(
                 content=json.dumps(
                     {
+                        "decision": "tool_calls",
                         "tool_calls": [
                             {
                                 "name": "HumanInputTool_ask_user",
                                 "arguments": {"question": "Name?"},
                             }
-                        ]
+                        ],
                     }
                 )
             ),
             LLMResponse(
                 content=json.dumps(
                     {
+                        "decision": "tool_calls",
                         "tool_calls": [
                             {
                                 "name": "HumanInputTool_ask_user",
                                 "arguments": {"question": "Age?"},
                             }
-                        ]
+                        ],
                     }
                 )
             ),
             LLMResponse(
                 content=json.dumps(
                     {
-                        "final_answer": {
+                        "decision": "result",
+                        "result": {
                             "topic": "Profile",
                             "summary": "Alice is 99.",
                             "sources": [],
-                        }
+                        },
                     }
                 )
             ),

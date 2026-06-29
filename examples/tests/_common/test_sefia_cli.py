@@ -12,6 +12,7 @@ from examples._common.sefia_cli import (
     _USE_DEFAULT_REPORTER,
 )
 from examples._common.session import ResolvedSession
+from sefia.exceptions import InvalidInferenceResponseError
 from sefios.tools import HumanInputRequest, HumanInputTool
 
 
@@ -161,3 +162,16 @@ class TestDefaultCLIReporter:
         reporter.on_human_input_question_delta("topic?")
 
         assert capsys.readouterr().out == "What topic?"
+
+    async def test_inference_error_is_reported_as_error(self, capsys, mocker):
+        reporter = DefaultCLIReporter()
+        mocker.patch.object(reporter, "_echo_total_cost")
+
+        await reporter.on_inference_error(
+            InvalidInferenceResponseError("bad model response")
+        )
+
+        output = capsys.readouterr().out
+        assert "INFERENCE ERROR" in output
+        assert "bad model response" in output
+        assert "WAITING FOR INPUT" not in output

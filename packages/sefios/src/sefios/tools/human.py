@@ -2,10 +2,11 @@ import inspect
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Annotated, TypeVar
 
 from glyff import engrave
 from glyff.exceptions import YieldException
+from pydantic import Field
 from sefia import get_context, tool
 from sefia.streaming import ArgStream, StringDelta
 
@@ -80,10 +81,16 @@ class HumanInputTool:
 
     @tool
     @engrave
-    async def get_human_input(self, question: str) -> str:
+    async def get_human_input(
+        self,
+        question: Annotated[str, Field(min_length=1)],
+    ) -> str:
         """
-        Asks the user a question and returns their answer.
-        This tool interrupts the session to wait for user input.
+        Request external human input for ``question`` and return the answer.
+
+        The question is emitted to the configured human-input callbacks. If no
+        answer is immediately available, the current session is interrupted until
+        input is provided.
         """
         ctx = get_context()
         call_store = ctx.get_call_state_store("internal_state", _AskUserState)

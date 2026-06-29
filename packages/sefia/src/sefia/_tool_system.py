@@ -29,9 +29,7 @@ class ToolRegistry:
         stream_handler: StreamHandler | None = None,
     ) -> None:
         if name in self._tools:
-            raise ToolConflictError(
-                f"A tool with the name '{name}' already exists."
-            )
+            raise ToolConflictError(f"A tool with the name '{name}' already exists.")
         self._tools[name] = Tool(
             name=name,
             function=func,

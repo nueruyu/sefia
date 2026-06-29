@@ -25,10 +25,13 @@ def _make_stores(serializer):
     )
 
 
-def _final_answer(summary: str) -> LLMResponse:
+def _result(summary: str) -> LLMResponse:
     return LLMResponse(
         content=json.dumps(
-            {"final_answer": {"topic": "t", "summary": summary, "sources": []}}
+            {
+                "decision": "result",
+                "result": {"topic": "t", "summary": summary, "sources": []},
+            }
         )
     )
 
@@ -113,8 +116,8 @@ async def test_infer_uses_selected_profile_client(
     """An @infer decorated with @profile runs on the profile's client, while an
     undecorated @infer on the same agent uses the session default."""
 
-    default_llm = MockLLMClient(responses=[_final_answer("from default")])
-    fast_llm = MockLLMClient(responses=[_final_answer("from fast")])
+    default_llm = MockLLMClient(responses=[_result("from default")])
+    fast_llm = MockLLMClient(responses=[_result("from fast")])
 
     glyff_store, sefia_store = _make_stores(serializer)
     async with glyff.Session(id="profiles", store=glyff_store, hasher=hasher) as gs:
@@ -151,7 +154,7 @@ async def test_policy_layering_session_profile_function(
             """Selects a profile and adds its own policy."""
             ...
 
-    fast_llm = MockLLMClient(responses=[_final_answer("ok")])
+    fast_llm = MockLLMClient(responses=[_result("ok")])
     glyff_store, sefia_store = _make_stores(serializer)
     async with glyff.Session(id="layering", store=glyff_store, hasher=hasher) as gs:
         async with Session(
@@ -176,7 +179,7 @@ async def test_unknown_profile_raises(serializer: Serializer, hasher: ArgsHasher
     """Referencing a profile the session does not register fails fast at call
     time with the list of registered profiles."""
 
-    default_llm = MockLLMClient(responses=[_final_answer("unused")])
+    default_llm = MockLLMClient(responses=[_result("unused")])
     glyff_store, sefia_store = _make_stores(serializer)
     async with glyff.Session(id="unknown", store=glyff_store, hasher=hasher) as gs:
         async with Session(
@@ -221,8 +224,8 @@ async def test_enum_key_selects_profile(serializer: Serializer, hasher: ArgsHash
             """Runs on the profile keyed by an enum member."""
             ...
 
-    default_llm = MockLLMClient(responses=[_final_answer("default")])
-    smart_llm = MockLLMClient(responses=[_final_answer("from smart")])
+    default_llm = MockLLMClient(responses=[_result("default")])
+    smart_llm = MockLLMClient(responses=[_result("from smart")])
 
     glyff_store, sefia_store = _make_stores(serializer)
     async with glyff.Session(id="enum-key", store=glyff_store, hasher=hasher) as gs:
@@ -252,7 +255,7 @@ async def test_unknown_enum_key_lists_registered(
             """Selects a profile keyed by an enum member that is not registered."""
             ...
 
-    default_llm = MockLLMClient(responses=[_final_answer("unused")])
+    default_llm = MockLLMClient(responses=[_result("unused")])
     glyff_store, sefia_store = _make_stores(serializer)
     async with glyff.Session(id="enum-miss", store=glyff_store, hasher=hasher) as gs:
         async with Session(

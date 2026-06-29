@@ -96,20 +96,22 @@ async def test_stagnation_state_is_isolated_between_infer_calls():
     repeated_call_response = LLMResponse(
         content=json.dumps(
             {
+                "decision": "tool_calls",
                 "tool_calls": [
                     {"name": "WebToolkit_search", "arguments": {"query": "sefia"}}
-                ]
+                ],
             }
         )
     )
     final_response = LLMResponse(
         content=json.dumps(
             {
-                "final_answer": {
+                "decision": "result",
+                "result": {
                     "topic": "sefia",
                     "summary": "Sefia is a framework for building LLM agents.",
                     "sources": [],
-                }
+                },
             }
         )
     )
@@ -120,11 +122,12 @@ async def test_stagnation_state_is_isolated_between_infer_calls():
             LLMResponse(
                 content=json.dumps(
                     {
-                        "final_answer": {
+                        "decision": "result",
+                        "result": {
                             "topic": "sefia",
                             "summary": "first call done",
                             "sources": [],
-                        }
+                        },
                     }
                 )
             ),

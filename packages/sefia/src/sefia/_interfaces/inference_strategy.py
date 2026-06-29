@@ -18,5 +18,5 @@ class InferenceStrategy(ABC):
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
-        """Decides the next action, either calling tools or returning a final answer."""
+        """Decides the next action, either calling tools or returning a result."""
         ...
