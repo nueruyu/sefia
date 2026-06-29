@@ -7,11 +7,24 @@ from typing import Any, cast
 from pydantic import BaseModel, ConfigDict, create_model
 
 
+class _UnhashableCallableKey:
+    __slots__ = ("_obj",)
+
+    def __init__(self, obj: Callable[..., Any]):
+        self._obj = obj
+
+    def __hash__(self) -> int:
+        return id(self._obj)
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, _UnhashableCallableKey) and self._obj is other._obj
+
+
 def cache_key(func: Callable[..., Any]) -> Any:
     try:
         hash(func)
     except TypeError:
-        return id(func)
+        return _UnhashableCallableKey(func)
     return func
 
 
@@ -109,7 +122,7 @@ class PydanticFunctionModelFactory:
         name: str,
         forbid_extra: bool,
     ) -> type[BaseModel]:
-        key = ("params_model", cache_key(func), name, forbid_extra)
+        key = (cache_key(func), name, forbid_extra)
         if key not in self._params_model_cache:
             self._params_model_cache[key] = _create_params_model(
                 func,

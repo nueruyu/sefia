@@ -72,7 +72,7 @@ def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
 
         if item.get("type") == "literal_error":
             loc = item.get("loc")
-            if isinstance(loc, tuple) and loc[-1] == "name":
+            if isinstance(loc, tuple) and loc and loc[-1] == "name":
                 value = item.get("input")
                 if isinstance(value, str):
                     return value

@@ -42,7 +42,7 @@ class PydanticModelBackend(ModelBackend):
         name: str | None = None,
     ) -> dict:
         schema_name = name or self.get_function_name(func)
-        cache_key_value = ("function_schema", cache_key(func), schema_name)
+        cache_key_value = (cache_key(func), schema_name)
         if cache_key_value in self._function_schema_cache:
             return self._function_schema_cache[cache_key_value]
 

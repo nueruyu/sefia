@@ -1,9 +1,9 @@
 import json
-from typing import Annotated, Any, Never
+from typing import Annotated, Any, Literal, Never
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from pydantic import Field
+from pydantic import Field, TypeAdapter, ValidationError
 
 from sefia._interfaces import DecisionModelSpec
 from sefia._tool_system import Tool, ToolRegistry
@@ -13,6 +13,7 @@ from sefia.inference import FunctionInfo, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._strategy import _ToolOnlyDirector
 from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic._decision_model import _unknown_tool_name_from_error
 
 
 async def ask_user(question: Annotated[str, Field(min_length=1)]) -> str:
@@ -80,6 +81,13 @@ def test_tool_only_schema_embeds_tool_argument_schema() -> None:
     assert arguments["required"] == ["question"]
     assert arguments["additionalProperties"] is False
     assert arguments["properties"]["question"]["minLength"] == 1
+
+
+def test_unknown_tool_name_ignores_root_literal_errors() -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        TypeAdapter(Literal["expected"]).validate_python("actual")
+
+    assert _unknown_tool_name_from_error(exc_info.value) is None
 
 
 def test_decision_model_spec_rejects_tool_modes_without_tools() -> None:

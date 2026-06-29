@@ -1,7 +1,10 @@
+import gc
+import weakref
+
 import pytest
 
 from sefia.pydantic import PydanticModelBackend
-from sefia.pydantic._function_models import PydanticFunctionModelFactory
+from sefia.pydantic._function_models import PydanticFunctionModelFactory, cache_key
 
 
 def _sample_func(a: int, b: str = "x") -> bool:
@@ -11,6 +14,14 @@ def _sample_func(a: int, b: str = "x") -> bool:
 
 def _positional_only_func(value: int, /) -> bool:
     return True
+
+
+class _UnhashableCallable:
+    def __call__(self, value: int) -> str:
+        return str(value)
+
+    def __eq__(self, other: object) -> bool:
+        return self is other
 
 
 class TestPydanticModelBackend:
@@ -48,6 +59,37 @@ class TestPydanticModelBackend:
         schema2 = backend.get_function_schema(_sample_func)
 
         assert schema1 is schema2
+
+    def test_get_function_schema_caches_unhashable_callables(self):
+        backend = PydanticModelBackend()
+        func = _UnhashableCallable()
+
+        schema1 = backend.get_function_schema(func)
+        schema2 = backend.get_function_schema(func)
+
+        assert schema1 is schema2
+
+    def test_cache_key_uses_identity_for_unhashable_callables(self):
+        func = _UnhashableCallable()
+
+        key1 = cache_key(func)
+        key2 = cache_key(func)
+        other_key = cache_key(_UnhashableCallable())
+
+        assert key1 == key2
+        assert hash(key1) == hash(key2)
+        assert key1 != other_key
+
+    def test_cache_key_keeps_unhashable_callables_alive(self):
+        func = _UnhashableCallable()
+        ref = weakref.ref(func)
+        key = cache_key(func)
+
+        del func
+        gc.collect()
+
+        assert key is not None
+        assert ref() is not None
 
     def test_get_function_schema_rejects_positional_only_parameters(self):
         backend = PydanticModelBackend()
