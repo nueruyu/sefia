@@ -1,9 +1,8 @@
 # How it works
 
-The mechanism behind `@infer`, with enough detail to verify the "magic" against the
-source. No part of this is a model doing something unobservable — it is a prompt, a
-loop, a JSON schema, and content-addressed replay. Module paths point at the code so
-you can check each claim.
+The mechanism behind `@infer`, with enough detail to check it against the source.
+There is nothing unobservable here: it is a prompt, a loop, a JSON schema, and
+content-addressed replay. Module paths point at the code so you can verify each claim.
 
 > Pre-1.0: the architecture below is stable, but names and one rule (which methods
 > count as tools) are being finalized — see the notes inline and [DESIGN.md](../DESIGN.md).
@@ -94,7 +93,7 @@ stripped of any ``` fence, `json.loads`-ed, validated into the decision model, a
 **Why this shape:** one schema that works across any provider's JSON/structured-output
 mode, and a return type that can be any nested/union/collection type — at the cost of
 native parallel tool calls and getting prompt caching for free. (See
-[DESIGN.md](../DESIGN.md#non-goals--honest-tradeoffs) and
+[DESIGN.md](../DESIGN.md#non-goals--tradeoffs) and
 [why-less.md](./why-less.md#2-less-to-leak--provider-concerns-staying-out-of-your-abstraction).)
 
 ## Tools: discovery, schema, execution
@@ -123,7 +122,7 @@ the run.
 
 ## Durability and replay (glyff)
 
-Every engraved call — the `@infer` run, each model step, each tool batch — is keyed by
+Every engraved call (the `@infer` run, each model step, each tool batch) is keyed by
 glyff on its **call identity + arguments** (content-addressed). On a later invocation
 of the same session:
 
@@ -160,7 +159,7 @@ that:
 The raise propagates out, glyff leaves that engraved tool call **resumable**, and the
 exception reaches your handler, which returns "needs input". On the next request the
 answer is delivered with `accept_input` and you re-invoke the same session: every
-completed step replays, and the human tool runs again — now with an answer available —
+completed step replays, and the human tool runs again, now with an answer available,
 and returns it.
 
 The idempotency hinge is `get_call_state_store` (`_context.py`): it scopes a small
@@ -197,7 +196,7 @@ a single call swap the model/policies by key, resolved per-call in
    final answer.
 
 Nothing ran between the two requests; the only thing that crossed the gap was rows in
-the store. That is the whole trick.
+the store.
 
 ## See also
 

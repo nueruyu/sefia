@@ -14,10 +14,10 @@ have to run to make a paused run survive. sefia's bet is to keep all three small
 A typed-agent stack usually asks you to learn a vocabulary before you write a
 useful line: an `Agent` object, a way to register tools, a dependency-injection
 context threaded into every tool, an `output_type` mechanism, a run/result type,
-and — once you want durability — a second vocabulary on top (workflows, steps,
+and, once you want durability, a second vocabulary on top (workflows, steps,
 signals, or graph nodes/edges/state).
 
-sefia's vocabulary is the one you already have:
+sefia's vocabulary is mostly Python's own:
 
 | Concept you'd otherwise learn | sefia |
 | --- | --- |
@@ -28,10 +28,10 @@ sefia's vocabulary is the one you already have:
 | durable workflow / step / graph DSL | nothing — `await` is already durable |
 
 The two decorators (`@infer`, and glyff's `@engrave` underneath) are the whole
-framework-specific surface. Everything else — visibility, types, fields, `await`,
-`raise` — is Python you already know.
+framework-specific surface. Everything else (visibility, types, fields, `await`,
+`raise`) is plain Python.
 
-### The DI context is redundant
+### No per-run DI context
 
 Frameworks that model a tool as a free function need a side channel to pass
 per-run dependencies into it — hence a `RunContext`/`Deps` object that every tool
@@ -59,7 +59,7 @@ Re-expressing it as a per-call context parameter is a concept you only need
 because the tool wasn't allowed to be a method. Remove that constraint and the
 context disappears.
 
-> Tradeoff, honestly: a per-run context *does* buy one thing — a tool can read
+> Tradeoff: a per-run context *does* buy one thing — a tool can read
 > run-scoped data (the current run id, usage, a request deadline) without you
 > wiring it. sefia surfaces that through an explicit `get_context()` inside a tool
 > when needed, rather than putting it in every signature. If most of your tools
@@ -76,7 +76,7 @@ on these models, best-effort on those"; "parallel tool calls behave differently
 here").
 
 sefia deliberately does **not** use native tool-calling. It asks the model for a
-single unified result shape — `final_answer | tool_calls` — and uses strict
+single unified result shape (`final_answer | tool_calls`) and uses strict
 structured output only where the provider supports it. The consequence is one
 abstraction that reads the same across providers: the return type is whatever your
 Python type says, full stop, and you don't carry a matrix of per-provider tool
@@ -89,7 +89,7 @@ async def classify(self, ticket: str) -> Triage:   # Triage is a normal type;
     ...
 ```
 
-> Tradeoff, honestly: this is a real bet, not a free win. By not using native
+> Tradeoff: this is a real bet, not a free win. By not using native
 > tool-calling you give up **native parallel tool calls** and some
 > frontier-model tuning on long, complex agent loops, and you take on prompt
 > caching as something to design for rather than get for free (tracked, not
@@ -130,8 +130,8 @@ async def turn(id, body):
 
 ### When you genuinely need the engine
 
-This is the honest boundary, not a sales line. Reach for a Temporal-grade engine
-when your workload actually has one of these shapes:
+This is the actual boundary. Reach for a Temporal-grade engine when your workload has
+one of these shapes:
 
 - **Long-horizon waits** — a run that sleeps for days or weeks on a durable timer
   (a 30-day trial follow-up, a "ping me next quarter"), not a request-scoped pause.
@@ -165,7 +165,7 @@ and **no background task, worker, daemon, or live workflow exists** between paus
 and resume. Resume is an ordinary new request that re-invokes and replays the
 engraved steps.
 
-**Honest scope of the claim — it is not sefia-exclusive.** "Completes over plain
+**Scope of the claim: it is not sefia-exclusive.** "Completes over plain
 HTTP, nothing running between requests" is a *property*, and two other approaches
 share it: hand-rolling the resume yourself (you write the engine — see
 [01](./usecases/01-human-in-the-loop.md)), and a typed-agent framework's **native
@@ -207,6 +207,6 @@ enough is the long-horizon/distributed list above.
 
 None of this makes sefia a Temporal replacement, and it is not trying to be — it
 is the lighter, single-flow, request-scoped layer *before* you need distributed
-workflow infrastructure. The claim is narrow and honest: for the durable,
+workflow infrastructure. The claim is narrow: for the durable,
 human-in-the-loop agent turn that most apps actually build, there is less to
 learn, less to leak, and less to operate.

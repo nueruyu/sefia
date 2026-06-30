@@ -1,6 +1,6 @@
 # FAQ
 
-Honest answers to the questions sefia tends to raise. Where the answer is a
+Answers to the questions sefia tends to raise. Where the answer is a
 tradeoff, it's stated as one. For the longer arguments, see
 [DESIGN.md](../DESIGN.md), [why-less.md](./why-less.md), and
 [choosing.md](./choosing.md).
@@ -9,11 +9,11 @@ tradeoff, it's stated as one. For the longer arguments, see
 
 ### Isn't this just another LangChain-style agent framework?
 
-No `Agent` object, no chain, no graph, no global tool registry. The unit of work is
-a **typed async function** (`@infer`), composed with ordinary `await` and ordinary
-Python control flow. Tools are just the public methods of the objects a function
-holds. If your logic is naturally a Python call graph, there is no framework shape to
-adopt — you write functions.
+There is no `Agent` object, chain, graph, or global tool registry. The unit of work
+is a **typed async function** (`@infer`), composed with ordinary `await` and ordinary
+Python control flow. Tools are the public methods of the objects a function holds. If
+your logic is naturally a Python call graph, there is no framework shape to adopt; you
+write functions.
 
 ### How is it different from Pydantic AI?
 

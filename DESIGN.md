@@ -21,7 +21,7 @@ plain stateless HTTP, no workflow engine, no graph DSL.**
 - **HITL = a tool that raises.** No input yet → record the question, raise → the
   run pauses durably → the handler returns "needs input" + a session id →
   re-invoke resumes. Stateless request/response; **survives process death.** No
-  special exception type, no websocket, no worker, no engine.
+  special exception type, websocket, or engine.
 
 ## The model: only standard Python vocabulary
 
@@ -81,7 +81,7 @@ async def turn(id, body):
 ```
 
 A paused run survives process death: re-invoke and the completed engraved work
-replays while the pending step re-runs. No engine, no graph, no websocket.
+replays while the pending step re-runs. No engine, graph, or websocket.
 
 ## How it compares
 
@@ -99,7 +99,7 @@ replays while the pending step re-runs. No engine, no graph, no websocket.
   durable HITL is either native *deferred tools* (the run returns, you persist the
   message history, a new run resumes with the result) or an adopted engine
   (first-class `TemporalAgent` / `DBOSAgent` wrappers). sefia's durability is native
-  to the `@infer` model — pausing is just raising, resuming is re-invoking — on a
+  to the `@infer` model (pausing is just raising, resuming is re-invoking) on a
   plain stateless handler with a sqlite/file store, no message-history threading and
   no engine.
 - **vs DBOS** — also code-first, non-graph, durable. The difference is altitude:
@@ -110,12 +110,12 @@ replays while the pending step re-runs. No engine, no graph, no websocket.
 - **vs Temporal** — Temporal is a distributed workflow engine (cluster + workers);
   sefia/glyff cover the lighter, single-flow, request-scoped part before that.
 
-For the positioning argument in full — concept surface, provider leakage, and
-operational weight — see [Less to learn, less to leak, less to operate](./docs/why-less.md).
-For an honest "use this if you want X, use sefia if you want Y" decision guide, see
+For the positioning argument in full (concept surface, provider leakage, and
+operational weight) see [Less to learn, less to leak, less to operate](./docs/why-less.md).
+For a "use this if you want X, use sefia if you want Y" decision guide, see
 [Choosing a stack](./docs/choosing.md).
 
-## Non-goals & honest tradeoffs
+## Non-goals & tradeoffs
 
 - **Not native tool-calling.** A single unified schema (`final_answer |
   tool_calls`) plus strict structured output where supported → provider-portable,

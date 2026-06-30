@@ -1,9 +1,9 @@
 # Choosing a stack: when to use sefia, and when not to
 
-An honest decision guide. It names real tools and, where they fit your problem
-better, sends you to them. sefia covers a deliberately narrow shape — the durable,
-human-in-the-loop, typed-function agent turn on stateless HTTP — and most of this
-page is about telling you when that shape is *not* what you have.
+A decision guide. It names real tools and, where they fit your problem better, sends
+you to them. sefia covers a deliberately narrow shape: the durable, human-in-the-loop,
+typed-function agent turn on stateless HTTP. Most of this page is about when that shape
+is *not* what you have.
 
 > Caveat: the landscape moves fast and these tools ship constantly. Treat the
 > characterizations as category-level and current as of writing, not as fixed
@@ -29,7 +29,7 @@ page is about telling you when that shape is *not* what you have.
    on a fresh request, with no engine to operate?**
    That's **sefia**.
 
-## The options, honestly
+## The options
 
 ### Direct provider SDK (no framework)
 - **Use it when:** one-shot or stateless calls, a simple tool loop you're happy to
@@ -44,7 +44,7 @@ page is about telling you when that shape is *not* what you have.
 - **Not when:** you want durability *without* adopting an engine, or you want to
   avoid per-provider tool-calling/structured-output differences surfacing in your
   code. Then look at sefia.
-- **Honest note:** this is the closest neighbor to sefia on typed ergonomics and a
+- **Note:** this is the closest neighbor to sefia on typed ergonomics and a
   well-regarded one. The real difference is *how you get durability* (engine vs.
   native) and *whether provider tool-calling leaks* — see
   [why-less.md](./why-less.md).

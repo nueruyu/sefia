@@ -106,7 +106,7 @@ tool. To expose a narrower surface than a class's full public API, hold it behin
 
 ## 3. Make it pause for a human — and survive a restart
 
-This is the part that's hard to hand-roll. Add a human-input tool. When it has no
+This is the part that is painful to hand-roll. Add a human-input tool. When it has no
 answer it records the question and **raises**; the run pauses *durably*. Because the
 session is engraved, you can resume in a **completely new process** and the completed
 steps replay instead of re-running.
@@ -260,6 +260,6 @@ between the two requests changes nothing.
 - Read [use case 01](./usecases/01-human-in-the-loop.md) to see this same turn
   hand-rolled, and exactly what the framework removed.
 - Read [Design & Philosophy](../DESIGN.md) and the [FAQ](./faq.md) for the model and
-  the honest tradeoffs.
+  the tradeoffs.
 - For long-horizon "resume in N days" flows, add an external scheduler that re-calls
   the endpoint — see the [timer note in the FAQ](./faq.md#what-about-long-running-waits--timers).

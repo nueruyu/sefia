@@ -18,10 +18,10 @@ async def summarize(article: str) -> Summary:
     ...
 ```
 
-That's the whole idea: an **`@infer` function is an abstract method whose
-implementer happens to be an LLM.** The signature is the input contract, the return
-type is the validated output contract, the docstring is the instruction, and the
-body is `...`. The call site stays ordinary Python.
+An **`@infer` function is an abstract method whose implementer is an LLM.** The
+signature is the input contract, the return type is the validated output contract,
+the docstring is the instruction, and the body is `...`. The call site stays ordinary
+Python.
 
 ```python
 brief    = await clarify(request)
@@ -42,13 +42,13 @@ report   = await write(brief, sources)     # plain await, plain control flow
   the interrupted call stays resumable. **Pausing is just raising.**
 - **Human-in-the-loop over stateless HTTP.** A paused run survives process death:
   re-invoke in a fresh request and completed steps replay while the pending one runs.
-  No worker, no websocket, no cluster — just a request, a response, and a store.
+  It needs only a request, a response, and a store; no worker or cluster.
 - **State is explicit.** Inputs in, outputs out; mutable state lives in a store only
   when a tool needs it.
 
 For the reasoning behind these choices, see **[Design & Philosophy](./DESIGN.md)**
-and **[Less to learn, less to leak, less to operate](./docs/why-less.md)**. For an
-honest "use X if you want Y, sefia if you want Z" guide, see
+and **[Less to learn, less to leak, less to operate](./docs/why-less.md)**. For a
+"use X if you want Y, sefia if you want Z" guide, see
 **[Choosing a stack](./docs/choosing.md)**.
 
 ## Install
@@ -109,9 +109,9 @@ walk from here to a durable HITL agent over HTTP, see the
 
 ## Durable human-in-the-loop
 
-The defining use case: a turn that pauses for a human and resumes after a restart,
-served on an ordinary request/response handler. The pause is a tool that **raises**;
-resume is just calling the endpoint again.
+A turn that pauses for a human and resumes after a restart, served on an ordinary
+request/response handler: the pause is a tool that **raises**, and resume is calling
+the endpoint again.
 
 ```python
 from sefios.tools import HumanInputTool
@@ -172,7 +172,7 @@ Sefia asks the model for one unified result shape (`final_answer | tool_calls`) 
 uses strict structured output where the provider supports it, instead of binding to
 each provider's native tool-calling. The win is **provider-portability and full
 return-type expressiveness** with no per-provider semantics leaking into your code;
-the honest cost is no native parallel tool calls and prompt caching as something to
+the cost is no native parallel tool calls, and prompt caching becomes something to
 design for rather than get for free. Full argument:
 [why-less — less to leak](./docs/why-less.md#2-less-to-leak--provider-concerns-staying-out-of-your-abstraction).
 
@@ -191,12 +191,12 @@ Full index with a suggested reading path: **[docs/](./docs/)**.
   workflow.
 - **[Less to learn, less to leak, less to operate](./docs/why-less.md)** — the
   positioning argument: concept surface, provider leakage, operational weight.
-- **[Choosing a stack](./docs/choosing.md)** — honest "when to use what, and when
-  not to use sefia".
+- **[Choosing a stack](./docs/choosing.md)** — "when to use what, and when not to use
+  sefia".
 - **[Use cases](./docs/usecases/)** — durable HITL and approval-gated workflows,
-  hand-rolled and across paradigms.
-- **[FAQ](./docs/faq.md)** — honest answers to the common objections and "how does
-  it actually work" questions.
+  hand-rolled and across LangGraph / Pydantic AI / sefia.
+- **[FAQ](./docs/faq.md)** — answers to the common objections and "how does it
+  actually work" questions.
 - **[Statelessness — a design note](./docs/notes/statelessness.md)** — the
   vendor-neutral tradeoff this all rests on.
 - **[Examples](./examples/)** — runnable end-to-end agents.

@@ -157,9 +157,9 @@ async def research(task: str) -> Outcome:
     return Outcome(published=False)
 ```
 
-Honest read: with first-class durable wrappers the **orchestration code converges**
-toward sefia's — plain async with durable awaits, no hand-rolled resume engine.
-What diverges is **operations**: you adopt a durable-execution engine and run its
+With first-class durable wrappers the **orchestration code converges** toward
+sefia's: plain async with durable awaits, no hand-rolled resume engine. What diverges
+is **operations**: you adopt a durable-execution engine and run its
 infrastructure. With **DBOS** that is a library plus a Postgres database; with
 **Temporal** it is a server cluster plus workers. (Pydantic AI also has a native
 *deferred tools* path that stays stateless-HTTP with no engine, at the cost of
@@ -175,7 +175,7 @@ you hand-roll the resume engine — see [01](./01-human-in-the-loop.md).)
 | **Pydantic AI + DBOS** | N agents + a durable workflow | `DBOSAgent(agent)` wrapper | the DBOS library + **Postgres** |
 | **Pydantic AI + Temporal** | N agents + a durable workflow | `TemporalAgent(agent)` wrapper | a **Temporal cluster + workers** |
 
-## Where each is the right call (no favoritism)
+## Where each is the right call
 
 - **LangGraph** — when you want the flow as an operable artifact *and* durable
   interrupt from the framework. Genuinely strong at pause/resume; you adopt and
@@ -188,7 +188,7 @@ you hand-roll the resume engine — see [01](./01-human-in-the-loop.md).)
   Postgres or cluster required. You give up the graph's operable diagram and the
   agent runtime's open-ended loop.
 
-## The honest summary
+## Summary
 
 The dividing line is **how you get durability**, and it is *not* code length —
 with first-class wrappers the Pydantic AI code is about as short as sefia's. It

@@ -141,6 +141,6 @@ workload is bounded, plural, and externalizable, that relocation is a clear net 
 less to run, trivial scale-out, cheap crash safety, one resume mechanism. When the
 workload's value *is* autonomy, distribution, or warm long-lived coordination, the
 relocation removes the very thing you needed, and a stateful runtime earns its
-operational weight. The honest engineering question is never "stateless or not" in
+operational weight. The real engineering question is never "stateless or not" in
 general — it is whether your work lives on the bounded-and-plural side of that line
 or the autonomous-and-coordinated side.
