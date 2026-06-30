@@ -148,6 +148,55 @@ If it is none of those — which the typical agent turn (research, approve, publ
 clarify, act, answer) is not — then an engine is weight you'd operate for
 guarantees you don't use, and "durable on a plain handler with a store" is enough.
 
+### Where the paused run lives — and who shares "stateless over HTTP"
+
+The sharpest way to see the operational difference is to ask: **during the pause,
+what is running, and where?**
+
+| | what runs during the pause | where the paused run lives | when the server restarts |
+| --- | --- | --- | --- |
+| **Temporal** | a suspended workflow on a worker | **outside** your HTTP server (cluster) | workflow is untouched; lives in the cluster |
+| **DBOS** | a background workflow in your process | **inside** your process + Postgres | recovery rebuilds PENDING workflows from Postgres |
+| **sefia** | **nothing** | **nowhere** — state is only in the store | nothing to lose; the next request replays |
+
+This is the concrete meaning of "stateless over HTTP": in sefia a pause is just the
+request ending — a tool raises, the handler returns "needs input" + a session id,
+and **no background task, worker, daemon, or live workflow exists** between pause
+and resume. Resume is an ordinary new request that re-invokes and replays the
+engraved steps.
+
+**Honest scope of the claim — it is not sefia-exclusive.** "Completes over plain
+HTTP, nothing running between requests" is a *property*, and two other approaches
+share it: hand-rolling the resume yourself (you write the engine — see
+[01](./usecases/01-human-in-the-loop.md)), and a typed-agent framework's **native
+deferred-tools** path, where `agent.run()` *returns* with the pending request, you
+persist the message history, and a new request resumes by passing the result back.
+Both are genuinely stateless-HTTP. What separates them from sefia is *within* that
+camp, not the camp itself:
+
+- **vs hand-rolled** — you don't write the resume engine.
+- **vs deferred-tools** — the pause is an ordinary `raise` at **any point**, not a
+  shape tied to "a tool needs approval/external execution"; and memoization is
+  **content-addressed over any engraved call** — including your own side-effecting
+  Python — not just the model's message history. Same simple client contract, more
+  general server.
+
+The frameworks that are *not* in this camp are exactly the engine ones: DBOS keeps
+a background workflow plus Postgres; Temporal keeps it in a cluster. They buy the
+self-waking durable timer; the stateless-HTTP camp trades that away.
+
+### One mechanism, applied uniformly
+
+Because nothing runs between requests, every kind of "continue later" is the **same
+primitive — an HTTP request that re-invokes and replays**: a human answering, a
+transient-error retry, and a scheduled wake-up are not three subsystems (a signal,
+a retry policy, a durable timer) but one. The cost is that sefia cannot wake
+*itself*: a long-horizon "continue in 3 days" needs an external caller (a cron or
+scheduler hitting the endpoint). That is a small, ordinary, debuggable moving part —
+the same statelessness that removes the engine also turns the timer into "something
+calls your URL," which most stacks already have. The boundary where that stops being
+enough is the long-horizon/distributed list above.
+
 ## The summary
 
 | Surface | Engine / graph stack | sefia |
