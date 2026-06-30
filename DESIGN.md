@@ -106,6 +106,9 @@ replays while the pending step re-runs. No engine, no graph, no websocket.
 - **vs Temporal** — Temporal is a distributed workflow engine (cluster + workers);
   sefia/glyff cover the lighter, single-flow, request-scoped part before that.
 
+For the positioning argument in full — concept surface, provider leakage, and
+operational weight — see [Less to learn, less to leak, less to operate](./docs/why-less.md).
+
 ## Non-goals & honest tradeoffs
 
 - **Not native tool-calling.** A single unified schema (`final_answer |

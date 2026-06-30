@@ -9,6 +9,10 @@ doesn't fit.
 - [02 — An approval-gated workflow that survives a restart](./02-approval-gated-workflow.md)
   — the same workflow in three paradigms (agent-object, graph, sefia), honestly.
 
+See also [Less to learn, less to leak, less to operate](../why-less.md) for the
+positioning argument behind these examples: concept surface, provider leakage, and
+operational weight.
+
 > Code snippets are idiomatic illustrations of each **paradigm**, not any
 > specific library. Comparisons name neutral infrastructure (Temporal, DBOS) only
 > to be accurate about operational weight.
