@@ -6,6 +6,9 @@
 > human and survive a restart over plain stateless HTTP, with no workflow engine,
 > no graph DSL, and no database to operate but a small store.
 
+> The code in these docs shows the **release-target (1.0) API**. sefia is pre-1.0 and
+> some surfaces still differ — see [Status](#status).
+
 ```python
 from sefia import infer
 
@@ -125,26 +128,28 @@ class Assistant:
         ...
 
 
+agent = Assistant(web=WebSearchTool(), human=HumanInputTool())
+
+
 @app.post("/sessions/{session_id}/turn")
 async def turn(session_id: str, body: TurnBody):
-    # the human tool returns a recorded answer if present, else records the question and raises
-    human = HumanInputTool(get_answer=answer_for(session_id, body.answer))
-    agent = Assistant(web=WebSearchTool(), human=human)
-    async with scope.session(session_id=session_id) as _:
+    async with scope.session(session_id=session_id) as s:
+        if body.answer is not None:
+            await s.accept_input(body.answer)      # deliver the human's answer
         try:
-            report = await agent.run(body.task)
-            return {"status": "done", "report": report}
-        except NeedsInput as e:               # the run paused durably
+            return {"status": "done", "report": await agent.run(body.task)}
+        except NeedsInput as e:                     # the run paused durably
             return {"status": "needs_input", "question": e.question}
 ```
 
-When the human tool has no answer yet it records the question and raises; the run
-pauses **durably** and the handler returns "needs input". The answer arrives in a
-later request, the same endpoint re-invokes, every completed LLM/tool call **replays
-its exact output** (the approved draft is byte-for-byte the same), and only the
-pending step runs. No checkpoint code, no step keys, no idempotency plumbing, no 202
-dance — see [use case 01](./docs/usecases/01-human-in-the-loop.md) for the same turn
-hand-rolled, and what collapses.
+When the human tool has no recorded answer it raises `NeedsInput`; the run pauses
+**durably** and the handler returns "needs input". The answer arrives in a later
+request and is delivered with `accept_input`; the same endpoint re-invokes, every
+completed LLM/tool call **replays its exact output** (the approved draft is
+byte-for-byte the same), and only the pending step runs. No checkpoint code, no step
+keys, no idempotency plumbing, no 202 dance — see
+[use case 01](./docs/usecases/01-human-in-the-loop.md) for the same turn hand-rolled,
+and what collapses.
 
 ## Core concepts
 

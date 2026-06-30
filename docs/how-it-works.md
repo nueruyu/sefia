@@ -116,9 +116,10 @@ not sent as a native tool spec.
 
 **Execution** (`InferenceExecutor._call_tools`): the model's requested call is matched
 in the registry and invoked; sync or async returns are normalized. A tool that
-**raises `YieldException` re-raises immediately** (this is the pause — see below); any
-*other* tool exception is stringified into the history and fed back to the model so it
-can recover and continue, rather than failing the run.
+**raises `NeedsInput` propagates immediately** — that is the durable pause (see below)
+— so it reaches your handler; any *other* tool exception is stringified into the
+history and fed back to the model so it can recover and continue, rather than failing
+the run.
 
 ## Durability and replay (glyff)
 
@@ -134,17 +135,19 @@ of the same session:
 The nesting (run ⊃ step ⊃ tool batch) makes replay granular: resuming a turn that
 paused at step 4 replays steps 1–3 and the tools they called, then runs step 4.
 
-**Exception semantics are the clever part** (`exceptions.py`, `_executor.py`):
+**Exception semantics are the clever part.** glyff **never engraves an exception as a
+permanent result** — any exception that escapes an engraved call leaves that call
+**resumable** while the work that already completed stays committed, then the
+exception propagates normally. So there is no special control-flow type: a transient
+provider hiccup or a response that failed schema validation simply propagates and is
+re-run on the next invocation (an in-loop `Retrier` may retry it first); a
+human-input tool raises `NeedsInput` to pause; an ordinary bug raises and surfaces to
+you. In every case the completed engraved steps are safe and the interrupted one runs
+again on re-invocation.
 
-- `InferenceError` (a transient provider hiccup, or a response that failed schema
-  validation) **subclasses glyff's `YieldException`**. glyff therefore does *not*
-  engrave it as a permanent `FAILED` record — the step is left **resumable**, so
-  re-invoking re-runs just that step (and an in-loop `Retrier` may retry it first).
-- A genuinely permanent error (auth, malformed request, ...) is *not* mapped to
-  `InferenceError`, so it engraves as a real failure.
-
-This is why "any exception is non-terminal" holds without a special control flow: the
-recoverable ones *are* yields.
+> Pre-1.0: today's code still routes recoverable errors through a transitional
+> exception base (`InferenceError` in `exceptions.py`); that distinction is being
+> removed so *every* exception is treated as non-terminal, as described above.
 
 ## Human-in-the-loop: pause = raise, resume = re-invoke
 
@@ -152,13 +155,13 @@ A human-input tool (`packages/sefios/src/sefios/tools/human.py`) is an engraved 
 that:
 
 1. looks up whether an answer is recorded; if so, returns it;
-2. if not, records the pending question and **raises `YieldException`**.
+2. if not, records the pending question and **raises `NeedsInput`**.
 
-The raise propagates out (the executor re-raises `YieldException` unchanged at every
-layer), glyff leaves that engraved tool call **resumable**, and the exception reaches
-your handler, which returns "needs input". On the next request you re-invoke the same
-session: every completed step replays, and the human tool runs again — now with an
-answer available — and returns it.
+The raise propagates out, glyff leaves that engraved tool call **resumable**, and the
+exception reaches your handler, which returns "needs input". On the next request the
+answer is delivered with `accept_input` and you re-invoke the same session: every
+completed step replays, and the human tool runs again — now with an answer available —
+and returns it.
 
 The idempotency hinge is `get_call_state_store` (`_context.py`): it scopes a small
 state store to the **current engraved call's `ExecutionId`** (hashed). Because a
@@ -184,10 +187,11 @@ a single call swap the model/policies by key, resolved per-call in
 2. `@infer` engraves the run; the executor loops: model step (engraved) → "search"
    tool call (engraved) → model step → "ask human to approve" tool call.
 3. The human tool finds no answer, records the question under its call-scoped state,
-   and raises `YieldException`. glyff keeps the run's completed steps, leaves the
-   human call resumable, and the exception surfaces; the handler returns
-   `needs_input` + the question.
-4. `POST /turn` again with the answer. `agent.run` re-enters: the search step and the
+   and raises `NeedsInput`. glyff keeps the run's completed steps, leaves the human
+   call resumable, and the exception surfaces; the handler returns `needs_input` + the
+   question.
+4. `POST /turn` again with the answer (delivered via `accept_input`). `agent.run`
+   re-enters: the search step and the
    earlier model steps **replay their stored outputs** (the draft is identical), the
    human tool re-runs, now finds the answer, and returns it; the loop continues to the
    final answer.

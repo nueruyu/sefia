@@ -62,12 +62,12 @@ workflow engine. Multi-agent role-play orchestration is also out of scope. See
 ### How does the human-in-the-loop pause actually work? Exceptions?
 
 Yes — and that's the point. A human-input tool checks for a recorded answer; if there
-isn't one, it records the question and **raises**. glyff treats exceptions as
-non-terminal: completed engraved calls commit, the interrupted call stays resumable,
-and the exception propagates so your handler can return "needs input". When the
-answer arrives in a later request, you re-invoke the same call; the completed steps
-replay their exact outputs and only the pending step runs. No special exception type
-is required, no websocket, no worker.
+isn't one, it records the question and **raises `NeedsInput`**. glyff treats exceptions
+as non-terminal: completed engraved calls commit, the interrupted call stays resumable,
+and the exception propagates so your handler can return "needs input". When the answer
+arrives in a later request (delivered with `accept_input`), you re-invoke the same
+call; the completed steps replay their exact outputs and only the pending step runs. No
+durable-execution engine, no websocket, no worker.
 
 ### What does "replay" guarantee, and why does it matter for correctness?
 

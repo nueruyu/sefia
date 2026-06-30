@@ -123,7 +123,7 @@ weight diverges sharply between paradigms even when the *code* converges.
 ```python
 @app.post("/sessions/{id}/turn")
 async def turn(id, body):
-    async with api.session(session_id=id) as s:
+    async with scope.session(session_id=id) as s:
         await s.accept_input(body.input)
         return await agent.run(body.task)     # resumes where it paused; no engine
 ```

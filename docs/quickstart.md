@@ -129,13 +129,6 @@ class Report(BaseModel):
     summary: str
 
 
-def answer_provider(answer: str | None):
-    """Supply the just-arrived answer, or None to pause on the first run."""
-    async def provider(_request) -> str | None:
-        return answer
-    return provider
-
-
 class Assistant:
     def __init__(self, web: WebSearchTool, human: HumanInputTool):
         self._web = web
@@ -152,11 +145,10 @@ scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
 
 async def main() -> None:
     answer = sys.argv[1] if len(sys.argv) > 1 else None   # pass the answer on resume
-    agent = Assistant(
-        web=WebSearchTool(),
-        human=HumanInputTool(get_answer=answer_provider(answer)),
-    )
-    async with scope.session(session_id="approval-demo"):
+    agent = Assistant(web=WebSearchTool(), human=HumanInputTool())
+    async with scope.session(session_id="approval-demo") as s:
+        if answer is not None:
+            await s.accept_input(answer)                  # deliver the answer on resume
         try:
             report = await agent.run("the state of durable LLM agents")
             print("DONE:", report.summary)
@@ -203,10 +195,11 @@ from sefia.exceptions import NeedsInput
 from sefios import SessionScope
 from sefios.tools import HumanInputTool, WebSearchTool
 
-# (Assistant, Report, answer_provider from hitl.py)
+# (Assistant, Report from hitl.py)
 
 app = FastAPI()
 scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
+agent = Assistant(web=WebSearchTool(), human=HumanInputTool())
 
 
 class TurnBody(BaseModel):
@@ -216,14 +209,11 @@ class TurnBody(BaseModel):
 
 @app.post("/sessions/{session_id}/turn")
 async def turn(session_id: str, body: TurnBody):
-    agent = Assistant(
-        web=WebSearchTool(),
-        human=HumanInputTool(get_answer=answer_provider(body.answer)),
-    )
-    async with scope.session(session_id=session_id):
+    async with scope.session(session_id=session_id) as s:
+        if body.answer is not None:
+            await s.accept_input(body.answer)     # deliver the human's answer
         try:
-            report = await agent.run(body.task)
-            return {"status": "done", "report": report}
+            return {"status": "done", "report": await agent.run(body.task)}
         except NeedsInput as e:
             return {"status": "needs_input", "question": e.question}
 ```

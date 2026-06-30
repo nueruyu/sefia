@@ -123,7 +123,7 @@ class Research:
 # the endpoint stays an ordinary request/response handler
 @app.post("/sessions/{id}/research")
 async def research(id, body):
-    async with api.session(session_id=id) as s:
+    async with scope.session(session_id=id) as s:
         await s.accept_input(body.approval)        # answer for a pending question
         return await agent.run(body.task)          # resumes where it paused
 ```

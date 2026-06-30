@@ -1,7 +1,8 @@
 # Design & Philosophy
 
-> Status: pre-1.0, API unstable. This is the design we are building toward;
-> parts — notably the tool model — are in progress (see issues #38/#39/#40).
+> Status: pre-1.0, API unstable. The code here shows the **release-target (1.0) API** —
+> the design we are building toward; parts, notably the tool model, are still in
+> progress and some surfaces differ today (see the issue tracker).
 
 **Durable, resumable LLM agents as ordinary typed Python functions — HITL over
 plain stateless HTTP, no workflow engine, no graph DSL.**
@@ -70,11 +71,11 @@ class HumanInput:
         if answer := await self._pending.answer_for(question):
             return answer
         await self._pending.record(question)
-        raise InputRequired(question)              # pause — durably
+        raise NeedsInput(question)                 # pause — durably
 
 @app.post("/sessions/{id}/turn")
 async def turn(id, body):
-    async with api.session(session_id=id) as s:
+    async with scope.session(session_id=id) as s:
         await s.accept_input(body.input)
         return await agent.run(body.task)          # resumes where it paused
 ```
@@ -87,17 +88,20 @@ replays while the pending step re-runs. No engine, no graph, no websocket.
 | Tool        | Shape                        | Durable           | Best fit |
 | ----------- | ---------------------------- | ----------------- | -------- |
 | LangGraph   | Graph (nodes/edges/state)    | yes               | explicit state machines, complex routing |
-| Pydantic AI | Agent objects                | via Temporal/DBOS | typed agent apps on a runtime |
+| Pydantic AI | Agent objects                | native or via Temporal/DBOS | typed agent apps on a runtime |
 | DBOS        | Durable functions (Postgres) | yes               | general durable execution; you build the LLM layer |
 | Temporal    | Distributed workflows        | yes               | distributed workflow infra across services |
 | **sefia**   | **Typed async functions**    | **yes**           | **durable LLM steps as plain Python, lightweight** |
 
 - **vs LangGraph** — no graph to author; agent logic stays a normal Python call
   graph.
-- **vs Pydantic AI** — closest on typed ergonomics, and a well-regarded one. It
-  reaches durability by adopting an engine (first-class `TemporalAgent` /
-  `DBOSAgent` wrappers); sefia's durability is native to the `@infer` model and
-  runs on a plain stateless handler with a sqlite/file store — no engine to adopt.
+- **vs Pydantic AI** — closest on typed ergonomics, and a well-regarded one. Its
+  durable HITL is either native *deferred tools* (the run returns, you persist the
+  message history, a new run resumes with the result) or an adopted engine
+  (first-class `TemporalAgent` / `DBOSAgent` wrappers). sefia's durability is native
+  to the `@infer` model — pausing is just raising, resuming is re-invoking — on a
+  plain stateless handler with a sqlite/file store, no message-history threading and
+  no engine.
 - **vs DBOS** — also code-first, non-graph, durable. The difference is altitude:
   DBOS gives durable *functions* (you build the LLM loop, tools, structured output
   yourself); sefia gives a durable *agent* with those built in, and needs no

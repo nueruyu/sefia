@@ -49,7 +49,7 @@ async def research(task, drafter: Drafter, human: HumanInput) -> Outcome:
 ```python
 @app.post("/sessions/{id}/research")
 async def endpoint(id, body):
-    async with api.session(session_id=id) as s:
+    async with scope.session(session_id=id) as s:
         await s.accept_input(body.approval)
         return await research(body.task, drafter, human)   # resumes; steps replay
 ```
