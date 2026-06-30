@@ -108,6 +108,8 @@ replays while the pending step re-runs. No engine, no graph, no websocket.
 
 For the positioning argument in full — concept surface, provider leakage, and
 operational weight — see [Less to learn, less to leak, less to operate](./docs/why-less.md).
+For an honest "use this if you want X, use sefia if you want Y" decision guide, see
+[Choosing a stack](./docs/choosing.md).
 
 ## Non-goals & honest tradeoffs
 
