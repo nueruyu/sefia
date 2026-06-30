@@ -118,4 +118,4 @@ implementation noted in parentheses.
 
 - [how-it-works.md](./how-it-works.md) — the runtime data flow these modules implement.
 - [DESIGN.md](../DESIGN.md) — why the boundaries are where they are.
-- root [`AGENTS.md`](../AGENTS.md) — the short orientation a coding agent reads first.
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — setup, commands, and the development workflow.

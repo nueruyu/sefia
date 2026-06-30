@@ -179,6 +179,8 @@ design for rather than get for free. See [DESIGN.md](./DESIGN.md#non-goals--hone
   source references: the loop, the unified schema, and content-addressed replay.
 - **[Architecture map](./docs/architecture.md)** — package layout, dependency
   direction, and "if you want to change X, look at Y" (handy for AI-assisted dev).
+- **[Contributing](./CONTRIBUTING.md)** — setup, commands, and the development
+  workflow.
 - **[Less to learn, less to leak, less to operate](./docs/why-less.md)** — the
   positioning argument: concept surface, provider leakage, operational weight.
 - **[Choosing a stack](./docs/choosing.md)** — honest "when to use what, and when
