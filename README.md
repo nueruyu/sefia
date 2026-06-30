@@ -100,7 +100,9 @@ async def main(topic: str) -> Report:
 ```
 
 `SessionScope` wires the LLM client, the glyff durability session, and the store for
-you; drop to `sefia.Session` directly when you want full control.
+you; drop to `sefia.Session` directly when you want full control. For a step-by-step
+walk from here to a durable HITL agent over HTTP, see the
+**[Quickstart tutorial](./docs/quickstart.md)**.
 
 ## Durable human-in-the-loop
 
@@ -170,6 +172,8 @@ design for rather than get for free. See [DESIGN.md](./DESIGN.md#non-goals--hone
 
 ## Documentation
 
+- **[Quickstart](./docs/quickstart.md)** — from one inferred function to a durable
+  HITL agent over HTTP, step by step.
 - **[Design & Philosophy](./DESIGN.md)** — the thesis and the model in full.
 - **[Less to learn, less to leak, less to operate](./docs/why-less.md)** — the
   positioning argument: concept surface, provider leakage, operational weight.
