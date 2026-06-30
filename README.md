@@ -177,6 +177,8 @@ design for rather than get for free. See [DESIGN.md](./DESIGN.md#non-goals--hone
   not to use sefia".
 - **[Use cases](./docs/usecases/)** — durable HITL and approval-gated workflows,
   hand-rolled and across paradigms.
+- **[FAQ](./docs/faq.md)** — honest answers to the common objections and "how does
+  it actually work" questions.
 - **[Statelessness — a design note](./docs/notes/statelessness.md)** — the
   vendor-neutral tradeoff this all rests on.
 - **[Examples](./examples/)** — runnable end-to-end agents.
