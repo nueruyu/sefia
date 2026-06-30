@@ -175,6 +175,8 @@ design for rather than get for free. See [DESIGN.md](./DESIGN.md#non-goals--hone
 - **[Quickstart](./docs/quickstart.md)** — from one inferred function to a durable
   HITL agent over HTTP, step by step.
 - **[Design & Philosophy](./DESIGN.md)** — the thesis and the model in full.
+- **[How it works](./docs/how-it-works.md)** — the mechanism behind `@infer`, with
+  source references: the loop, the unified schema, and content-addressed replay.
 - **[Less to learn, less to leak, less to operate](./docs/why-less.md)** — the
   positioning argument: concept surface, provider leakage, operational weight.
 - **[Choosing a stack](./docs/choosing.md)** — honest "when to use what, and when
