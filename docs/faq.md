@@ -54,8 +54,9 @@ makes it *unable to wake itself* (see timers, below). See
 Long-horizon autonomous waits (days/weeks on a self-firing timer), cross-service
 sagas with compensation, distributed fan-out of a single workflow across machines,
 or audit-grade exactly-once history as a product requirement. Those justify a real
-workflow engine. Multi-agent role-play orchestration is also out of scope. See
-[choosing.md](./choosing.md).
+workflow engine. Multi-agent role-play orchestration is also out of scope. The full
+boundary is in [why-less — when you genuinely need the engine](./why-less.md#when-you-genuinely-need-the-engine);
+the decision guide is [choosing.md](./choosing.md).
 
 ## Mechanics
 
@@ -121,7 +122,8 @@ semantics leaking into your code. The cost is no native parallel tool calls and 
 frontier-model tuning on long agent loops, and prompt caching becomes something to
 design for rather than get for free. Concurrency and caching are tracked on the issue
 tracker, not guaranteed. If you target one provider and lean on native parallel
-tools, that calculus can flip.
+tools, that calculus can flip. Full treatment:
+[why-less — less to leak](./why-less.md#2-less-to-leak--provider-concerns-staying-out-of-your-abstraction).
 
 ### Does it scale?
 

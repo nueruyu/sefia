@@ -120,8 +120,9 @@ For an honest "use this if you want X, use sefia if you want Y" decision guide, 
 - **Not native tool-calling.** A single unified schema (`final_answer |
   tool_calls`) plus strict structured output where supported → provider-portable,
   full return-type expressiveness; at the cost of native parallel tools and some
-  frontier-model tuning on complex agents. Concurrency and prompt caching are
-  tracked (#36, #37), not guaranteed.
+  frontier-model tuning on complex agents. Concurrency and prompt caching are tracked
+  on the issue tracker, not guaranteed. Full argument:
+  [why-less — less to leak](./docs/why-less.md#2-less-to-leak--provider-concerns-staying-out-of-your-abstraction).
 - **Lighter than Temporal, not a replacement.** Single-process /
   resume-on-fresh-request, plus horizontal scale across independent sessions.
   Distributed single-workflow branches are out of scope.

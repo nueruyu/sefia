@@ -173,9 +173,12 @@ uses strict structured output where the provider supports it, instead of binding
 each provider's native tool-calling. The win is **provider-portability and full
 return-type expressiveness** with no per-provider semantics leaking into your code;
 the honest cost is no native parallel tool calls and prompt caching as something to
-design for rather than get for free. See [DESIGN.md](./DESIGN.md#non-goals--honest-tradeoffs).
+design for rather than get for free. Full argument:
+[why-less — less to leak](./docs/why-less.md#2-less-to-leak--provider-concerns-staying-out-of-your-abstraction).
 
 ## Documentation
+
+Full index with a suggested reading path: **[docs/](./docs/)**.
 
 - **[Quickstart](./docs/quickstart.md)** — from one inferred function to a durable
   HITL agent over HTTP, step by step.

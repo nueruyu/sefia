@@ -98,10 +98,10 @@ async def research_turn(session_id: str, task: str, approval: str | None = None)
 
 ### The framework alternatives
 
-A durable workflow engine (or a typed-agent framework's durable wrapper) does all
-of the above correctly — at the cost of adopting that engine and its
-infrastructure. A graph framework gives you a built-in checkpointer and an
-interrupt — at the cost of authoring the flow as a graph. Both are reasonable; see
+A durable-execution engine like Temporal or DBOS — or Pydantic AI's `TemporalAgent` /
+`DBOSAgent` wrapper over it — does all of the above correctly, at the cost of adopting
+that engine and its infrastructure. LangGraph gives you a built-in checkpointer and an
+interrupt, at the cost of authoring the flow as a graph. Both are reasonable; see
 [02 — approval-gated workflow](./02-approval-gated-workflow.md) for how they read.
 
 ## With sefia
