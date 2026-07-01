@@ -1,11 +1,9 @@
 # How it works
 
-The mechanism behind `@infer`, with enough detail to check it against the source.
-There is nothing unobservable here: it is a prompt, a loop, a JSON schema, and
-content-addressed replay. Module paths point at the code so you can verify each claim.
+This page traces the runtime path behind `@infer` and points to the modules that
+implement each step.
 
-> Pre-1.0: the architecture below is stable, but names and one rule (which methods
-> count as tools) are being finalized — see the notes inline and [DESIGN.md](../DESIGN.md).
+> Pre-1.0: some names and the tool-discovery rule may change.
 
 ## The pieces
 
@@ -18,11 +16,14 @@ content-addressed replay. Module paths point at the code so you can verify each 
 | `Session` / `SessionContext` | `packages/sefia/src/sefia/_session.py`, `_context.py` | The durable, contextvar-scoped run; wraps a `glyff.Session`. |
 | glyff | [nueruyu/glyff](https://github.com/nueruyu/glyff) | Content-addressed engrave/replay underneath every engraved call. |
 
-**One sentence of data flow:** calling an `@infer` function resolves the session
-context, builds an executor, and runs it inside an *engraved* boundary; the executor
-loops — ask the strategy for the next decision, run any tool calls, append to history
-— until the model returns a final answer, with every model call and tool batch
-individually engraved so a re-invocation replays completed work instead of redoing it.
+At a high level:
+
+1. Calling an `@infer` function resolves the current session context and builds an
+   executor, run inside an *engraved* boundary.
+2. The executor loops, asking the strategy for the next model decision.
+3. Each model step and tool batch is engraved separately.
+4. On re-invocation, completed work replays and the run continues from the unfinished
+   step.
 
 ## `@infer`: calling a function runs an inference
 
@@ -69,8 +70,8 @@ loop:
 ## Turning a function into a prompt
 
 `LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) does the core
-translation. The key design choice is that **tool-calling is not native** — there is
-one unified structured-output schema instead.
+translation. Instead of provider-native tool-calling, it asks the model for one
+unified structured-output schema.
 
 A `create_model`-built decision model is the schema, picked by an
 `_ExecutionDirector`:
@@ -90,10 +91,7 @@ stripped of any ``` fence, `json.loads`-ed, validated into the decision model, a
 `process_decision` validates `final_answer` against the declared return type
 (`InvalidInferenceResponseError` if it doesn't conform).
 
-**Why this shape:** one schema that works across any provider's JSON/structured-output
-mode, and a return type that can be any nested/union/collection type — at the cost of
-native parallel tool calls and getting prompt caching for free. (See
-[DESIGN.md](../DESIGN.md#non-goals--tradeoffs) and
+(Why the unified schema rather than native tool-calling, and the tradeoff it makes:
 [tradeoffs.md](./tradeoffs.md#2-provider-leakage).)
 
 ## Tools: discovery, schema, execution
@@ -102,12 +100,11 @@ native parallel tool calls and getting prompt caching for free. (See
 the `@infer` method), the collector gathers tools from the instance itself and from
 **each dependency it holds in an attribute** (public or private). It scans the class
 hierarchy via `__mro__` (and `__slots__`) rather than `dir()`+`getattr` on every
-name, so it never triggers a third-party object's lazy properties. Today a method
-counts as a tool when it carries the `@tool` marker (or comes from a `toolify`
-`Toolset`); **the rule being finalized is to treat the public methods of held objects
-as the tool surface** (private `_` methods internal) — see DESIGN. Either way, the
-*mechanism* is the same: collect from the held objects into a `ToolRegistry`. The
-running `@infer` method is itself unmarked, so an agent never offers itself as a tool.
+name, so it never triggers a third-party object's lazy properties. A method counts as
+a tool via the `@tool` marker today; the target is the public methods of held objects
+(private `_` methods internal — see DESIGN). Either way the mechanism is the same:
+collect from the held objects into a `ToolRegistry`. The running `@infer` method is
+itself unmarked, so an agent never offers itself as a tool.
 
 **Schema** (`_strategy.py`): each tool's signature becomes a function schema
 (`model_inspector.get_function_schema`) and is embedded as JSON in the system prompt —
@@ -142,11 +139,8 @@ provider hiccup or a response that failed schema validation simply propagates an
 re-run on the next invocation (an in-loop `Retrier` may retry it first); a
 human-input tool raises `NeedsInput` to pause; an ordinary bug raises and surfaces to
 you. In every case the completed engraved steps are safe and the interrupted one runs
-again on re-invocation.
-
-> Pre-1.0: today's code still routes recoverable errors through a transitional
-> exception base (`InferenceError` in `exceptions.py`); that distinction is being
-> removed so *every* exception is treated as non-terminal, as described above.
+again on re-invocation. (Today's code still routes recoverable errors through a
+transitional `InferenceError` base; that distinction is being removed.)
 
 ## Human-in-the-loop: pause = raise, resume = re-invoke
 
