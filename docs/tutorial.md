@@ -259,7 +259,7 @@ between the two requests changes nothing.
   control over the LLM client, policies, and middleware.
 - Read [use case 01](./usecases/01-human-in-the-loop.md) to see this same turn
   hand-rolled, and exactly what the framework removed.
-- Read [Design & Philosophy](../DESIGN.md) and the [FAQ](./faq.md) for the model and
+- Read [Design](../DESIGN.md) and the [FAQ](./faq.md) for the model and
   the tradeoffs.
 - For long-horizon "resume in N days" flows, add an external scheduler that re-calls
   the endpoint — see the [timer note in the FAQ](./faq.md#what-about-long-running-waits--timers).

@@ -50,7 +50,7 @@ Under the hood, [glyff](https://github.com/nueruyu/glyff) content-addresses and 
 each call, so **pausing is just raising**. The store behind it is your choice:
 in-memory, a file, or your own database.
 
-For the reasoning behind these choices, see **[Design & Philosophy](./DESIGN.md)**
+For the reasoning behind these choices, see **[Design](./DESIGN.md)**
 and **[the positioning argument](./docs/tradeoffs.md)**. For a
 "use X if you want Y, sefia if you want Z" guide, see
 **[Choosing a stack](./docs/choosing.md)**.
@@ -168,7 +168,7 @@ and what it removes.
 ## Documentation
 
 - **[Quickstart](./docs/quickstart.md)** — install and run your first `@infer` agent.
-- **[Design & Philosophy](./DESIGN.md)** — the thesis and non-goals.
+- **[Design](./DESIGN.md)** — the thesis and non-goals.
 - **[How it works](./docs/how-it-works.md)** — the runtime mechanism.
 - **[Docs index](./docs/)** — everything else (comparisons, FAQ, use cases,
   architecture), with a suggested reading path.

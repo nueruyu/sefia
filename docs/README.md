@@ -2,7 +2,7 @@
 
 The [project README](../README.md) is the pitch; this page is the map of everything
 else, grouped by what you're trying to do. A reasonable first path:
-**[Quickstart](./quickstart.md) → [Design & Philosophy](../DESIGN.md) →
+**[Quickstart](./quickstart.md) → [Design](../DESIGN.md) →
 [How it works](./how-it-works.md)**.
 
 ## Get started
@@ -12,7 +12,7 @@ else, grouped by what you're trying to do. A reasonable first path:
 - **[Examples](../examples/)** — runnable end-to-end agents.
 
 ## Understand the model
-- **[Design & Philosophy](../DESIGN.md)** — the thesis (`@infer` = an
+- **[Design](../DESIGN.md)** — the thesis (`@infer` = an
   LLM-implemented abstract method) and the tool / durability model.
 - **[How it works](./how-it-works.md)** — the runtime mechanism, with source
   references: the loop, the unified schema, content-addressed replay.

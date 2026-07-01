@@ -1,12 +1,13 @@
-# Design & Philosophy
+# Design
 
 > Status: pre-1.0, API unstable. The code here shows the **release-target (1.0) API** —
 > the design we are building toward; parts, notably the tool model, are still in
 > progress and some surfaces differ today (see the issue tracker).
 
-**LLM agents that pause for a human and resume after a restart, written as ordinary
-typed Python functions — human-in-the-loop over plain stateless HTTP, without a
-workflow engine or graph DSL.**
+**`@infer` turns a typed Python function into an LLM-backed call whose completed steps
+are engraved and replay on re-invocation.** A paused run is just an engraved call that
+hasn't finished, which is what makes durable human-in-the-loop over a plain stateless
+HTTP handler possible — with no workflow engine and no graph DSL.
 
 ## Thesis
 
@@ -85,21 +86,14 @@ async def turn(id, body):
 A paused run survives process death: re-invoke and the completed engraved work
 replays while the pending step re-runs. No engine, graph, or websocket.
 
-## How it compares
+## How it relates
 
-| Tool        | Shape                        | Durable           | Best fit |
-| ----------- | ---------------------------- | ----------------- | -------- |
-| LangGraph   | Graph (nodes/edges/state)    | yes               | explicit state machines, complex routing |
-| Pydantic AI | Agent objects                | native or via Temporal/DBOS | typed agent apps on a runtime |
-| DBOS        | Durable functions (Postgres) | yes               | general durable execution; the LLM layer stays application code |
-| Temporal    | Distributed workflows        | yes               | distributed workflow infra across services |
-| **sefia**   | **Typed async functions**    | **yes**           | **durable LLM steps as plain Python, lightweight** |
-
-The short version: LangGraph and sefia both keep durability built in (a graph to
-author vs. plain Python); Pydantic AI reaches durable HITL via native deferred tools or
-an adopted engine; DBOS and Temporal are general engines you run underneath. The
-per-tool detail, the tradeoffs, and "when to use which" are in
-[docs/choosing.md](./docs/choosing.md) and [docs/tradeoffs.md](./docs/tradeoffs.md).
+sefia keeps durability built into ordinary Python, rather than a graph to author
+(LangGraph), an adopted engine (Pydantic AI's `TemporalAgent`/`DBOSAgent`, or DBOS and
+Temporal directly), or a distributed cluster. It targets the lighter, single-flow,
+request-scoped layer before you need a distributed workflow engine. The per-tool
+comparison and "when to use which" are in [docs/choosing.md](./docs/choosing.md); the
+tradeoffs behind the design are in [docs/tradeoffs.md](./docs/tradeoffs.md).
 
 ## Non-goals & tradeoffs
 
