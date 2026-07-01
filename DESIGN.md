@@ -45,8 +45,9 @@ class ResearchAgent:
   are scoped to the object that holds them.
 - **Narrow by type.** A concrete class exposes its public methods; a `Protocol`
   exposes only its declared members.
-- **An agent consumes tools, never provides them.** No self-tools → no
-  self-recursion.
+- **An agent's own methods aren't its own tools.** Its `@infer` methods are not
+  offered back to itself, so a run can't recurse into itself. (The agent object can
+  still be held by another agent and act as its tool.)
 - **A held field is a tool; an `@infer` argument is task input.** So an agent's
   fields are all tool objects, and nothing unrelated.
 
