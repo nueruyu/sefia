@@ -1,8 +1,8 @@
 # Use cases
 
-Where sefia's tradeoff — *automatic resume for agents, no engine, no graph* —
-helps, shown against hand-rolled code and other approaches, and clear about where it
-doesn't fit.
+Where sefia's tradeoff (*automatic resume for agents, no engine, no graph*) helps,
+shown against hand-rolled code and other approaches, and clear about where it doesn't
+fit.
 
 - [01 — Human-in-the-loop without re-running the turn](./01-human-in-the-loop.md)
   — why resumption is the hard part, hand-rolled vs sefia.

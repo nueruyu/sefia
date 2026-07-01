@@ -1,7 +1,7 @@
 # Statelessness in durable, resumable execution — a design note
 
 A neutral consideration, not a pitch for any tool. When a computation has to
-**pause and resume** — wait for a human, survive a crash, continue after a deploy —
+**pause and resume** (wait for a human, survive a crash, continue after a deploy) —
 you face one architectural choice before any API detail: **where does the paused
 run's state live, and what is running while it waits?** Statelessness is one answer
 to that question. This note works through its value, its costs, the workarounds,
@@ -24,8 +24,8 @@ A paused computation's progress has to live *somewhere*. There are two families:
 This is the same dividing line that recurs all over systems design: server-side
 sessions vs. self-contained tokens, stateful connections vs. stateless request
 protocols, long-lived servers vs. functions that spin up per request. The tradeoffs
-rhyme each time, which is why it's worth treating as a pattern rather than a
-per-tool detail.
+recur each time, so it helps to treat this as a pattern rather than a per-tool
+detail.
 
 ## The value of statelessness
 
@@ -79,8 +79,8 @@ the runtime was doing for you.
 
 ## Workarounds
 
-Most of the costs have well-trodden mitigations; the point is that they are
-*explicit, ordinary parts* rather than capabilities a runtime hides.
+Most of the costs have well-trodden mitigations, and each is an *explicit, ordinary
+part* rather than a capability a runtime hides.
 
 - **Self-waking → an external trigger.** A scheduler, cron, or delay-queue calls the
   resume endpoint at the due time. Because re-invocation is idempotent (replay makes

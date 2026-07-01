@@ -11,8 +11,8 @@ plain stateless HTTP, no workflow engine, no graph DSL.**
 
 - **`@infer` = an abstract method implemented by an LLM.** Signature = input
   contract; return type = validated output contract; docstring = instruction;
-  body is `...`. Not magic — "declared, not yet implemented," the implementer is
-  the LLM.
+  body is `...`. An ordinary "declared, not yet implemented" method, with the LLM
+  as the implementer.
 - **Durable execution, no engine.** Backed by
   [glyff](https://github.com/nueruyu/glyff): engraved calls are content-addressed
   (call identity + args) and replayed on re-invocation. Any exception is

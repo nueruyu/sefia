@@ -4,7 +4,7 @@ A progressive walk from a single inferred function to a durable, human-in-the-lo
 agent served over HTTP that resumes after a restart. About fifteen minutes.
 
 > This tutorial is written against the **release-target API**. sefia is pre-1.0 and
-> parts — notably the tool model — are being finalized, so names may shift before
+> parts (notably the tool model) are being finalized, so names may shift before
 > 1.0; see [DESIGN.md](../DESIGN.md) for what is settled.
 
 ## Install
@@ -249,9 +249,8 @@ between the two requests changes nothing.
 - **Tools** are the public methods of held objects — ordinary OOP, scoped to the
   holder.
 - **Durability** is native: every call is engraved and replays on re-invocation, so
-  pausing is just a tool raising and resuming is just calling again.
-- The whole thing runs on a **stateless handler with a store** — no engine, no
-  worker, no graph.
+  pausing is a tool raising and resuming is calling again.
+- It runs on a **stateless handler with a store**: no engine, worker, or graph.
 
 ## Next steps
 

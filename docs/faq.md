@@ -24,7 +24,7 @@ differences:
   engine (its first-class `TemporalAgent`/`DBOSAgent` wrappers) or via its native
   *deferred-tools* flow, where a run returns, you persist the message history, and a
   new run resumes by passing the result back. sefia's durability is native to the
-  `@infer` model — pausing is just raising, resuming is re-invoking — and runs on a
+  `@infer` model (pausing is just raising, resuming is re-invoking) and runs on a
   plain handler with a sqlite/file/Postgres store, no engine.
 - **Provider leakage.** Pydantic AI binds to per-provider native tool-calling, so
   provider differences (strict vs. best-effort structured output, parallel-call
@@ -62,8 +62,8 @@ the decision guide is [choosing.md](./choosing.md).
 
 ### How does the human-in-the-loop pause actually work? Exceptions?
 
-Yes — and that's the point. A human-input tool checks for a recorded answer; if there
-isn't one, it records the question and **raises `NeedsInput`**. glyff treats exceptions
+Yes. A human-input tool checks for a recorded answer; if there isn't one, it records
+the question and **raises `NeedsInput`**. glyff treats exceptions
 as non-terminal: completed engraved calls commit, the interrupted call stays resumable,
 and the exception propagates so your handler can return "needs input". When the answer
 arrives in a later request (delivered with `accept_input`), you re-invoke the same
@@ -142,7 +142,7 @@ holds only enough to bring a paused or crashed run back to where it was.
 
 ### Is it production-ready?
 
-Pre-1.0. The API is unstable and parts of the design — notably the tool model — are
+Pre-1.0. The API is unstable and parts of the design (notably the tool model) are
 being finalized. Use it where you can track breaking changes; see
 [DESIGN.md](../DESIGN.md) and the issue tracker for what is settled and what is in
 flight.

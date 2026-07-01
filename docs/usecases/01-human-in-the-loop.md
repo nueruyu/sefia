@@ -86,7 +86,7 @@ async def research_turn(session_id: str, task: str, approval: str | None = None)
 - **Persist after every step.** A crash between "do work" and "save" re-runs that
   step. Fine for pure reads; **every side-effecting step then needs its own
   idempotency key** (step 5).
-- **Step keys are load-bearing.** Reorder or insert a step and the saved progress
+- **Step keys are brittle.** Reorder or insert a step and the saved progress
   silently maps to the wrong slot.
 - **Concurrent re-entry double-runs.** Two requests resuming the same session need
   a lock you haven't written yet.
@@ -145,10 +145,10 @@ human-input tool raising when no answer is recorded yet.
 | Pause / resume for a human              | `Paused`, `approval=None`, 202 dance | a tool raises; re-invoke resumes |
 | Not double-run on concurrent re-entry   | a lock you write                     | session-scoped |
 
-## The point
+## Why it matters
 
-The resume logic is the hard, error-prone part — and most of it exists for
+The resume logic is the hard, error-prone part, and most of it exists for
 *correctness* (non-determinism, exactly-once), not convenience. sefia removes it:
-you write the turn as a normal typed function, pausing is just raising, and
-resuming is automatic. Your database still stores your data; sefia stores just
-enough to bring a paused or crashed turn back to exactly where it was.
+you write the turn as a normal typed function, pausing is raising, and resuming is
+automatic. Your database still stores your data; sefia stores just enough to bring a
+paused or crashed turn back to where it was.

@@ -101,7 +101,7 @@ is *not* what you have.
 | **sefia** | ✓ (native) | ✓ | ✓ | ✗ | ✗ | ✗ (unified schema) |
 
 "✓/✗" are about the *default* shape, not what's achievable with effort. Two cells
-worth reading as tradeoffs, not wins: sefia's "no native tool-calling" is a
+are tradeoffs, not wins: sefia's "no native tool-calling" is a
 deliberate portability bet with a real cost (no native parallel tools, prompt
 caching to design for), and its "no long-horizon/distributed" is a scope choice,
 not a gap to close.
