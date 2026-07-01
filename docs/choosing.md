@@ -120,6 +120,6 @@ not a gap to close.
 ## Where this came from
 
 The reasoning behind sefia's narrow shape — fewer concepts, no provider leakage,
-no engine to run — is in [Less to learn, less to leak, less to operate](./why-less.md).
+no engine to run — is in [the positioning argument](./why-less.md).
 Worked examples of the same workflow across paradigms are in
 [use cases](./usecases/). The full design rationale is in [DESIGN.md](../DESIGN.md).

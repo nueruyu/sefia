@@ -134,7 +134,7 @@ re-invocation the completed ones **replay their exact outputs** (the approved
 draft is the same draft) and only the unfinished step runs. The pause is just the
 human-input tool raising when no answer is recorded yet.
 
-## What collapsed
+## What sefia removes
 
 | The turn must…                          | Hand-rolled                          | sefia |
 | --------------------------------------- | ------------------------------------ | ----- |

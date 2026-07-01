@@ -1,4 +1,4 @@
-# Less to learn, less to leak, less to operate
+# Concept surface, provider leakage, and operational weight
 
 A typed-agent framework is judged on three surfaces that have nothing to do with
 how good its prompts are: how many concepts you must hold in your head, how much
@@ -9,7 +9,7 @@ have to run to make a paused run survive. sefia's bet is to keep all three small
 > infrastructure (Temporal, DBOS) is named only to be accurate about operational
 > weight. Where a paradigm's strength is real, it is stated as such.
 
-## 1. Less to learn — the concept surface
+## 1. The concept surface
 
 A typed-agent stack usually asks you to learn a vocabulary before you write a
 useful line: an `Agent` object, a way to register tools, a dependency-injection
@@ -65,7 +65,7 @@ context disappears.
 > when needed, rather than putting it in every signature. If most of your tools
 > genuinely need run-scoped data, the gap narrows.
 
-## 2. Less to leak — provider concerns staying out of your abstraction
+## 2. Provider leakage
 
 The second tax is subtler: provider-specific behavior leaking up into the
 abstraction you write against. Native tool-calling is per-provider — schema
@@ -97,7 +97,7 @@ async def classify(self, ticket: str) -> Triage:   # Triage is a normal type;
 > provider leakage; the cost is the native-path optimizations. If your workload is
 > one provider and leans on parallel native tools, that calculus can flip.
 
-## 3. Less to operate — durability without an engine
+## 3. Operational weight
 
 The third surface only appears when a run has to **pause and resume across a
 process restart** — a human approval, a deploy mid-run, a crash. This is where a
@@ -201,12 +201,12 @@ enough is the long-horizon/distributed list above.
 
 | Surface | Engine / graph stack | sefia |
 | --- | --- | --- |
-| **Learn** | Agent + tools + DI context + output_type + workflow/graph vocab | a class, `@infer`, held fields, return types |
-| **Leak** | per-provider tool-call & structured-output semantics surface | one unified result shape; provider-portable (at a stated cost) |
-| **Operate** | durable engine + Postgres / cluster + workers | a stateless handler + a store; no engine |
+| **Concepts** | Agent + tools + DI context + output_type + workflow/graph vocab | a class, `@infer`, held fields, return types |
+| **Leakage** | per-provider tool-call & structured-output semantics surface | one unified result shape; provider-portable (at a stated cost) |
+| **Operations** | durable engine + Postgres / cluster + workers | a stateless handler + a store; no engine |
 
 None of this makes sefia a Temporal replacement, and it is not trying to be — it
 is the lighter, single-flow, request-scoped layer *before* you need distributed
-workflow infrastructure. The claim is narrow: for the durable,
-human-in-the-loop agent turn that most apps actually build, there is less to
-learn, less to leak, and less to operate.
+workflow infrastructure. The claim is narrow: for the pause-and-resume,
+human-in-the-loop agent turn that most apps build, sefia keeps the concept surface,
+the provider coupling, and the operational weight all low.

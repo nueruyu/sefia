@@ -16,12 +16,11 @@ else, grouped by what you're trying to do. A reasonable first path:
 - **[How it works](./how-it-works.md)** — the runtime mechanism, with source
   references: the loop, the unified schema, content-addressed replay.
 - **[Architecture map](./architecture.md)** — package layout, dependency direction,
-  and "if you want to change X, look at Y".
+  and where to change what.
 
 ## Compare & decide
-- **[Less to learn, less to leak, less to operate](./why-less.md)** — the canonical
-  positioning argument: concept surface, provider leakage, operational weight (and
-  where an engine is genuinely the right call).
+- **[Concept surface, provider leakage, operational weight](./why-less.md)** — the
+  canonical positioning argument, and where an engine is genuinely the right call.
 - **[Choosing a stack](./choosing.md)** — when to use sefia vs LangGraph,
   Pydantic AI, DBOS, or Temporal.
 - **[FAQ](./faq.md)** — objections and "how does it actually work".

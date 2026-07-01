@@ -94,7 +94,7 @@ stripped of any ``` fence, `json.loads`-ed, validated into the decision model, a
 mode, and a return type that can be any nested/union/collection type — at the cost of
 native parallel tool calls and getting prompt caching for free. (See
 [DESIGN.md](../DESIGN.md#non-goals--tradeoffs) and
-[why-less.md](./why-less.md#2-less-to-leak--provider-concerns-staying-out-of-your-abstraction).)
+[why-less.md](./why-less.md#2-provider-leakage).)
 
 ## Tools: discovery, schema, execution
 

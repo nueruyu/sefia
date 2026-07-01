@@ -1,8 +1,8 @@
 # Architecture map
 
 A navigation aid for humans and AI coding agents: where things live, which package
-may import which, and **"if you want to change X, look at Y."** For *how* the runtime
-works, see [how-it-works.md](./how-it-works.md); this doc is the layout.
+may import which, and **where to change what**. For *how* the runtime works, see
+[how-it-works.md](./how-it-works.md); this doc is the layout.
 
 ## Repository shape
 
@@ -85,7 +85,7 @@ implementation noted in parentheses.
 | `tools/` | `human.py` (HITL pause-by-raise), `web.py` (DuckDuckGo search). |
 | `state.py` | App-level state helpers: `StateRegistry`, `StateContainer`, `state`, `get_state`. |
 
-## "If you want to change X, look at Y"
+## Where to change what
 
 | Goal | Where |
 | --- | --- |

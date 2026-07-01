@@ -44,7 +44,7 @@ each call, so **pausing is just raising**. The store behind it is your choice:
 in-memory, a file, or your own database.
 
 For the reasoning behind these choices, see **[Design & Philosophy](./DESIGN.md)**
-and **[Less to learn, less to leak, less to operate](./docs/why-less.md)**. For a
+and **[the positioning argument](./docs/why-less.md)**. For a
 "use X if you want Y, sefia if you want Z" guide, see
 **[Choosing a stack](./docs/choosing.md)**.
 
@@ -173,11 +173,11 @@ Full index with a suggested reading path: **[docs/](./docs/)**.
 - **[How it works](./docs/how-it-works.md)** — the mechanism behind `@infer`, with
   source references: the loop, the unified schema, and content-addressed replay.
 - **[Architecture map](./docs/architecture.md)** — package layout, dependency
-  direction, and "if you want to change X, look at Y" (handy for AI-assisted dev).
+  direction, and a where-to-change-what map (handy for AI-assisted dev).
 - **[Contributing](./CONTRIBUTING.md)** — setup, commands, and the development
   workflow.
-- **[Less to learn, less to leak, less to operate](./docs/why-less.md)** — the
-  positioning argument: concept surface, provider leakage, operational weight.
+- **[Concept surface, provider leakage, operational weight](./docs/why-less.md)** —
+  the positioning argument in full.
 - **[Choosing a stack](./docs/choosing.md)** — "when to use what, and when not to use
   sefia".
 - **[Use cases](./docs/usecases/)** — human-in-the-loop and approval-gated workflows,

@@ -9,7 +9,7 @@ fit.
 - [02 — An approval-gated workflow that survives a restart](./02-approval-gated-workflow.md)
   — the same workflow across Pydantic AI, LangGraph, and sefia.
 
-See also [Less to learn, less to leak, less to operate](../why-less.md) for the
+See also [the positioning argument](../why-less.md) for the
 positioning argument behind these examples: concept surface, provider leakage, and
 operational weight.
 

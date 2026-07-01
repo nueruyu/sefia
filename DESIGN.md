@@ -4,8 +4,9 @@
 > the design we are building toward; parts, notably the tool model, are still in
 > progress and some surfaces differ today (see the issue tracker).
 
-**Durable, resumable LLM agents as ordinary typed Python functions — HITL over
-plain stateless HTTP, no workflow engine, no graph DSL.**
+**LLM agents that pause for a human and resume after a restart, written as ordinary
+typed Python functions — human-in-the-loop over plain stateless HTTP, without a
+workflow engine or graph DSL.**
 
 ## Thesis
 
@@ -13,7 +14,7 @@ plain stateless HTTP, no workflow engine, no graph DSL.**
   contract; return type = validated output contract; docstring = instruction;
   body is `...`. An ordinary "declared, not yet implemented" method, with the LLM
   as the implementer.
-- **Durable execution, no engine.** Backed by
+- **Resumable execution, no engine.** Backed by
   [glyff](https://github.com/nueruyu/glyff): engraved calls are content-addressed
   (call identity + args) and replayed on re-invocation. Any exception is
   non-terminal — completed work commits, the interrupted call stays resumable, the
@@ -46,8 +47,8 @@ class ResearchAgent:
   exposes only its declared members.
 - **An agent consumes tools, never provides them.** No self-tools → no
   self-recursion.
-- **A held field is a tool; an `@infer` argument is task input.** An agent holds
-  only its tools.
+- **A held field is a tool; an `@infer` argument is task input.** So an agent's
+  fields are all tool objects, and nothing unrelated.
 
 ## Principles
 
@@ -111,7 +112,7 @@ replays while the pending step re-runs. No engine, graph, or websocket.
   sefia/glyff cover the lighter, single-flow, request-scoped part before that.
 
 For the positioning argument in full (concept surface, provider leakage, and
-operational weight) see [Less to learn, less to leak, less to operate](./docs/why-less.md).
+operational weight) see [the positioning argument](./docs/why-less.md).
 For a "use this if you want X, use sefia if you want Y" decision guide, see
 [Choosing a stack](./docs/choosing.md).
 
@@ -122,12 +123,12 @@ For a "use this if you want X, use sefia if you want Y" decision guide, see
   full return-type expressiveness; at the cost of native parallel tools and some
   frontier-model tuning on complex agents. Concurrency and prompt caching are tracked
   on the issue tracker, not guaranteed. Full argument:
-  [why-less — less to leak](./docs/why-less.md#2-less-to-leak--provider-concerns-staying-out-of-your-abstraction).
+  [why-less — provider leakage](./docs/why-less.md#2-provider-leakage).
 - **Lighter than Temporal, not a replacement.** Single-process /
   resume-on-fresh-request, plus horizontal scale across independent sessions.
   Distributed single-workflow branches are out of scope.
 - **Replay assumes determinism** between engraved steps — every replay engine's
   caveat.
-- **Minimal core by convention** — "an agent holds only its tools" is not enforced
-  today (may gain a static check).
+- **Minimal core by convention** — the rule that an agent's held objects are all
+  tools (nothing unrelated) is not enforced today (may gain a static check).
 - **Pre-1.0.** The API will change.

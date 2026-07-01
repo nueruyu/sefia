@@ -39,7 +39,7 @@ want to inspect and operate. sefia keeps the flow as a normal Python call graph 
 makes the durability native instead of authoring a graph. Pick LangGraph when the
 diagram is the artifact; sefia when it's ordinary code.
 
-### How is the durability different from Temporal or DBOS?
+### How does resumption differ from Temporal or DBOS?
 
 All three are checkpoint-and-replay at heart. The difference is **where the paused
 run lives and what you operate**: Temporal keeps a suspended workflow in a
@@ -123,7 +123,7 @@ frontier-model tuning on long agent loops, and prompt caching becomes something 
 design for rather than get for free. Concurrency and caching are tracked on the issue
 tracker, not guaranteed. If you target one provider and lean on native parallel
 tools, that calculus can flip. Full treatment:
-[why-less — less to leak](./why-less.md#2-less-to-leak--provider-concerns-staying-out-of-your-abstraction).
+[why-less — provider leakage](./why-less.md#2-provider-leakage).
 
 ### Does it scale?
 

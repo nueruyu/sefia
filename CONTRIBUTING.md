@@ -24,7 +24,7 @@ Tests mirror the source under each package's `tests/units/` (per-module) and
 
 ## Where to make a change
 
-The per-module map and the **"if you want to change X, look at Y"** table are in
+The per-module map and the **where-to-change-what** table are in
 [`docs/architecture.md`](./docs/architecture.md). Start there to find the right file,
 then read [`docs/how-it-works.md`](./docs/how-it-works.md) if you need the runtime
 data flow.

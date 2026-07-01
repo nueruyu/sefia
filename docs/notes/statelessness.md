@@ -1,4 +1,4 @@
-# Statelessness in durable, resumable execution — a design note
+# Statelessness in durable execution — a design note
 
 A neutral consideration, not a pitch for any tool. When a computation has to
 **pause and resume** (wait for a human, survive a crash, continue after a deploy) —
