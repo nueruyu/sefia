@@ -20,8 +20,8 @@ the map of everything else. A reasonable first path:
 ## Compare & decide
 - **[Concept surface, provider leakage, operational weight](./tradeoffs.md)** — the
   main positioning note, and where an engine is the right call.
-- **[Choosing a stack](./choosing.md)** — when to use sefia vs LangGraph,
-  Pydantic AI, DBOS, or Temporal.
+- **[Choosing a stack](./choosing.md)** — when to use sefia vs Pydantic AI,
+  Pydantic AI + Temporal / DBOS, LangGraph, CrewAI, or workflow infrastructure.
 - **[FAQ](./faq.md)** — objections and "how does it actually work".
 - **[Use cases](./usecases/)** — the same workflows hand-rolled and across
   LangGraph / Pydantic AI / sefia.

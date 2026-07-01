@@ -1,17 +1,21 @@
 # Tradeoffs
 
 sefia keeps the abstraction small: typed Python functions, replayable model/tool
-calls, and explicit stores. The bet is that ordinary typed Python calls are a good
-boundary for durable LLM work — the signature, return type, and docstring are the
-interface, and the model/tool execution underneath is replayable.
+calls, and explicit stores. That is a bet on an abstraction boundary, not a claim
+that broader workflow systems are unnecessary.
 
 ## What it buys
+
+The main bet is that ordinary typed Python calls are a good boundary for durable LLM
+work. The function signature, return type, and docstring remain the interface; the
+model/tool execution underneath becomes replayable.
 
 - ordinary Python control flow (branches, loops, retries) around LLM steps;
 - typed return values as the output contract — any nested/union/collection type,
   validated on the way out;
 - pause and resume by re-invocation, on plain request/response handlers;
-- no workflow engine to operate for request-scoped flows.
+- request/session-scoped durability without adopting a workflow engine;
+- one provider-portable result shape.
 
 ### Replay is for correctness, not just cost
 
@@ -42,13 +46,27 @@ isn't bolted on.
 - no native provider tool-calling (see above);
 - no built-in distributed workflow runtime;
 - no self-waking timers — a paused run resumes only when something calls it;
-- replay assumes deterministic orchestration between engraved calls.
+- replay assumes deterministic orchestration between engraved calls;
+- long-running or cross-service workflows need another system.
+
+## Layer boundary
+
+Temporal and DBOS are general durable execution systems. They solve a broader
+workflow problem than sefia does.
+
+For LLM applications, the closer comparison is often an agent framework plus a
+durable backend, such as Pydantic AI + Temporal or Pydantic AI + DBOS.
+
+sefia makes a different tradeoff: replay is part of the typed function model itself.
+The application still looks like ordinary Python functions/classes, while selected
+calls become LLM-backed and replayable.
 
 ## When a workflow engine fits better
 
-Reach for Temporal- or DBOS-grade infrastructure when you need:
+Use Temporal or DBOS directly when you need:
 
 - long-running or self-firing timers (days to weeks);
+- workers and queues as core infrastructure;
 - cross-service transactions with compensation;
 - distributed fan-out across machines;
 - audit-grade, queryable workflow history.
