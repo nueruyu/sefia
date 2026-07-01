@@ -2,9 +2,10 @@
 
 **S**tateless **E**ngraved **F**unction **I**nference **A**bstraction
 
-> Durable, resumable LLM agents as ordinary typed Python functions — pause for a
-> human and survive a restart over plain stateless HTTP, with no workflow engine,
-> no graph DSL, and no database to operate but a small store.
+> Durable, resumable LLM agents as ordinary typed Python functions: pause for a
+> human and survive a restart on a plain stateless HTTP handler, with no workflow
+> engine to run — just a store you already have (in-memory, a file, or your own
+> database).
 
 > The code in these docs shows the **release-target (1.0) API**. sefia is pre-1.0 and
 > some surfaces still differ — see [Status](#status).
@@ -31,20 +32,17 @@ report   = await write(brief, sources)     # plain await, plain control flow
 
 ## What makes it different
 
-- **LLM steps are functions.** `@infer` on a typed async function or method. No
-  `Agent` object, no registry, no graph.
-- **Tools are the public surface of the objects an agent holds.** A held dependency's
-  public methods are its tools; private (`_`) methods stay internal. Ordinary OOP
-  encapsulation, scoped to the object — no decorators, no global tool registry.
-- **Durable execution, no engine.** Backed by
-  [glyff](https://github.com/nueruyu/glyff): each call is content-addressed and
-  replayed on re-invocation. Any exception is non-terminal — completed work commits,
-  the interrupted call stays resumable. **Pausing is just raising.**
-- **Human-in-the-loop over stateless HTTP.** A paused run survives process death:
-  re-invoke in a fresh request and completed steps replay while the pending one runs.
-  It needs only a request, a response, and a store; no worker or cluster.
-- **State is explicit.** Inputs in, outputs out; mutable state lives in a store only
-  when a tool needs it.
+| What you get | What you don't run or learn |
+| --- | --- |
+| LLM steps as plain typed functions (`@infer`) | an `Agent` object or a graph DSL |
+| Tools = the public methods of the objects an agent holds | a tool registry or decorators |
+| Durable, resumable runs (pause, then replay on re-invocation) | a workflow engine, cluster, or worker |
+| Human-in-the-loop that survives a restart, over plain HTTP | websockets or background daemons |
+| One provider-portable output schema | per-provider native tool-calling quirks |
+
+Durability is backed by [glyff](https://github.com/nueruyu/glyff): calls are
+content-addressed and replayed, so **pausing is just raising**. The store behind it is
+your choice: in-memory, a file, or your own database.
 
 For the reasoning behind these choices, see **[Design & Philosophy](./DESIGN.md)**
 and **[Less to learn, less to leak, less to operate](./docs/why-less.md)**. For a
