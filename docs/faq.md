@@ -34,7 +34,7 @@ differences:
 ### How is it different from LangGraph?
 
 LangGraph models the flow as an explicit graph (nodes/edges/state) with a built-in
-checkpointer and interrupt — genuinely strong when the flow *is* a state machine you
+checkpointer and interrupt — strong when the flow *is* a state machine you
 want to inspect and operate. sefia keeps the flow as a normal Python call graph and
 makes the durability native instead of authoring a graph. Pick LangGraph when the
 diagram is the artifact; sefia when it's ordinary code.
@@ -55,7 +55,7 @@ Long-horizon autonomous waits (days/weeks on a self-firing timer), cross-service
 sagas with compensation, distributed fan-out of a single workflow across machines,
 or audit-grade exactly-once history as a product requirement. Those justify a real
 workflow engine. Multi-agent role-play orchestration is also out of scope. The full
-boundary is in [why-less — when you genuinely need the engine](./why-less.md#when-you-genuinely-need-the-engine);
+boundary is in [why-less — when you need the engine](./why-less.md#when-you-need-the-engine);
 the decision guide is [choosing.md](./choosing.md).
 
 ## Mechanics
@@ -127,10 +127,10 @@ tools, that calculus can flip. Full treatment:
 
 ### Does it scale?
 
-Horizontally across independent sessions, trivially: because no instance *owns* a
-paused run, any instance can resume any session — there's no affinity to preserve.
-What sefia does *not* do is distribute a single workflow across machines; that's an
-engine's job. Per-resume cost is replaying a session's completed steps, which is
+Horizontally across independent sessions, as long as the backing store and session
+locking are designed for it: because no instance *owns* a paused run, any instance can
+resume any session, with no affinity to preserve. What sefia does *not* do is
+distribute a single workflow across machines; that's an engine's job. Per-resume cost is replaying a session's completed steps, which is
 cheap for typical turn-length histories and is the thing to watch for very long
 single runs.
 

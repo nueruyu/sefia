@@ -22,7 +22,7 @@ workflow engine or graph DSL.**
 - **HITL = a tool that raises.** No input yet → record the question, raise → the
   run pauses durably → the handler returns "needs input" + a session id →
   re-invoke resumes. Stateless request/response; **survives process death.** No
-  special exception type, websocket, or engine.
+  special runtime protocol, websocket, or workflow engine.
 
 ## The model: only standard Python vocabulary
 
@@ -90,7 +90,7 @@ replays while the pending step re-runs. No engine, graph, or websocket.
 | ----------- | ---------------------------- | ----------------- | -------- |
 | LangGraph   | Graph (nodes/edges/state)    | yes               | explicit state machines, complex routing |
 | Pydantic AI | Agent objects                | native or via Temporal/DBOS | typed agent apps on a runtime |
-| DBOS        | Durable functions (Postgres) | yes               | general durable execution; you build the LLM layer |
+| DBOS        | Durable functions (Postgres) | yes               | general durable execution; the LLM layer stays application code |
 | Temporal    | Distributed workflows        | yes               | distributed workflow infra across services |
 | **sefia**   | **Typed async functions**    | **yes**           | **durable LLM steps as plain Python, lightweight** |
 
@@ -104,9 +104,10 @@ replays while the pending step re-runs. No engine, graph, or websocket.
   plain stateless handler with a sqlite/file store, no message-history threading and
   no engine.
 - **vs DBOS** — also code-first, non-graph, durable. The difference is altitude:
-  DBOS gives durable *functions* (you build the LLM loop, tools, structured output
-  yourself); sefia gives a durable *agent* with those built in, and needs no
-  Postgres. The moat vs DBOS is the LLM-native layer, not storage weight (DBOS is
+  DBOS provides durable execution primitives, and the LLM loop, tool protocol, and
+  structured output stay application concerns; sefia gives an agent with those built
+  in, and needs no Postgres. The difference from DBOS is the LLM-native layer, not
+  storage weight (DBOS is
   itself light).
 - **vs Temporal** — Temporal is a distributed workflow engine (cluster + workers);
   sefia/glyff cover the lighter, single-flow, request-scoped part before that.

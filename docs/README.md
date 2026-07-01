@@ -20,7 +20,7 @@ else, grouped by what you're trying to do. A reasonable first path:
 
 ## Compare & decide
 - **[Concept surface, provider leakage, operational weight](./why-less.md)** — the
-  canonical positioning argument, and where an engine is genuinely the right call.
+  main positioning note, and where an engine is the right call.
 - **[Choosing a stack](./choosing.md)** — when to use sefia vs LangGraph,
   Pydantic AI, DBOS, or Temporal.
 - **[FAQ](./faq.md)** — objections and "how does it actually work".

@@ -10,7 +10,14 @@
 > some surfaces still differ — see [Status](#status).
 
 ```python
+from pydantic import BaseModel
 from sefia import infer
+
+
+class Summary(BaseModel):
+    key_points: list[str]
+    uncertainty: str
+
 
 @infer
 async def summarize(article: str) -> Summary:
@@ -173,7 +180,7 @@ Full index with a suggested reading path: **[docs/](./docs/)**.
 - **[How it works](./docs/how-it-works.md)** — the mechanism behind `@infer`, with
   source references: the loop, the unified schema, and content-addressed replay.
 - **[Architecture map](./docs/architecture.md)** — package layout, dependency
-  direction, and a where-to-change-what map (handy for AI-assisted dev).
+  direction, and a where-to-change-what map.
 - **[Contributing](./CONTRIBUTING.md)** — setup, commands, and the development
   workflow.
 - **[Concept surface, provider leakage, operational weight](./docs/why-less.md)** —

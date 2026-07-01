@@ -178,7 +178,7 @@ you hand-roll the resume engine — see [01](./01-human-in-the-loop.md).)
 ## Where each is the right call
 
 - **LangGraph** — when you want the flow as an operable artifact *and* durable
-  interrupt from the framework. Genuinely strong at pause/resume; you adopt and
+  interrupt from the framework. Strong at pause/resume; you adopt and
   operate the graph runtime.
 - **Pydantic AI** — when the flow is **model-driven** (the model picks tools and
   loops). Durability is a clean wrapper away, and for an already-Postgres or

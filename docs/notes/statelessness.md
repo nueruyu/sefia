@@ -132,15 +132,12 @@ provides:
 - **The execution history is itself the product** — strict, queryable audit of every
   step as a first-class requirement.
 
-## The shape of the conclusion
+## Conclusion
 
 Statelessness does not make a system simpler in the abstract; it **relocates**
-complexity — out of a runtime you operate and into explicit parts you can see: a
-store, an external trigger, an idempotency key, a determinism discipline. When the
-workload is bounded, plural, and externalizable, that relocation is a clear net win:
-less to run, trivial scale-out, cheap crash safety, one resume mechanism. When the
-workload's value *is* autonomy, distribution, or warm long-lived coordination, the
-relocation removes the very thing you needed, and a stateful runtime earns its
-operational weight. The real engineering question is never "stateless or not" in
-general — it is whether your work lives on the bounded-and-plural side of that line
-or the autonomous-and-coordinated side.
+complexity out of a runtime you operate and into explicit parts you can see: a store,
+an external trigger, an idempotency key, a determinism discipline. That is a net win
+when the workload is bounded, plural, and externalizable, and a poor fit when its
+value *is* autonomy, distribution, or warm long-lived coordination. The practical
+question is not "stateless or not" in general, but whether your work sits on the
+bounded-and-plural side of that line or the autonomous-and-coordinated side.

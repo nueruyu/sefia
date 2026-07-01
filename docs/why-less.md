@@ -63,7 +63,7 @@ context disappears.
 > run-scoped data (the current run id, usage, a request deadline) without you
 > wiring it. sefia surfaces that through an explicit `get_context()` inside a tool
 > when needed, rather than putting it in every signature. If most of your tools
-> genuinely need run-scoped data, the gap narrows.
+> need run-scoped data, the gap narrows.
 
 ## 2. Provider leakage
 
@@ -128,10 +128,10 @@ async def turn(id, body):
         return await agent.run(body.task)     # resumes where it paused; no engine
 ```
 
-### When you genuinely need the engine
+### When you need the engine
 
-This is the actual boundary. Reach for a Temporal-grade engine when your workload has
-one of these shapes:
+This is the boundary. Reach for a Temporal-grade engine when your workload has one of
+these shapes:
 
 - **Long-horizon waits** — a run that sleeps for days or weeks on a durable timer
   (a 30-day trial follow-up, a "ping me next quarter"), not a request-scoped pause.
@@ -142,15 +142,16 @@ one of these shapes:
 - **Large-scale exactly-once with audit** — high-volume, strict once semantics with
   a durable, queryable execution history as a compliance artifact.
 
-If your workload is one of those, Temporal-grade infrastructure is *justified* and
-sefia is the wrong tool — it is single-flow and request/session-scoped by design.
+If your workload is one of those, Temporal-grade infrastructure is *justified*, and
+sefia is not built for that shape: it is single-flow and request/session-scoped by
+design.
 If it is none of those — which the typical agent turn (research, approve, publish;
 clarify, act, answer) is not — then an engine is weight you'd operate for
 guarantees you don't use, and "durable on a plain handler with a store" is enough.
 
 ### Where the paused run lives — and who shares "stateless over HTTP"
 
-The sharpest way to see the operational difference is to ask: **during the pause,
+The clearest way to see the operational difference is to ask: **during the pause,
 what is running, and where?**
 
 | | what runs during the pause | where the paused run lives | when the server restarts |
@@ -171,7 +172,7 @@ share it: hand-rolling the resume yourself (you write the engine — see
 [01](./usecases/01-human-in-the-loop.md)), and a typed-agent framework's **native
 deferred-tools** path, where `agent.run()` *returns* with the pending request, you
 persist the message history, and a new request resumes by passing the result back.
-Both are genuinely stateless-HTTP. What separates them from sefia is *within* that
+Both are stateless-HTTP as well. What separates them from sefia is *within* that
 camp, not the camp itself:
 
 - **vs hand-rolled** — you don't write the resume engine.

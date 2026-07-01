@@ -128,11 +128,13 @@ async def research(id, body):
         return await agent.run(body.task)          # resumes where it paused
 ```
 
-There is no checkpoint code, no step keys, no idempotency keys, and no 202
-plumbing in the agent. Each LLM call and tool call is engraved automatically; on
-re-invocation the completed ones **replay their exact outputs** (the approved
-draft is the same draft) and only the unfinished step runs. The pause is just the
-human-input tool raising when no answer is recorded yet.
+The agent has no checkpoint code, step keys, or 202 plumbing. Each LLM call and tool
+call is engraved automatically; on re-invocation the completed ones **replay their
+exact outputs** (the approved draft is the same draft) and only the unfinished step
+runs. Idempotency does not disappear entirely — a side effect that runs but crashes
+before it commits still needs a key at that boundary (see the traps above) — but it
+stays localized to the side-effecting step instead of spreading across the turn. The
+pause is just the human-input tool raising when no answer is recorded yet.
 
 ## What sefia removes
 
@@ -140,7 +142,7 @@ human-input tool raising when no answer is recorded yet.
 | --------------------------------------- | ------------------------------------ | ----- |
 | Skip completed steps                    | `if "x" not in r:` per step          | automatic (replay) |
 | Replay exact LLM/tool outputs           | persist & cache every result         | automatic (content-addressed) |
-| Fire side effects once                  | per-step idempotency keys            | replay of the completed step |
+| Fire side effects once                  | per-step idempotency keys            | replay of completed steps; a key only at the side-effect boundary |
 | Survive a process restart               | load state, reconstruct the loop     | re-invoke; completed work replays |
 | Pause / resume for a human              | `Paused`, `approval=None`, 202 dance | a tool raises; re-invoke resumes |
 | Not double-run on concurrent re-entry   | a lock you write                     | session-scoped |

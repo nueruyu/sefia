@@ -50,17 +50,17 @@ is *not* what you have.
   [why-less.md](./why-less.md).
 
 ### LangGraph (graph framework)
-- **Use it when:** the flow is genuinely a state machine — complex branching,
-  cycles, explicit shared state you want to inspect — and you want the graph as an
-  operable artifact, with a built-in checkpointer + interrupt for durable pause.
+- **Use it when:** the flow is a state machine — complex branching, cycles, explicit
+  shared state you want to inspect — and you want the graph as an operable artifact,
+  with a built-in checkpointer + interrupt for durable pause.
 - **Not when:** your logic is just ordinary Python control flow. Then authoring it
   as nodes/edges/`State` is overhead you don't need; a plain typed function (sefia)
   reads better.
 
 ### DBOS (durable functions on Postgres)
 - **Use it when:** you want general-purpose durable execution (not just agents),
-  you're **already on Postgres**, and you're happy to build the LLM layer (tool
-  loop, structured output) yourself on top of durable `@workflow`/`@step`.
+  you're **already on Postgres**, and the LLM layer (tool loop, structured output)
+  can live in your application code on top of durable `@workflow`/`@step`.
 - **Not when:** you want an LLM-native agent out of the box, or you don't want
   Postgres as a hard dependency. DBOS is light as engines go, so the gap to sefia
   is mostly "no engine, no mandatory Postgres, LLM-native" rather than raw weight.
@@ -68,14 +68,14 @@ is *not* what you have.
 ### Temporal (distributed workflow engine)
 - **Use it when:** long-horizon waits (days–weeks on durable timers), cross-service
   sagas with compensation, distributed fan-out across machines, or large-scale
-  exactly-once with a queryable audit history. This is the heavy artillery and it
-  is *justified* for those shapes.
+  exactly-once with a queryable audit history. Temporal is appropriate when those
+  guarantees are central to the workload.
 - **Not when:** your workload is a request-scoped agent turn. Then a cluster +
   workers is infrastructure you'd operate for guarantees you don't use.
 
 ### Multi-agent frameworks (CrewAI, AutoGen, …)
-- **Use them when:** your problem is genuinely several collaborating/role-playing
-  agents negotiating a task. That orchestration shape is their focus.
+- **Use them when:** your problem is several collaborating/role-playing agents
+  negotiating a task. That orchestration shape is their focus.
 - **Not when:** you have one durable typed pipeline. sefia is not a multi-agent
   framework and doesn't try to be.
 
