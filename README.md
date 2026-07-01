@@ -2,10 +2,9 @@
 
 **S**tateless **E**ngraved **F**unction **I**nference **A**bstraction
 
-> Durable, resumable LLM agents as ordinary typed Python functions: pause for a
-> human and survive a restart on a plain stateless HTTP handler, with no workflow
-> engine to run — just a store you already have (in-memory, a file, or your own
-> database).
+> LLM agents that pause for a human and resume after a restart, written as ordinary
+> typed Python functions on a plain stateless HTTP handler — no workflow engine to
+> run, just a store you already have (in-memory, a file, or your own database).
 
 > The code in these docs shows the **release-target (1.0) API**. sefia is pre-1.0 and
 > some surfaces still differ — see [Status](#status).
@@ -36,13 +35,13 @@ report   = await write(brief, sources)     # plain await, plain control flow
 | --- | --- |
 | LLM steps as plain typed functions (`@infer`) | an `Agent` object or a graph DSL |
 | Tools = the public methods of the objects an agent holds | a tool registry or decorators |
-| Durable, resumable runs (pause, then replay on re-invocation) | a workflow engine, cluster, or worker |
-| Human-in-the-loop that survives a restart, over plain HTTP | websockets or background daemons |
+| Runs that pause and resume across a restart (by replay) | a workflow engine, cluster, or worker |
+| Human-in-the-loop over plain stateless HTTP | websockets or background daemons |
 | One provider-portable output schema | per-provider native tool-calling quirks |
 
-Durability is backed by [glyff](https://github.com/nueruyu/glyff): calls are
-content-addressed and replayed, so **pausing is just raising**. The store behind it is
-your choice: in-memory, a file, or your own database.
+Under the hood, [glyff](https://github.com/nueruyu/glyff) content-addresses and replays
+each call, so **pausing is just raising**. The store behind it is your choice:
+in-memory, a file, or your own database.
 
 For the reasoning behind these choices, see **[Design & Philosophy](./DESIGN.md)**
 and **[Less to learn, less to leak, less to operate](./docs/why-less.md)**. For a
@@ -55,13 +54,13 @@ and **[Less to learn, less to leak, less to operate](./docs/why-less.md)**. For 
 pip install 'sefios[litellm]'
 ```
 
-- **`sefia`** — the core: `@infer`, the tool model, sessions, durability.
+- **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
 - **`sefios`** — the official batteries: the `SessionScope` front door, ready-made
   policies/middleware, and tools (human input, web search). The `[litellm]` extra
   pulls in **`sefia_litellm`** for provider support via
   [LiteLLM](https://github.com/BerriAI/litellm).
 
-Durability is provided by [glyff](https://github.com/nueruyu/glyff), installed
+The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
 
 ## Quickstart
@@ -97,15 +96,15 @@ scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
 async def main(topic: str) -> Report:
     agent = Researcher(web=WebSearchTool())
     async with scope.session(session_id="demo") as _:
-        return await agent.run(topic)         # the engraved run is durable & resumable
+        return await agent.run(topic)         # the engraved run can pause and resume
 ```
 
-`SessionScope` wires the LLM client, the glyff durability session, and the store for
-you; drop to `sefia.Session` directly when you want full control. For a step-by-step
-walk from here to a durable HITL agent over HTTP, see the
+`SessionScope` wires the LLM client, the glyff session, and the store for you; drop to
+`sefia.Session` directly when you want full control. For a step-by-step walk from here
+to a human-in-the-loop agent that resumes over HTTP, see the
 **[Quickstart tutorial](./docs/quickstart.md)**.
 
-## Durable human-in-the-loop
+## Pause for a human, resume after a restart
 
 A turn that pauses for a human and resumes after a restart, served on an ordinary
 request/response handler: the pause is a tool that **raises**, and resume is calling
@@ -136,18 +135,18 @@ async def turn(session_id: str, body: TurnBody):
             await s.accept_input(body.answer)      # deliver the human's answer
         try:
             return {"status": "done", "report": await agent.run(body.task)}
-        except NeedsInput as e:                     # the run paused durably
+        except NeedsInput as e:                     # the run paused; it will resume
             return {"status": "needs_input", "question": e.question}
 ```
 
-When the human tool has no recorded answer it raises `NeedsInput`; the run pauses
-**durably** and the handler returns "needs input". The answer arrives in a later
-request and is delivered with `accept_input`; the same endpoint re-invokes, every
-completed LLM/tool call **replays its exact output** (the approved draft is
-byte-for-byte the same), and only the pending step runs. No checkpoint code, no step
-keys, no idempotency plumbing, no 202 dance — see
+When the human tool has no recorded answer it raises `NeedsInput`; the run pauses and
+the handler returns "needs input". The answer arrives in a later request and is
+delivered with `accept_input`; the same endpoint re-invokes, every completed LLM/tool
+call **replays its exact output** (the approved draft is byte-for-byte the same), and
+only the pending step runs. You write no checkpoint code, step keys, idempotency
+plumbing, or 202 dance — see
 [use case 01](./docs/usecases/01-human-in-the-loop.md) for the same turn hand-rolled,
-and what collapses.
+and what it removes.
 
 ## Core concepts
 
@@ -155,30 +154,20 @@ and what collapses.
 | --- | --- |
 | **`@infer`** | An abstract async method implemented by an LLM. Signature = contract, docstring = instruction, return type = validated output. |
 | **Tools** | The public methods of the objects an agent holds. Public = tool, private = internal. Scoped to the holder; narrow with a `Protocol`. |
-| **Durability** | Every call is engraved (content-addressed) via glyff and replays on re-invocation; exceptions are non-terminal, so pausing = raising. |
-| **Session** | The durable scope for a run. `SessionScope` (in `sefios`) is the configured front door; `sefia.Session` is the core primitive. |
+| **Pause & resume** | Every call is engraved (content-addressed) via glyff and replays on re-invocation; exceptions are non-terminal, so pausing = raising. |
+| **Session** | The scope for a run. `SessionScope` (in `sefios`) is the configured front door; `sefia.Session` is the core primitive. |
 | **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). The `sefios` defaults give a step cap and ready-made behaviors. |
 | **Stores** | Where engraved progress and tool state live — memory, file, or your own backend. Your application database stays yours. |
 
 A note on the design choice underneath all of this:
-[statelessness in durable execution](./docs/notes/statelessness.md) (a neutral design
-note, not a pitch).
-
-## Why not native tool-calling?
-
-Sefia asks the model for one unified result shape (`final_answer | tool_calls`) and
-uses strict structured output where the provider supports it, instead of binding to
-each provider's native tool-calling. The win is **provider-portability and full
-return-type expressiveness** with no per-provider semantics leaking into your code;
-the cost is no native parallel tool calls, and prompt caching becomes something to
-design for rather than get for free. Full argument:
-[why-less — less to leak](./docs/why-less.md#2-less-to-leak--provider-concerns-staying-out-of-your-abstraction).
+[statelessness as a tradeoff](./docs/notes/statelessness.md) (a neutral design note,
+not a pitch).
 
 ## Documentation
 
 Full index with a suggested reading path: **[docs/](./docs/)**.
 
-- **[Quickstart](./docs/quickstart.md)** — from one inferred function to a durable
+- **[Quickstart](./docs/quickstart.md)** — from one inferred function to a resumable
   HITL agent over HTTP, step by step.
 - **[Design & Philosophy](./DESIGN.md)** — the thesis and the model in full.
 - **[How it works](./docs/how-it-works.md)** — the mechanism behind `@infer`, with
@@ -191,7 +180,7 @@ Full index with a suggested reading path: **[docs/](./docs/)**.
   positioning argument: concept surface, provider leakage, operational weight.
 - **[Choosing a stack](./docs/choosing.md)** — "when to use what, and when not to use
   sefia".
-- **[Use cases](./docs/usecases/)** — durable HITL and approval-gated workflows,
+- **[Use cases](./docs/usecases/)** — human-in-the-loop and approval-gated workflows,
   hand-rolled and across LangGraph / Pydantic AI / sefia.
 - **[FAQ](./docs/faq.md)** — answers to the common objections and "how does it
   actually work" questions.
