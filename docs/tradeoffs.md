@@ -3,7 +3,7 @@
 A typed-agent framework is judged on three surfaces that have nothing to do with
 how good its prompts are: how many concepts you must hold in your head, how much
 of the model provider's world leaks into your code, and how much machinery you
-have to run to make a paused run survive. sefia's bet is to keep all three small.
+have to run to make a paused run survive. sefia is designed to keep all three small.
 
 > Idiomatic illustrations of each **paradigm**, not any specific library. Neutral
 > infrastructure (Temporal, DBOS) is named only to be accurate about operational

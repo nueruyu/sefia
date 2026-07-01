@@ -19,7 +19,7 @@ else, grouped by what you're trying to do. A reasonable first path:
   and where to change what.
 
 ## Compare & decide
-- **[Concept surface, provider leakage, operational weight](./why-less.md)** — the
+- **[Concept surface, provider leakage, operational weight](./tradeoffs.md)** — the
   main positioning note, and where an engine is the right call.
 - **[Choosing a stack](./choosing.md)** — when to use sefia vs LangGraph,
   Pydantic AI, DBOS, or Temporal.

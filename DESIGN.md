@@ -112,10 +112,8 @@ replays while the pending step re-runs. No engine, graph, or websocket.
 - **vs Temporal** — Temporal is a distributed workflow engine (cluster + workers);
   sefia/glyff cover the lighter, single-flow, request-scoped part before that.
 
-For the positioning argument in full (concept surface, provider leakage, and
-operational weight) see [the positioning argument](./docs/why-less.md).
-For a "use this if you want X, use sefia if you want Y" decision guide, see
-[Choosing a stack](./docs/choosing.md).
+The tradeoffs behind this comparison — concept surface, provider leakage, and
+operational weight — are in [docs/tradeoffs.md](./docs/tradeoffs.md).
 
 ## Non-goals & tradeoffs
 
@@ -124,7 +122,7 @@ For a "use this if you want X, use sefia if you want Y" decision guide, see
   full return-type expressiveness; at the cost of native parallel tools and some
   frontier-model tuning on complex agents. Concurrency and prompt caching are tracked
   on the issue tracker, not guaranteed. Full argument:
-  [why-less — provider leakage](./docs/why-less.md#2-provider-leakage).
+  [tradeoffs — provider leakage](./docs/tradeoffs.md#2-provider-leakage).
 - **Lighter than Temporal, not a replacement.** Single-process /
   resume-on-fresh-request, plus horizontal scale across independent sessions.
   Distributed single-workflow branches are out of scope.

@@ -51,7 +51,7 @@ each call, so **pausing is just raising**. The store behind it is your choice:
 in-memory, a file, or your own database.
 
 For the reasoning behind these choices, see **[Design & Philosophy](./DESIGN.md)**
-and **[the positioning argument](./docs/why-less.md)**. For a
+and **[the positioning argument](./docs/tradeoffs.md)**. For a
 "use X if you want Y, sefia if you want Z" guide, see
 **[Choosing a stack](./docs/choosing.md)**.
 
@@ -172,28 +172,11 @@ not a pitch).
 
 ## Documentation
 
-Full index with a suggested reading path: **[docs/](./docs/)**.
-
-- **[Quickstart](./docs/quickstart.md)** — from one inferred function to a resumable
-  HITL agent over HTTP, step by step.
-- **[Design & Philosophy](./DESIGN.md)** — the thesis and the model in full.
-- **[How it works](./docs/how-it-works.md)** — the mechanism behind `@infer`, with
-  source references: the loop, the unified schema, and content-addressed replay.
-- **[Architecture map](./docs/architecture.md)** — package layout, dependency
-  direction, and a where-to-change-what map.
-- **[Contributing](./CONTRIBUTING.md)** — setup, commands, and the development
-  workflow.
-- **[Concept surface, provider leakage, operational weight](./docs/why-less.md)** —
-  the positioning argument in full.
-- **[Choosing a stack](./docs/choosing.md)** — "when to use what, and when not to use
-  sefia".
-- **[Use cases](./docs/usecases/)** — human-in-the-loop and approval-gated workflows,
-  hand-rolled and across LangGraph / Pydantic AI / sefia.
-- **[FAQ](./docs/faq.md)** — answers to the common objections and "how does it
-  actually work" questions.
-- **[Statelessness — a design note](./docs/notes/statelessness.md)** — the
-  vendor-neutral tradeoff this all rests on.
-- **[Examples](./examples/)** — runnable end-to-end agents.
+- **[Quickstart](./docs/quickstart.md)** — build a resumable HITL agent step by step.
+- **[Design & Philosophy](./DESIGN.md)** — the thesis and non-goals.
+- **[How it works](./docs/how-it-works.md)** — the runtime mechanism.
+- **[Docs index](./docs/)** — everything else (comparisons, FAQ, use cases,
+  architecture), with a suggested reading path.
 
 ## Status
 

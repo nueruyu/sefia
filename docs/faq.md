@@ -1,9 +1,7 @@
 # FAQ
 
-Answers to the questions sefia tends to raise. Where the answer is a
-tradeoff, it's stated as one. For the longer arguments, see
-[DESIGN.md](../DESIGN.md), [why-less.md](./why-less.md), and
-[choosing.md](./choosing.md).
+Answers to the questions sefia tends to raise. Where the answer is a tradeoff, it's
+stated as one.
 
 ## Positioning
 
@@ -47,7 +45,7 @@ cluster + workers; DBOS keeps a background workflow in your process plus a manda
 Postgres; sefia keeps **nothing** running between requests — state is in a store and
 the next request replays. That makes sefia lighter and stateless-HTTP-native, and
 makes it *unable to wake itself* (see timers, below). See
-[why-less.md](./why-less.md#where-the-paused-run-lives--and-who-shares-stateless-over-http).
+[tradeoffs.md](./tradeoffs.md#where-the-paused-run-lives--and-who-shares-stateless-over-http).
 
 ### When should I *not* use sefia?
 
@@ -55,7 +53,7 @@ Long-horizon autonomous waits (days/weeks on a self-firing timer), cross-service
 sagas with compensation, distributed fan-out of a single workflow across machines,
 or audit-grade exactly-once history as a product requirement. Those justify a real
 workflow engine. Multi-agent role-play orchestration is also out of scope. The full
-boundary is in [why-less — when you need the engine](./why-less.md#when-you-need-the-engine);
+boundary is in [tradeoffs — when you need the engine](./tradeoffs.md#when-you-need-the-engine);
 the decision guide is [choosing.md](./choosing.md).
 
 ## Mechanics
@@ -123,7 +121,7 @@ frontier-model tuning on long agent loops, and prompt caching becomes something 
 design for rather than get for free. Concurrency and caching are tracked on the issue
 tracker, not guaranteed. If you target one provider and lean on native parallel
 tools, that calculus can flip. Full treatment:
-[why-less — provider leakage](./why-less.md#2-provider-leakage).
+[tradeoffs — provider leakage](./tradeoffs.md#2-provider-leakage).
 
 ### Does it scale?
 

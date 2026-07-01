@@ -94,7 +94,7 @@ stripped of any ``` fence, `json.loads`-ed, validated into the decision model, a
 mode, and a return type that can be any nested/union/collection type — at the cost of
 native parallel tool calls and getting prompt caching for free. (See
 [DESIGN.md](../DESIGN.md#non-goals--tradeoffs) and
-[why-less.md](./why-less.md#2-provider-leakage).)
+[tradeoffs.md](./tradeoffs.md#2-provider-leakage).)
 
 ## Tools: discovery, schema, execution
 
@@ -201,6 +201,4 @@ the store.
 ## See also
 
 - [DESIGN.md](../DESIGN.md) — why these choices.
-- [Quickstart](./quickstart.md) — run it.
-- [FAQ](./faq.md) — the determinism constraint, scaling, and tradeoffs.
 - [glyff](https://github.com/nueruyu/glyff) — the engrave/replay engine in detail.

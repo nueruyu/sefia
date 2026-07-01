@@ -47,7 +47,7 @@ is *not* what you have.
 - **Note:** this is the closest neighbor to sefia on typed ergonomics and a
   well-regarded one. The real difference is *how you get durability* (engine vs.
   native) and *whether provider tool-calling leaks* — see
-  [why-less.md](./why-less.md).
+  [tradeoffs.md](./tradeoffs.md).
 
 ### LangGraph (graph framework)
 - **Use it when:** the flow is a state machine — complex branching, cycles, explicit
@@ -117,9 +117,4 @@ not a gap to close.
 - **"A durable, human-in-the-loop typed turn on a plain HTTP handler, no engine."**
   → sefia.
 
-## Where this came from
-
-The reasoning behind sefia's narrow shape — fewer concepts, no provider leakage,
-no engine to run — is in [the positioning argument](./why-less.md).
-Worked examples of the same workflow across paradigms are in
-[use cases](./usecases/). The full design rationale is in [DESIGN.md](../DESIGN.md).
+The reasoning behind sefia's narrow shape is in [tradeoffs.md](./tradeoffs.md).
