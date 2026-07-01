@@ -36,7 +36,5 @@ async def research(task, drafter, human) -> Outcome:
     return Outcome(published=False)
 ```
 
-For graph-first approval flows, LangGraph may fit better. For typed agents that need
-a durable backend, Pydantic AI + Temporal or Pydantic AI + DBOS may fit better. For
-general distributed workflows, long timers, or cross-service compensation, use
-Temporal or DBOS directly — see [choosing.md](../choosing.md).
+For a graph-first version, LangGraph may fit better; for a typed agent runtime with a
+durable backend, Pydantic AI + Temporal or DBOS. See [choosing.md](../choosing.md).

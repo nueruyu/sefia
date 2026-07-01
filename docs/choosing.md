@@ -2,54 +2,52 @@
 
 sefia is narrow in the abstraction it adds: selected typed Python calls become
 LLM-backed, durable, and replayable. It is not a general workflow engine, graph
-runtime, or multi-agent platform.
+runtime, or multi-agent platform — where one of those fits the shape better, use it.
+
+Note the layers: Pydantic AI, LangGraph, CrewAI, and sefia are agent/orchestration
+abstractions, while Temporal and DBOS are durable-execution engines. So the
+apples-to-apples comparison to an agent-plus-durability setup is **Pydantic AI +
+Temporal/DBOS**, not Temporal or DBOS on their own.
 
 > Category-level and current as of writing; these tools move fast, so check each one.
 
-## Agent / orchestration layer
+## Quick table
 
 | Need | Consider |
 | --- | --- |
-| One-shot model calls or minimal typed calls | Provider SDK or Pydantic AI |
-| Typed agent runtime with native provider tooling | Pydantic AI |
-| Typed agent runtime with durable workflow backend | Pydantic AI + Temporal / DBOS |
-| Explicit graph or state machine as the artifact | LangGraph |
-| Multi-agent teams, roles, tasks, and flows | CrewAI |
-| Ordinary typed Python functions/classes with replayable LLM/tool steps | **sefia** |
+| One-shot typed model calls | a provider SDK, or Pydantic AI |
+| Typed agent runtime with native provider tool-calling | Pydantic AI |
+| A typed agent runtime plus a durable-execution backend | Pydantic AI + Temporal / DBOS |
+| An explicit graph / state machine as the artifact | LangGraph |
+| Multi-agent crews, roles, and task orchestration | CrewAI |
+| Durable typed Python calls that pause/resume over request/response | **sefia** |
 
-## Durability / workflow layer
+## When sefia fits
 
-| Need | Consider |
-| --- | --- |
-| Long timers, workers, distributed workflows, compensation | Temporal |
-| Durable Python workflows backed by a database | DBOS |
-| Request/session-scoped replayable LLM/tool calls without adopting an engine | **sefia** |
-
-## Sefia is a good fit when
-
-- your workflow reads naturally as Python functions or service methods;
-- selected calls should be LLM-backed but still typed like ordinary code;
+- your workflow reads naturally as a Python call graph;
 - model/tool outputs must replay unchanged after a restart;
-- a human may approve or provide input later;
-- you do not want an `Agent` object, graph DSL, or workflow engine as the
-  application model.
+- a human may approve or supply input later;
+- you don't want to operate a workflow engine for this flow.
 
-## Another tool may fit better when
+## When another tool may fit better
 
-- **Pydantic AI** — you want an explicit `Agent` abstraction with native provider
-  tooling and ecosystem integrations.
-- **Pydantic AI + Temporal / DBOS** — you want Pydantic AI's agent model plus a
-  durable execution backend.
-- **LangGraph** — the graph/state machine is the artifact you want to inspect and
-  operate.
-- **CrewAI** — the application is naturally a team of agents, roles, tasks, and
-  flows.
-- **Temporal / DBOS directly** — the problem is general durable execution: timers,
-  workers, compensation, distributed fan-out, or auditable workflow history.
+- **Pydantic AI** — a mature typed agent runtime with native provider tool-calling
+  (parallel calls, per-provider tuning) and a broad ecosystem. It is sefia's closest
+  neighbor; the difference is *how you get durability* and *whether provider
+  tool-calling leaks* into your code. For restart-surviving durability it adds a
+  backend — **Temporal** or **DBOS** — or uses its native deferred tools.
+- **LangGraph** — when the graph / state machine is the artifact you want to inspect
+  and operate, with a built-in checkpointer and interrupt.
+- **CrewAI** — when the main abstraction is a team of agents with roles, tasks, and
+  automation flows.
+- **A workflow engine directly (Temporal / DBOS)** — when the durable workflow is the
+  point and it isn't LLM-specific: long timers, distributed fan-out, cross-service
+  compensation, audit-grade history. For agents you'd usually reach these *through*
+  Pydantic AI rather than wiring them yourself.
 
 ## Rule of thumb
 
-If the flow is ordinary Python that has to pause and resume within a request/session
-shape, sefia keeps it that way. If the primary artifact is an agent object, graph,
-crew, or general workflow system, choose the layer that matches that boundary. The
-reasoning is in [tradeoffs.md](./tradeoffs.md).
+If the flow is ordinary Python that has to pause and resume, sefia keeps it that way.
+If the flow *is* a graph, is multi-agent, spans services, or must wake itself on a
+timer, reach for the tool built for that. The reasoning is in
+[tradeoffs.md](./tradeoffs.md).
