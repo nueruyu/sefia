@@ -168,7 +168,8 @@ and what it removes.
 
 ## Documentation
 
-- **[Quickstart](./docs/quickstart.md)** — install and run your first `@infer` agent.
+- **[Tutorial](./docs/tutorial.md)** — build a resumable human-in-the-loop agent, step
+  by step.
 - **[Design](./DESIGN.md)** — the thesis and non-goals.
 - **[How it works](./docs/how-it-works.md)** — the runtime mechanism.
 - **[Docs index](./docs/)** — everything else (comparisons, FAQ, use cases,

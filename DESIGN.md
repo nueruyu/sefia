@@ -102,7 +102,7 @@ tradeoffs behind the design are in [docs/tradeoffs.md](./docs/tradeoffs.md).
   full return-type expressiveness; at the cost of native parallel tools and some
   frontier-model tuning on complex agents. Concurrency and prompt caching are tracked
   on the issue tracker, not guaranteed. Full argument:
-  [tradeoffs — provider leakage](./docs/tradeoffs.md#2-provider-leakage).
+  [tradeoffs.md](./docs/tradeoffs.md).
 - **Lighter than Temporal, not a replacement.** Single-process /
   resume-on-fresh-request, plus horizontal scale across independent sessions.
   Distributed single-workflow branches are out of scope.

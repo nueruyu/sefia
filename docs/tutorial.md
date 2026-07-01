@@ -1,8 +1,8 @@
 # Tutorial: a resumable human-in-the-loop agent
 
 A progressive walk from a single inferred function to a human-in-the-loop agent served
-over HTTP that resumes after a restart. About fifteen minutes. For the short version,
-see the [Quickstart](./quickstart.md).
+over HTTP that resumes after a restart. About fifteen minutes. For the minimal example,
+see the [README](../README.md).
 
 > This tutorial is written against the **release-target API**. sefia is pre-1.0 and
 > parts (notably the tool model) are being finalized, so names may shift before

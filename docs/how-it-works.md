@@ -92,7 +92,7 @@ stripped of any ``` fence, `json.loads`-ed, validated into the decision model, a
 (`InvalidInferenceResponseError` if it doesn't conform).
 
 (Why the unified schema rather than native tool-calling, and the tradeoff it makes:
-[tradeoffs.md](./tradeoffs.md#2-provider-leakage).)
+[tradeoffs.md](./tradeoffs.md).)
 
 ## Tools: discovery, schema, execution
 

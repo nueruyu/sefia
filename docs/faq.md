@@ -38,7 +38,7 @@ cluster + workers; DBOS keeps a background workflow in your process plus a manda
 Postgres; sefia keeps **nothing** running between requests — state is in a store and
 the next request replays. That makes sefia lighter and stateless-HTTP-native, and
 makes it *unable to wake itself* (see timers, below). See
-[tradeoffs.md](./tradeoffs.md#where-the-paused-run-lives--and-who-shares-stateless-over-http).
+[tradeoffs.md](./tradeoffs.md).
 
 ### When should I *not* use sefia?
 
@@ -46,7 +46,7 @@ Long-horizon autonomous waits (days/weeks on a self-firing timer), cross-service
 sagas with compensation, distributed fan-out of a single workflow across machines,
 or audit-grade exactly-once history as a product requirement. Those justify a real
 workflow engine. Multi-agent role-play orchestration is also out of scope. The full
-boundary is in [tradeoffs — when you need the engine](./tradeoffs.md#when-you-need-the-engine);
+boundary is in [tradeoffs — when you need the engine](./tradeoffs.md#when-a-workflow-engine-fits-better);
 the decision guide is [choosing.md](./choosing.md).
 
 ## Mechanics
@@ -116,7 +116,7 @@ comes with it. The cost is real: no native parallel tool calls, some frontier-mo
 tuning on long agent loops, and prompt caching to design for rather than get free
 (tracked, not guaranteed). If you target one provider and lean on native parallel
 tools, that calculus can flip. Full treatment:
-[tradeoffs — provider leakage](./tradeoffs.md#2-provider-leakage).
+[tradeoffs.md](./tradeoffs.md).
 
 ### Does it scale?
 

@@ -80,29 +80,14 @@ async def research_turn(session_id: str, task: str, approval: str | None = None)
 
 ### The traps hiding in that code
 
-- **Every LLM/tool output must be persisted and replayed** — for *correctness*,
-  not just cost. Forget to cache `draft` and a resume regenerates it; the human
-  approved a draft that no longer exists.
-- **Persist after every step.** A crash between "do work" and "save" re-runs that
-  step. Fine for pure reads; **every side-effecting step then needs its own
-  idempotency key** (step 5).
-- **Step keys are brittle.** Reorder or insert a step and the saved progress
-  silently maps to the wrong slot.
-- **Concurrent re-entry double-runs.** Two requests resuming the same session need
-  a lock you haven't written yet.
-- **The pause plumbing leaks into the signature** (`approval=None`, `Paused`, the
-  202 dance) and into every caller.
-- **This is one happy path.** Add a second tool, a loop, a retry, or a sub-agent,
-  and the `if "x" not in r` bookkeeping multiplies — you are now maintaining a
-  small, bespoke durable-execution engine.
-
-### The framework alternatives
-
-A durable-execution engine like Temporal or DBOS — or Pydantic AI's `TemporalAgent` /
-`DBOSAgent` wrapper over it — does all of the above correctly, at the cost of adopting
-that engine and its infrastructure. LangGraph gives you a built-in checkpointer and an
-interrupt, at the cost of authoring the flow as a graph. Both are reasonable; see
-[02 — approval-gated workflow](./02-approval-gated-workflow.md) for how they read.
+- **Cache for correctness, not just cost** — forget to cache `draft` and a resume
+  regenerates it; the human approved a draft that no longer exists.
+- **Persist after every step**, and give every side-effecting step its own
+  idempotency key (step 5).
+- **Step keys are brittle** — reorder or insert a step and progress maps to the wrong
+  slot. Concurrent re-entry needs a lock you haven't written.
+- **It only grows** — add a tool, a loop, or a retry and the `if "x" not in r`
+  bookkeeping multiplies. You are maintaining a small, bespoke resume engine.
 
 ## With sefia
 
@@ -147,10 +132,6 @@ pause is just the human-input tool raising when no answer is recorded yet.
 | Pause / resume for a human              | `Paused`, `approval=None`, 202 dance | a tool raises; re-invoke resumes |
 | Not double-run on concurrent re-entry   | a lock you write                     | session-scoped |
 
-## Why it matters
-
-The resume logic is the hard, error-prone part, and most of it exists for
-*correctness* (non-determinism, exactly-once), not convenience. sefia removes it:
-you write the turn as a normal typed function, pausing is raising, and resuming is
-automatic. Your database still stores your data; sefia stores just enough to bring a
-paused or crashed turn back to where it was.
+Most of that resume logic exists for *correctness* (non-determinism, exactly-once),
+not convenience. Your database still stores your data; sefia stores just enough to
+bring a paused or crashed turn back to where it was.

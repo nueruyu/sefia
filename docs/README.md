@@ -1,14 +1,12 @@
 # Documentation
 
-The [project README](../README.md) is the pitch; this page is the map of everything
-else, grouped by what you're trying to do. A reasonable first path:
-**[Quickstart](./quickstart.md) → [Design](../DESIGN.md) →
-[How it works](./how-it-works.md)**.
+The [project README](../README.md) is the pitch and the minimal example; this page is
+the map of everything else. A reasonable first path:
+**[README](../README.md) → [Tutorial](./tutorial.md) → [How it works](./how-it-works.md)**.
 
 ## Get started
-- **[Quickstart](./quickstart.md)** — install and run your first `@infer` agent.
-- **[Tutorial](./tutorial.md)** — build that up to a resumable human-in-the-loop
-  agent over HTTP.
+- **[Tutorial](./tutorial.md)** — build a resumable human-in-the-loop agent, step by
+  step.
 - **[Examples](../examples/)** — runnable end-to-end agents.
 
 ## Understand the model
