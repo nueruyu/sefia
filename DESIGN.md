@@ -94,26 +94,11 @@ replays while the pending step re-runs. No engine, graph, or websocket.
 | Temporal    | Distributed workflows        | yes               | distributed workflow infra across services |
 | **sefia**   | **Typed async functions**    | **yes**           | **durable LLM steps as plain Python, lightweight** |
 
-- **vs LangGraph** — no graph to author; agent logic stays a normal Python call
-  graph.
-- **vs Pydantic AI** — closest on typed ergonomics, and a well-regarded one. Its
-  durable HITL is either native *deferred tools* (the run returns, you persist the
-  message history, a new run resumes with the result) or an adopted engine
-  (first-class `TemporalAgent` / `DBOSAgent` wrappers). sefia's durability is native
-  to the `@infer` model (pausing is just raising, resuming is re-invoking) on a
-  plain stateless handler with a sqlite/file store, no message-history threading and
-  no engine.
-- **vs DBOS** — also code-first, non-graph, durable. The difference is altitude:
-  DBOS provides durable execution primitives, and the LLM loop, tool protocol, and
-  structured output stay application concerns; sefia gives an agent with those built
-  in, and needs no Postgres. The difference from DBOS is the LLM-native layer, not
-  storage weight (DBOS is
-  itself light).
-- **vs Temporal** — Temporal is a distributed workflow engine (cluster + workers);
-  sefia/glyff cover the lighter, single-flow, request-scoped part before that.
-
-The tradeoffs behind this comparison — concept surface, provider leakage, and
-operational weight — are in [docs/tradeoffs.md](./docs/tradeoffs.md).
+The short version: LangGraph and sefia both keep durability built in (a graph to
+author vs. plain Python); Pydantic AI reaches durable HITL via native deferred tools or
+an adopted engine; DBOS and Temporal are general engines you run underneath. The
+per-tool detail, the tradeoffs, and "when to use which" are in
+[docs/choosing.md](./docs/choosing.md) and [docs/tradeoffs.md](./docs/tradeoffs.md).
 
 ## Non-goals & tradeoffs
 

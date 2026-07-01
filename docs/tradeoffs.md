@@ -198,6 +198,19 @@ the same statelessness that removes the engine also turns the timer into "someth
 calls your URL," which most stacks already have. The boundary where that stops being
 enough is the long-horizon/distributed list above.
 
+### Statelessness as a general tradeoff
+
+Zoomed out, this is one instance of a recurring choice: where does a paused
+computation's state live — in a live runtime that holds it, or externalized to a store
+with nothing running between requests? Statelessness does not remove complexity so much
+as **relocate** it, out of a runtime you operate and into explicit parts you can see: a
+store, an external trigger, an idempotency key at a side-effect boundary, a determinism
+discipline. That is a net win when the work is bounded, plural, and externalizable (a
+request-scoped agent turn, many independent sessions), and a poor fit when its value
+*is* autonomy, distribution, or warm long-lived coordination. The practical question is
+not "stateless or not" in the abstract, but which side of that line your workload sits
+on.
+
 ## The summary
 
 | Surface | Engine / graph stack | sefia |

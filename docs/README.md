@@ -6,8 +6,9 @@ else, grouped by what you're trying to do. A reasonable first path:
 [How it works](./how-it-works.md)**.
 
 ## Get started
-- **[Quickstart](./quickstart.md)** — from one `@infer` function to a durable
-  human-in-the-loop agent over HTTP, step by step.
+- **[Quickstart](./quickstart.md)** — install and run your first `@infer` agent.
+- **[Tutorial](./tutorial.md)** — build that up to a resumable human-in-the-loop
+  agent over HTTP.
 - **[Examples](../examples/)** — runnable end-to-end agents.
 
 ## Understand the model
@@ -26,8 +27,6 @@ else, grouped by what you're trying to do. A reasonable first path:
 - **[FAQ](./faq.md)** — objections and "how does it actually work".
 - **[Use cases](./usecases/)** — the same workflows hand-rolled and across
   LangGraph / Pydantic AI / sefia.
-- **[Statelessness — a design note](./notes/statelessness.md)** — the vendor-neutral
-  tradeoff underneath it all.
 
 ## Contribute
 - **[Contributing](../CONTRIBUTING.md)** — setup, commands, conventions, and the

@@ -52,7 +52,7 @@ treat updating them as part of the change, not a follow-up. The mapping:
 
 | If you change… | Update… |
 | --- | --- |
-| The public API, exports, or a quickstart-level usage | `README.md`, `docs/quickstart.md` |
+| The public API, exports, or a quickstart-level usage | `README.md`, `docs/quickstart.md`, `docs/tutorial.md` |
 | The runtime mechanism (executor, strategy, decorators, context, glyff glue) | `docs/how-it-works.md` (it references specific modules/behavior) |
 | Package layout, a module's role, or the dependency graph | `docs/architecture.md` (and `CONTRIBUTING.md`/`AGENTS.md` if commands change) |
 | The tool-exposure model | `DESIGN.md`, `README.md`, the tool sections of `docs/how-it-works.md`, and the relevant issue |

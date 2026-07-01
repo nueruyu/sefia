@@ -15,19 +15,12 @@ write functions.
 
 ### How is it different from Pydantic AI?
 
-It's the closest neighbor on typed ergonomics, and a good library. Two real
-differences:
-
-- **How you get durability.** Pydantic AI reaches durable HITL either by adopting an
-  engine (its first-class `TemporalAgent`/`DBOSAgent` wrappers) or via its native
-  *deferred-tools* flow, where a run returns, you persist the message history, and a
-  new run resumes by passing the result back. sefia's durability is native to the
-  `@infer` model (pausing is just raising, resuming is re-invoking) and runs on a
-  plain handler with a sqlite/file/Postgres store, no engine.
-- **Provider leakage.** Pydantic AI binds to per-provider native tool-calling, so
-  provider differences (strict vs. best-effort structured output, parallel-call
-  semantics) surface as caveats on your code. sefia uses one unified result shape, so
-  the abstraction reads the same across providers — at the cost described below.
+The closest neighbor on typed ergonomics, and a good library. Two differences: **how
+you get durability** (Pydantic AI via native deferred tools or an adopted
+`TemporalAgent`/`DBOSAgent` engine; sefia native to `@infer`, no engine) and **provider
+coupling** (Pydantic AI binds to per-provider native tool-calling; sefia uses one
+unified schema, at the cost below). The full comparison is in
+[tradeoffs.md](./tradeoffs.md) and [choosing.md](./choosing.md).
 
 ### How is it different from LangGraph?
 

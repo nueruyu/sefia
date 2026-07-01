@@ -107,9 +107,8 @@ async def main(topic: str) -> Report:
 ```
 
 `SessionScope` wires the LLM client, the glyff session, and the store for you; drop to
-`sefia.Session` directly when you want full control. For a step-by-step walk from here
-to a human-in-the-loop agent that resumes over HTTP, see the
-**[Quickstart tutorial](./docs/quickstart.md)**.
+`sefia.Session` directly when you want full control. The **[tutorial](./docs/tutorial.md)**
+builds this into a human-in-the-loop agent that resumes over HTTP.
 
 ## Pause for a human, resume after a restart
 
@@ -166,13 +165,9 @@ and what it removes.
 | **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). The `sefios` defaults give a step cap and ready-made behaviors. |
 | **Stores** | Where engraved progress and tool state live — memory, file, or your own backend. Your application database stays yours. |
 
-A note on the design choice underneath all of this:
-[statelessness as a tradeoff](./docs/notes/statelessness.md) (a neutral design note,
-not a pitch).
-
 ## Documentation
 
-- **[Quickstart](./docs/quickstart.md)** — build a resumable HITL agent step by step.
+- **[Quickstart](./docs/quickstart.md)** — install and run your first `@infer` agent.
 - **[Design & Philosophy](./DESIGN.md)** — the thesis and non-goals.
 - **[How it works](./docs/how-it-works.md)** — the runtime mechanism.
 - **[Docs index](./docs/)** — everything else (comparisons, FAQ, use cases,
