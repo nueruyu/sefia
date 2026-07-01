@@ -1,6 +1,6 @@
 # Use cases
 
-Where sefia's tradeoff (*automatic resume for agents, no engine, no graph*) helps,
+Where sefia's tradeoff (*automatic resume for LLM-backed calls, no engine, no graph*) helps,
 shown against hand-rolled code and other approaches, and clear about where it doesn't
 fit.
 

@@ -1,8 +1,8 @@
-# Tutorial: a resumable human-in-the-loop agent
+# Tutorial: a resumable human-in-the-loop service
 
-A progressive walk from a single inferred function to a human-in-the-loop agent served
-over HTTP that resumes after a restart. About fifteen minutes. For the minimal example,
-see the [README](../README.md).
+A progressive walk from a single inferred function to a human-in-the-loop service
+served over HTTP that resumes after a restart. About fifteen minutes. For the minimal
+example, see the [README](../README.md).
 
 > This tutorial is written against the **release-target API**. sefia is pre-1.0 and
 > parts (notably the tool model) are being finalized, so names may shift before
@@ -69,8 +69,8 @@ client, the durability session, and a file store under `.sessions/` for you.
 
 ## 2. Give it a tool
 
-Tools are the **public methods of the objects an agent holds** — no decorator, no
-registry. Make the work a method on an agent, hold a dependency, and its public
+Tools are the **public methods of held dependency objects** — no decorator, no
+registry. Make the work a method on a service, hold a dependency, and its public
 methods become callable by the inferred step.
 
 ```python
@@ -83,7 +83,7 @@ class Report(BaseModel):
     sources: list[str]
 
 
-class Researcher:
+class ResearchService:
     def __init__(self, web: WebSearchTool):
         self._web = web                 # held dependency → its public methods are tools
 
@@ -94,9 +94,9 @@ class Researcher:
 
 
 async def main() -> None:
-    agent = Researcher(web=WebSearchTool())
+    service = ResearchService(web=WebSearchTool())
     async with scope.session(session_id="quickstart"):
-        report = await agent.run("durable execution for LLM agents")
+        report = await service.run("durable execution for LLM applications")
         print(report.summary)
 ```
 
@@ -130,7 +130,7 @@ class Report(BaseModel):
     summary: str
 
 
-class Assistant:
+class ResearchService:
     def __init__(self, web: WebSearchTool, human: HumanInputTool):
         self._web = web
         self._human = human
@@ -146,12 +146,12 @@ scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
 
 async def main() -> None:
     answer = sys.argv[1] if len(sys.argv) > 1 else None   # pass the answer on resume
-    agent = Assistant(web=WebSearchTool(), human=HumanInputTool())
+    service = ResearchService(web=WebSearchTool(), human=HumanInputTool())
     async with scope.session(session_id="approval-demo") as s:
         if answer is not None:
             await s.accept_input(answer)                  # deliver the answer on resume
         try:
-            report = await agent.run("the state of durable LLM agents")
+            report = await service.run("the state of durable LLM applications")
             print("DONE:", report.summary)
         except NeedsInput as e:
             print("NEEDS INPUT:", e.question)
@@ -182,7 +182,7 @@ that raised and a session that replays.
 
 ## 4. Serve it over HTTP
 
-The same agent behind a stateless request/response handler. A pause returns
+The same service behind a stateless request/response handler. A pause returns
 "needs input"; the answer arrives in a later request to the same session id, and the
 run resumes. Nothing runs in the background between the two requests.
 
@@ -196,11 +196,11 @@ from sefia.exceptions import NeedsInput
 from sefios import SessionScope
 from sefios.tools import HumanInputTool, WebSearchTool
 
-# (Assistant, Report from hitl.py)
+# (ResearchService, Report from hitl.py)
 
 app = FastAPI()
 scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
-agent = Assistant(web=WebSearchTool(), human=HumanInputTool())
+research_service = ResearchService(web=WebSearchTool(), human=HumanInputTool())
 
 
 class TurnBody(BaseModel):
@@ -214,7 +214,7 @@ async def turn(session_id: str, body: TurnBody):
         if body.answer is not None:
             await s.accept_input(body.answer)     # deliver the human's answer
         try:
-            return {"status": "done", "report": await agent.run(body.task)}
+            return {"status": "done", "report": await research_service.run(body.task)}
         except NeedsInput as e:
             return {"status": "needs_input", "question": e.question}
 ```
@@ -227,7 +227,7 @@ uvicorn server:app
 # first request — pauses for approval
 curl -X POST localhost:8000/sessions/abc/turn \
   -H 'content-type: application/json' \
-  -d '{"task": "the state of durable LLM agents"}'
+  -d '{"task": "the state of durable LLM applications"}'
 # {"status":"needs_input","question":"Here's the draft ... Approve it?"}
 
 # restart the server here if you like — the paused run survives
@@ -235,7 +235,7 @@ curl -X POST localhost:8000/sessions/abc/turn \
 # second request — resumes and finalizes
 curl -X POST localhost:8000/sessions/abc/turn \
   -H 'content-type: application/json' \
-  -d '{"task": "the state of durable LLM agents", "answer": "yes, approve"}'
+  -d '{"task": "the state of durable LLM applications", "answer": "yes, approve"}'
 # {"status":"done","report":{...}}
 ```
 

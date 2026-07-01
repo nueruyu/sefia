@@ -12,7 +12,7 @@ implement each step.
 | `@infer` decorator | `packages/sefia/src/sefia/_decorators.py` | Wraps a function so calling it runs an inference instead of the body. |
 | `InferenceExecutor` | `packages/sefia/src/sefia/_executor.py` | Owns the step loop, tool execution, middleware. |
 | `LLMInferenceStrategy` | `packages/sefia/src/sefia/llm/_strategy.py` | Turns the function + history into a prompt + schema, parses the reply. |
-| `DefaultToolCollector` | `packages/sefia/src/sefia/tool_collectors/_collector.py` | Discovers tools from the agent object and its held dependencies. |
+| `DefaultToolCollector` | `packages/sefia/src/sefia/tool_collectors/_collector.py` | Discovers tools from the bound object and its held dependencies. |
 | `Session` / `SessionContext` | `packages/sefia/src/sefia/_session.py`, `_context.py` | The durable, contextvar-scoped run; wraps a `glyff.Session`. |
 | glyff | [nueruyu/glyff](https://github.com/nueruyu/glyff) | Content-addressed engrave/replay underneath every engraved call. |
 
@@ -96,7 +96,7 @@ stripped of any ``` fence, `json.loads`-ed, validated into the decision model, a
 
 ## Tools: discovery, schema, execution
 
-**Discovery** (`DefaultToolCollector.collect`): given the agent instance (`self` of
+**Discovery** (`DefaultToolCollector.collect`): given the bound instance (`self` of
 the `@infer` method), the collector gathers tools from the instance itself and from
 **each dependency it holds in an attribute** (public or private). It scans the class
 hierarchy via `__mro__` (and `__slots__`) rather than `dir()`+`getattr` on every
@@ -104,7 +104,8 @@ name, so it never triggers a third-party object's lazy properties. A method coun
 a tool via the `@tool` marker today; the target is the public methods of held objects
 (private `_` methods internal — see DESIGN). Either way the mechanism is the same:
 collect from the held objects into a `ToolRegistry`. The running `@infer` method is
-itself unmarked, so an agent never offers itself as a tool.
+itself unmarked, so the bound object never offers the running method back to itself as
+a tool.
 
 **Schema** (`_strategy.py`): each tool's signature becomes a function schema
 (`model_inspector.get_function_schema`) and is embedded as JSON in the system prompt —
@@ -176,14 +177,14 @@ a single call swap the model/policies by key, resolved per-call in
 
 ## End to end: tracing one pause/resume
 
-1. `POST /turn` → `scope.session(id)` installs the context → `agent.run(task)`.
+1. `POST /turn` → `scope.session(id)` installs the context → `service.run(task)`.
 2. `@infer` engraves the run; the executor loops: model step (engraved) → "search"
    tool call (engraved) → model step → "ask human to approve" tool call.
 3. The human tool finds no answer, records the question under its call-scoped state,
    and raises `NeedsInput`. glyff keeps the run's completed steps, leaves the human
    call resumable, and the exception surfaces; the handler returns `needs_input` + the
    question.
-4. `POST /turn` again with the answer (delivered via `accept_input`). `agent.run`
+4. `POST /turn` again with the answer (delivered via `accept_input`). `service.run`
    re-enters: the search step and the
    earlier model steps **replay their stored outputs** (the draft is identical), the
    human tool re-runs, now finds the answer, and returns it; the loop continues to the

@@ -5,9 +5,9 @@ the map of everything else. A reasonable first path:
 **[README](../README.md) → [Tutorial](./tutorial.md) → [How it works](./how-it-works.md)**.
 
 ## Get started
-- **[Tutorial](./tutorial.md)** — build a resumable human-in-the-loop agent, step by
+- **[Tutorial](./tutorial.md)** — build a resumable human-in-the-loop service, step by
   step.
-- **[Examples](../examples/)** — runnable end-to-end agents.
+- **[Examples](../examples/)** — runnable end-to-end workflows.
 
 ## Understand the model
 - **[Design](../DESIGN.md)** — the thesis (`@infer` = an

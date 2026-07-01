@@ -9,9 +9,9 @@ stated as one.
 
 There is no `Agent` object, chain, graph, or global tool registry. The unit of work
 is a **typed async function** (`@infer`), composed with ordinary `await` and ordinary
-Python control flow. Tools are the public methods of the objects a function holds. If
-your logic is naturally a Python call graph, there is no framework shape to adopt; you
-write functions.
+Python control flow. Service classes can hold dependencies, and those dependencies'
+public methods become tools. If your logic is naturally a Python call graph, there is
+no framework shape to adopt; you write functions and classes.
 
 ### How is it different from Pydantic AI?
 
@@ -80,11 +80,11 @@ across hand-rolled bookkeeping.
 ### How do tools work — really just public methods?
 
 A held dependency's **public methods are its tools**; private (`_`-prefixed) methods
-stay internal. Discovery follows ordinary OOP visibility on the objects an agent
-holds — no decorator, no registry. To expose a narrower surface than a class's full
-public API, hold it behind a `Protocol`: only the protocol's declared members are
-offered. By convention an agent holds *only* its tools (so it never offers itself as
-a tool); this is not statically enforced today.
+stay internal. Discovery follows ordinary OOP visibility on held dependency objects —
+no decorator, no registry. To expose a narrower surface than a class's full public
+API, hold it behind a `Protocol`: only the protocol's declared members are offered.
+By convention a service holds only tool dependencies; this is not statically enforced
+today.
 
 ### What can I not do — the determinism constraint?
 

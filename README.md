@@ -42,7 +42,7 @@ replayable model/tool execution underneath.
 | What you get | What you don't run or learn |
 | --- | --- |
 | LLM steps as plain typed functions (`@infer`) | an `Agent` object or a graph DSL |
-| Tools = the public methods of the objects an agent holds | a tool registry or decorators |
+| Tools = the public methods of held dependencies | a tool registry or decorators |
 | Runs that pause and resume across a restart (by replay) | a workflow engine, cluster, or worker |
 | Human-in-the-loop over plain stateless HTTP | websockets or background daemons |
 | One provider-portable output schema | per-provider native tool-calling quirks |
@@ -73,7 +73,8 @@ automatically.
 
 ## Quickstart
 
-A typed agent that holds a tool, runs an inferred step, and persists its run.
+A plain Python class that holds a dependency, runs an inferred step, and persists its
+run.
 
 ```python
 from pathlib import Path
@@ -89,7 +90,7 @@ class Report(BaseModel):
     sources: list[str]
 
 
-class Researcher:
+class ResearchService:
     def __init__(self, web: WebSearchTool):
         self._web = web                       # held dependency → its public methods are tools
 
@@ -102,14 +103,14 @@ class Researcher:
 scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
 
 async def main(topic: str) -> Report:
-    agent = Researcher(web=WebSearchTool())
+    service = ResearchService(web=WebSearchTool())
     async with scope.session(session_id="demo") as _:
-        return await agent.run(topic)         # the engraved run can pause and resume
+        return await service.run(topic)       # the engraved run can pause and resume
 ```
 
 `SessionScope` wires the LLM client, the glyff session, and the store for you; drop to
 `sefia.Session` directly when you want full control. The **[tutorial](./docs/tutorial.md)**
-builds this into a human-in-the-loop agent that resumes over HTTP.
+builds this into a human-in-the-loop service that resumes over HTTP.
 
 ## Pause for a human, resume after a restart
 
@@ -121,7 +122,7 @@ the endpoint again.
 from sefios.tools import HumanInputTool
 
 
-class Assistant:
+class ResearchService:
     def __init__(self, web: WebSearchTool, human: HumanInputTool):
         self._web = web
         self._human = human
@@ -132,7 +133,7 @@ class Assistant:
         ...
 
 
-agent = Assistant(web=WebSearchTool(), human=HumanInputTool())
+research_service = ResearchService(web=WebSearchTool(), human=HumanInputTool())
 
 
 @app.post("/sessions/{session_id}/turn")
@@ -141,7 +142,7 @@ async def turn(session_id: str, body: TurnBody):
         if body.answer is not None:
             await s.accept_input(body.answer)      # deliver the human's answer
         try:
-            return {"status": "done", "report": await agent.run(body.task)}
+            return {"status": "done", "report": await research_service.run(body.task)}
         except NeedsInput as e:                     # the run paused; it will resume
             return {"status": "needs_input", "question": e.question}
 ```
@@ -160,7 +161,7 @@ and what it removes.
 | Concept | What it is |
 | --- | --- |
 | **`@infer`** | An abstract async method implemented by an LLM. Signature = contract, docstring = instruction, return type = validated output. |
-| **Tools** | The public methods of the objects an agent holds. Public = tool, private = internal. Scoped to the holder; narrow with a `Protocol`. |
+| **Tools** | The public methods of held dependency objects. Public = tool, private = internal. Scoped to the holder; narrow with a `Protocol`. |
 | **Pause & resume** | Every call is engraved (content-addressed) via glyff and replays on re-invocation; exceptions are non-terminal, so pausing = raising. |
 | **Session** | The scope for a run. `SessionScope` (in `sefios`) is the configured front door; `sefia.Session` is the core primitive. |
 | **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). The `sefios` defaults give a step cap and ready-made behaviors. |
@@ -168,7 +169,7 @@ and what it removes.
 
 ## Documentation
 
-- **[Tutorial](./docs/tutorial.md)** — build a resumable human-in-the-loop agent, step
+- **[Tutorial](./docs/tutorial.md)** — build a resumable human-in-the-loop service, step
   by step.
 - **[Design](./DESIGN.md)** — the thesis and non-goals.
 - **[How it works](./docs/how-it-works.md)** — the runtime mechanism.

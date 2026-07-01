@@ -14,7 +14,7 @@ A `uv` workspace (`pyproject.toml` → `[tool.uv.workspace]`) of small packages:
 | **sefios** | `packages/sefios` | Official batteries: `SessionScope`, default policies/middleware/handlers, ready-made tools. |
 | **sefia_litellm** | `packages/sefia_litellm` | Provider adapter — an `LLMClient` implemented over LiteLLM. |
 | **jsonstream** | `packages/jsonstream` | Standalone incremental JSON parser (used for streaming tool args). Zero deps. |
-| **examples** | `examples` | Runnable end-to-end agents. |
+| **examples** | `examples` | Runnable end-to-end workflows. |
 | **glyff** | *(separate repo)* | Content-addressed durable execution. A dependency, not vendored. |
 
 ## Dependency direction (one-way, no cycles)

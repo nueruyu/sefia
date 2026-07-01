@@ -1,6 +1,6 @@
 # Human-in-the-loop without re-running the turn
 
-*The hard part of agents isn't calling the model — it's resuming a turn that
+*The hard part of human-in-the-loop LLM flows isn't calling the model — it's resuming a turn that
 paused, without redoing the expensive, side-effecting, or already-approved work.*
 
 ## The scenario
@@ -110,16 +110,16 @@ class Research:
 async def research(id, body):
     async with scope.session(session_id=id) as s:
         await s.accept_input(body.approval)        # answer for a pending question
-        return await agent.run(body.task)          # resumes where it paused
+        return await service.run(body.task)        # resumes where it paused
 ```
 
-The agent has no checkpoint code, step keys, or 202 plumbing. Each LLM call and tool
-call is engraved automatically; on re-invocation the completed ones **replay their
-exact outputs** (the approved draft is the same draft) and only the unfinished step
-runs. Idempotency does not disappear entirely — a side effect that runs but crashes
-before it commits still needs a key at that boundary (see the traps above) — but it
-stays localized to the side-effecting step instead of spreading across the turn. The
-pause is just the human-input tool raising when no answer is recorded yet.
+The service has no checkpoint code, step keys, or 202 plumbing. Each LLM call and
+tool call is engraved automatically; on re-invocation the completed ones **replay
+their exact outputs** (the approved draft is the same draft) and only the unfinished
+step runs. Idempotency does not disappear entirely — a side effect that runs but
+crashes before it commits still needs a key at that boundary (see the traps above) —
+but it stays localized to the side-effecting step instead of spreading across the
+turn. The pause is just the human-input tool raising when no answer is recorded yet.
 
 ## What sefia removes
 

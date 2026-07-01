@@ -22,13 +22,15 @@ not in what you can build with it. Where another tool fits the shape better, use
 - model/tool outputs must replay unchanged after a restart;
 - a human may approve or supply input later;
 - you don't want to operate a workflow engine for this flow.
+- you want ordinary functions and service classes, not an agent object model.
 
 ## When another tool may fit better
 
 - **Pydantic AI** — a mature typed agent runtime with native provider tool-calling
   (parallel calls, per-provider tuning) and a broad ecosystem. It is sefia's closest
   neighbor; the difference is *how you get durability* (an engine or deferred tools vs.
-  native to `@infer`) and *whether provider tool-calling leaks* into your code.
+  native to `@infer`), *whether provider tool-calling leaks* into your code, and
+  whether you want an agent object model or ordinary Python services/functions.
 - **LangGraph** — when the graph / state machine is the artifact you want to inspect
   and operate, with a built-in checkpointer and interrupt.
 - **DBOS** — general durable execution when you're already comfortable running Postgres
