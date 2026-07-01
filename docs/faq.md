@@ -106,13 +106,15 @@ workload, that's the boundary where an engine is the right call.
 
 ### Why not native tool-calling? Don't I lose parallel tools and caching?
 
-You do, and it's a deliberate bet. One unified result shape (`final_answer |
-tool_calls`) plus strict structured output where supported buys
-**provider-portability** and **full return-type expressiveness** with no per-provider
-semantics leaking into your code. The cost is no native parallel tool calls and some
-frontier-model tuning on long agent loops, and prompt caching becomes something to
-design for rather than get for free. Concurrency and caching are tracked on the issue
-tracker, not guaranteed. If you target one provider and lean on native parallel
+You do lose those, but the unified schema is a design choice, not only a portability
+workaround. Asking the model for one result shape (`final_answer | tool_calls`) with
+strict structured output is what lets sefia treat the **Python return type as the
+primary output contract** — any nested/union/collection type — independent of a
+provider's native tool-call format, and handle final answers and tool calls in one
+decision model. The portability (no per-provider semantics leaking into your code)
+comes with it. The cost is real: no native parallel tool calls, some frontier-model
+tuning on long agent loops, and prompt caching to design for rather than get free
+(tracked, not guaranteed). If you target one provider and lean on native parallel
 tools, that calculus can flip. Full treatment:
 [tradeoffs — provider leakage](./tradeoffs.md#2-provider-leakage).
 

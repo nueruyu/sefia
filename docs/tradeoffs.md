@@ -4,6 +4,9 @@ A typed-agent framework is judged on three surfaces that have nothing to do with
 how good its prompts are: how many concepts you must hold in your head, how much
 of the model provider's world leaks into your code, and how much machinery you
 have to run to make a paused run survive. sefia is designed to keep all three small.
+The deeper bet is not only that it has fewer concepts, but that ordinary typed Python
+calls are the right abstraction boundary for durable LLM work: replayable model and
+tool steps, with the return type as the output contract.
 
 > Idiomatic illustrations of each **paradigm**, not any specific library. Neutral
 > infrastructure (Temporal, DBOS) is named only to be accurate about operational

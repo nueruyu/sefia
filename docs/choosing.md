@@ -1,9 +1,11 @@
 # Choosing a stack: when to use sefia, and when not to
 
 A decision guide. It names real tools and, where they fit your problem better, sends
-you to them. sefia covers a deliberately narrow shape: the durable, human-in-the-loop,
-typed-function agent turn on stateless HTTP. Most of this page is about when that shape
-is *not* what you have.
+you to them. sefia is narrow in its abstraction, not in what you can build with it: it
+makes typed Python function calls durable and replayable. The clearest fit is a
+human-in-the-loop agent turn over stateless HTTP, but the same model also suits typed
+LLM pipelines and approval-gated flows. Much of this page is about the workloads where
+a different tool fits better.
 
 > Caveat: the landscape moves fast and these tools ship constantly. Treat the
 > characterizations as category-level and current as of writing, not as fixed

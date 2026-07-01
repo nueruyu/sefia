@@ -2,12 +2,10 @@
 
 **S**tateless **E**ngraved **F**unction **I**nference **A**bstraction
 
-> LLM agents that pause for a human and resume after a restart, written as ordinary
-> typed Python functions on a plain stateless HTTP handler — no workflow engine to
-> run, just a store you already have (in-memory, a file, or your own database).
-
-> The code in these docs shows the **release-target (1.0) API**. sefia is pre-1.0 and
-> some surfaces still differ — see [Status](#status).
+> sefia turns typed Python functions into durable, replayable LLM-backed calls.
+> Because model and tool steps replay on re-invocation, a call can pause, resume after
+> a restart, and drive human-in-the-loop flows over ordinary request/response handlers
+> — with no workflow engine or graph DSL.
 
 ```python
 from pydantic import BaseModel
@@ -37,6 +35,9 @@ report   = await write(brief, sources)     # plain await, plain control flow
 ```
 
 ## What makes it different
+
+You compose durable LLM steps with ordinary Python: typed functions, plain `await`,
+replayable model/tool execution underneath.
 
 | What you get | What you don't run or learn |
 | --- | --- |
@@ -175,6 +176,6 @@ and what it removes.
 
 ## Status
 
-Pre-1.0 — the API is unstable and will change. Parts of the design, notably the tool
-model, are being finalized; see [DESIGN.md](./DESIGN.md) and the issue tracker for
-what is settled and what is in flight.
+Pre-1.0 — the API is unstable and will change. The code in these docs targets the 1.0
+API; some surfaces (notably the tool model) differ today. See [DESIGN.md](./DESIGN.md)
+and the issue tracker for what is settled and what is in flight.
