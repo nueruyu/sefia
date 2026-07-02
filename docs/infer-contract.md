@@ -63,6 +63,19 @@ same service share the tool surface collected from that service and its held
 dependencies. Split services when different operations need different tools,
 different write permissions, or unrelated capabilities.
 
+### `self` and replay identity
+
+Although `self` is not shown to the model, it still participates in the engraved
+call identity. For a method call, the durable execution key is based on the method
+identity and the bound arguments, including `self`.
+
+That means two service instances can be distinct for replay even when the visible
+task arguments are the same. With the default Glyff/Pydantic hasher, structured
+values such as Pydantic models and dataclasses are hashed by value, while opaque
+objects fall back to a qualified name representation. If an instance must be
+replay-distinct by tenant, user, store, or other runtime identity, include that
+identity in a stable field or argument rather than relying on object identity.
+
 ## Tool methods
 
 Tool parameters must have type annotations. Prefer explicit parameters over
@@ -80,5 +93,6 @@ serializable data.
 - Put application capabilities on service dependencies.
 - Keep return types explicit and structured.
 - Keep tool parameters explicit and typed.
+- Remember that `self` affects replay identity even though it is not prompt input.
 - Split services when a tool should not be visible to every inferred method on
   that service.
