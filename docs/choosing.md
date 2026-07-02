@@ -35,7 +35,7 @@ Temporal/DBOS**, not Temporal or DBOS on their own.
   (parallel calls, per-provider tuning) and a broad ecosystem. It is sefia's closest
   neighbor; the differences are *where durability lives* and *how directly your code
   uses provider-native tool-calling*. For restart-surviving durability, pair it with
-  a backend such as **Temporal** or **DBOS**, or use its native deferred-tool patterns.
+  a supported durable-execution backend, such as **Temporal** or **DBOS**.
 - **LangGraph** — when the graph / state machine is the artifact you want to inspect
   and operate, with a built-in checkpointer and interrupt.
 - **CrewAI** — when the main abstraction is a team of agents with roles, tasks, and
