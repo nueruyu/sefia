@@ -44,6 +44,8 @@ At a high level:
 
 The original function body is never executed — it exists only so its **signature,
 type hints, and docstring** can be read (`FunctionInfo.create` in `inference.py`).
+For user-facing constraints on function shapes, arguments, service members, tools,
+and return types, see [infer-contract.md](./infer-contract.md).
 
 ## The inference loop
 
@@ -201,5 +203,6 @@ the store.
 
 ## See also
 
+- [infer-contract.md](./infer-contract.md) — function shapes, arguments, service members, tools, and return types.
 - [DESIGN.md](../DESIGN.md) — why these choices.
 - [glyff](https://github.com/nueruyu/glyff) — the engrave/replay engine in detail.
