@@ -105,6 +105,19 @@ model; the private `_web` *field* is just storage. The model decides when to cal
 tool. To expose a narrower surface than a class's full public API, hold it behind a
 `Protocol` — only the protocol's declared members are offered.
 
+### Tool scope is the service boundary
+
+A service class can have more than one `@infer` method. That is useful when the
+methods share the same domain and the same narrow tool surface.
+
+But tools are collected from the bound instance and the dependency objects it holds,
+so every `@infer` method on the service should be allowed to see that tool surface.
+If one operation needs broader, write-capable, or unrelated tools, split it into
+another service.
+
+A good rule of thumb: if you want to tell one `@infer` method "do not use this tool",
+that tool probably belongs on a different service.
+
 ## 3. Make it pause for a human — and survive a restart
 
 This is the part that is painful to hand-roll. Add a human-input tool. When it has no
