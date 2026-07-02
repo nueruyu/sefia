@@ -7,6 +7,8 @@ the map of everything else. A reasonable first path:
 ## Get started
 - **[Tutorial](./tutorial.md)** — build a resumable human-in-the-loop service, step by
   step.
+- **[The `@infer` contract](./infer-contract.md)** — what arguments, service members,
+  tools, and return types can look like.
 - **[Examples](../examples/)** — runnable end-to-end workflows.
 
 ## Understand the model
