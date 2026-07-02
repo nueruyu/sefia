@@ -24,26 +24,30 @@ That matters beyond saving money: LLM calls are non-deterministic, so if a human
 approved one draft, a resume must continue from *that* draft, not a freshly generated
 one. Replay makes the resumed run identical to the one that paused.
 
-### The unified schema
+### Unified schema vs native provider tooling
 
 sefia doesn't use native provider tool-calling by default; it asks the model for one
 result shape (`final_answer | tool_calls`) with strict structured output where
 supported. The upside is that the Python return type stays the primary output
 contract, independent of each provider's tool-call message format, and one decision
-model covers both final answers and tool calls. The downside is losing native parallel
-tool calls and some provider-specific optimizations (prompt caching becomes something
-to design for).
+model covers both final answers and tool calls. The downside is that applications
+that rely on native parallel tool calls, provider-specific tuning, or provider-managed
+caching may fit better with a native-tooling framework.
 
-### Stateless HTTP is a consequence, not a feature
+### Stateless HTTP follows from the model
 
 Because nothing runs between requests — a paused run is just an engraved call that
 hasn't finished — the same model resumes on a plain request/response handler with no
-background worker. Human-in-the-loop over stateless HTTP falls out of the design; it
-isn't bolted on.
+background worker. Human-in-the-loop over stateless HTTP is one use of that model,
+not a separate runtime protocol.
 
 ## What it costs
 
-- no native provider tool-calling (see above);
+These costs are mostly about choosing where orchestration lives. sefia keeps the
+application shape small, but it does not replace provider-native tool execution or
+a general workflow runtime.
+
+- no native provider tool-calling by default (see above);
 - no built-in distributed workflow runtime;
 - no self-waking timers — a paused run resumes only when something calls it;
 - replay assumes deterministic orchestration between engraved calls;
@@ -51,11 +55,12 @@ isn't bolted on.
 
 ## Layer boundary
 
-Temporal and DBOS are general durable execution systems. They solve a broader
-workflow problem than sefia does.
+Durable-execution systems such as Temporal and DBOS solve a broader workflow problem
+than sefia does.
 
 For LLM applications, the closer comparison is often an agent framework plus a
-durable backend, such as Pydantic AI + Temporal or Pydantic AI + DBOS.
+supported durable-execution backend, such as Pydantic AI + Temporal or Pydantic AI +
+DBOS.
 
 sefia makes a different tradeoff: replay is part of the typed function model itself.
 The application still looks like ordinary Python functions/classes, while selected
@@ -63,7 +68,7 @@ calls become LLM-backed and replayable.
 
 ## When a workflow engine fits better
 
-Use Temporal or DBOS directly when you need:
+Use a workflow or durable-execution engine directly when you need:
 
 - long-running or self-firing timers (days to weeks);
 - workers and queues as core infrastructure;
