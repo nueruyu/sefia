@@ -1,7 +1,7 @@
 # Architecture map
 
-A navigation aid for humans and AI coding agents: where things live, which package
-may import which, and **where to change what**. For *how* the runtime works, see
+A navigation aid for contributors: where things live, which package may import which,
+and **where to change what**. For *how* the runtime works, see
 [how-it-works.md](./how-it-works.md); this doc is the layout.
 
 ## Repository shape
@@ -17,26 +17,39 @@ A `uv` workspace (`pyproject.toml` → `[tool.uv.workspace]`) of small packages:
 | **examples** | `examples` | Runnable end-to-end workflows. |
 | **glyff** | *(separate repo)* | Content-addressed durable execution. A dependency, not vendored. |
 
-## Dependency direction (one-way, no cycles)
+## Package dependencies (one-way, no cycles)
+
+Arrows point from a package to what it imports or depends on.
 
 ```
-pydantic ─┐
-glyff ────┤
-jsonstream┴─▶ sefia ─▶ sefia_litellm
-                │            ▲
-                └─▶ sefios ──┘  (optional: sefios[litellm])
-                       ├─▶ ddgs        (optional: sefios[web])
-                       └─▶ typer/rich  (optional: sefios[cli])
+examples ─▶ sefios[all]
+
+sefios ─┬▶ sefia
+        ├▶ sefia_litellm        (optional: sefios[litellm])
+        ├▶ ddgs                 (optional: sefios[web])
+        └▶ typer / rich / python-dotenv
+                                 (optional: sefios[cli])
+
+sefia_litellm ─┬▶ sefia
+               └▶ litellm
+
+sefia ─┬▶ pydantic
+       ├▶ glyff / glyff-file-store / glyff-pydantic
+       └▶ jsonstream
+
+jsonstream has no runtime dependencies.
 ```
 
 Rules that keep the layering clean — worth preserving in any change:
 
-- **sefia core never imports sefios, sefia_litellm, or any provider SDK.** Provider
-  and convenience concerns live *above* the core.
+- **`sefia` core never imports `sefios`, `sefia_litellm`, or any provider SDK.**
+  Provider, IO, and convenience concerns live above the core.
 - **Provider specifics stay in adapters.** Anything LiteLLM/OpenAI-shaped belongs in
   `sefia_litellm`, behind the `LLMClient` interface. The core only knows the interface.
-- **`sefios` depends on `sefia` only**; its provider/web/cli needs are **optional
-  extras**, so installing `sefios` alone pulls in nothing heavy.
+- **`sefios` depends on `sefia` directly.** Its provider, web, and CLI integrations are
+  optional extras, so installing `sefios` alone pulls in only the core.
+- **`examples` depend on the batteries.** They are consumers of the stack, not a layer
+  that other packages should import.
 
 ## Inside `sefia` (the core)
 
