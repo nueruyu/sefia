@@ -2,20 +2,14 @@
 
 **S**tateless **E**ngraved **F**unction **I**nference **A**bstraction
 
-Sefia lets you define LLM-powered behavior as typed async Python functions.
-
-The function signature defines the inputs, the return type defines the output,
-and the docstring defines the instruction.
+> sefia turns typed Python functions into durable, replayable LLM-backed calls.
+> Because model and tool steps replay on re-invocation, a call can pause, resume after
+> a restart, and drive human-in-the-loop flows over ordinary request/response handlers
+> — with no workflow engine or graph DSL.
 
 ```python
-import glyff
-from glyff.store import MemoryClient
-from glyff.store import MemorySessionStore as GlyffMemorySessionStore
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from pydantic import BaseModel
-from sefia import Session, infer
-from sefia.stores import MemorySessionStore as SefiaMemorySessionStore
-from sefia_litellm import LiteLLMClient
+from sefia import infer
 
 
 class Summary(BaseModel):
@@ -25,48 +19,69 @@ class Summary(BaseModel):
 
 @infer
 async def summarize(article: str) -> Summary:
-    """
-    Summarize the article for a technical audience.
-    Include key claims and note important uncertainty.
-    """
+    """Summarize the article for a technical audience; note key uncertainty."""
     ...
-
-
-async def main(article: str):
-    serializer = PydanticSerializer()
-    client = MemoryClient()
-    glyff_store = GlyffMemorySessionStore(client=client, serializer=serializer)
-    sefia_store = SefiaMemorySessionStore(client=client, serializer=serializer)
-
-    async with glyff.Session(
-        id="demo",
-        store=glyff_store,
-        hasher=PydanticArgsHasher(),
-    ) as gs:
-        async with Session(
-            llm_client=LiteLLMClient(model="gpt-4o"),
-            glyff_session=gs,
-            session_store=sefia_store,
-        ):
-            summary = await summarize(article)
-            print(summary.key_points)
 ```
 
-The call site stays ordinary Python:
+An **`@infer` function is an abstract method whose implementer is an LLM.** The
+signature is the input contract, the return type is the validated output contract,
+the docstring is the instruction, and the body is `...`. The call site stays ordinary
+Python.
 
 ```python
-brief = await clarify_request(user_request)
-sources = await research(brief)
-article = await write_article(brief, sources)
+brief    = await clarify(request)
+sources  = await research(brief)
+report   = await write(brief, sources)     # plain await, plain control flow
 ```
 
-Sefia can also collect tools from objects you pass around. That gives you a
-small way to model dependencies without turning the workflow into a graph DSL
-or making an agent object the main unit of work.
+## What makes it different
+
+You compose durable LLM steps with ordinary Python: typed functions, plain `await`,
+replayable model/tool execution underneath.
+
+| What you get | What you don't run or learn |
+| --- | --- |
+| LLM steps as plain typed functions (`@infer`) | an `Agent` object or a graph DSL |
+| Tools = the public methods of held dependencies | a tool registry or decorators |
+| Runs that pause and resume across a restart (by replay) | a workflow engine, cluster, or worker |
+| Human-in-the-loop over plain stateless HTTP | websockets or background daemons |
+| One provider-portable output schema | per-provider native tool-calling quirks |
+
+Under the hood, [glyff](https://github.com/nueruyu/glyff) content-addresses and replays
+each call, so **pausing is just raising**. The store behind it is your choice:
+in-memory, a file, or your own database.
+
+For the reasoning behind these choices, see **[Design](./DESIGN.md)**
+and **[the positioning argument](./docs/tradeoffs.md)**. For a
+"use X if you want Y, sefia if you want Z" guide, see
+**[Choosing a stack](./docs/choosing.md)**.
+
+## Install
+
+```bash
+pip install 'sefios[litellm]'
+```
+
+- **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
+- **`sefios`** — the official batteries: the `SessionScope` front door, ready-made
+  policies/middleware, and tools (human input, web search). The `[litellm]` extra
+  pulls in **`sefia_litellm`** for provider support via
+  [LiteLLM](https://github.com/BerriAI/litellm).
+
+The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
+automatically.
+
+## Quickstart
+
+A plain Python class that holds a dependency, runs an inferred step, and persists its
+run.
 
 ```python
+from pathlib import Path
 from pydantic import BaseModel
-from sefia import infer, tool
+from sefia import infer
+from sefios import SessionScope
+from sefios.tools import WebSearchTool
 
 
 class Report(BaseModel):
@@ -75,494 +90,94 @@ class Report(BaseModel):
     sources: list[str]
 
 
-class WebToolkit:
-    @tool
-    async def search(self, query: str) -> list[str]:
-        """Search the web and return relevant URLs."""
-        ...
-
-    @tool
-    async def fetch_content(self, url: str) -> str:
-        """Fetch the text content of the given URL."""
-        ...
-
-
-class Researcher:
-    def __init__(self, web: WebToolkit):
-        self._web = web
+class ResearchService:
+    def __init__(self, web: WebSearchTool):
+        self._web = web                       # held dependency → its public methods are tools
 
     @infer
-    async def generate_report(self, topic: str) -> Report:
-        """Research the topic using the web tools and produce a structured report."""
+    async def run(self, topic: str) -> Report:
+        """Research the topic with web search and produce a structured report."""
         ...
+
+
+scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
+
+async def main(topic: str) -> Report:
+    service = ResearchService(web=WebSearchTool())
+    async with scope.session(session_id="demo") as _:
+        return await service.run(topic)       # the engraved run can pause and resume
 ```
 
-The body of `generate_report` is not executed. Sefia sends the signature,
-docstring, arguments, and available tools to the LLM, then returns a structured
-`Report`.
+`SessionScope` wires the LLM client, the glyff session, and the store for you; drop to
+`sefia.Session` directly when you want full control. The **[tutorial](./docs/tutorial.md)**
+builds this into a human-in-the-loop service that resumes over HTTP.
 
-## Why Sefia
+## Pause for a human, resume after a restart
 
-Pydantic AI, LangGraph, and Sefia all help build LLM applications. Sefia is for
-the cases where the most natural shape of the code is still a Python call graph:
-small typed steps, composed with normal `await` calls, with tools available when
-a step needs them.
+A turn that pauses for a human and resumes after a restart, served on an ordinary
+request/response handler: the pause is a tool that **raises**, and resume is calling
+the endpoint again.
 
-- **LLM steps are functions.** Use `@infer` on an async function or method. The
-  signature and docstring are the contract.
-- **Tools are opt-in methods.** Mark a method with `@tool` to make it callable
-  by an inferred step. Discovery follows the Python objects reachable from
-  `self` instead of a separate registry. For classes you cannot decorate, wrap
-  them with `toolify()`.
-- **Composition stays in Python.** Branching, loops, retries around a workflow,
-  and helper functions can use normal Python control flow.
-- **Durability is lightweight.** Sefia is backed by
-  [glyff](https://github.com/nueruyu/glyff), so function calls can be
-  checkpointed, paused, resumed, and replayed without starting from a workflow
-  engine such as Temporal.
-- **State is explicit.** Pass inputs in, return outputs out, and keep mutable
-  state in stores when a tool or workflow actually needs it.
+```python
+from sefios.tools import HumanInputTool
 
-## Installation
 
-```bash
-pip install sefia
+class ResearchService:
+    def __init__(self, web: WebSearchTool, human: HumanInputTool):
+        self._web = web
+        self._human = human
+
+    @infer
+    async def run(self, task: str) -> Report:
+        """Research the task, draft a report, ask the human to approve it, then finalize."""
+        ...
+
+
+research_service = ResearchService(web=WebSearchTool(), human=HumanInputTool())
+
+
+@app.post("/sessions/{session_id}/turn")
+async def turn(session_id: str, body: TurnBody):
+    async with scope.session(session_id=session_id) as s:
+        if body.answer is not None:
+            await s.accept_input(body.answer)      # deliver the human's answer
+        try:
+            return {"status": "done", "report": await research_service.run(body.task)}
+        except NeedsInput as e:                     # the run paused; it will resume
+            return {"status": "needs_input", "question": e.question}
 ```
 
-To use LiteLLM as an LLM provider adapter:
-
-```bash
-pip install sefia_litellm
-```
-
-Sefia depends on [glyff](https://github.com/nueruyu/glyff) for checkpointing and
-resumption. For LiteLLM-backed provider support, install
-[sefia_litellm](./packages/sefia_litellm).
+When the human tool has no recorded answer it raises `NeedsInput`; the run pauses and
+the handler returns "needs input". The answer arrives in a later request and is
+delivered with `accept_input`; the same endpoint re-invokes, every completed LLM/tool
+call **replays its exact output** (the approved draft is byte-for-byte the same), and
+only the pending step runs. You write no checkpoint code, step keys, idempotency
+plumbing, or 202 dance — see
+[use case 01](./docs/usecases/01-human-in-the-loop.md) for the same turn hand-rolled,
+and what it removes.
 
 ## Core concepts
 
-### `@infer`
-
-`@infer` turns a typed async function into an LLM-backed call.
-
-```python
-@infer
-async def decide_next_action(state: AgentState) -> AgentDecision:
-    """Decide the next action for the current state."""
-    ...
-```
-
-The signature and docstring define the contract. The LLM:
-
-1. Receives the docstring as instructions and the arguments as task input.
-2. Calls `@tool` methods when tools are reachable from `self`.
-3. Returns a value matching the declared return type.
-
-Dataclasses, Pydantic models, primitives, and standard typing constructs are
-supported. Sefia generates a structured output schema from the declared return
-type and validates the response before returning it.
-
-#### `-> Never`: tool-only loops
-
-Annotate an `@infer` function with `-> Never` when it should never produce a
-final answer — only call tools, indefinitely.
-
-```python
-from typing import Never
-from sefia import infer
-
-
-class ChatAgent:
-    @infer
-    async def chat(self) -> Never:
-        """
-        Have a conversation with the user via HumanInputTool.
-        Always call the tool to get the next message; never return a final answer.
-        """
-        ...
-```
-
-When the return type is `Never`, Sefia enforces tool-only execution at every
-layer: the JSON schema sent to the LLM omits the `final_answer` field entirely,
-the system prompt instructs the model to always use `tool_calls`, and the
-executor raises `RuntimeError` if a final answer somehow arrives anyway. The
-inference loop then runs until an external signal (such as `YieldException` from
-a human-input tool) interrupts it.
-
-### `@tool`
-
-Tools are opt-in. Mark a method with `@tool`, and when an `@infer` step runs,
-Sefia discovers the marked methods reachable from `self` and offers them to the
-LLM. The discovery rules are deliberately small:
-
-- **The instance's own `@tool` methods** are exposed, including private
-  (`_`-prefixed) ones — a step can call its own marked helpers.
-- **`@infer` methods are not tools** unless you also mark them. A bare `@infer`
-  entry point never exposes itself, so the running step cannot recurse into
-  itself by accident.
-- **Dependencies held in attributes**, public or private (such as `self._web`
-  or `self.calculator`), contribute their `@tool` methods.
-- Name collisions raise `ToolConflictError` from `sefia.exceptions` at runtime.
-
-```python
-class Calculator:
-    @tool
-    async def add(self, a: int, b: int) -> int:
-        """Return the sum of two integers."""
-        return a + b
-
-
-class MathAgent:
-    def __init__(self, calculator: Calculator):
-        self._calculator = calculator  # its @tool methods become tools
-
-    @infer
-    async def solve(self, problem: str) -> int:
-        """Solve the problem, using the calculator when arithmetic is needed."""
-        ...
-```
-
-To expose an inferred step of one agent as a tool for another, stack the
-decorators — `@tool` over `@infer`:
-
-```python
-class Researcher:
-    @tool
-    @infer
-    async def research(self, topic: str) -> list[str]:
-        """Research the topic and return supporting URLs."""
-        ...
-```
-
-### `toolify`
-
-`@tool` works for your own classes, but you often want to expose a third-party
-client or a plain function you cannot decorate. `toolify()` bundles objects and
-functions into a `Toolset` you hold like any other dependency:
-
-```python
-from sefia import infer, toolify
-
-
-async def current_time() -> str:
-    """Return the current time as an ISO-8601 string."""
-    ...
-
-
-class Assistant:
-    def __init__(self, client: SomeExternalClient):
-        # Every public method of `client`, plus the standalone function.
-        self._tools = toolify(client, current_time)
-
-    @infer
-    async def handle(self, request: str) -> str:
-        """Handle the request using the available tools."""
-        ...
-```
-
-`toolify(obj)` exposes every public callable method of `obj` (its `_`-prefixed
-helpers stay private) and registers any function passed directly. This is
-convenient, but broad external clients can contain methods you do not want the
-LLM to call. For production use, prefer a narrow adapter object and
-`toolify(adapter)`, or pass only the specific functions you intend to expose.
-
-### `Session`
-
-`Session` wires up the LLM client, policies, and the underlying glyff session.
-The glyff store records replay state; the Sefia store records Sefia-specific
-metadata.
-
-```python
-async with glyff.Session(id="abc-123", store=glyff_store, hasher=hasher) as gs:
-    async with Session(
-        llm_client=llm,
-        glyff_session=gs,
-        session_store=sefia_store,
-    ):
-        result = await summarize(text)
-```
-
-### Policies
-
-A policy contributes two kinds of extension to an inference run, and may provide
-either or both:
-
-- **Observation** via `create_handlers()` — event handlers that are notified of
-  events but cannot steer the loop (see [Event handlers](#event-handlers)).
-- **Control** via `create_middleware()` — middleware that wraps the run (or each
-  step) and steers the executor's loops.
-
-```python
-from sefia import InferenceMiddleware, Policy, infer, policy
-
-
-class Retry(Policy):
-    """A policy that retries a recoverable inference failure."""
-
-    def __init__(self, count: int):
-        self._count = count
-
-    def create_middleware(self) -> list[InferenceMiddleware]:
-        ...  # return a retry middleware bounded by self._count
-
-
-class MyAgent:
-    @infer
-    @policy(Retry(count=5))
-    async def critical_task(self, request: Request) -> Result:
-        """Handle the request with retry behavior."""
-        ...
-```
-
-A per-function policy is attached with the separate `@policy` decorator. It
-records the policy under the `"policies"` key of the function's
-`__sefia_metadata__`, where `@infer` reads it — the order of the two
-decorators does not matter. To apply more than one policy, merge them on the
-caller side (or stack multiple `@policy` decorators).
-
-Custom policies are added by implementing the `Policy` ABC, as above. The
-`sefios` companion package ships ready-made ones such as `MaxRetries` and
-`MaxSteps`.
-
-### Profiles
-
-A `Profile` is a keyed, reusable bundle of inference configuration: the model
-(its `LLMClient`) plus any policies that should apply whenever it is selected.
-Build profiles up front, register them on the `Session`, and select one per
-function with `@profile`:
-
-```python
-from enum import Enum, auto
-
-from sefia import Profile, Session, infer, profile
-from sefia_litellm import LiteLLMClient
-
-
-class Models(Enum):
-    FAST = auto()
-    SMART = auto()
-
-
-class MyAgent:
-    @infer
-    async def quick_step(self, request: Request) -> Draft:
-        """Runs on the session default model and policies."""
-        ...
-
-    @infer
-    @profile(Models.SMART)
-    async def hard_step(self, draft: Draft) -> Result:
-        """Runs on the SMART profile instead."""
-        ...
-
-
-async with Session(
-    llm_client=LiteLLMClient(model="gpt-4o-mini"),
-    glyff_session=gs,
-    session_store=sefia_store,
-    profiles=[
-        Profile(
-            key=Models.SMART,
-            client=LiteLLMClient(model="gpt-4o"),
-            # policies=[...] may also be attached; any sefia Policy works
-            # (see "Policies" above) and applies whenever this profile is selected.
-        )
-    ],
-):
-    ...
-```
-
-A profile `key` is **any hashable value**, not just a string — an `Enum` member
-(shown above), an `int`, or a plain `"smart"` all work — so you can avoid
-stringly-typed configuration. `@profile` records the key under the `"profile"`
-slot of the function's `__sefia_metadata__` (just like `@policy`), so its order
-relative to `@infer` does not matter. Selecting by key keeps the call site
-decoupled from the concrete client — a test can bind the same key to a mock. An
-unknown key fails fast at call time with the list of registered profiles.
-
-Configuration is **layered, most specific wins**:
-
-```text
-function (@policy / @profile)  >  profile  >  session
-```
-
-- **Model/client:** the selected profile's `client` overrides the session's
-  default `llm_client`; with no `@profile`, the session default is used.
-- **Policies:** additive across layers and collected most-general first
-  (`session → profile → function`), so a function's own `@policy` decorators sit
-  closest to the call.
-
-Model settings (temperature, max tokens, ...) ride on how the profile's client
-is constructed today; the profile is the seam where first-class settings can be
-added later.
-
-### Steps and the inference loop
-
-The executor owns the inference lifecycle and the inner step loop, and wraps
-each unit of work with the configured middleware. Inference middleware can
-retry by calling its wrapped function again, while step middleware can stop the
-step loop by raising an exception.
-
-Two seams are available, exposed as ABCs from `sefia`:
-
-- `InferenceMiddleware.wrap(ctx, nxt)` wraps a whole inference run. `Retrier`
-  uses this: on a recoverable `InferenceError` it calls `nxt` again, and once
-  the budget is spent it re-raises the original error — which, being a
-  `YieldException`, propagates as a resumable yield rather than a hard failure
-  (see [Recoverable inference errors](#recoverable-inference-errors)).
-- `StepMiddleware.wrap(ctx, nxt)` wraps a single step. `MaxSteps` uses this to
-  cap the loop, raising `MaxStepsExceededError` once the step limit is reached.
-
-The executor does not cap the loop on its own; without a `StepMiddleware` there
-is no default cap. The `sefios` session helpers add a 25-step cap by default;
-pass `max_steps=None` to opt out.
-
-```python
-from sefia import Policy, StepMiddleware, infer, policy
-
-
-class MaxSteps(Policy):
-    """A policy that caps the inference loop at a fixed number of steps."""
-
-    def __init__(self, count: int):
-        self._count = count
-
-    def create_middleware(self) -> list[StepMiddleware]:
-        ...  # return a step middleware that raises once self._count is reached
-
-
-class MyAgent:
-    @infer
-    @policy(MaxSteps(count=25))
-    async def run(self, task: Task) -> Result:
-        """Work the task, capped at 25 steps."""
-        ...
-```
-
-A step-capping policy can also be passed to `Session(policies=[...])` to apply
-across an entire session.
-
-A failing tool is never treated as a retryable failure: the executor stringifies
-the error into the history and feeds it back to the model so it can recover,
-rather than restarting the run.
-
-### Resumption and interruption
-
-Sefia inherits glyff's replay model. In practice, this means a call can pause
-while waiting for outside input, then resume later without re-running completed
-engraved work.
-
-```python
-from glyff import engrave
-from glyff.exceptions import YieldException
-from sefia import tool
-
-
-class HumanInputTool:
-    @tool
-    @engrave
-    async def ask_user(self, question: str) -> str:
-        """Ask the user a question and resume when an answer is available."""
-        if answer := await find_answer_for_this_call():
-            return answer
-
-        await record_pending_question(question)
-        raise YieldException()
-```
-
-A web handler can return `202 Accepted` with the session ID, then resume by
-calling the same workflow again when the answer arrives.
-
-#### Recoverable inference errors
-
-A recoverable inference failure — a transient provider hiccup (timeout, rate
-limit, connection, temporarily unavailable) or an LLM response that fails schema
-validation — is treated the same way. `InferenceError` subclasses
-`YieldException`, so glyff never engraves it as a permanent `FAILED` record;
-instead the step is left resumable. Re-invoking the workflow re-runs just that
-step, and earlier completed steps replay without re-running. This means a
-one-off network blip or malformed model response never poisons a run.
-
-The `@infer` call surfaces the failure as the typed error, which you can catch
-either as an `InferenceError` or as a `YieldException`. The abstract
-`InferenceError` and `InvalidInferenceResponseError` live in `sefia`; a client
-adapter contributes its own provider-shaped subclasses (for example
-`sefia_litellm` defines `InferenceTimeoutError`, `InferenceRateLimitError`, and
-friends). Genuinely permanent failures (authentication, malformed request,
-content policy, ...) are *not* mapped to `InferenceError`; they propagate as
-their own exceptions and are engraved as genuine failures.
-
-`Retrier` adds an in-process fast path on top of this: it retries a recoverable
-error a few times within the same process, and only once that budget is spent
-does it let the error propagate as a resumable yield.
-
-## Event handlers
-
-The inference loop emits events at each significant step. Handlers **observe**
-these events — they do not steer the loop. A handler's exception is logged and
-swallowed so a misbehaving observer can never break the core loop. (Control
-lives in middleware instead; see [Steps and the inference
-loop](#steps-and-the-inference-loop).)
-
-- `InferenceStart`: an `@infer` call begins
-- `AttemptStart`: a new inference attempt
-- `BeforeInferenceStep` and `AfterInferenceStep`: surrounding each LLM decision
-- `BeforeToolCall`, `AfterToolCall`, and `ToolExecutionFailed`: surrounding tool
-  execution
-- `InferenceEnd`: the call completes
-
-Handlers are typed by event. `EventHandler[SomeEvent]` infers the subscribed
-event type automatically; `EventHandler[A | B]` or `EventHandler[Union[A, B]]`
-subscribes to multiple event types.
-
-```python
-from sefia import Policy
-from sefia.event_system import EventHandler
-from sefia.events import AfterInferenceStep
-
-
-class DecisionLogger(EventHandler[AfterInferenceStep]):
-    async def handle(self, event: AfterInferenceStep) -> None:
-        print(type(event.decision).__name__)
-
-
-class LoggingPolicy(Policy):
-    def create_handlers(self) -> list[EventHandler]:
-        return [DecisionLogger()]
-```
-
-Pass policies to `Session` or to a specific `@infer` call.
-
-Use `sefios.policies.StagnationPolicy` when you want to abort the loop if the
-same tool is called repeatedly with identical arguments.
-
-## How it compares
-
-These tools overlap. The difference is mostly in the mental model they ask you
-to use.
-
-| Tool        | Main shape                  | Good fit                                              |
-| ----------- | --------------------------- | ----------------------------------------------------- |
-| LangGraph   | Graphs, nodes, edges, state | Explicit state machines and complex routing           |
-| Pydantic AI | Agent objects               | Typed agent applications centered on an agent runtime |
-| Sefia       | Typed async functions       | LLM steps that read naturally as Python calls         |
-| Temporal    | Distributed workflows       | Production workflow infrastructure across services    |
-
-LangGraph is a good fit when the graph is the thing you want to see and operate.
-Sefia keeps ordinary agent logic as a Python call graph.
-
-Pydantic AI is a good fit when an `Agent` object is the center of the app. Sefia
-starts from functions and methods, then lets tools and sessions sit around those
-calls.
-
-Temporal is excellent infrastructure when you need a distributed workflow
-engine. Sefia and glyff cover a lighter part of the space: replaying Python
-function calls for LLM workflows before that infrastructure is necessary.
+| Concept | What it is |
+| --- | --- |
+| **`@infer`** | An abstract async method implemented by an LLM. Signature = contract, docstring = instruction, return type = validated output. |
+| **Tools** | The public methods of held dependency objects. Public = tool, private = internal. Scoped to the holder; narrow with a `Protocol`. |
+| **Pause & resume** | Every call is engraved (content-addressed) via glyff and replays on re-invocation; exceptions are non-terminal, so pausing = raising. |
+| **Session** | The scope for a run. `SessionScope` (in `sefios`) is the configured front door; `sefia.Session` is the core primitive. |
+| **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). The `sefios` defaults give a step cap and ready-made behaviors. |
+| **Stores** | Where engraved progress and tool state live — memory, file, or your own backend. Your application database stays yours. |
+
+## Documentation
+
+- **[Tutorial](./docs/tutorial.md)** — build a resumable human-in-the-loop service, step
+  by step.
+- **[Design](./DESIGN.md)** — the thesis and non-goals.
+- **[How it works](./docs/how-it-works.md)** — the runtime mechanism.
+- **[Docs index](./docs/)** — everything else (comparisons, FAQ, use cases,
+  architecture), with a suggested reading path.
 
 ## Status
 
-Sefia is under active development. The API is not yet stable.
-
-## License
-
-MIT
+Pre-1.0 — the API is unstable and will change. The code in these docs targets the 1.0
+API; some surfaces (notably the tool model) differ today. See [DESIGN.md](./DESIGN.md)
+and the issue tracker for what is settled and what is in flight.
