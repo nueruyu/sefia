@@ -129,8 +129,9 @@ the run.
 ## Durability and replay (glyff)
 
 Every engraved call (the `@infer` run, each model step, each tool batch) is keyed by
-glyff on its **call identity + arguments** (content-addressed). On a later invocation
-of the same session:
+glyff on its **call identity + arguments** (content-addressed). For method calls,
+those arguments include `self`: `self` is not prompt input, but it still contributes
+to the durable execution identity. On a later invocation of the same session:
 
 - a call that **already completed** returns its **stored output** instead of running
   again — so a non-deterministic model step yields the *same* result it did the first
