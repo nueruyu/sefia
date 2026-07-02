@@ -65,7 +65,9 @@ python quickstart.py
 
 The body never runs. sefia sends the signature, docstring, and arguments to the
 model, then validates the response into a `Summary`. `SessionScope` wired the LLM
-client, the durability session, and a file store under `.sessions/` for you.
+client, the durability session, and a file store under `.sessions/` for you. For the
+full rules on arguments, service members, tools, and return types, see
+[The `@infer` contract](./infer-contract.md).
 
 ## 2. Give it a tool
 
@@ -270,6 +272,8 @@ between the two requests changes nothing.
 
 - Swap the file store for your own backend, or drop to `sefia.Session` for full
   control over the LLM client, policies, and middleware.
+- Read [The `@infer` contract](./infer-contract.md) for the rules on arguments,
+  service members, tool methods, and return types.
 - Read [use case 01](./usecases/01-human-in-the-loop.md) to see this same turn
   hand-rolled, and exactly what the framework removed.
 - Read [Design](../DESIGN.md) and the [FAQ](./faq.md) for the model and
