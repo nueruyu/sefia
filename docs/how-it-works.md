@@ -107,6 +107,12 @@ collect from the held objects into a `ToolRegistry`. The running `@infer` method
 itself unmarked, so the bound object never offers the running method back to itself as
 a tool.
 
+This also means the bound object is a capability boundary. If a class has multiple
+`@infer` methods, they share the tool surface collected from that instance and its
+held dependencies. Keep multiple inferred methods together only when that shared
+surface is intentional; split services when different operations need different
+tools or different write permissions.
+
 **Schema** (`_strategy.py`): each tool's signature becomes a function schema
 (`model_inspector.get_function_schema`) and is embedded as JSON in the system prompt —
 not sent as a native tool spec.
