@@ -33,17 +33,17 @@ Temporal/DBOS**, not Temporal or DBOS on their own.
 
 - **Pydantic AI** — a mature typed agent runtime with native provider tool-calling
   (parallel calls, per-provider tuning) and a broad ecosystem. It is sefia's closest
-  neighbor; the difference is *how you get durability* and *whether provider
-  tool-calling leaks* into your code. For restart-surviving durability it adds a
-  backend — **Temporal** or **DBOS** — or uses its native deferred tools.
+  neighbor; the differences are *where durability lives* and *how directly your code
+  uses provider-native tool-calling*. For restart-surviving durability, pair it with
+  a backend such as **Temporal** or **DBOS**, or use its native deferred-tool patterns.
 - **LangGraph** — when the graph / state machine is the artifact you want to inspect
   and operate, with a built-in checkpointer and interrupt.
 - **CrewAI** — when the main abstraction is a team of agents with roles, tasks, and
   automation flows.
 - **A workflow engine directly (Temporal / DBOS)** — when the durable workflow is the
   point and it isn't LLM-specific: long timers, distributed fan-out, cross-service
-  compensation, audit-grade history. For agents you'd usually reach these *through*
-  Pydantic AI rather than wiring them yourself.
+  compensation, audit-grade history. For agent applications, this often means pairing
+  an agent framework with one of these backends.
 
 ## Rule of thumb
 
