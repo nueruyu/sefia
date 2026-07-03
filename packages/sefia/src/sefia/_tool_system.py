@@ -8,11 +8,24 @@ from .streaming import StreamHandler
 
 @dataclass(frozen=True)
 class Tool:
-    """Represents a callable tool registered for inference."""
+    """Represents a callable tool registered for inference.
+
+    ``function`` is what gets called. ``schema_function`` is what the schema
+    (name, docstring, parameters) is built from — normally the same callable,
+    but for a tool discovered through a ``Protocol``-narrowed field, it is the
+    Protocol's own method (its declared signature and docstring), while
+    ``function`` stays the concrete, bound implementation that actually runs.
+    """
 
     name: str
     function: Callable[..., Any]
+    schema_function: Callable[..., Any] | None = None
     stream_handler: StreamHandler | None = None
+
+    @property
+    def schema(self) -> Callable[..., Any]:
+        """The callable to build the tool's schema from; falls back to ``function``."""
+        return self.schema_function or self.function
 
 
 class ToolRegistry:
@@ -26,6 +39,7 @@ class ToolRegistry:
         func: Callable[..., Any],
         *,
         name: str,
+        schema_function: Callable[..., Any] | None = None,
         stream_handler: StreamHandler | None = None,
     ) -> None:
         if name in self._tools:
@@ -33,6 +47,7 @@ class ToolRegistry:
         self._tools[name] = Tool(
             name=name,
             function=func,
+            schema_function=schema_function,
             stream_handler=stream_handler,
         )
 

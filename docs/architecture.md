@@ -58,20 +58,19 @@ Modules with a leading underscore are internal; the public surface is whatever
 
 | Module | Responsibility | Key symbols |
 | --- | --- | --- |
-| `_decorators.py` | The entry points. Calling `@infer` builds the executor and engraves the run. | `infer`, `tool`, `policy`, `profile` |
+| `_decorators.py` | The entry points. Calling `@infer` builds the executor and engraves the run. | `infer`, `stream_for`, `policy`, `profile` |
 | `_executor.py` | The step loop, tool execution, middleware composition. | `InferenceExecutor` |
 | `inference.py` | Plain data: the decision/history types and the call descriptor. | `FunctionInfo`, `ToolCallDecision`, `FinalAnswerDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state; call-scoped state stores. | `SessionContext`, `get_context`, `get_call_state_store` |
 | `_profiles.py` / `_metadata.py` | Per-call model/policy selection; the `__sefia_metadata__` store. | `Profile` |
 | `_tool_system.py` | The tool registry and the collector interface. | `Tool`, `ToolRegistry`, `ToolCollector` |
-| `tool_collectors/_collector.py` | Default discovery from the held objects. | `DefaultToolCollector` |
-| `_toolify.py` | Wrap non-decorated callables/objects as tools. | `toolify`, `Toolset` |
+| `tool_collectors/_collector.py` | Default discovery: a held field's public surface, by class-level annotation or runtime type. | `DefaultToolCollector` |
 | `_state_store.py` / `stores/` | Typed state persistence; memory & file backends. | `StateStore`, `MemorySessionStore`, `FileSessionStore` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
-| `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel. | `AsRawText`, `ArgStream`, `StringDelta` |
+| `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`stream_for`). | `AsRawText`, `ArgStream`, `StringDelta` |
 | `llm/` | The **default** `InferenceStrategy`: function → prompt+schema → decision. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
-| `pydantic/` | The **default** `ModelInspector`: schema gen & validation via Pydantic. | `PydanticModelInspector` |
+| `pydantic/` | The **default** `ModelBackend`: schema gen & validation via Pydantic. | `PydanticModelBackend` |
 
 ### The seams (`_interfaces/`) — the extension ports
 
@@ -82,7 +81,7 @@ implementation noted in parentheses.
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
-| `ModelInspector` | non-Pydantic schema/validation | `pydantic/PydanticModelInspector` |
+| `ModelBackend` | non-Pydantic schema/validation | `pydantic/PydanticModelBackend` |
 | `SessionStore` | a new persistence backend | `stores/Memory`/`File` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards | `sefios` middleware/policies |

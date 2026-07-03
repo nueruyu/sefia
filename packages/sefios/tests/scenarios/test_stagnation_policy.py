@@ -8,7 +8,7 @@ from glyff import ArgsHasher, Serializer
 from glyff.store import MemoryClient
 from glyff.store import MemorySessionStore as GlyffMemoryStore
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import Session, infer, policy, tool
+from sefia import Session, infer, policy
 from sefia.llm import LLMClient, LLMResponse, Message
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
 from sefios.middleware import StagnationDetector
@@ -50,7 +50,6 @@ class SearchResult:
 
 @dataclass
 class WebToolkit:
-    @tool
     async def search(self, query: str) -> list[SearchResult]:
         """Search the web for a query."""
         if query == "sefia":

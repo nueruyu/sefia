@@ -7,7 +7,7 @@ from typing import Annotated, TypeVar
 from glyff import engrave
 from glyff.exceptions import YieldException
 from pydantic import Field
-from sefia import get_context, tool
+from sefia import get_context, stream_for
 from sefia.streaming import ArgStream, StringDelta
 
 T = TypeVar("T")
@@ -79,7 +79,6 @@ class HumanInputTool:
         if self._on_question_delta is not None:
             await _maybe_await(self._on_question_delta(text))
 
-    @tool
     @engrave
     async def get_human_input(
         self,
@@ -118,7 +117,7 @@ class HumanInputTool:
         await self._notify_request(request)
         raise YieldException()
 
-    @get_human_input.stream
+    @stream_for(get_human_input)
     async def _stream_get_human_input(self, events: ArgStream) -> None:
         async for event in events:
             if isinstance(event, StringDelta) and event.name == "question":

@@ -1,8 +1,8 @@
 # Design
 
 > Status: pre-1.0, API unstable. The code here shows the **release-target (1.0) API** —
-> the design we are building toward; parts, notably the tool model, are still in
-> progress and some surfaces differ today (see the issue tracker).
+> the design we are building toward; some surfaces still differ today (see the issue
+> tracker).
 
 **`@infer` turns a typed Python function into an LLM-backed call whose completed steps
 are engraved and replay on re-invocation.** A paused run is just an engraved call that

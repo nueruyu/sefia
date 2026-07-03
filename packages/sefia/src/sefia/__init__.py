@@ -1,5 +1,5 @@
 from ._context import SessionContext, get_context
-from ._decorators import infer, policy, profile, tool
+from ._decorators import infer, policy, profile, stream_for
 from ._interfaces import (
     InferenceContext,
     InferenceMiddleware,
@@ -15,16 +15,13 @@ from ._profiles import Profile
 from ._session import Session
 from ._state_store import StateStore
 from ._tool_system import Tool, ToolCollector, ToolRegistry
-from ._toolify import Toolset, toolify
 
 __all__ = [
     "infer",
-    "tool",
+    "stream_for",
     "policy",
     "profile",
     "Profile",
-    "toolify",
-    "Toolset",
     "AsRawText",
     "Session",
     "Policy",
