@@ -35,9 +35,9 @@ class _PolicyDecorator(Protocol):
     def __call__(self, func: C) -> C: ...
 
 
-def stream_for(target: Callable[..., Any]) -> Callable[[_StreamH], _StreamH]:
+def preview(target: Callable[..., Any]) -> Callable[[_StreamH], _StreamH]:
     """
-    Register a handler that receives a tool method's arguments incrementally,
+    Register a handler that previews a tool method's arguments incrementally,
     as the model emits them (see :mod:`sefia.streaming`).
 
     ``target`` is the tool method itself, referenced directly — typically a
@@ -46,12 +46,12 @@ def stream_for(target: Callable[..., Any]) -> Callable[[_StreamH], _StreamH]:
         class Toolkit:
             async def ask_human(self, question: str) -> str: ...
 
-            @stream_for(ask_human)
+            @preview(ask_human)
             async def _ask_human_stream(self, events) -> None:
                 async for ev in events: ...
 
     This is independent of tool exposure (a public method is a tool because it
-    is public, not because it is streamed); ``stream_for`` only attaches the
+    is public, not because it is previewed); ``preview`` only attaches the
     side-channel handler that the tool collector picks up when it discovers
     ``target`` as a tool. The handler is a best-effort live preview — the tool
     still runs with the fully decoded arguments.

@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from sefia import stream_for
+from sefia import preview
 from sefia.llm._arg_stream import _ArgStreamChannel
 from sefia.streaming import ArgStream, StringDelta
 from sefia.tool_collectors import DefaultToolCollector
@@ -13,7 +13,7 @@ async def test_stream_handler_is_collected_and_bound_to_instance():
         async def ask_human(self, question: str) -> str:
             return question
 
-        @stream_for(ask_human)
+        @preview(ask_human)
         async def _ask_human_stream(self, events) -> None:
             seen_self.append(self)
             async for _ in events:
@@ -42,7 +42,7 @@ async def test_bound_stream_handler_consumes_events():
         async def ask_human(self, question: str) -> str:
             return question
 
-        @stream_for(ask_human)
+        @preview(ask_human)
         async def _ask_human_stream(self, events) -> None:
             async for event in events:
                 received.append(event)
@@ -86,7 +86,7 @@ async def test_static_tool_stream_handler_is_collected():
         async def ask_human(question: str) -> str:
             return question
 
-        @stream_for(ask_human)
+        @preview(ask_human)
         async def _ask_human_stream(events: ArgStream) -> None:
             async for event in events:
                 received.append(event)
@@ -115,7 +115,7 @@ async def test_class_tool_stream_handler_is_bound_to_class():
         async def ask_human(cls, question: str) -> str:
             return question
 
-        @stream_for(ask_human)
+        @preview(ask_human)
         async def _ask_human_stream(cls, events: ArgStream) -> None:
             seen_cls.append(cls)
             async for _ in events:
@@ -137,7 +137,7 @@ async def test_class_tool_stream_handler_is_bound_to_class():
 
 
 async def test_stream_handler_is_found_when_the_field_is_protocol_narrowed():
-    # stream_for is applied to the implementation's method, which is a
+    # preview is applied to the implementation's method, which is a
     # different function object than the Protocol's own declared method — the
     # handler lookup must not be tied to whichever one supplied the schema.
     received = []
@@ -149,7 +149,7 @@ async def test_stream_handler_is_found_when_the_field_is_protocol_narrowed():
         async def ask_human(self, question: str) -> str:
             return question
 
-        @stream_for(ask_human)
+        @preview(ask_human)
         async def _ask_human_stream(self, events) -> None:
             async for event in events:
                 received.append(event)

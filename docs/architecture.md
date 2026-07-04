@@ -58,7 +58,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 
 | Module | Responsibility | Key symbols |
 | --- | --- | --- |
-| `_decorators.py` | The entry points. Calling `@infer` builds the executor and engraves the run. | `infer`, `stream_for`, `policy`, `profile` |
+| `_decorators.py` | The entry points. Calling `@infer` builds the executor and engraves the run. | `infer`, `preview`, `policy`, `profile` |
 | `_executor.py` | The step loop, tool execution, middleware composition. | `InferenceExecutor` |
 | `inference.py` | Plain data: the decision/history types and the call descriptor. | `FunctionInfo`, `ToolCallDecision`, `FinalAnswerDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
@@ -68,7 +68,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `tool_collectors/_collector.py` | Default discovery: a held field's public surface, by class-level annotation or runtime type. | `DefaultToolCollector` |
 | `_state_store.py` / `stores/` | Typed state persistence; memory & file backends. | `StateStore`, `MemorySessionStore`, `FileSessionStore` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
-| `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`stream_for`). | `AsRawText`, `ArgStream`, `StringDelta` |
+| `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
 | `llm/` | The **default** `InferenceStrategy`: function → prompt+schema → decision. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
 | `pydantic/` | The **default** `ModelBackend`: schema gen & validation via Pydantic. | `PydanticModelBackend` |
 

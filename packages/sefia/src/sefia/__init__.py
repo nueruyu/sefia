@@ -1,5 +1,5 @@
 from ._context import SessionContext, get_context
-from ._decorators import infer, policy, profile, stream_for
+from ._decorators import infer, policy, preview, profile
 from ._interfaces import (
     InferenceContext,
     InferenceMiddleware,
@@ -18,7 +18,7 @@ from ._tool_system import Tool, ToolCollector, ToolRegistry
 
 __all__ = [
     "infer",
-    "stream_for",
+    "preview",
     "policy",
     "profile",
     "Profile",

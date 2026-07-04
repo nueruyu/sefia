@@ -79,13 +79,13 @@ class DefaultToolCollector(ToolCollector):
 
     @staticmethod
     def _resolve_stream_handler(bound: Callable[..., Any]) -> StreamHandler | None:
-        """Bind a ``@stream_for(...)`` handler to the tool's target, if present.
+        """Bind a ``@preview(...)`` handler to the tool's target, if present.
 
-        ``stream_for`` is applied to the tool's *implementation* method (see its
+        ``preview`` is applied to the tool's *implementation* method (see its
         docstring), so the handler is looked up on ``bound``'s own underlying
         function — never on the declared interface's method (``schema_fn``),
         which can be a different function object under ``Protocol`` narrowing
-        and is never itself a ``stream_for`` target. ``bound`` carries
+        and is never itself a ``preview`` target. ``bound`` carries
         ``__self__`` for an instance or class method, so the handler is bound to
         that same target; a ``staticmethod`` tool has no ``__self__``, so it is
         returned unbound.
