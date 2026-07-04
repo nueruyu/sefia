@@ -4,7 +4,7 @@ from typing import Any, Callable, Union, get_args, get_origin, get_type_hints
 
 from .._interfaces import ModelBackend
 from .._tool_system import ToolCollector, ToolRegistry
-from ..streaming import StreamHandler
+from ..streaming import STREAM_HANDLER_ATTR, StreamHandler
 
 # Annotations that declare no usable interface; a field so annotated falls
 # back to its runtime type instead of resolving to a type with no methods.
@@ -59,45 +59,14 @@ class DefaultToolCollector(ToolCollector):
                 bound = getattr(value, method_name, None)
                 if not callable(bound):
                     continue
-                self._add(bound, schema_fn, registry)
+                registry.add(
+                    bound,
+                    name=self._model_backend.get_function_name(schema_fn),
+                    schema_function=schema_fn,
+                    stream_handler=_resolve_stream_handler(bound),
+                )
 
         return registry
-
-    def _add(
-        self,
-        bound: Callable[..., Any],
-        schema_fn: Callable[..., Any],
-        registry: ToolRegistry,
-    ) -> None:
-        stream_handler = self._resolve_stream_handler(bound)
-        registry.add(
-            bound,
-            name=self._model_backend.get_function_name(schema_fn),
-            schema_function=schema_fn,
-            stream_handler=stream_handler,
-        )
-
-    @staticmethod
-    def _resolve_stream_handler(bound: Callable[..., Any]) -> StreamHandler | None:
-        """Bind a ``@preview(...)`` handler to the tool's target, if present.
-
-        ``preview`` is applied to the tool's *implementation* method (see its
-        docstring), so the handler is looked up on ``bound``'s own underlying
-        function — never on the declared interface's method (``schema_fn``),
-        which can be a different function object under ``Protocol`` narrowing
-        and is never itself a ``preview`` target. ``bound`` carries
-        ``__self__`` for an instance or class method, so the handler is bound to
-        that same target; a ``staticmethod`` tool has no ``__self__``, so it is
-        returned unbound.
-        """
-        target_self = getattr(bound, "__self__", None)
-        implementation = getattr(bound, "__func__", bound)
-        handler = getattr(implementation, "__sefia_stream_handler__", None)
-        if handler is None:
-            return None
-        if target_self is not None:
-            return handler.__get__(target_self, type(target_self))
-        return handler
 
 
 def _held_attr_names(instance: object) -> set[str]:
@@ -171,3 +140,23 @@ def _public_methods(cls: type) -> dict[str, Callable[..., Any]]:
             elif inspect.isfunction(raw):
                 methods[name] = raw
     return methods
+
+
+def _resolve_stream_handler(bound: Callable[..., Any]) -> StreamHandler | None:
+    """The ``@preview`` handler bound to a tool's target, or ``None``.
+
+    ``preview`` attaches the handler to the tool's *implementation* method, so
+    it is looked up on ``bound``'s own underlying function — never on the
+    declared interface's method, which can be a different object under
+    ``Protocol`` narrowing. ``bound`` carries ``__self__`` for an instance or
+    class method, so the handler is bound to that same target; a ``staticmethod``
+    tool has no ``__self__`` and the handler is returned unbound.
+    """
+    target_self = getattr(bound, "__self__", None)
+    implementation = getattr(bound, "__func__", bound)
+    handler = getattr(implementation, STREAM_HANDLER_ATTR, None)
+    if handler is None:
+        return None
+    if target_self is not None:
+        return handler.__get__(target_self, type(target_self))
+    return handler

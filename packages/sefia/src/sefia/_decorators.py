@@ -21,6 +21,7 @@ from ._executor import InferenceExecutor
 from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from ._profiles import Profile
 from .event_system import EventPublisher
+from .streaming import STREAM_HANDLER_ATTR
 
 C = TypeVar("C", bound=Callable[..., object])
 P = ParamSpec("P")
@@ -65,7 +66,7 @@ def preview(target: Callable[..., Any]) -> Callable[[_StreamH], _StreamH]:
     )
 
     def decorator(handler: _StreamH) -> _StreamH:
-        setattr(underlying, "__sefia_stream_handler__", handler)
+        setattr(underlying, STREAM_HANDLER_ATTR, handler)
         return handler
 
     return decorator

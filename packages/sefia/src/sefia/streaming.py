@@ -47,3 +47,8 @@ class Scalar:
 ArgEvent: TypeAlias = StringDelta | StringEnd | Scalar
 ArgStream: TypeAlias = AsyncIterator[ArgEvent]
 StreamHandler: TypeAlias = Callable[[ArgStream], Awaitable[None]]
+
+# Attribute under which ``@preview`` stashes a tool method's stream handler for
+# the tool collector to read back during discovery. Named so the producer
+# (``preview``) and consumer (the collector) cannot drift.
+STREAM_HANDLER_ATTR = "__sefia_stream_handler__"
