@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Annotated, Any, Protocol
 
 import pytest
 
@@ -307,3 +307,60 @@ def test_collect_finds_dependencies_in_slots():
     tool_names = set(registry.get_names())
     assert "WebToolkit_search" in tool_names
     assert "WebToolkit_fetch_content" in tool_names
+
+
+class AnyAnnotatedAgent:
+    _web: Any  # a common escape-hatch annotation, not a usable interface
+
+    def __init__(self, web: WebToolkit):
+        self._web = web
+
+
+class ObjectAnnotatedAgent:
+    _web: object  # same as Any: no usable interface, must not resolve to it
+
+    def __init__(self, web: WebToolkit):
+        self._web = web
+
+
+def test_collect_falls_back_to_runtime_type_for_any_or_object_annotation():
+    # inspect.isclass(Any) is True on 3.11+, so Any/object must be treated as
+    # "no declared interface" rather than resolved to a type with no public
+    # methods (which would silently produce zero tools).
+    for agent in (AnyAnnotatedAgent(WebToolkit()), ObjectAnnotatedAgent(WebToolkit())):
+        registry = DefaultToolCollector().collect(agent)
+        tool_names = set(registry.get_names())
+        assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+
+
+class AnnotatedMetadataAgent:
+    _web: Annotated[WebToolkit, "some metadata"]  # class-level, with extras
+
+    def __init__(self, web: WebToolkit):
+        self._web = web
+
+
+def test_collect_unwraps_annotated_metadata_to_the_underlying_class():
+    registry = DefaultToolCollector().collect(AnnotatedMetadataAgent(WebToolkit()))
+
+    tool_names = set(registry.get_names())
+    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+
+
+class BadForwardRefAgent:
+    _unresolvable: "SomeNameThatDoesNotExist"  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+    _web: WebToolkit
+
+    def __init__(self, web: WebToolkit):
+        self._unresolvable = None
+        self._web = web
+
+
+def test_collect_tolerates_an_unresolvable_forward_ref_on_another_field():
+    # A NameError from one bad annotation must not crash discovery for the
+    # whole instance; the unresolvable field itself has a None value and is
+    # skipped, while a sibling field still resolves normally.
+    registry = DefaultToolCollector().collect(BadForwardRefAgent(WebToolkit()))
+
+    tool_names = set(registry.get_names())
+    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}

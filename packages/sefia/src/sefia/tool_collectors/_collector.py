@@ -6,6 +6,10 @@ from .._interfaces import ModelBackend
 from .._tool_system import ToolCollector, ToolRegistry
 from ..streaming import StreamHandler
 
+# Annotations that declare no usable interface; a field so annotated falls
+# back to its runtime type instead of resolving to a type with no methods.
+_NO_INTERFACE = (Any, object)
+
 
 class DefaultToolCollector(ToolCollector):
     """
@@ -65,7 +69,7 @@ class DefaultToolCollector(ToolCollector):
         schema_fn: Callable[..., Any],
         registry: ToolRegistry,
     ) -> None:
-        stream_handler = self._resolve_stream_handler(bound, schema_fn)
+        stream_handler = self._resolve_stream_handler(bound)
         registry.add(
             bound,
             name=self._model_backend.get_function_name(schema_fn),
@@ -74,28 +78,21 @@ class DefaultToolCollector(ToolCollector):
         )
 
     @staticmethod
-    def _resolve_stream_handler(
-        bound: Callable[..., Any], schema_fn: Callable[..., Any]
-    ) -> StreamHandler | None:
+    def _resolve_stream_handler(bound: Callable[..., Any]) -> StreamHandler | None:
         """Bind a ``@stream_for(...)`` handler to the tool's target, if present.
 
-        ``stream_for`` is applied to the tool's *implementation* method, so the
-        handler is registered on ``bound``'s own underlying function — not
-        necessarily ``schema_fn``, which is the declared interface's method and
-        can be a different function object (e.g. a ``Protocol``'s own method,
-        narrowing a field whose runtime value is some other concrete class).
-        ``schema_fn`` is checked too, so a handler attached directly to a
-        concrete class-level annotation's method (where it and the
-        implementation coincide) is still found. ``bound`` carries ``__self__``
-        for an instance or class method, so the handler is bound to that same
-        target; a ``staticmethod`` tool has no ``__self__``, so it is returned
-        unbound.
+        ``stream_for`` is applied to the tool's *implementation* method (see its
+        docstring), so the handler is looked up on ``bound``'s own underlying
+        function — never on the declared interface's method (``schema_fn``),
+        which can be a different function object under ``Protocol`` narrowing
+        and is never itself a ``stream_for`` target. ``bound`` carries
+        ``__self__`` for an instance or class method, so the handler is bound to
+        that same target; a ``staticmethod`` tool has no ``__self__``, so it is
+        returned unbound.
         """
         target_self = getattr(bound, "__self__", None)
         implementation = getattr(bound, "__func__", bound)
-        handler = getattr(implementation, "__sefia_stream_handler__", None) or getattr(
-            schema_fn, "__sefia_stream_handler__", None
-        )
+        handler = getattr(implementation, "__sefia_stream_handler__", None)
         if handler is None:
             return None
         if target_self is not None:
@@ -120,11 +117,14 @@ def _held_attr_names(instance: object) -> set[str]:
 
 def _class_hints(cls: type) -> dict[str, Any]:
     try:
-        return get_type_hints(cls, include_extras=True)
-    except Exception:
+        # include_extras=False (the default) also resolves Annotated[X, ...]
+        # down to X, since nothing here reads the extra metadata.
+        return get_type_hints(cls)
+    except NameError:
         # An unresolvable forward reference (e.g. a name only available under
         # TYPE_CHECKING) must not break discovery; those fields simply fall
-        # back to their runtime type below.
+        # back to their runtime type below. Any other exception is a genuine
+        # bug in the annotation and should surface, not be swallowed.
         return {}
 
 
@@ -140,6 +140,8 @@ def _unwrap_optional(annotation: Any) -> Any:
 def _resolve_interface(annotation: Any, value: object) -> type | None:
     """The type whose public methods are exposed for this held field."""
     declared = _unwrap_optional(annotation) if annotation is not None else None
+    if declared in _NO_INTERFACE:
+        declared = None
     interface = declared if inspect.isclass(declared) else type(value)
     # A held primitive/builtin instance (str, list, int, ...) must not leak its
     # methods as tools; user-defined and third-party classes are fair game.
