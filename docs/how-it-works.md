@@ -110,8 +110,16 @@ methods:
   ReadOnlyWeb`, assigned in the class body — not just an `__init__` parameter, whose
   mapping to the attribute is unrecoverable), that declared type is the interface: a
   concrete class exposes its public methods, a `Protocol` exposes only its declared
-  members.
+  members. `Any`/`object` declare no interface and behave as if unannotated.
 - Otherwise the interface falls back to the **runtime value's concrete type**.
+
+Narrowing is **best-effort and fails open**: the annotation is resolved with
+`typing.get_type_hints`, so a type it cannot resolve — most commonly a `Protocol`
+or class defined in a local scope (inside a function, e.g. a test), which
+`get_type_hints` cannot see — silently falls back to the runtime type and exposes
+the **full** public surface. If you use a `Protocol` to *restrict* a broad object's
+surface (hiding a destructive method), declare that `Protocol` at module level, not
+locally, or the restriction is silently lost.
 
 Properties and other non-function descriptors are never treated as tools (accessing
 them could execute a getter's side effects). The instance's **own** methods —

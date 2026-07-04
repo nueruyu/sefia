@@ -87,6 +87,12 @@ Tool return values should also be structured values the model can read: strings,
 numbers, booleans, lists, dictionaries, Pydantic models, dataclasses, or other
 serializable data.
 
+A tool method is discovered as a plain function, `staticmethod`, or `classmethod`
+on the held object's class. A decorator applied to it must return a function
+(use `functools.wraps`); one that returns a non-function callable — a class-based
+wrapper or a bare `functools.partial` — makes the method invisible to discovery,
+with no error. `@engrave` and similar `functools.wraps`-based decorators are fine.
+
 ## Practical rules
 
 - Put task input in function arguments.
