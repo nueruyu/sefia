@@ -109,7 +109,7 @@ implementation noted in parentheses.
 | Add a persistence backend | implement `SessionStore`; reference `stores/_file.py` |
 | Change which methods are tools | `tool_collectors/_collector.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
-| Support a new output type system | `ModelInspector` in `pydantic/_model_inspector.py` |
+| Support a new output type system | `ModelBackend` in `pydantic/_model_backend.py` |
 | Trace the runtime end to end | [how-it-works.md](./how-it-works.md) |
 
 ## Conventions

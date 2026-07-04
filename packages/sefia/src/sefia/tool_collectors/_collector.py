@@ -79,14 +79,23 @@ class DefaultToolCollector(ToolCollector):
     ) -> StreamHandler | None:
         """Bind a ``@stream_for(...)`` handler to the tool's target, if present.
 
-        The handler is registered on the interface's underlying function by
-        ``stream_for``. ``bound`` is what the tool actually dispatches to: for
-        an instance or class method it carries ``__self__``, so the handler is
-        bound to that same target; a ``staticmethod`` tool has no ``__self__``,
-        so the handler is returned unbound.
+        ``stream_for`` is applied to the tool's *implementation* method, so the
+        handler is registered on ``bound``'s own underlying function — not
+        necessarily ``schema_fn``, which is the declared interface's method and
+        can be a different function object (e.g. a ``Protocol``'s own method,
+        narrowing a field whose runtime value is some other concrete class).
+        ``schema_fn`` is checked too, so a handler attached directly to a
+        concrete class-level annotation's method (where it and the
+        implementation coincide) is still found. ``bound`` carries ``__self__``
+        for an instance or class method, so the handler is bound to that same
+        target; a ``staticmethod`` tool has no ``__self__``, so it is returned
+        unbound.
         """
         target_self = getattr(bound, "__self__", None)
-        handler = getattr(schema_fn, "__sefia_stream_handler__", None)
+        implementation = getattr(bound, "__func__", bound)
+        handler = getattr(implementation, "__sefia_stream_handler__", None) or getattr(
+            schema_fn, "__sefia_stream_handler__", None
+        )
         if handler is None:
             return None
         if target_self is not None:

@@ -132,7 +132,11 @@ not sent as a native tool spec. The schema is built from the tool's
 `schema_function` — the *interface* method (a `Protocol`'s own docstring and
 signature when the field was narrowed that way) — while `function` stays the
 concrete, bound callable that actually runs; they are the same callable unless a
-`Protocol` narrowed the field.
+`Protocol` narrowed the field. The model is told the *Protocol's* parameter names,
+and the executor calls the concrete implementation with those same names as
+keyword arguments, so a `Protocol` and the implementation it narrows must agree on
+parameter names, not just behavior — nothing checks this at runtime, so a mismatch
+surfaces as a tool-execution error on the first call rather than at discovery time.
 
 **Execution** (`InferenceExecutor._call_tools`): the model's requested call is matched
 in the registry and invoked; sync or async returns are normalized. A tool that
