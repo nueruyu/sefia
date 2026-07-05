@@ -92,9 +92,7 @@ def executor_dependencies(mocker: MockerFixture):
 
 
 class TestInferenceExecutor:
-    async def test_run_loop_with_tool_call_and_result(
-        self, executor_dependencies
-    ):
+    async def test_run_loop_with_tool_call_and_result(self, executor_dependencies):
         # Arrange
         (
             mock_strategy,

@@ -15,13 +15,39 @@ sefios = { workspace = true }
 addopts = ["--import-mode=importlib"]
 asyncio_mode = "auto"
 
-[tool.pyright]
-include = ["packages", "examples"]
-exclude = [".venv", ".uv-cache", "**/__pycache__"]
-pythonVersion = "3.11"
-
 [dependency-groups]
 dev = [
     "pyright>=1.1.410",
+    "pytest-cov>=6.0",
     "ruff>=0.15.16",
 ]
+
+[tool.coverage.run]
+branch = true
+source = [
+    "sefia",
+    "sefia_litellm",
+    "sefios",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.pyright]
+include = ["packages", "examples"]
+exclude = [".venv", ".uv-cache", "**/__pycache__"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.11"
+typeCheckingMode = "basic"

@@ -3,6 +3,9 @@ Thumbs.db
 
 node_modules/
 
+.coverage
+coverage.xml
+
 .env
 .env.local
 
