@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from .._common.human_input import (
     AmbiguousHumanInputError,
@@ -23,12 +23,15 @@ from .models import (
 )
 
 
+EXAMPLE_DIR = Path(__file__).parent
+
+
 def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
     from dotenv import load_dotenv
 
     load_dotenv()
     api = sefia_http or SefiaHTTP(
-        session_dir=Path(__file__).parent / ".local",
+        session_dir=EXAMPLE_DIR / ".local",
         model=os.environ.get("EXAMPLE_DEFAULT_MODEL", "gpt-4o-mini"),
     )
     assistant = Assistant()
@@ -59,6 +62,10 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
                 question=exc.question,
             ).model_dump(),
         )
+
+    @app.get("/", include_in_schema=False)
+    async def index():
+        return FileResponse(EXAMPLE_DIR / "index.html")
 
     @app.post("/sessions", response_model=SessionCreatedResponse)
     async def create_session() -> SessionCreatedResponse:
