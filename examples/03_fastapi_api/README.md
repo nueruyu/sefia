@@ -14,21 +14,24 @@ Run from the repository root. See the [examples README](../README.md) for setup
 python -m examples.03_fastapi_api
 ```
 
-The server listens on `http://127.0.0.1:8000`. Open `/` for a small browser UI,
+The server listens on `http://127.0.0.1:8000`. Open `/` for a small chat UI,
 or `/docs` for the interactive API docs.
 
 ## Browser UI
 
-Open `http://127.0.0.1:8000/` to create a session, call the answer and interview
-endpoints, and watch `token`, `completed`, `input_required`, and `error` events
-from the shared SSE channel. The UI is intentionally plain HTML served by the
-FastAPI example so it stays dependency-free and easy to inspect.
+Open `http://127.0.0.1:8000/` for a dependency-free chat UI that creates a
+session, sends messages to the one-shot assistant endpoint, and streams token
+updates into the assistant message as they arrive. The `Create new session`
+button starts a fresh session and clears the visible chat history.
+
+The UI is intentionally plain HTML served by the FastAPI example, so it remains
+easy to inspect and does not require a separate frontend toolchain.
 
 ## Endpoints
 
 | Method & path | Purpose |
 | --- | --- |
-| `GET /` | Open the dependency-free browser UI |
+| `GET /` | Open the dependency-free chat UI |
 | `POST /sessions` | Create a persisted session |
 | `GET /sessions/{id}/events` | Subscribe to session events via SSE |
 | `POST /sessions/{id}/answer` | Ask the one-shot assistant |
@@ -52,7 +55,7 @@ Browser clients can use the standard `EventSource` API:
 
 ```js
 const events = new EventSource(`/sessions/${sessionId}/events`)
-events.addEventListener("token", (event) => console.log(event.data))
+events.addEventListener("token", (event) => console.log(JSON.parse(event.data)))
 events.addEventListener("completed", (event) => console.log(JSON.parse(event.data)))
 events.addEventListener("input_required", (event) => console.log(JSON.parse(event.data)))
 events.addEventListener("error", (event) => console.error(JSON.parse(event.data)))
@@ -83,7 +86,7 @@ curl -s -X POST localhost:8000/sessions/$SID/interview \
 - Running Sefia workflows with a CLI-like procedural session block
 - Publishing `token`, `completed`, `input_required`, and `error` events through a separate SSE channel
 - Keeping SSE wiring out of the application workflow body
-- Serving a dependency-free browser UI from the same FastAPI process
+- Serving a dependency-free chat UI from the same FastAPI process
 
 ## Note on sessions
 
