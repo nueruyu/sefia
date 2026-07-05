@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sefia._interfaces import InferenceMiddleware, Policy, StepMiddleware
-from sefios.middleware._human_input import ComposeHumanInputStepMiddleware
+from sefios.middleware._human_input import HumanInputCallComposer
 from sefios.middleware._max_steps import StepLimiter
 from sefios.middleware._stagnation import StagnationDetector
 
@@ -19,5 +19,5 @@ class DefaultPolicy(Policy):
             middleware.append(StepLimiter(max_steps=self.max_steps))
         middleware.append(StagnationDetector(max_repeats=self.max_repeats))
         # Runs innermost so StagnationDetector observes the decision that will execute.
-        middleware.append(ComposeHumanInputStepMiddleware())
+        middleware.append(HumanInputCallComposer())
         return middleware

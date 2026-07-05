@@ -1,5 +1,5 @@
 from sefios.middleware import (
-    ComposeHumanInputStepMiddleware,
+    HumanInputCallComposer,
     StagnationDetector,
     StepLimiter,
 )
@@ -12,5 +12,5 @@ def test_default_policy_includes_human_input_composition():
     assert [type(m) for m in middleware] == [
         StepLimiter,
         StagnationDetector,
-        ComposeHumanInputStepMiddleware,
+        HumanInputCallComposer,
     ]

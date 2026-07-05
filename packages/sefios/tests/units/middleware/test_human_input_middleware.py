@@ -1,6 +1,6 @@
 from sefia import StepContext
 from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
-from sefios.middleware import ComposeHumanInputStepMiddleware, compose_human_input_calls
+from sefios.middleware import HumanInputCallComposer
 from sefios.tools import HUMAN_INPUT_TOOL_NAME
 
 
@@ -16,28 +16,28 @@ def _tool_call(id_: str, name: str = "search") -> ToolCallRequest:
     return ToolCallRequest(id=id_, name=name, arguments={"query": "sefia"})
 
 
-async def _run(middleware: ComposeHumanInputStepMiddleware, decision, step: int = 0):
+async def _run(middleware: HumanInputCallComposer, decision, step: int = 0):
     async def nxt():
         return decision
 
     return await middleware.wrap(StepContext(step=step, history=[]), nxt)
 
 
-class TestComposeHumanInputStepMiddleware:
+class TestHumanInputCallComposer:
     async def test_non_tool_decision_is_unchanged(self):
-        middleware = ComposeHumanInputStepMiddleware()
+        middleware = HumanInputCallComposer()
         decision = ResultDecision(result="done")
 
         assert await _run(middleware, decision) is decision
 
     async def test_tool_decision_without_human_input_calls_is_unchanged(self):
-        middleware = ComposeHumanInputStepMiddleware()
+        middleware = HumanInputCallComposer()
         decision = ToolCallDecision(calls=[_tool_call("t1")])
 
         assert await _run(middleware, decision) is decision
 
     async def test_single_human_input_call_is_unchanged(self):
-        middleware = ComposeHumanInputStepMiddleware()
+        middleware = HumanInputCallComposer()
         decision = ToolCallDecision(calls=[_human_call("h1", "What is the audience?")])
 
         assert await _run(middleware, decision) is decision
@@ -50,8 +50,9 @@ class TestComposeHumanInputStepMiddleware:
             ]
         )
 
-        composed = compose_human_input_calls(decision)
+        composed = await _run(HumanInputCallComposer(), decision)
 
+        assert isinstance(composed, ToolCallDecision)
         assert composed is not decision
         assert composed.calls == [
             ToolCallRequest(
@@ -81,8 +82,9 @@ class TestComposeHumanInputStepMiddleware:
             ]
         )
 
-        composed = compose_human_input_calls(decision)
+        composed = await _run(HumanInputCallComposer(), decision)
 
+        assert isinstance(composed, ToolCallDecision)
         assert composed.calls[0] is before
         assert composed.calls[2] is between
         assert composed.calls[3] is after
@@ -99,7 +101,7 @@ class TestComposeHumanInputStepMiddleware:
         )
 
     async def test_sequential_human_input_steps_are_not_collapsed(self):
-        middleware = ComposeHumanInputStepMiddleware()
+        middleware = HumanInputCallComposer()
         first = ToolCallDecision(calls=[_human_call("h1", "Who is the audience?")])
         second = ToolCallDecision(
             calls=[_human_call("h2", "Educational or promotional?")]
@@ -124,4 +126,4 @@ class TestComposeHumanInputStepMiddleware:
             ]
         )
 
-        assert compose_human_input_calls(decision) is decision
+        assert await _run(HumanInputCallComposer(), decision) is decision

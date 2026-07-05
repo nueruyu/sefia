@@ -5,7 +5,7 @@ from sefia.inference import InferenceDecision, ToolCallDecision, ToolCallRequest
 from sefios.tools.human import HUMAN_INPUT_TOOL_NAME
 
 
-def compose_human_input_calls(decision: ToolCallDecision) -> ToolCallDecision:
+def _compose_human_input_calls(decision: ToolCallDecision) -> ToolCallDecision:
     """Compose batched human-input calls in one decision into one prompt."""
     human_calls = [
         call for call in decision.calls if call.name == HUMAN_INPUT_TOOL_NAME
@@ -49,7 +49,7 @@ def _compose_question(questions: list[str]) -> str:
     return "\n".join(lines)
 
 
-class ComposeHumanInputStepMiddleware(StepMiddleware):
+class HumanInputCallComposer(StepMiddleware):
     """
     Composes multiple human-input requests emitted in the same inference step.
 
@@ -65,4 +65,4 @@ class ComposeHumanInputStepMiddleware(StepMiddleware):
         decision = await nxt()
         if not isinstance(decision, ToolCallDecision):
             return decision
-        return compose_human_input_calls(decision)
+        return _compose_human_input_calls(decision)
