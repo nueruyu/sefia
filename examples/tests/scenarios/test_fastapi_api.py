@@ -33,45 +33,16 @@ def _new_session(client: TestClient) -> str:
     return response.json()["session_id"]
 
 
-def test_index_serves_browser_ui(api):
+def test_index_serves_hitl_browser_ui(api):
     response = api.client.get("/")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Sefia FastAPI Example" in response.text
+    assert "Sefia FastAPI HITL Example" in response.text
     assert "chat-log" in response.text
     assert "new EventSource" in response.text
-    assert "appendToken" in response.text
-
-
-class TestAnswerEndpoint:
-    def test_returns_completed_answer(self, api, monkeypatch):
-        async def fake_answer(self, question: str) -> str:
-            return "A vector store."
-
-        monkeypatch.setattr(agents_module.Assistant, "answer", fake_answer)
-        session_id = _new_session(api.client)
-
-        response = api.client.post(
-            f"/sessions/{session_id}/answer", json={"question": "What is it?"}
-        )
-
-        assert response.status_code == 200
-        assert response.json() == {"status": "completed", "answer": "A vector store."}
-
-    def test_unknown_session_is_404(self, api, monkeypatch):
-        async def fake_answer(self, question: str) -> str:
-            return "ignored"
-
-        monkeypatch.setattr(agents_module.Assistant, "answer", fake_answer)
-        response = api.client.post(
-            "/sessions/does-not-exist/answer", json={"question": "hi"}
-        )
-        assert response.status_code == 404
-
-    def test_unknown_session_events_is_404(self, api):
-        response = api.client.get("/sessions/does-not-exist/events")
-        assert response.status_code == 404
+    assert "/interview" in response.text
+    assert "/answer" not in response.text
 
 
 class TestInterviewFlow:
@@ -110,3 +81,17 @@ class TestInterviewFlow:
                 "audience": "Developers",
             },
         }
+
+    def test_unknown_session_is_404(self, api, monkeypatch):
+        async def fake_run(self):
+            return Brief(topic="ignored", goal="ignored", audience="ignored")
+
+        monkeypatch.setattr(agents_module.Interviewer, "run", fake_run)
+        response = api.client.post(
+            "/sessions/does-not-exist/interview", json={"input": "hi"}
+        )
+        assert response.status_code == 404
+
+    def test_unknown_session_events_is_404(self, api):
+        response = api.client.get("/sessions/does-not-exist/events")
+        assert response.status_code == 404
