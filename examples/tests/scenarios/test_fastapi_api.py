@@ -33,6 +33,15 @@ def _new_session(client: TestClient) -> str:
     return response.json()["session_id"]
 
 
+def test_index_serves_browser_ui(api):
+    response = api.client.get("/")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Sefia FastAPI Example" in response.text
+    assert "new EventSource" in response.text
+
+
 class TestAnswerEndpoint:
     def test_returns_completed_answer(self, api, monkeypatch):
         async def fake_answer(self, question: str) -> str:
