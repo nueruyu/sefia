@@ -198,6 +198,7 @@
           eventSource.addEventListener(type, (event) => appendEvent(type, event.data));
         }
         eventSource.onerror = () => appendEvent("connection", "SSE connection error");
+        return data;
       }
 
       async function ensureSession() {
@@ -215,8 +216,12 @@
         }
       }
 
-      document.querySelector("#create-session").addEventListener("click", () => {
-        run(createSession);
+      document.querySelector("#create-session").addEventListener("click", async () => {
+        try {
+          writeResponse(await createSession());
+        } catch (error) {
+          writeResponse({ status: "error", detail: error.message });
+        }
       });
 
       document.querySelector("#ask").addEventListener("click", () => {
