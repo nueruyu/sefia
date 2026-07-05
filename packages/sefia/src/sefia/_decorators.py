@@ -60,10 +60,9 @@ def preview(target: Callable[..., Any]) -> Callable[[_StreamH], _StreamH]:
     # target may be a plain function, or a classmethod/staticmethod descriptor
     # (accessed from inside the class body before the class exists) — mark the
     # underlying function either way, since descriptors may reject attribute
-    # assignment.
-    underlying = (
-        target.__func__ if isinstance(target, (classmethod, staticmethod)) else target
-    )
+    # assignment. This mirrors how the collector reads the marker back off the
+    # bound method (``getattr(bound, "__func__", bound)``).
+    underlying = getattr(target, "__func__", target)
 
     def decorator(handler: _StreamH) -> _StreamH:
         setattr(underlying, STREAM_HANDLER_ATTR, handler)
