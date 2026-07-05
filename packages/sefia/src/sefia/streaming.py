@@ -1,8 +1,8 @@
 """Streaming of a tool call's arguments as they are decoded from the LLM.
 
 A tool may opt in to receive its arguments incrementally, as the model emits
-them, via a side channel registered with ``@<tool>.stream``. The handler is
-given an :data:`ArgStream` — an async iterator of :data:`ArgEvent` — and can
+them, via a side channel registered with :func:`sefia.preview`. The handler
+is given an :data:`ArgStream` — an async iterator of :data:`ArgEvent` — and can
 react (for example, render a question to a UI) before the full tool call has
 been decoded.
 

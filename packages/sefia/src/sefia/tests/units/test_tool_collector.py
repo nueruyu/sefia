@@ -1,9 +1,8 @@
-import functools
-import types
+from typing import Annotated, Any, Protocol
 
 import pytest
 
-from sefia import Toolset, infer, tool, toolify
+from sefia import infer
 from sefia.exceptions import ToolConflictError
 from sefia.pydantic import PydanticModelBackend
 from sefia.tool_collectors import DefaultToolCollector
@@ -60,15 +59,16 @@ def test_schema_builder_caches_results():
 
 
 class GreetingToolkit:
-    @tool
     async def greet(self, name: str) -> str:
         """Greet someone by name."""
         return f"Hello, {name}"
 
+    def _internal_helper(self) -> None: ...
+
 
 class MyAgent:
     def __init__(self, toolkit: WebToolkit):
-        self._toolkit = toolkit  # private member → its @tool methods are scanned
+        self._toolkit = toolkit  # private member → its public methods are scanned
         self.greeter = GreetingToolkit()  # public member → also scanned
 
 
@@ -78,12 +78,14 @@ def test_collect_tools_from_public_and_private_members():
     registry = collector.collect(agent)
 
     tool_names = set(registry.get_names())
-    # Marked methods held in a private attribute.
+    # Held in a private attribute.
     assert "WebToolkit_search" in tool_names
     assert "WebToolkit_fetch_content" in tool_names
-    # Marked method held in a public attribute.
+    # Held in a public attribute.
     assert "GreetingToolkit_greet" in tool_names
     assert len(tool_names) == 3
+    # The private method of a held dependency stays internal.
+    assert not any("internal_helper" in name for name in tool_names)
 
 
 class ConflictingAgent:
@@ -100,52 +102,61 @@ def test_collect_tools_with_conflict_raises_error():
 
 
 class SelfMethodAgent:
-    """Exposes its own @tool methods, including private ones, but not @infer."""
+    """A class's own methods are never its own tools — public or private."""
 
     def __init__(self):
         self._note = "held primitive, not a tool provider"
 
-    @tool
-    async def marked_public(self, value: int) -> int:
-        """A marked public helper exposed as a tool."""
+    async def public_method(self, value: int) -> int:
+        """A public helper, but it belongs to the running instance."""
         return value
 
-    @tool
-    async def _marked_private(self, value: int) -> int:
-        """A marked private helper, still exposed for the instance itself."""
-        return value
-
-    async def unmarked(self, value: int) -> int:
-        """Not marked, so not a tool."""
+    async def _private_method(self, value: int) -> int:
+        """A private helper."""
         return value
 
     @infer
     async def run(self, task: str) -> str:
-        """An inference entry point, not a tool."""
+        """An inference entry point — also never a self-tool."""
         ...
 
 
-def test_collect_exposes_marked_methods_including_private_but_not_infer():
+def test_collect_never_exposes_the_instance_own_methods():
     collector = DefaultToolCollector()
     registry = collector.collect(SelfMethodAgent())
 
+    # Nothing is collected: the instance holds no dependencies, and its own
+    # methods (public, private, or @infer) are never offered back to itself.
+    assert registry.get_names() == []
+
+
+class SubAgent:
+    """A nested agent whose @infer method is a tool once held as a dependency."""
+
+    @infer
+    async def analyze(self, topic: str) -> str:
+        """Analyze the topic."""
+        ...
+
+    def _helper(self) -> None: ...
+
+
+class OuterAgent:
+    def __init__(self, sub: SubAgent):
+        self._sub = sub  # held agent → its public methods, incl. @infer, are tools
+
+
+def test_collect_exposes_a_held_agent_infer_method_as_a_tool():
+    registry = DefaultToolCollector().collect(OuterAgent(SubAgent()))
+
     tool_names = set(registry.get_names())
-    assert "SelfMethodAgent_marked_public" in tool_names
-    # The leading "." of "._marked_private" sanitizes to a second underscore.
-    assert "SelfMethodAgent__marked_private" in tool_names
-    # Unmarked methods and @infer entry points are not tools.
-    assert not any(name.endswith("_unmarked") for name in tool_names)
-    assert not any(name.endswith("_run") for name in tool_names)
-    # A held primitive (str) must not leak its public methods as tools.
-    assert not any("upper" in name for name in tool_names)
-    assert len(tool_names) == 2
+    assert "SubAgent_analyze" in tool_names
+    assert not any("_helper" in name for name in tool_names)
+    assert len(tool_names) == 1
 
 
 class ExternalLikeClient:
-    """Simulates a third-party class we cannot decorate with @tool."""
-
-    class Error(Exception):
-        """A nested class attribute — callable, but not a tool."""
+    """Simulates a third-party class we cannot modify."""
 
     async def fetch(self, url: str) -> str:
         """Fetch a URL."""
@@ -154,156 +165,131 @@ class ExternalLikeClient:
     def _internal(self) -> None: ...
 
 
-async def standalone_search(query: str) -> str:
-    """A standalone search function."""
-    return query
+class RuntimeFallbackAgent:
+    """No class-level annotation on the field → falls back to the runtime type."""
+
+    def __init__(self, client):
+        self._client = client
 
 
-async def prefixed_search(prefix: str, query: str) -> str:
-    """Search with a fixed prefix."""
-    return f"{prefix}:{query}"
-
-
-def test_toolify_bundles_public_methods_and_functions():
-    box = toolify(ExternalLikeClient(), standalone_search)
-    assert isinstance(box, Toolset)
-    # One public method of the object plus the standalone function.
-    assert len(box.tools) == 2
-
-
-class ToolifyAgent:
-    def __init__(self):
-        self._tools = toolify(ExternalLikeClient(), standalone_search)
-
-
-def test_collect_registers_toolify_members():
-    collector = DefaultToolCollector()
-    registry = collector.collect(ToolifyAgent())
+def test_collect_falls_back_to_runtime_type_without_class_level_annotation():
+    registry = DefaultToolCollector().collect(
+        RuntimeFallbackAgent(ExternalLikeClient())
+    )
 
     tool_names = set(registry.get_names())
     assert "ExternalLikeClient_fetch" in tool_names
-    assert "standalone_search" in tool_names
-    # The external object's private method is not exposed.
     assert not any("internal" in name for name in tool_names)
-    assert len(tool_names) == 2
+    assert len(tool_names) == 1
 
 
-def test_toolify_keeps_partial_and_skips_builtins():
-    bound = functools.partial(standalone_search, "fixed")
-    # A str/list are builtin instances and must not leak their methods.
-    box = toolify(bound, "a string", [1, 2])
-    # Only the partial is registered, with its bound argument intact.
-    assert box.tools == [bound]
+class ReadOnlyWeb(Protocol):
+    async def search(self, q: str) -> list[str]:
+        """Search the web."""
+        ...
 
 
-class PartialToolifyAgent:
-    def __init__(self):
-        self._tools = toolify(functools.partial(prefixed_search, "fixed"))
+class ProtocolNarrowedAgent:
+    _web: ReadOnlyWeb  # class-level annotation → only the Protocol's members
+
+    def __init__(self, web: "BroadWebClient"):
+        self._web = web
 
 
-def test_collect_registers_partial_tool():
-    registry = DefaultToolCollector().collect(PartialToolifyAgent())
+class BroadWebClient:
+    async def search(self, q: str) -> list[str]:
+        """Search the web and return matching URLs."""
+        return [q]
 
-    tool_info = registry.get("partial_prefixed_search")
-    assert tool_info is not None
-    tool_schema = PydanticModelBackend().get_function_schema(
-        tool_info.function,
-        name=tool_info.name,
-    )
-    params = tool_schema["function"]["parameters"]
-    assert set(params["properties"]) == {"query"}
-    assert len(registry.get_all()) == 1
-
-
-class CallableSearch:
-    async def __call__(self, query: str) -> str:
-        """Search by query."""
-        return query
-
-
-class CallableToolifyAgent:
-    def __init__(self):
-        self._tools = toolify(CallableSearch())
-
-
-def test_collect_registers_callable_object_tool():
-    registry = DefaultToolCollector().collect(CallableToolifyAgent())
-
-    tool_info = registry.get("CallableSearch")
-    assert tool_info is not None
-    tool_schema = PydanticModelBackend().get_function_schema(
-        tool_info.function,
-        name=tool_info.name,
-    )
-    assert tool_schema["function"]["description"] == "Search by query."
-    assert len(registry.get_all()) == 1
-
-
-class BadCallable:
-    def __call__(self, value):
-        return value
-
-
-class BadToolifyAgent:
-    def __init__(self):
-        self._tools = toolify(BadCallable())
-
-
-def test_tool_schema_generation_requires_type_annotations():
-    # Collection records neutral metadata and succeeds; the missing annotation is
-    # only surfaced later, when the strategy asks the backend for a schema.
-    registry = DefaultToolCollector().collect(BadToolifyAgent())
-    tool_info = registry.get("BadCallable")
-    assert tool_info is not None
-
-    with pytest.raises(ValueError, match="must have a type annotation"):
-        PydanticModelBackend().get_function_schema(
-            tool_info.function, name=tool_info.name
-        )
-
-
-class CallableToolkit:
-    def __call__(self):
+    async def delete_index(self) -> None:
+        """A destructive capability the Protocol does not expose."""
         return None
 
-    @tool
-    async def search(self, query: str) -> str:
-        """Search."""
-        return query
 
-
-class CallableToolkitAgent:
-    def __init__(self):
-        self._toolkit = CallableToolkit()
-
-
-def test_collect_marked_methods_from_callable_dependency():
-    registry = DefaultToolCollector().collect(CallableToolkitAgent())
-
-    assert any(name.endswith("search") for name in registry.get_names())
-
-
-class StaticToolHost:
-    @tool
-    @staticmethod
-    async def static_tool(value: int) -> int:
-        """A static tool."""
-        return value
-
-    @tool
-    @classmethod
-    async def class_tool(cls, value: int) -> int:
-        """A class tool."""
-        return value
-
-
-def test_tool_marks_static_and_class_methods():
-    collector = DefaultToolCollector()
-    registry = collector.collect(StaticToolHost())
+def test_collect_narrows_a_protocol_annotated_field_to_its_declared_members():
+    registry = DefaultToolCollector().collect(ProtocolNarrowedAgent(BroadWebClient()))
 
     tool_names = set(registry.get_names())
-    assert any(name.endswith("static_tool") for name in tool_names)
-    assert any(name.endswith("class_tool") for name in tool_names)
+    assert tool_names == {"ReadOnlyWeb_search"}
+
+
+async def test_collect_uses_the_protocol_method_docstring_for_the_schema():
+    registry = DefaultToolCollector().collect(ProtocolNarrowedAgent(BroadWebClient()))
+    tool_info = registry.get("ReadOnlyWeb_search")
+    assert tool_info is not None
+
+    schema = PydanticModelBackend().get_function_schema(
+        tool_info.schema_source, name=tool_info.name
+    )
+    # The Protocol's own docstring is used, not the implementation's.
+    assert schema["function"]["description"] == "Search the web."
+
+    # Invocation still dispatches to the concrete implementation.
+    result = await tool_info.function(q="sefia")
+    assert result == ["sefia"]
+
+
+class ConcreteAnnotatedAgent:
+    _web: WebToolkit  # class-level annotation to a concrete class
+
+    def __init__(self, web: WebToolkit):
+        self._web = web
+
+
+def test_collect_uses_a_concrete_class_level_annotation():
+    registry = DefaultToolCollector().collect(ConcreteAnnotatedAgent(WebToolkit()))
+
+    tool_names = set(registry.get_names())
+    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+
+
+class OptionalAnnotatedAgent:
+    _web: WebToolkit | None
+
+    def __init__(self, web: WebToolkit):
+        self._web = web
+
+
+def test_collect_unwraps_an_optional_class_level_annotation():
+    registry = DefaultToolCollector().collect(OptionalAnnotatedAgent(WebToolkit()))
+
+    tool_names = set(registry.get_names())
+    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+
+
+class PrimitiveHoldingAgent:
+    def __init__(self):
+        self._name = "just a string"
+        self._items = [1, 2, 3]
+        self._nothing = None
+
+
+def test_collect_skips_builtin_primitives():
+    registry = DefaultToolCollector().collect(PrimitiveHoldingAgent())
+    assert registry.get_names() == []
+
+
+class ToolkitWithProperty:
+    @property
+    def status(self) -> str:
+        """A property must never be treated as a tool method."""
+        raise AssertionError("the property getter must not run during discovery")
+
+    async def check(self) -> str:
+        """A real tool method."""
+        return "ok"
+
+
+class PropertyAgent:
+    def __init__(self):
+        self._toolkit = ToolkitWithProperty()
+
+
+def test_collect_excludes_properties_without_invoking_them():
+    registry = DefaultToolCollector().collect(PropertyAgent())
+
+    tool_names = set(registry.get_names())
+    assert tool_names == {"ToolkitWithProperty_check"}
 
 
 class SlottedAgent:
@@ -323,33 +309,58 @@ def test_collect_finds_dependencies_in_slots():
     assert "WebToolkit_fetch_content" in tool_names
 
 
-def test_toolify_skips_builtin_iterables():
-    # Generators / map objects are builtins but not in any hardcoded primitive
-    # list; the dynamic builtins check must still skip them.
-    box = toolify(map(str, [1, 2]), (x for x in []))
-    assert box.tools == []
+class AnyAnnotatedAgent:
+    _web: Any  # a common escape-hatch annotation, not a usable interface
+
+    def __init__(self, web: WebToolkit):
+        self._web = web
 
 
-def test_collect_terminates_on_wrapped_cycle():
-    cyclic = ExternalLikeClient()
-    setattr(cyclic, "__wrapped__", cyclic)  # self-referential wrapper chain
+class ObjectAnnotatedAgent:
+    _web: object  # same as Any: no usable interface, must not resolve to it
 
-    class CyclicHost:
-        attr = cyclic
-
-    # Must not hang: the traversal's cycle guard breaks the loop.
-    DefaultToolCollector().collect(CyclicHost())
+    def __init__(self, web: WebToolkit):
+        self._web = web
 
 
-def test_toolify_exposes_module_functions():
-    # A module's type lives in "builtins" but is not a primitive — it should be
-    # introspected, not skipped.
-    module = types.ModuleType("fake_tools")
+def test_collect_falls_back_to_runtime_type_for_any_or_object_annotation():
+    # inspect.isclass(Any) is True on 3.11+, so Any/object must be treated as
+    # "no declared interface" rather than resolved to a type with no public
+    # methods (which would silently produce zero tools).
+    for agent in (AnyAnnotatedAgent(WebToolkit()), ObjectAnnotatedAgent(WebToolkit())):
+        registry = DefaultToolCollector().collect(agent)
+        tool_names = set(registry.get_names())
+        assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
 
-    async def do_thing(value: int) -> int:
-        """Do a thing."""
-        return value
 
-    setattr(module, "do_thing", do_thing)
-    box = toolify(module)
-    assert do_thing in box.tools
+class AnnotatedMetadataAgent:
+    _web: Annotated[WebToolkit, "some metadata"]  # class-level, with extras
+
+    def __init__(self, web: WebToolkit):
+        self._web = web
+
+
+def test_collect_unwraps_annotated_metadata_to_the_underlying_class():
+    registry = DefaultToolCollector().collect(AnnotatedMetadataAgent(WebToolkit()))
+
+    tool_names = set(registry.get_names())
+    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+
+
+class BadForwardRefAgent:
+    _unresolvable: "SomeNameThatDoesNotExist"  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
+    _web: WebToolkit
+
+    def __init__(self, web: WebToolkit):
+        self._unresolvable = None
+        self._web = web
+
+
+def test_collect_tolerates_an_unresolvable_forward_ref_on_another_field():
+    # A NameError from one bad annotation must not crash discovery for the
+    # whole instance; the unresolvable field itself has a None value and is
+    # skipped, while a sibling field still resolves normally.
+    registry = DefaultToolCollector().collect(BadForwardRefAgent(WebToolkit()))
+
+    tool_names = set(registry.get_names())
+    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}

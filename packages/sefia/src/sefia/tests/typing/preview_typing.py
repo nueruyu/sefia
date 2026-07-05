@@ -1,55 +1,53 @@
 from typing import TYPE_CHECKING
 
-from sefia import tool
+from sefia import preview
 from sefia.streaming import ArgStream
 
 
-@tool
 async def standalone(question: str, count: int = 0) -> str:
     return f"{question}:{count}"
 
 
-@standalone.stream
+@preview(standalone)
 async def _standalone_stream(events: ArgStream) -> None:
     async for _ in events:
         pass
 
 
-class Agent:
-    @tool
+class Toolkit:
     async def ask(self, question: str) -> str:
         return question
 
-    @ask.stream
+    @preview(ask)
     async def _ask_stream(self, events: ArgStream) -> None:
         async for _ in events:
             pass
 
-    @tool
     @staticmethod
     async def static_ask(question: str) -> str:
         return question
 
-    @static_ask.stream
+    @preview(static_ask)
     async def _static_ask_stream(events: ArgStream) -> None:
         async for _ in events:
             pass
 
-    @tool
     @classmethod
     async def class_ask(cls, question: str) -> str:
         return question
 
-    @class_ask.stream
+    @preview(class_ask)
     async def _class_ask_stream(cls, events: ArgStream) -> None:
         async for _ in events:
             pass
 
 
 if TYPE_CHECKING:
-    agent = Agent()
+    toolkit = Toolkit()
 
+    # preview is purely metadata: it never changes the decorated method's
+    # own type, so ordinary calls through the class stay unaffected.
     standalone_result = standalone("q")
-    method_result = agent.ask("q")
-    staticmethod_result = Agent.static_ask("q")
-    classmethod_result = Agent.class_ask("q")
+    method_result = toolkit.ask("q")
+    staticmethod_result = Toolkit.static_ask("q")
+    classmethod_result = Toolkit.class_ask("q")

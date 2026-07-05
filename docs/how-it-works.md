@@ -98,16 +98,35 @@ stripped of any ``` fence, `json.loads`-ed, validated into the decision model, a
 
 ## Tools: discovery, schema, execution
 
-**Discovery** (`DefaultToolCollector.collect`): given the bound instance (`self` of
-the `@infer` method), the collector gathers tools from the instance itself and from
-**each dependency it holds in an attribute** (public or private). It scans the class
-hierarchy via `__mro__` (and `__slots__`) rather than `dir()`+`getattr` on every
-name, so it never triggers a third-party object's lazy properties. A method counts as
-a tool via the `@tool` marker today; the target is the public methods of held objects
-(private `_` methods internal — see DESIGN). Either way the mechanism is the same:
-collect from the held objects into a `ToolRegistry`. The running `@infer` method is
-itself unmarked, so the bound object never offers the running method back to itself as
-a tool.
+**Discovery** (`DefaultToolCollector.collect`): tools are the **public surface of
+what the bound instance (`self` of the `@infer` method) holds** — plain Python
+visibility, no marker or registry. For **each dependency held in an attribute**
+(public or private; found via `__mro__`/`__slots__`, not `dir()`+`getattr` on every
+name, so a third-party object's lazy properties are never triggered), the collector
+resolves an *interface* for that field and exposes its public (non `_`-prefixed)
+methods:
+
+- If the field has a **class-level annotation** (`_web: WebToolkit`, `_web:
+  ReadOnlyWeb`, assigned in the class body — not just an `__init__` parameter, whose
+  mapping to the attribute is unrecoverable), that declared type is the interface: a
+  concrete class exposes its public methods, a `Protocol` exposes only its declared
+  members. `Any`/`object` declare no interface and behave as if unannotated.
+- Otherwise the interface falls back to the **runtime value's concrete type**.
+
+Narrowing is **best-effort and fails open**: the annotation is resolved with
+`typing.get_type_hints`, so a type it cannot resolve — most commonly a `Protocol`
+or class defined in a local scope (inside a function, e.g. a test), which
+`get_type_hints` cannot see — silently falls back to the runtime type and exposes
+the **full** public surface. If you use a `Protocol` to *restrict* a broad object's
+surface (hiding a destructive method), declare that `Protocol` at module level, not
+locally, or the restriction is silently lost.
+
+Properties and other non-function descriptors are never treated as tools (accessing
+them could execute a getter's side effects). The instance's **own** methods —
+including its `@infer` methods — are never offered back to itself as tools; that
+dissolves self-recursion entirely. A service becomes usable as a tool by being
+*held* as another service's dependency, not by marking its own methods — so a
+sub-agent's `@infer` method is a normal, callable tool once something else holds it.
 
 This also means the bound object is a capability boundary. If a class has multiple
 `@infer` methods, they share the tool surface collected from that instance and its
@@ -116,8 +135,16 @@ surface is intentional; split services when different operations need different
 tools or different write permissions.
 
 **Schema** (`_strategy.py`): each tool's signature becomes a function schema
-(`model_inspector.get_function_schema`) and is embedded as JSON in the system prompt —
-not sent as a native tool spec.
+(`model_backend.get_function_schema`) and is embedded as JSON in the system prompt —
+not sent as a native tool spec. The schema is built from the tool's
+`schema_source` — the *interface* method (a `Protocol`'s own docstring and
+signature when the field was narrowed that way) — while `function` stays the
+concrete, bound callable that actually runs; they are the same callable unless a
+`Protocol` narrowed the field. The model is told the *Protocol's* parameter names,
+and the executor calls the concrete implementation with those same names as
+keyword arguments, so a `Protocol` and the implementation it narrows must agree on
+parameter names, not just behavior — nothing checks this at runtime, so a mismatch
+surfaces as a tool-execution error on the first call rather than at discovery time.
 
 **Execution** (`InferenceExecutor._call_tools`): the model's requested call is matched
 in the registry and invoked; sync or async returns are normalized. A tool that

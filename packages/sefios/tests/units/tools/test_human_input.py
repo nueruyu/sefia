@@ -4,10 +4,17 @@ from sefia.tool_collectors import DefaultToolCollector
 from sefios.tools import HumanInputTool
 
 
+class Agent:
+    """A tool's own methods are never self-exposed; hold it as a dependency."""
+
+    def __init__(self, human_input: HumanInputTool):
+        self._human_input = human_input
+
+
 async def test_human_input_tool_streams_question_deltas():
     seen: list[str] = []
-    tool = HumanInputTool(on_question_delta=seen.append)
-    registry = DefaultToolCollector().collect(tool)
+    agent = Agent(HumanInputTool(on_question_delta=seen.append))
+    registry = DefaultToolCollector().collect(agent)
     registered = next(
         tool for tool in registry.get_all() if "get_human_input" in tool.name
     )

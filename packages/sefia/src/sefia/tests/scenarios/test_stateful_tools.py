@@ -14,7 +14,6 @@ from sefia import (
     Session,
     get_context,
     infer,
-    tool,
 )
 from sefia.llm import LLMResponse
 from sefia.stores import MemorySessionStore as SefiaMemoryStore
@@ -44,7 +43,6 @@ class HumanInputTool:
     def __init__(self, on_interrupt: Callable[[str, str], None] | None = None):
         self._on_interrupt = on_interrupt
 
-    @tool
     @engrave
     async def ask_user(self, question: str) -> str:
         ctx = get_context()

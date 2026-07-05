@@ -1,4 +1,4 @@
-from sefia import infer, tool
+from sefia import infer
 from sefios.tools import HumanInputTool, WebSearchTool
 
 from .models import ArticleRequest, NewsArticle
@@ -40,7 +40,6 @@ class Researcher:
     def __init__(self, web_search: WebSearchTool):
         self._web = web_search
 
-    @tool
     @infer
     async def research_topic(self, article_request: ArticleRequest) -> list[str]:
         """

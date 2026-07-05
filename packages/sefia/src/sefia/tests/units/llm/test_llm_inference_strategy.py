@@ -70,6 +70,7 @@ def _tool(func: Callable[..., Any]) -> Tool:
     return Tool(
         name=name,
         function=func,
+        schema_source=func,
     )
 
 

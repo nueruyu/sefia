@@ -179,5 +179,5 @@ and what it removes.
 ## Status
 
 Pre-1.0 — the API is unstable and will change. The code in these docs targets the 1.0
-API; some surfaces (notably the tool model) differ today. See [DESIGN.md](./DESIGN.md)
-and the issue tracker for what is settled and what is in flight.
+API; some surfaces still differ today. See [DESIGN.md](./DESIGN.md) and the issue
+tracker for what is settled and what is in flight.

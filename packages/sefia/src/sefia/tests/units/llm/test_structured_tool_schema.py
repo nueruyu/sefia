@@ -35,6 +35,7 @@ def _tool() -> Tool:
     return Tool(
         name=name,
         function=ask_user,
+        schema_source=ask_user,
     )
 
 
