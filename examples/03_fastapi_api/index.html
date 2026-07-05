@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sefia FastAPI Example</title>
+    <title>Sefia FastAPI HITL Example</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -200,8 +200,8 @@
     <main>
       <header>
         <div>
-          <h1>Sefia FastAPI Example</h1>
-          <div class="muted">Plain HTML chat UI for the FastAPI + SSE example.</div>
+          <h1>Sefia FastAPI HITL Example</h1>
+          <div class="muted">Plain HTML chat UI for the interview workflow.</div>
         </div>
         <button class="primary" type="button" id="create-session">
           Create new session
@@ -216,8 +216,8 @@
       <section class="chat-log" id="chat-log" aria-label="Chat messages">
         <div class="empty-state" id="empty-state">
           <div>
-            <strong>Start a chat</strong>
-            <div>Send a message to create a session and stream the response here.</div>
+            <strong>Start an interview</strong>
+            <div>Send a vague content request. The agent should ask follow-up questions when details are missing.</div>
           </div>
         </div>
         <div class="messages" id="messages"></div>
@@ -226,8 +226,8 @@
       <form class="composer" id="composer">
         <textarea
           id="message-input"
-          placeholder="Ask the one-shot assistant..."
-        >What is a vector database in one sentence?</textarea>
+          placeholder="Describe the content you want..."
+        >I want an article about our new product.</textarea>
         <div class="composer-actions">
           <span class="muted">Enter sends. Shift+Enter adds a newline.</span>
           <button class="primary" type="submit" id="send">Send</button>
@@ -239,6 +239,8 @@
       let sessionId = null;
       let eventSource = null;
       let activeAssistantBubble = null;
+      let pendingInteractionId = null;
+      let lastInputRequiredId = null;
       let isSending = false;
 
       const sessionIdElement = document.querySelector("#session-id");
@@ -284,6 +286,8 @@
         messagesElement.replaceChildren();
         emptyStateElement.hidden = false;
         activeAssistantBubble = null;
+        pendingInteractionId = null;
+        lastInputRequiredId = null;
       }
 
       function appendMessage(role, content = "") {
@@ -306,13 +310,40 @@
         appendMessage("system", content);
       }
 
-      function appendToken(token) {
+      function setAssistantMessage(content) {
         if (!activeAssistantBubble) {
           activeAssistantBubble = appendMessage("assistant");
-          activeAssistantBubble.classList.add("typing");
         }
-        activeAssistantBubble.textContent += token;
+        activeAssistantBubble.textContent = content;
+        activeAssistantBubble.classList.remove("typing");
         chatLogElement.scrollTop = chatLogElement.scrollHeight;
+      }
+
+      function formatBrief(brief) {
+        return [
+          "Brief completed:",
+          `Topic: ${brief.topic}`,
+          `Goal: ${brief.goal}`,
+          `Audience: ${brief.audience}`,
+        ].join("\n");
+      }
+
+      function handleInputRequired(data) {
+        pendingInteractionId = data.interaction_id;
+        if (lastInputRequiredId === data.interaction_id) {
+          setStatus("Waiting for your reply");
+          return;
+        }
+        lastInputRequiredId = data.interaction_id;
+        setAssistantMessage(data.question);
+        setStatus("Waiting for your reply");
+      }
+
+      function handleCompleted(data) {
+        pendingInteractionId = null;
+        lastInputRequiredId = null;
+        setAssistantMessage(formatBrief(data.brief));
+        setStatus("Completed");
       }
 
       function connectEvents() {
@@ -324,22 +355,17 @@
         }
 
         eventSource = new EventSource(`/sessions/${sessionId}/events`);
-        eventSource.addEventListener("token", (event) => {
-          appendToken(String(parseEventData(event.data)));
+        eventSource.addEventListener("input_required", (event) => {
+          handleInputRequired(parseEventData(event.data));
         });
         eventSource.addEventListener("completed", () => {
-          if (activeAssistantBubble) {
-            activeAssistantBubble.classList.remove("typing");
-          }
           setStatus("Completed");
-        });
-        eventSource.addEventListener("input_required", (event) => {
-          const data = parseEventData(event.data);
-          appendSystemMessage(`Input required: ${data.question}`);
-          setStatus("Input required");
         });
         eventSource.addEventListener("error", (event) => {
           const data = parseEventData(event.data);
+          if (activeAssistantBubble) {
+            activeAssistantBubble.classList.remove("typing");
+          }
           appendSystemMessage(`Error: ${data.message || event.data}`);
           setStatus("Error");
         });
@@ -367,26 +393,31 @@
       }
 
       async function sendMessage() {
-        const question = inputElement.value.trim();
-        if (!question || isSending) {
+        const input = inputElement.value.trim();
+        if (!input || isSending) {
           return;
         }
 
         await ensureSession();
-        appendMessage("user", question);
-        activeAssistantBubble = appendMessage("assistant");
+        const replyTo = pendingInteractionId;
+        pendingInteractionId = null;
+        appendMessage("user", input);
+        activeAssistantBubble = appendMessage("assistant", "Thinking...");
         activeAssistantBubble.classList.add("typing");
         inputElement.value = "";
         setSending(true);
-        setStatus("Streaming...");
+        setStatus(replyTo ? "Sending reply..." : "Starting interview...");
 
         try {
-          const result = await postJSON(`/sessions/${sessionId}/answer`, { question });
-          if (!activeAssistantBubble.textContent) {
-            activeAssistantBubble.textContent = result.answer;
+          const result = await postJSON(`/sessions/${sessionId}/interview`, {
+            input,
+            reply_to: replyTo,
+          });
+          if (result.status === "input_required") {
+            handleInputRequired(result);
+          } else {
+            handleCompleted(result);
           }
-          activeAssistantBubble.classList.remove("typing");
-          setStatus("Completed");
         } catch (error) {
           if (activeAssistantBubble) {
             activeAssistantBubble.classList.remove("typing");
