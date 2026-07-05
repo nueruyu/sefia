@@ -20,8 +20,8 @@ from ._context import get_context
 from ._executor import InferenceExecutor
 from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from ._profiles import Profile
+from ._tool_system import set_stream_handler
 from .event_system import EventPublisher
-from .streaming import STREAM_HANDLER_ATTR
 
 C = TypeVar("C", bound=Callable[..., object])
 P = ParamSpec("P")
@@ -65,7 +65,7 @@ def preview(target: Callable[..., Any]) -> Callable[[_StreamH], _StreamH]:
     underlying = getattr(target, "__func__", target)
 
     def decorator(handler: _StreamH) -> _StreamH:
-        setattr(underlying, STREAM_HANDLER_ATTR, handler)
+        set_stream_handler(underlying, handler)
         return handler
 
     return decorator

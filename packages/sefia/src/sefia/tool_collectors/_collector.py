@@ -3,8 +3,8 @@ import types
 from typing import Any, Callable, Union, get_args, get_origin, get_type_hints
 
 from .._interfaces import ModelBackend
-from .._tool_system import ToolCollector, ToolRegistry
-from ..streaming import STREAM_HANDLER_ATTR, StreamHandler
+from .._tool_system import ToolCollector, ToolRegistry, get_stream_handler
+from ..streaming import StreamHandler
 
 # Annotations that declare no usable interface; a field so annotated falls
 # back to its runtime type instead of resolving to a type with no methods.
@@ -154,7 +154,7 @@ def _resolve_stream_handler(bound: Callable[..., Any]) -> StreamHandler | None:
     """
     target_self = getattr(bound, "__self__", None)
     implementation = getattr(bound, "__func__", bound)
-    handler = getattr(implementation, STREAM_HANDLER_ATTR, None)
+    handler = get_stream_handler(implementation)
     if handler is None:
         return None
     if target_self is not None:

@@ -5,6 +5,21 @@ from typing import Any, Callable
 from .exceptions import ToolConflictError
 from .streaming import StreamHandler
 
+# The attribute under which a tool method carries its ``@preview`` stream
+# handler. Kept private to this module; ``preview`` and the collector go
+# through the accessors below so the raw name never crosses a module boundary.
+_STREAM_HANDLER_ATTR = "__sefia_stream_handler__"
+
+
+def set_stream_handler(func: Callable[..., Any], handler: StreamHandler) -> None:
+    """Attach ``handler`` to ``func`` as its tool's argument-stream preview."""
+    setattr(func, _STREAM_HANDLER_ATTR, handler)
+
+
+def get_stream_handler(func: Callable[..., Any]) -> StreamHandler | None:
+    """Return the stream handler attached to ``func``, or ``None``."""
+    return getattr(func, _STREAM_HANDLER_ATTR, None)
+
 
 @dataclass(frozen=True)
 class Tool:
