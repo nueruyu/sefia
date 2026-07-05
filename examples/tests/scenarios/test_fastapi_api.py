@@ -39,7 +39,9 @@ def test_index_serves_browser_ui(api):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "Sefia FastAPI Example" in response.text
+    assert "chat-log" in response.text
     assert "new EventSource" in response.text
+    assert "appendToken" in response.text
 
 
 class TestAnswerEndpoint:
