@@ -8,7 +8,6 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "jsonstream",
     "sefia",
     "sefia-examples",
     "sefia-litellm",
@@ -983,19 +982,13 @@ wheels = [
 ]
 
 [[package]]
-name = "jsonstream"
+name = "jsonweir"
 version = "0.1.0"
-source = { editable = "packages/jsonstream" }
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/59/140db46bc2f05dbc9fd09169b1aab52ffd9b9a8e24144bf295096c0e3d93/jsonweir-0.1.0.tar.gz", hash = "sha256:0823551700b06bf4b1605d52d3514e6581c6c5f72d0295ce8b47eb024e6420b2", size = 29958, upload-time = "2026-07-05T04:37:38.486Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/83/6043193396a9fc6dc9e6cf01cd5d85a329631c9b27969b75e112060022e2/jsonweir-0.1.0-py3-none-any.whl", hash = "sha256:1b2615c89f34dd9878a23b826128746498536bdff05e389fb1056d3f8159ea5a", size = 9139, upload-time = "2026-07-05T04:37:37.296Z" },
 ]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.0" }]
 
 [[package]]
 name = "litellm"
@@ -2098,7 +2091,7 @@ dependencies = [
     { name = "glyff" },
     { name = "glyff-file-store" },
     { name = "glyff-pydantic" },
-    { name = "jsonstream" },
+    { name = "jsonweir" },
     { name = "pydantic" },
 ]
 
@@ -2114,7 +2107,7 @@ requires-dist = [
     { name = "glyff", specifier = ">=0.11.0" },
     { name = "glyff-file-store", specifier = ">=0.11.0" },
     { name = "glyff-pydantic", specifier = ">=0.11.0" },
-    { name = "jsonstream", editable = "packages/jsonstream" },
+    { name = "jsonweir", specifier = ">=0.1.0" },
     { name = "pydantic", specifier = ">=2.0" },
 ]
 

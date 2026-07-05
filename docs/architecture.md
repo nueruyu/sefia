@@ -13,9 +13,9 @@ A `uv` workspace (`pyproject.toml` → `[tool.uv.workspace]`) of small packages:
 | **sefia** | `packages/sefia` | The core: `@infer`, the inference loop, tool model, sessions, the default LLM strategy. |
 | **sefios** | `packages/sefios` | Official batteries: `SessionScope`, default policies/middleware/handlers, ready-made tools. |
 | **sefia_litellm** | `packages/sefia_litellm` | Provider adapter — an `LLMClient` implemented over LiteLLM. |
-| **jsonstream** | `packages/jsonstream` | Standalone incremental JSON parser (used for streaming tool args). Zero deps. |
 | **examples** | `examples` | Runnable end-to-end workflows. |
 | **glyff** | *(separate repo)* | Content-addressed durable execution. A dependency, not vendored. |
+| **jsonweir** | *(separate repo / PyPI)* | Standalone incremental JSON parser used for streaming tool args. |
 
 ## Package dependencies (one-way, no cycles)
 
@@ -35,9 +35,9 @@ sefia_litellm ─┬▶ sefia
 
 sefia ─┬▶ pydantic
        ├▶ glyff / glyff-file-store / glyff-pydantic
-       └▶ jsonstream
+       └▶ jsonweir
 
-jsonstream has no runtime dependencies.
+jsonweir is a separate package published on PyPI, not a workspace member.
 ```
 
 Rules that keep the layering clean — worth preserving in any change:
