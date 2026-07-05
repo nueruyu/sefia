@@ -22,10 +22,6 @@ class Brief:
 # --- Requests ---------------------------------------------------------------
 
 
-class AnswerRequest(BaseModel):
-    question: str
-
-
 class TurnRequest(BaseModel):
     """A turn for a human-in-the-loop workflow.
 
@@ -53,11 +49,6 @@ class InputRequiredResponse(BaseModel):
     question: str
 
 
-class AnswerResponse(BaseModel):
-    status: Literal["completed"] = "completed"
-    answer: str
-
-
 class BriefSchema(BaseModel):
     topic: str
     goal: str
@@ -73,5 +64,5 @@ class InterviewCompletedResponse(BaseModel):
     brief: BriefSchema
 
 
-# Discriminated unions used as FastAPI ``response_model``s.
+# Discriminated union used as the FastAPI ``response_model``.
 InterviewResponse = InterviewCompletedResponse | InputRequiredResponse
