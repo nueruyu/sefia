@@ -1,9 +1,9 @@
 # 03 FastAPI API
 
-A REST API built with [FastAPI](https://fastapi.tiangolo.com/) that serves the
-same kind of `@infer` agents the CLI examples run. LLM tokens and lifecycle
-updates are streamed through a session event channel, not by changing each
-workflow endpoint into a streaming endpoint.
+A REST API built with [FastAPI](https://fastapi.tiangolo.com/) that serves a
+human-in-the-loop `@infer` workflow. Lifecycle updates are streamed through a
+session event channel, while the workflow itself stays a normal HTTP
+request/response endpoint.
 
 ## Run
 
@@ -14,52 +14,32 @@ Run from the repository root. See the [examples README](../README.md) for setup
 python -m examples.03_fastapi_api
 ```
 
-The server listens on `http://127.0.0.1:8000`. Open `/` for a small chat UI,
+The server listens on `http://127.0.0.1:8000`. Open `/` for a small HITL chat UI,
 or `/docs` for the interactive API docs.
 
 ## Browser UI
 
 Open `http://127.0.0.1:8000/` for a dependency-free chat UI that creates a
-session, sends messages to the one-shot assistant endpoint, and streams token
-updates into the assistant message as they arrive. The `Create new session`
-button starts a fresh session and clears the visible chat history.
+session and sends messages to the human-in-the-loop interview endpoint. When the
+agent needs more detail, the UI displays the `input_required` question as the
+next assistant message and remembers the `interaction_id` for the next user
+reply. When the workflow completes, the UI renders the structured brief.
 
-The UI is intentionally plain HTML served by the FastAPI example, so it remains
-easy to inspect and does not require a separate frontend toolchain.
+The UI intentionally ignores raw `token` events because this example's `@infer`
+stream contains internal structured output tokens; the user-facing HITL flow is
+shown through `input_required`, `completed`, and the normal HTTP response body.
+
+The UI is plain HTML served by the FastAPI example, so it remains easy to inspect
+and does not require a separate frontend toolchain.
 
 ## Endpoints
 
 | Method & path | Purpose |
 | --- | --- |
-| `GET /` | Open the dependency-free chat UI |
+| `GET /` | Open the dependency-free HITL chat UI |
 | `POST /sessions` | Create a persisted session |
 | `GET /sessions/{id}/events` | Subscribe to session events via SSE |
-| `POST /sessions/{id}/answer` | Ask the one-shot assistant |
 | `POST /sessions/{id}/interview` | Run the human-in-the-loop interviewer |
-
-## Simple one-shot assistant
-
-```bash
-SID=$(curl -s -X POST localhost:8000/sessions | python -c 'import sys,json;print(json.load(sys.stdin)["session_id"])')
-
-# Optional: subscribe to token/completed/error events in another terminal.
-curl -N localhost:8000/sessions/$SID/events
-
-# Normal JSON request/response.
-curl -s -X POST localhost:8000/sessions/$SID/answer \
-  -H 'content-type: application/json' \
-  -d '{"question": "What is a vector database in one sentence?"}'
-```
-
-Browser clients can use the standard `EventSource` API:
-
-```js
-const events = new EventSource(`/sessions/${sessionId}/events`)
-events.addEventListener("token", (event) => console.log(JSON.parse(event.data)))
-events.addEventListener("completed", (event) => console.log(JSON.parse(event.data)))
-events.addEventListener("input_required", (event) => console.log(JSON.parse(event.data)))
-events.addEventListener("error", (event) => console.error(JSON.parse(event.data)))
-```
 
 ## Human-in-the-loop (pause / resume)
 
@@ -80,13 +60,22 @@ curl -s -X POST localhost:8000/sessions/$SID/interview \
   -d '{"input": "Developers evaluating the product.", "reply_to": "<interaction_id>"}'
 ```
 
+Browser clients can use the standard `EventSource` API for lifecycle events:
+
+```js
+const events = new EventSource(`/sessions/${sessionId}/events`)
+events.addEventListener("completed", (event) => console.log(JSON.parse(event.data)))
+events.addEventListener("input_required", (event) => console.log(JSON.parse(event.data)))
+events.addEventListener("error", (event) => console.error(JSON.parse(event.data)))
+```
+
 ## What it shows
 
 - Writing FastAPI endpoints as ordinary HTTP request handlers
-- Running Sefia workflows with a CLI-like procedural session block
-- Publishing `token`, `completed`, `input_required`, and `error` events through a separate SSE channel
+- Running a Sefia workflow with a CLI-like procedural session block
+- Publishing `completed`, `input_required`, and `error` events through a separate SSE channel
 - Keeping SSE wiring out of the application workflow body
-- Serving a dependency-free chat UI from the same FastAPI process
+- Serving a dependency-free HITL chat UI from the same FastAPI process
 
 ## Note on sessions
 
