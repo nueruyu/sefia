@@ -21,153 +21,250 @@
 
       main {
         box-sizing: border-box;
-        width: min(960px, 100%);
+        width: min(900px, 100%);
+        min-height: 100vh;
         margin: 0 auto;
-        padding: 32px 20px 48px;
+        padding: 28px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
       }
 
-      h1,
-      h2 {
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.5rem, 3vw, 2rem);
         line-height: 1.2;
       }
 
-      section {
-        margin-top: 24px;
-        padding: 20px;
-        border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
-        border-radius: 12px;
-      }
-
-      label {
-        display: block;
-        margin: 12px 0 6px;
-        font-weight: 650;
-      }
-
-      textarea,
-      input,
-      button {
+      button,
+      textarea {
         font: inherit;
       }
 
-      textarea,
-      input {
-        box-sizing: border-box;
-        width: 100%;
-        border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
-        border-radius: 8px;
-        padding: 10px 12px;
-        background: Canvas;
-        color: CanvasText;
-      }
-
-      textarea {
-        min-height: 96px;
-        resize: vertical;
-      }
-
       button {
-        margin-top: 12px;
         border: 0;
-        border-radius: 8px;
-        padding: 10px 14px;
+        border-radius: 999px;
+        padding: 10px 16px;
         background: ButtonFace;
         color: ButtonText;
         cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
       }
 
       button.primary {
         font-weight: 700;
       }
 
-      .row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        align-items: center;
-      }
-
-      .muted {
-        color: color-mix(in srgb, CanvasText 62%, transparent);
-      }
-
       code {
         overflow-wrap: anywhere;
       }
 
-      pre {
-        min-height: 96px;
+      .session-bar,
+      .composer,
+      .chat-log {
+        border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+        border-radius: 16px;
+        background: color-mix(in srgb, Canvas 94%, CanvasText 6%);
+      }
+
+      .session-bar {
+        padding: 12px 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .muted,
+      .session-id,
+      .status {
+        color: color-mix(in srgb, CanvasText 62%, transparent);
+      }
+
+      .session-id {
+        font-size: 0.92rem;
+      }
+
+      .chat-log {
+        flex: 1;
+        min-height: 420px;
+        padding: 18px;
         overflow: auto;
-        padding: 12px;
-        border-radius: 8px;
-        background: color-mix(in srgb, CanvasText 8%, transparent);
+      }
+
+      .empty-state {
+        height: 100%;
+        min-height: 320px;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        color: color-mix(in srgb, CanvasText 62%, transparent);
+      }
+
+      .messages {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .message {
+        display: flex;
+      }
+
+      .message.user {
+        justify-content: flex-end;
+      }
+
+      .bubble {
+        max-width: min(720px, 88%);
+        padding: 12px 14px;
+        border-radius: 16px;
         white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .message.user .bubble {
+        border-bottom-right-radius: 4px;
+        background: Highlight;
+        color: HighlightText;
+      }
+
+      .message.assistant .bubble {
+        border-bottom-left-radius: 4px;
+        background: color-mix(in srgb, CanvasText 10%, transparent);
+      }
+
+      .message.system .bubble {
+        max-width: 100%;
+        margin: 0 auto;
+        padding: 8px 12px;
+        border-radius: 999px;
+        color: color-mix(in srgb, CanvasText 66%, transparent);
+        background: color-mix(in srgb, CanvasText 7%, transparent);
+        font-size: 0.92rem;
+      }
+
+      .typing::after {
+        content: "▍";
+        display: inline-block;
+        animation: blink 1s steps(1) infinite;
+      }
+
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      .composer {
+        padding: 12px;
+      }
+
+      textarea {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 88px;
+        resize: vertical;
+        border: 0;
+        outline: none;
+        border-radius: 12px;
+        padding: 12px;
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      .composer-actions {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
       }
     </style>
   </head>
   <body>
     <main>
-      <h1>Sefia FastAPI Example</h1>
-      <p class="muted">
-        Create a session, call the normal HTTP endpoints, and watch token and
-        lifecycle events from the shared SSE channel.
-      </p>
-
-      <section>
-        <h2>Session</h2>
-        <div class="row">
-          <button class="primary" type="button" id="create-session">
-            Create new session
-          </button>
-          <span>session_id: <code id="session-id">not created</code></span>
+      <header>
+        <div>
+          <h1>Sefia FastAPI Example</h1>
+          <div class="muted">Plain HTML chat UI for the FastAPI + SSE example.</div>
         </div>
+        <button class="primary" type="button" id="create-session">
+          Create new session
+        </button>
+      </header>
+
+      <div class="session-bar">
+        <div class="session-id">session_id: <code id="session-id">not created</code></div>
+        <div class="status" id="status">Ready</div>
+      </div>
+
+      <section class="chat-log" id="chat-log" aria-label="Chat messages">
+        <div class="empty-state" id="empty-state">
+          <div>
+            <strong>Start a chat</strong>
+            <div>Send a message to create a session and stream the response here.</div>
+          </div>
+        </div>
+        <div class="messages" id="messages"></div>
       </section>
 
-      <section>
-        <h2>One-shot answer</h2>
-        <label for="question">Question</label>
-        <textarea id="question">What is a vector database in one sentence?</textarea>
-        <button type="button" id="ask">Ask</button>
-      </section>
-
-      <section>
-        <h2>Human-in-the-loop interview</h2>
-        <label for="interview-input">Input</label>
-        <textarea id="interview-input">I want an article about our new product.</textarea>
-        <label for="reply-to">reply_to interaction_id, optional</label>
-        <input id="reply-to" placeholder="Paste interaction_id after input_required" />
-        <button type="button" id="run-interview">Run interview turn</button>
-      </section>
-
-      <section>
-        <h2>Response</h2>
-        <pre id="response">No response yet.</pre>
-      </section>
-
-      <section>
-        <h2>Events</h2>
-        <pre id="events">No events yet.</pre>
-      </section>
+      <form class="composer" id="composer">
+        <textarea
+          id="message-input"
+          placeholder="Ask the one-shot assistant..."
+        >What is a vector database in one sentence?</textarea>
+        <div class="composer-actions">
+          <span class="muted">Enter sends. Shift+Enter adds a newline.</span>
+          <button class="primary" type="submit" id="send">Send</button>
+        </div>
+      </form>
     </main>
 
     <script>
       let sessionId = null;
       let eventSource = null;
+      let activeAssistantBubble = null;
+      let isSending = false;
 
       const sessionIdElement = document.querySelector("#session-id");
-      const responseElement = document.querySelector("#response");
-      const eventsElement = document.querySelector("#events");
+      const statusElement = document.querySelector("#status");
+      const chatLogElement = document.querySelector("#chat-log");
+      const emptyStateElement = document.querySelector("#empty-state");
+      const messagesElement = document.querySelector("#messages");
+      const inputElement = document.querySelector("#message-input");
+      const sendButton = document.querySelector("#send");
 
-      function writeResponse(value) {
-        responseElement.textContent = JSON.stringify(value, null, 2);
+      function setStatus(message) {
+        statusElement.textContent = message;
       }
 
-      function appendEvent(type, data) {
-        if (eventsElement.textContent === "No events yet.") {
-          eventsElement.textContent = "";
+      function setSending(value) {
+        isSending = value;
+        sendButton.disabled = value;
+        inputElement.disabled = value;
+      }
+
+      function parseEventData(data) {
+        try {
+          return JSON.parse(data);
+        } catch {
+          return data;
         }
-        eventsElement.textContent += `[${type}] ${data}\n`;
-        eventsElement.scrollTop = eventsElement.scrollHeight;
       }
 
       async function postJSON(path, body) {
@@ -183,62 +280,145 @@
         return data;
       }
 
-      async function createSession() {
-        const data = await postJSON("/sessions");
-        sessionId = data.session_id;
-        sessionIdElement.textContent = sessionId;
-        eventsElement.textContent = "No events yet.";
+      function clearChat() {
+        messagesElement.replaceChildren();
+        emptyStateElement.hidden = false;
+        activeAssistantBubble = null;
+      }
 
+      function appendMessage(role, content = "") {
+        emptyStateElement.hidden = true;
+
+        const row = document.createElement("div");
+        row.className = `message ${role}`;
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = content;
+
+        row.appendChild(bubble);
+        messagesElement.appendChild(row);
+        chatLogElement.scrollTop = chatLogElement.scrollHeight;
+        return bubble;
+      }
+
+      function appendSystemMessage(content) {
+        appendMessage("system", content);
+      }
+
+      function appendToken(token) {
+        if (!activeAssistantBubble) {
+          activeAssistantBubble = appendMessage("assistant");
+          activeAssistantBubble.classList.add("typing");
+        }
+        activeAssistantBubble.textContent += token;
+        chatLogElement.scrollTop = chatLogElement.scrollHeight;
+      }
+
+      function connectEvents() {
+        if (!sessionId) {
+          return;
+        }
         if (eventSource) {
           eventSource.close();
         }
 
         eventSource = new EventSource(`/sessions/${sessionId}/events`);
-        for (const type of ["token", "completed", "input_required", "error"]) {
-          eventSource.addEventListener(type, (event) => appendEvent(type, event.data));
+        eventSource.addEventListener("token", (event) => {
+          appendToken(String(parseEventData(event.data)));
+        });
+        eventSource.addEventListener("completed", () => {
+          if (activeAssistantBubble) {
+            activeAssistantBubble.classList.remove("typing");
+          }
+          setStatus("Completed");
+        });
+        eventSource.addEventListener("input_required", (event) => {
+          const data = parseEventData(event.data);
+          appendSystemMessage(`Input required: ${data.question}`);
+          setStatus("Input required");
+        });
+        eventSource.addEventListener("error", (event) => {
+          const data = parseEventData(event.data);
+          appendSystemMessage(`Error: ${data.message || event.data}`);
+          setStatus("Error");
+        });
+        eventSource.onerror = () => {
+          setStatus("SSE connection interrupted");
+        };
+      }
+
+      async function createSession({ resetChat = true } = {}) {
+        const data = await postJSON("/sessions");
+        sessionId = data.session_id;
+        sessionIdElement.textContent = sessionId;
+        setStatus("Session ready");
+        if (resetChat) {
+          clearChat();
         }
-        eventSource.onerror = () => appendEvent("connection", "SSE connection error");
+        connectEvents();
         return data;
       }
 
       async function ensureSession() {
         if (!sessionId) {
-          await createSession();
+          await createSession({ resetChat: false });
         }
       }
 
-      async function run(action) {
+      async function sendMessage() {
+        const question = inputElement.value.trim();
+        if (!question || isSending) {
+          return;
+        }
+
+        await ensureSession();
+        appendMessage("user", question);
+        activeAssistantBubble = appendMessage("assistant");
+        activeAssistantBubble.classList.add("typing");
+        inputElement.value = "";
+        setSending(true);
+        setStatus("Streaming...");
+
         try {
-          await ensureSession();
-          writeResponse(await action());
+          const result = await postJSON(`/sessions/${sessionId}/answer`, { question });
+          if (!activeAssistantBubble.textContent) {
+            activeAssistantBubble.textContent = result.answer;
+          }
+          activeAssistantBubble.classList.remove("typing");
+          setStatus("Completed");
         } catch (error) {
-          writeResponse({ status: "error", detail: error.message });
+          if (activeAssistantBubble) {
+            activeAssistantBubble.classList.remove("typing");
+          }
+          appendSystemMessage(`Error: ${error.message}`);
+          setStatus("Error");
+        } finally {
+          activeAssistantBubble = null;
+          setSending(false);
+          inputElement.focus();
         }
       }
 
       document.querySelector("#create-session").addEventListener("click", async () => {
         try {
-          writeResponse(await createSession());
+          await createSession();
         } catch (error) {
-          writeResponse({ status: "error", detail: error.message });
+          appendSystemMessage(`Error: ${error.message}`);
+          setStatus("Error");
         }
       });
 
-      document.querySelector("#ask").addEventListener("click", () => {
-        run(() =>
-          postJSON(`/sessions/${sessionId}/answer`, {
-            question: document.querySelector("#question").value,
-          }),
-        );
+      document.querySelector("#composer").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await sendMessage();
       });
 
-      document.querySelector("#run-interview").addEventListener("click", () => {
-        run(() =>
-          postJSON(`/sessions/${sessionId}/interview`, {
-            input: document.querySelector("#interview-input").value,
-            reply_to: document.querySelector("#reply-to").value || null,
-          }),
-        );
+      inputElement.addEventListener("keydown", async (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          await sendMessage();
+        }
       });
     </script>
   </body>
