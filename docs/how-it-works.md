@@ -137,7 +137,7 @@ tools or different write permissions.
 **Schema** (`_strategy.py`): each tool's signature becomes a function schema
 (`model_backend.get_function_schema`) and is embedded as JSON in the system prompt —
 not sent as a native tool spec. The schema is built from the tool's
-`schema_function` — the *interface* method (a `Protocol`'s own docstring and
+`schema_source` — the *interface* method (a `Protocol`'s own docstring and
 signature when the field was narrowed that way) — while `function` stays the
 concrete, bound callable that actually runs; they are the same callable unless a
 `Protocol` narrowed the field. The model is told the *Protocol's* parameter names,

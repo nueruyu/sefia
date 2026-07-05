@@ -79,7 +79,7 @@ class _ExecutionDirector(ABC):
     def _tool_definitions(self) -> list[dict]:
         return [
             self.model_backend.get_function_schema(
-                tool.schema,
+                tool.schema_source,
                 name=tool.name,
             ).get("function", {})
             for tool in self.tools

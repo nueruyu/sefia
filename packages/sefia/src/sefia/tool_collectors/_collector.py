@@ -31,7 +31,7 @@ class DefaultToolCollector(ToolCollector):
 
     The collector records neutral tool metadata. Strategy-specific schema
     generation happens later in the inference strategy, from each tool's
-    ``schema_function`` (the interface's method — the class-level annotation's
+    ``schema_source`` (the interface's method — the class-level annotation's
     method, or the runtime type's, whichever supplied the surface).
     """
 
@@ -62,7 +62,7 @@ class DefaultToolCollector(ToolCollector):
                 registry.add(
                     bound,
                     name=self._model_backend.get_function_name(schema_fn),
-                    schema_function=schema_fn,
+                    schema_source=schema_fn,
                     stream_handler=_resolve_stream_handler(bound),
                 )
 

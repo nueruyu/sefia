@@ -101,7 +101,7 @@ class PydanticDecisionModelFactory:
                 name=(Literal[tool.name], ...),
                 arguments=(
                     self._function_model_factory.params_model(
-                        tool.schema,
+                        tool.schema_source,
                         name=tool.name,
                         forbid_extra=True,
                     ),

@@ -219,7 +219,7 @@ async def test_collect_uses_the_protocol_method_docstring_for_the_schema():
     assert tool_info is not None
 
     schema = PydanticModelBackend().get_function_schema(
-        tool_info.schema, name=tool_info.name
+        tool_info.schema_source, name=tool_info.name
     )
     # The Protocol's own docstring is used, not the implementation's.
     assert schema["function"]["description"] == "Search the web."
