@@ -10,10 +10,8 @@ from .._common.human_input import (
 )
 from .._common.sefia_http import InputRequired, SefiaHTTP
 from .._common.session import UnknownSessionError
-from .agents import Assistant, Interviewer
+from .agents import Interviewer
 from .models import (
-    AnswerRequest,
-    AnswerResponse,
     BriefSchema,
     InputRequiredResponse,
     InterviewCompletedResponse,
@@ -34,7 +32,6 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
         session_dir=EXAMPLE_DIR / ".local",
         model=os.environ.get("EXAMPLE_DEFAULT_MODEL", "gpt-4o-mini"),
     )
-    assistant = Assistant()
     interviewer = Interviewer(api.human_input_tool)
     app = FastAPI(title="Sefia FastAPI Example")
 
@@ -74,11 +71,6 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
     @app.get("/sessions/{session_id}/events")
     async def events(session_id: str):
         return api.events(session_id)
-
-    @app.post("/sessions/{session_id}/answer", response_model=AnswerResponse)
-    async def answer(session_id: str, body: AnswerRequest) -> AnswerResponse:
-        async with api.session(session_id=session_id):
-            return AnswerResponse(answer=await assistant.answer(body.question))
 
     @app.post("/sessions/{session_id}/interview", response_model=InterviewResponse)
     async def interview(session_id: str, body: TurnRequest) -> InterviewResponse:
