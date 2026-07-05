@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sefia FastAPI HITL Example</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+
+      body {
+        margin: 0;
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      main {
+        box-sizing: border-box;
+        width: min(900px, 100%);
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: 28px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        line-height: 1.2;
+      }
+
+      button,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 10px 16px;
+        background: ButtonFace;
+        color: ButtonText;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      button.primary {
+        font-weight: 700;
+      }
+
+      code {
+        overflow-wrap: anywhere;
+      }
+
+      .session-bar,
+      .composer,
+      .chat-log {
+        border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+        border-radius: 16px;
+        background: color-mix(in srgb, Canvas 94%, CanvasText 6%);
+      }
+
+      .session-bar {
+        padding: 12px 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .muted,
+      .session-id,
+      .status {
+        color: color-mix(in srgb, CanvasText 62%, transparent);
+      }
+
+      .session-id {
+        font-size: 0.92rem;
+      }
+
+      .chat-log {
+        flex: 1;
+        min-height: 420px;
+        padding: 18px;
+        overflow: auto;
+      }
+
+      .empty-state {
+        height: 100%;
+        min-height: 320px;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        color: color-mix(in srgb, CanvasText 62%, transparent);
+      }
+
+      .messages {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .message {
+        display: flex;
+      }
+
+      .message.user {
+        justify-content: flex-end;
+      }
+
+      .bubble {
+        max-width: min(720px, 88%);
+        padding: 12px 14px;
+        border-radius: 16px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .message.user .bubble {
+        border-bottom-right-radius: 4px;
+        background: Highlight;
+        color: HighlightText;
+      }
+
+      .message.assistant .bubble {
+        border-bottom-left-radius: 4px;
+        background: color-mix(in srgb, CanvasText 10%, transparent);
+      }
+
+      .message.system .bubble {
+        max-width: 100%;
+        margin: 0 auto;
+        padding: 8px 12px;
+        border-radius: 999px;
+        color: color-mix(in srgb, CanvasText 66%, transparent);
+        background: color-mix(in srgb, CanvasText 7%, transparent);
+        font-size: 0.92rem;
+      }
+
+      .typing::after {
+        content: "▍";
+        display: inline-block;
+        animation: blink 1s steps(1) infinite;
+      }
+
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      .composer {
+        padding: 12px;
+      }
+
+      textarea {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 88px;
+        resize: vertical;
+        border: 0;
+        outline: none;
+        border-radius: 12px;
+        padding: 12px;
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      .composer-actions {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Sefia FastAPI HITL Example</h1>
+          <div class="muted">Plain HTML chat UI for the interview workflow.</div>
+        </div>
+        <button class="primary" type="button" id="create-session">
+          Create new session
+        </button>
+      </header>
+
+      <div class="session-bar">
+        <div class="session-id">session_id: <code id="session-id">not created</code></div>
+        <div class="status" id="status">Ready</div>
+      </div>
+
+      <section class="chat-log" id="chat-log" aria-label="Chat messages">
+        <div class="empty-state" id="empty-state">
+          <div>
+            <strong>Start an interview</strong>
+            <div>Send a vague content request. The agent should ask follow-up questions when details are missing.</div>
+          </div>
+        </div>
+        <div class="messages" id="messages"></div>
+      </section>
+
+      <form class="composer" id="composer">
+        <textarea
+          id="message-input"
+          placeholder="Describe the content you want..."
+        >I want an article about our new product.</textarea>
+        <div class="composer-actions">
+          <span class="muted">Enter sends. Shift+Enter adds a newline.</span>
+          <button class="primary" type="submit" id="send">Send</button>
+        </div>
+      </form>
+    </main>
+
+    <script>
+      let sessionId = null;
+      let eventSource = null;
+      let activeAssistantBubble = null;
+      let pendingInteractionId = null;
+      let lastInputRequiredId = null;
+      let isSending = false;
+
+      const sessionIdElement = document.querySelector("#session-id");
+      const statusElement = document.querySelector("#status");
+      const chatLogElement = document.querySelector("#chat-log");
+      const emptyStateElement = document.querySelector("#empty-state");
+      const messagesElement = document.querySelector("#messages");
+      const inputElement = document.querySelector("#message-input");
+      const sendButton = document.querySelector("#send");
+
+      function setStatus(message) {
+        statusElement.textContent = message;
+      }
+
+      function setSending(value) {
+        isSending = value;
+        sendButton.disabled = value;
+        inputElement.disabled = value;
+      }
+
+      function parseEventData(data) {
+        try {
+          return JSON.parse(data);
+        } catch {
+          return data;
+        }
+      }
+
+      async function postJSON(path, body) {
+        const response = await fetch(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || response.statusText);
+        }
+        return data;
+      }
+
+      function clearChat() {
+        messagesElement.replaceChildren();
+        emptyStateElement.hidden = false;
+        activeAssistantBubble = null;
+        pendingInteractionId = null;
+        lastInputRequiredId = null;
+      }
+
+      function appendMessage(role, content = "") {
+        emptyStateElement.hidden = true;
+
+        const row = document.createElement("div");
+        row.className = `message ${role}`;
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = content;
+
+        row.appendChild(bubble);
+        messagesElement.appendChild(row);
+        chatLogElement.scrollTop = chatLogElement.scrollHeight;
+        return bubble;
+      }
+
+      function appendSystemMessage(content) {
+        appendMessage("system", content);
+      }
+
+      function setAssistantMessage(content) {
+        if (!activeAssistantBubble) {
+          activeAssistantBubble = appendMessage("assistant");
+        }
+        activeAssistantBubble.textContent = content;
+        activeAssistantBubble.classList.remove("typing");
+        chatLogElement.scrollTop = chatLogElement.scrollHeight;
+      }
+
+      function formatBrief(brief) {
+        return [
+          "Brief completed:",
+          `Topic: ${brief.topic}`,
+          `Goal: ${brief.goal}`,
+          `Audience: ${brief.audience}`,
+        ].join("\n");
+      }
+
+      function handleInputRequired(data) {
+        pendingInteractionId = data.interaction_id;
+        if (lastInputRequiredId === data.interaction_id) {
+          setStatus("Waiting for your reply");
+          return;
+        }
+        lastInputRequiredId = data.interaction_id;
+        setAssistantMessage(data.question);
+        setStatus("Waiting for your reply");
+      }
+
+      function handleCompleted(data) {
+        pendingInteractionId = null;
+        lastInputRequiredId = null;
+        setAssistantMessage(formatBrief(data.brief));
+        setStatus("Completed");
+      }
+
+      function connectEvents() {
+        if (!sessionId) {
+          return;
+        }
+        if (eventSource) {
+          eventSource.close();
+        }
+
+        eventSource = new EventSource(`/sessions/${sessionId}/events`);
+        eventSource.addEventListener("input_required", (event) => {
+          handleInputRequired(parseEventData(event.data));
+        });
+        eventSource.addEventListener("completed", () => {
+          setStatus("Completed");
+        });
+        eventSource.addEventListener("error", (event) => {
+          const data = parseEventData(event.data);
+          if (activeAssistantBubble) {
+            activeAssistantBubble.classList.remove("typing");
+          }
+          appendSystemMessage(`Error: ${data.message || event.data}`);
+          setStatus("Error");
+        });
+        eventSource.onerror = () => {
+          setStatus("SSE connection interrupted");
+        };
+      }
+
+      async function createSession({ resetChat = true } = {}) {
+        const data = await postJSON("/sessions");
+        sessionId = data.session_id;
+        sessionIdElement.textContent = sessionId;
+        setStatus("Session ready");
+        if (resetChat) {
+          clearChat();
+        }
+        connectEvents();
+        return data;
+      }
+
+      async function ensureSession() {
+        if (!sessionId) {
+          await createSession({ resetChat: false });
+        }
+      }
+
+      async function sendMessage() {
+        const input = inputElement.value.trim();
+        if (!input || isSending) {
+          return;
+        }
+
+        await ensureSession();
+        const replyTo = pendingInteractionId;
+        pendingInteractionId = null;
+        appendMessage("user", input);
+        activeAssistantBubble = appendMessage("assistant", "Thinking...");
+        activeAssistantBubble.classList.add("typing");
+        inputElement.value = "";
+        setSending(true);
+        setStatus(replyTo ? "Sending reply..." : "Starting interview...");
+
+        try {
+          const result = await postJSON(`/sessions/${sessionId}/interview`, {
+            input,
+            reply_to: replyTo,
+          });
+          if (result.status === "input_required") {
+            handleInputRequired(result);
+          } else {
+            handleCompleted(result);
+          }
+        } catch (error) {
+          if (activeAssistantBubble) {
+            activeAssistantBubble.classList.remove("typing");
+          }
+          appendSystemMessage(`Error: ${error.message}`);
+          setStatus("Error");
+        } finally {
+          activeAssistantBubble = null;
+          setSending(false);
+          inputElement.focus();
+        }
+      }
+
+      document.querySelector("#create-session").addEventListener("click", async () => {
+        try {
+          await createSession();
+        } catch (error) {
+          appendSystemMessage(`Error: ${error.message}`);
+          setStatus("Error");
+        }
+      });
+
+      document.querySelector("#composer").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await sendMessage();
+      });
+
+      inputElement.addEventListener("keydown", async (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          await sendMessage();
+        }
+      });
+    </script>
+  </body>
+</html>
