@@ -25,6 +25,10 @@ agent needs more detail, the UI displays the `input_required` question as the
 next assistant message and remembers the `interaction_id` for the next user
 reply. When the workflow completes, the UI renders the structured brief.
 
+The demo interviewer asks at most one focused follow-up question. If the request
+is usable with reasonable assumptions, it completes the brief instead of asking
+separately for topic, goal, and audience.
+
 The UI intentionally ignores raw `token` events because this example's `@infer`
 stream contains internal structured output tokens; the user-facing HITL flow is
 shown through `input_required`, `completed`, and the normal HTTP response body.
@@ -43,8 +47,8 @@ and does not require a separate frontend toolchain.
 
 ## Human-in-the-loop (pause / resume)
 
-The interview agent pauses to ask clarifying questions. The first POST sends the
-initial request; if the agent needs more, the normal HTTP response is
+The interview agent may pause to ask one clarifying question. The first POST
+sends the initial request; if the agent needs more, the normal HTTP response is
 `input_required` with an `interaction_id`. The same event is also published on
 the session event stream when a client is subscribed.
 
