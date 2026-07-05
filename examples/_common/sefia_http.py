@@ -214,7 +214,9 @@ class SefiaHTTP:
             )
             raise
         else:
-            await self._events.publish(session_id, "completed", {"session_id": session_id})
+            await self._events.publish(
+                session_id, "completed", {"session_id": session_id}
+            )
 
     def events(self, session_id: str) -> StreamingResponse:
         self.ensure_session(session_id)

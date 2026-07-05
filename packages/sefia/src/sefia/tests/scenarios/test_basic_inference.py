@@ -283,9 +283,7 @@ async def test_inference_on_standalone_function(
         ...
 
     mock_response = LLMResponse(
-        content=json.dumps(
-            {"decision": "result", "result": "This is a summary."}
-        )
+        content=json.dumps({"decision": "result", "result": "This is a summary."})
     )
     mock_llm = MockLLMClient(responses=[mock_response])
     session_id = "standalone-function-test"
