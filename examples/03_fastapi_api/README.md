@@ -14,12 +14,21 @@ Run from the repository root. See the [examples README](../README.md) for setup
 python -m examples.03_fastapi_api
 ```
 
-The server listens on `http://127.0.0.1:8000` (interactive docs at `/docs`).
+The server listens on `http://127.0.0.1:8000`. Open `/` for a small browser UI,
+or `/docs` for the interactive API docs.
+
+## Browser UI
+
+Open `http://127.0.0.1:8000/` to create a session, call the answer and interview
+endpoints, and watch `token`, `completed`, `input_required`, and `error` events
+from the shared SSE channel. The UI is intentionally plain HTML served by the
+FastAPI example so it stays dependency-free and easy to inspect.
 
 ## Endpoints
 
 | Method & path | Purpose |
 | --- | --- |
+| `GET /` | Open the dependency-free browser UI |
 | `POST /sessions` | Create a persisted session |
 | `GET /sessions/{id}/events` | Subscribe to session events via SSE |
 | `POST /sessions/{id}/answer` | Ask the one-shot assistant |
@@ -74,6 +83,7 @@ curl -s -X POST localhost:8000/sessions/$SID/interview \
 - Running Sefia workflows with a CLI-like procedural session block
 - Publishing `token`, `completed`, `input_required`, and `error` events through a separate SSE channel
 - Keeping SSE wiring out of the application workflow body
+- Serving a dependency-free browser UI from the same FastAPI process
 
 ## Note on sessions
 
