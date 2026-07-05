@@ -8,7 +8,7 @@ dependencies = [
     "glyff>=0.11.0",
     "glyff-file-store>=0.11.0",
     "glyff-pydantic>=0.11.0",
-    "jsonstream",
+    "jsonweir>=0.1.0",
 ]
 
 [build-system]

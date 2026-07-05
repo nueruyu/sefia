@@ -2,7 +2,6 @@
 members = [
     "packages/sefia",
     "packages/sefia_litellm",
-    "packages/jsonstream",
     "packages/sefios",
     "examples"
 ]
@@ -10,7 +9,6 @@ members = [
 [tool.uv.sources]
 sefia = { workspace = true }
 sefia-litellm = { workspace = true }
-jsonstream = { workspace = true }
 sefios = { workspace = true }
 
 [tool.pytest.ini_options]

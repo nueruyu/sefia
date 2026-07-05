@@ -8,8 +8,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from jsonstream import IncrementalJsonParser
-from jsonstream import events as js
+from jsonweir import IncrementalJsonParser
+from jsonweir import events as js
 
 from sefia.streaming import ArgStream
 
