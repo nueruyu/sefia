@@ -74,7 +74,10 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
 
     @app.post("/sessions/{session_id}/interview", response_model=InterviewResponse)
     async def interview(session_id: str, body: TurnRequest) -> InterviewResponse:
-        async with api.session(session_id=session_id) as session:
+        # The interview flow demonstrates human-in-the-loop lifecycle streaming,
+        # not raw LLM token streaming. Keeping token streaming disabled prevents
+        # internal structured @infer tokens from leaking into the browser UI.
+        async with api.session(session_id=session_id, stream=False) as session:
             await session.accept_input(body.input, reply_to=body.reply_to)
             brief = await interviewer.run()
             return InterviewCompletedResponse(brief=BriefSchema.from_brief(brief))
