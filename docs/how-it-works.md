@@ -193,6 +193,11 @@ answer is delivered with `accept_input` and you re-invoke the same session: ever
 completed step replays, and the human tool runs again, now with an answer available,
 and returns it.
 
+Before tool execution, the default `sefios` policy also runs a step middleware that
+composes multiple human-input tool calls emitted in the same model decision into one
+question. It does not carry state across steps, so a follow-up question produced
+after resume remains a normal separate interaction.
+
 The idempotency hinge is `get_call_state_store` (`_context.py`): it scopes a small
 state store to the **current engraved call's `ExecutionId`** (hashed). Because a
 resumed invocation re-enters the *same* engraved call with the *same* execution id,
