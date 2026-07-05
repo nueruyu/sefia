@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sefia FastAPI Example</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+
+      body {
+        margin: 0;
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      main {
+        box-sizing: border-box;
+        width: min(960px, 100%);
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.2;
+      }
+
+      section {
+        margin-top: 24px;
+        padding: 20px;
+        border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+        border-radius: 12px;
+      }
+
+      label {
+        display: block;
+        margin: 12px 0 6px;
+        font-weight: 650;
+      }
+
+      textarea,
+      input,
+      button {
+        font: inherit;
+      }
+
+      textarea,
+      input {
+        box-sizing: border-box;
+        width: 100%;
+        border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+
+      button {
+        margin-top: 12px;
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 14px;
+        background: ButtonFace;
+        color: ButtonText;
+        cursor: pointer;
+      }
+
+      button.primary {
+        font-weight: 700;
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .muted {
+        color: color-mix(in srgb, CanvasText 62%, transparent);
+      }
+
+      code {
+        overflow-wrap: anywhere;
+      }
+
+      pre {
+        min-height: 96px;
+        overflow: auto;
+        padding: 12px;
+        border-radius: 8px;
+        background: color-mix(in srgb, CanvasText 8%, transparent);
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Sefia FastAPI Example</h1>
+      <p class="muted">
+        Create a session, call the normal HTTP endpoints, and watch token and
+        lifecycle events from the shared SSE channel.
+      </p>
+
+      <section>
+        <h2>Session</h2>
+        <div class="row">
+          <button class="primary" type="button" id="create-session">
+            Create new session
+          </button>
+          <span>session_id: <code id="session-id">not created</code></span>
+        </div>
+      </section>
+
+      <section>
+        <h2>One-shot answer</h2>
+        <label for="question">Question</label>
+        <textarea id="question">What is a vector database in one sentence?</textarea>
+        <button type="button" id="ask">Ask</button>
+      </section>
+
+      <section>
+        <h2>Human-in-the-loop interview</h2>
+        <label for="interview-input">Input</label>
+        <textarea id="interview-input">I want an article about our new product.</textarea>
+        <label for="reply-to">reply_to interaction_id, optional</label>
+        <input id="reply-to" placeholder="Paste interaction_id after input_required" />
+        <button type="button" id="run-interview">Run interview turn</button>
+      </section>
+
+      <section>
+        <h2>Response</h2>
+        <pre id="response">No response yet.</pre>
+      </section>
+
+      <section>
+        <h2>Events</h2>
+        <pre id="events">No events yet.</pre>
+      </section>
+    </main>
+
+    <script>
+      let sessionId = null;
+      let eventSource = null;
+
+      const sessionIdElement = document.querySelector("#session-id");
+      const responseElement = document.querySelector("#response");
+      const eventsElement = document.querySelector("#events");
+
+      function writeResponse(value) {
+        responseElement.textContent = JSON.stringify(value, null, 2);
+      }
+
+      function appendEvent(type, data) {
+        if (eventsElement.textContent === "No events yet.") {
+          eventsElement.textContent = "";
+        }
+        eventsElement.textContent += `[${type}] ${data}\n`;
+        eventsElement.scrollTop = eventsElement.scrollHeight;
+      }
+
+      async function postJSON(path, body) {
+        const response = await fetch(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || response.statusText);
+        }
+        return data;
+      }
+
+      async function createSession() {
+        const data = await postJSON("/sessions");
+        sessionId = data.session_id;
+        sessionIdElement.textContent = sessionId;
+        eventsElement.textContent = "No events yet.";
+
+        if (eventSource) {
+          eventSource.close();
+        }
+
+        eventSource = new EventSource(`/sessions/${sessionId}/events`);
+        for (const type of ["token", "completed", "input_required", "error"]) {
+          eventSource.addEventListener(type, (event) => appendEvent(type, event.data));
+        }
+        eventSource.onerror = () => appendEvent("connection", "SSE connection error");
+      }
+
+      async function ensureSession() {
+        if (!sessionId) {
+          await createSession();
+        }
+      }
+
+      async function run(action) {
+        try {
+          await ensureSession();
+          writeResponse(await action());
+        } catch (error) {
+          writeResponse({ status: "error", detail: error.message });
+        }
+      }
+
+      document.querySelector("#create-session").addEventListener("click", () => {
+        run(createSession);
+      });
+
+      document.querySelector("#ask").addEventListener("click", () => {
+        run(() =>
+          postJSON(`/sessions/${sessionId}/answer`, {
+            question: document.querySelector("#question").value,
+          }),
+        );
+      });
+
+      document.querySelector("#run-interview").addEventListener("click", () => {
+        run(() =>
+          postJSON(`/sessions/${sessionId}/interview`, {
+            input: document.querySelector("#interview-input").value,
+            reply_to: document.querySelector("#reply-to").value || null,
+          }),
+        );
+      });
+    </script>
+  </body>
+</html>
