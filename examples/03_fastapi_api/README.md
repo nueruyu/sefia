@@ -79,4 +79,6 @@ curl -s -X POST localhost:8000/sessions/$SID/interview \
 
 Each session persists to disk under the example's `.local/` directory. Send
 requests for a given session one at a time; concurrent turns against the *same*
-session are not supported (different sessions are independent).
+session are not supported. Different sessions are independent and safe to run
+concurrently: the shared human-input store binds the active session per task
+(via a `ContextVar`), so overlapping requests do not see each other's state.

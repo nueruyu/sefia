@@ -57,9 +57,6 @@ class _SessionEventBroker:
             if not subscribers:
                 self._subscribers.pop(session_id, None)
 
-    def has_subscribers(self, session_id: str) -> bool:
-        return bool(self._subscribers.get(session_id))
-
     async def publish(self, session_id: str, name: str, data: Any) -> None:
         subscribers = list(self._subscribers.get(session_id, ()))
         if not subscribers:
@@ -151,9 +148,12 @@ class SefiaHTTP:
         policies: list[Policy] | None = None,
     ) -> AsyncIterator[SefiaHTTPSession]:
         self.ensure_session(session_id)
-        resolved_stream = (
-            self._events.has_subscribers(session_id) if stream is None else stream
-        )
+        # Always publish token events. Publishing is a no-op when nobody is
+        # subscribed, and keeping streaming on unconditionally means a client that
+        # subscribes mid-run still receives the remaining tokens -- otherwise
+        # streaming would depend on subscribing strictly before the request that
+        # starts the run.
+        resolved_stream = True if stream is None else stream
         session_policies: list[Policy] = list(policies or [])
         if resolved_stream:
             session_policies.append(
@@ -162,24 +162,35 @@ class SefiaHTTP:
                 )
             )
 
+        paused_request: dict | None = None
         try:
             async with self._session_scope.session(
                 session_id=session_id,
                 model=model,
                 stream=resolved_stream,
                 policies=session_policies or None,
-            ) as session:
-                with self._human_input.store.use_session_store(session.session_store):
-                    yield SefiaHTTPSession(human_input=self._human_input_receiver)
+            ) as scoped:
+                with self._human_input.store.use_session_store(scoped.session_store):
+                    try:
+                        yield SefiaHTTPSession(human_input=self._human_input_receiver)
+                    except YieldException:
+                        # Read the pending request while the session store is
+                        # still bound, so no second session scope is needed, then
+                        # re-raise so the session scope handles the pause exactly
+                        # as before. InputRequired is raised only after the scope
+                        # exits, both to keep glyff's pause/resume semantics and
+                        # because it is a frozen dataclass that cannot carry the
+                        # traceback the scope's exit would set on it.
+                        pending = await self._human_input.store.pending_requests()
+                        if not pending:
+                            raise RuntimeError(
+                                "YieldException raised but no pending input request found."
+                            ) from None
+                        paused_request = next(iter(sorted(pending.items())))[1]
+                        raise
         except YieldException:
-            async with self._session_scope.session(session_id=session_id) as session:
-                with self._human_input.store.use_session_store(session.session_store):
-                    pending = await self._human_input.store.pending_requests()
-            if not pending:
-                raise RuntimeError(
-                    "YieldException raised but no pending input request found."
-                )
-            request = next(iter(sorted(pending.items())))[1]
+            request = paused_request
+            assert request is not None  # set before the re-raise above
             await self._events.publish(
                 session_id,
                 "input_required",

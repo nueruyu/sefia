@@ -1,6 +1,7 @@
 import inspect
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TypeVar
 
 from sefia import SessionStore
@@ -39,19 +40,26 @@ class HumanInputSessionStore:
 
     Reads observe writes made earlier in the same session because the bound
     Sefia ``SessionStore`` provides read-your-writes consistency.
+
+    The active binding is held in a :class:`~contextvars.ContextVar` rather than a
+    plain attribute so that a single shared store instance stays correct when
+    several sessions run concurrently (e.g. one asyncio task per HTTP request):
+    each task binds and reads its own session store. ``set``/``reset`` also keeps
+    the nested single-session (CLI) usage working unchanged.
     """
 
     def __init__(self):
-        self._active_store: SessionStore | None = None
+        self._active_store: ContextVar[SessionStore | None] = ContextVar(
+            "human_input_active_store", default=None
+        )
 
     @contextmanager
     def use_session_store(self, session_store: SessionStore):
-        previous_store = self._active_store
-        self._active_store = session_store
+        token = self._active_store.set(session_store)
         try:
             yield
         finally:
-            self._active_store = previous_store
+            self._active_store.reset(token)
 
     async def pending_requests(self) -> dict[str, dict]:
         store = self._store()
@@ -102,9 +110,10 @@ class HumanInputSessionStore:
         return next_input
 
     def _store(self) -> SessionStore:
-        if self._active_store is None:
+        store = self._active_store.get()
+        if store is None:
             raise RuntimeError("Human input session store is not bound to a session.")
-        return self._active_store
+        return store
 
     @staticmethod
     def _answer_key(interaction_id: str) -> str:
