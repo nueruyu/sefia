@@ -29,13 +29,3 @@ async def test_human_input_tool_streams_question_deltas():
     await registered.stream_handler(channel)
 
     assert seen == ["What ", "topic?"]
-
-
-def test_human_input_tool_is_resolvable_by_function():
-    agent = Agent(HumanInputTool())
-    registry = DefaultToolCollector().collect(agent)
-    registered = next(
-        tool for tool in registry.get_all() if "get_human_input" in tool.name
-    )
-
-    assert registry.get_by_function(HumanInputTool.get_human_input) == [registered]

@@ -78,9 +78,8 @@ class TestHumanInputCallComposer:
                 name=HUMAN_INPUT_TOOL_NAME,
                 arguments={
                     "question": (
-                        "Please answer these together:\n"
-                        "1. What is the target audience?\n"
-                        "2. What is the goal of the article?"
+                        "What is the target audience?\n"
+                        "What is the goal of the article?"
                     )
                 },
             )
@@ -110,12 +109,29 @@ class TestHumanInputCallComposer:
             id="h1",
             name=HUMAN_INPUT_TOOL_NAME,
             arguments={
-                "question": (
-                    "Please answer these together:\n"
-                    "1. First question?\n"
-                    "2. Second question?"
-                )
+                "question": "First question?\nSecond question?",
             },
+        )
+
+    async def test_custom_question_composer_can_be_async(self):
+        async def compose_questions(questions: list[str]) -> str:
+            return " / ".join(questions)
+
+        decision = ToolCallDecision(
+            calls=[
+                _human_call("h1", "First question?"),
+                _human_call("h2", "Second question?"),
+            ]
+        )
+
+        composed = await _run(
+            HumanInputCallComposer(compose_questions=compose_questions),
+            decision,
+        )
+
+        assert isinstance(composed, ToolCallDecision)
+        assert composed.calls[0].arguments["question"] == (
+            "First question? / Second question?"
         )
 
     async def test_sequential_human_input_steps_are_not_collapsed(self):
