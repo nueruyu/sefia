@@ -25,49 +25,48 @@ class _UnhashableCallable:
 
 
 class TestPydanticModelBackend:
-    def test_get_function_schema(self):
+    def test_definition(self):
         backend = PydanticModelBackend()
 
-        schema = backend.get_function_schema(_sample_func)
+        definition = backend.definition(_sample_func, name="_sample_func")
 
-        assert schema["type"] == "function"
-        fn = schema["function"]
-        assert fn["name"] == "_sample_func"
-        assert fn["description"] == "Sample function."
-        assert fn["parameters"]["properties"]["a"]["type"] == "integer"
-        assert fn["parameters"]["properties"]["b"]["type"] == "string"
-        assert fn["parameters"]["properties"]["b"]["default"] == "x"
-        assert fn["parameters"]["required"] == ["a"]
-        assert fn["parameters"]["additionalProperties"] is False
+        assert definition.name == "_sample_func"
+        assert definition.description == "Sample function."
+        params = definition.parameters
+        assert params["properties"]["a"]["type"] == "integer"
+        assert params["properties"]["b"]["type"] == "string"
+        assert params["properties"]["b"]["default"] == "x"
+        assert params["required"] == ["a"]
+        assert params["additionalProperties"] is False
 
-    def test_get_function_name_sanitizes_complex_names(self):
+    def test_tool_name_sanitizes_complex_names(self):
         class Outer:
             class Inner:
                 def my_method(self):
                     pass
 
-        name = PydanticModelBackend().get_function_name(Outer.Inner.my_method)
+        name = PydanticModelBackend().tool_name(Outer.Inner.my_method)
 
         assert name.endswith("Outer_Inner_my_method")
         assert "." not in name
         assert "<" not in name
 
-    def test_get_function_schema_is_cached(self):
+    def test_definition_is_cached(self):
         backend = PydanticModelBackend()
 
-        schema1 = backend.get_function_schema(_sample_func)
-        schema2 = backend.get_function_schema(_sample_func)
+        definition1 = backend.definition(_sample_func, name="_sample_func")
+        definition2 = backend.definition(_sample_func, name="_sample_func")
 
-        assert schema1 is schema2
+        assert definition1 is definition2
 
-    def test_get_function_schema_caches_unhashable_callables(self):
+    def test_definition_caches_unhashable_callables(self):
         backend = PydanticModelBackend()
         func = _UnhashableCallable()
 
-        schema1 = backend.get_function_schema(func)
-        schema2 = backend.get_function_schema(func)
+        definition1 = backend.definition(func, name="unhashable")
+        definition2 = backend.definition(func, name="unhashable")
 
-        assert schema1 is schema2
+        assert definition1 is definition2
 
     def test_cache_key_uses_identity_for_unhashable_callables(self):
         func = _UnhashableCallable()
@@ -91,11 +90,18 @@ class TestPydanticModelBackend:
         assert key is not None
         assert ref() is not None
 
-    def test_get_function_schema_rejects_positional_only_parameters(self):
+    def test_definition_rejects_positional_only_parameters(self):
         backend = PydanticModelBackend()
 
         with pytest.raises(ValueError, match="positional-only.*keyword arguments"):
-            backend.get_function_schema(_positional_only_func)
+            backend.definition(_positional_only_func, name="_positional_only_func")
+
+    def test_bind_coerces_and_passes_extra_keys_through(self):
+        backend = PydanticModelBackend()
+
+        # Declared params are coerced; the shape is enforced upstream, so bind
+        # passes any additional keys through unchanged.
+        assert backend.bind(_sample_func, {"a": "1", "b": "y"}) == {"a": 1, "b": "y"}
 
     def test_function_model_factory_reuses_params_model(self):
         factory = PydanticFunctionModelFactory()
@@ -103,12 +109,12 @@ class TestPydanticModelBackend:
         model1 = factory.params_model(
             _sample_func,
             name="_sample_func",
-            forbid_extra=True,
+            extra="forbid",
         )
         model2 = factory.params_model(
             _sample_func,
             name="_sample_func",
-            forbid_extra=True,
+            extra="forbid",
         )
 
         assert model1 is model2

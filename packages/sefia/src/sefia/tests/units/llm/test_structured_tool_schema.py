@@ -6,7 +6,7 @@ import pytest
 from pydantic import Field, TypeAdapter, ValidationError
 
 from sefia._interfaces import DecisionModelSpec
-from sefia._tool_system import Tool, ToolRegistry
+from sefia._tool_system import SignatureTool, Tool, ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.inference import FunctionInfo, ToolCallDecision
@@ -31,11 +31,12 @@ class _MockPublisher(EventPublisher):
 
 def _tool() -> Tool:
     backend = PydanticModelBackend()
-    name = backend.get_function_name(ask_user)
-    return Tool(
+    name = backend.tool_name(ask_user)
+    return SignatureTool(
+        ask_user,
         name=name,
-        function=ask_user,
         schema_source=ask_user,
+        inspector=backend,
     )
 
 
@@ -117,7 +118,7 @@ class TestToolCallValidation:
         formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=client,
-            model_backend=PydanticModelBackend(),
+            decision_builder=PydanticModelBackend(),
             prompt_formatter=formatter,
         )
 
@@ -165,7 +166,7 @@ class TestToolCallValidation:
             )
 
     async def test_rejects_empty_min_length_argument(self) -> None:
-        with pytest.raises(InvalidInferenceResponseError, match="at least 1"):
+        with pytest.raises(InvalidInferenceResponseError, match="non-empty"):
             await self._decide(
                 {
                     "decision": "tool_calls",

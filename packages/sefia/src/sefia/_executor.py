@@ -1,4 +1,3 @@
-import inspect
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from . import events
@@ -143,13 +142,9 @@ class InferenceExecutor:
                 )
             else:
                 try:
-                    tool_func = tool_info.function
-                    result = tool_func(**call.arguments)
-                    if inspect.isawaitable(result):
-                        result = await result
-                    output = result
+                    output = await tool_info.invoke(call.arguments)
                     await self.publisher.publish(
-                        events.AfterToolCall(tool_call=call, result=result)
+                        events.AfterToolCall(tool_call=call, result=output)
                     )
                 except PauseException:
                     raise

@@ -2,9 +2,45 @@ import functools
 import inspect
 import re
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Annotated, Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, create_model
+import jsonschema
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    WithJsonSchema,
+    create_model,
+)
+
+ExtraPolicy = Literal["forbid", "allow", "ignore"]
+
+
+def json_schema_argument_type(schema: dict[str, Any]) -> Any:
+    """A Pydantic-usable type that validates a dict against a raw JSON Schema.
+
+    ``BeforeValidator`` runs strict ``jsonschema`` validation (required, types,
+    ``additionalProperties``, ...) on the decoded arguments, and
+    ``WithJsonSchema`` embeds the schema verbatim so it reaches the LLM through
+    the decision model's own JSON schema. Kept internal to the pydantic backend:
+    the raw type never crosses a tool or interface boundary.
+    """
+
+    validator = jsonschema.Draft202012Validator(schema)
+
+    def _validate(value: Any) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ValueError("arguments must be a JSON object")
+        errors = sorted(validator.iter_errors(value), key=lambda e: list(e.path))
+        if errors:
+            raise ValueError("; ".join(error.message for error in errors))
+        return value
+
+    return Annotated[
+        dict[str, Any],
+        BeforeValidator(_validate),
+        WithJsonSchema(schema),
+    ]
 
 
 class _UnhashableCallableKey:
@@ -97,16 +133,14 @@ def _create_params_model(
     func: Callable[..., Any],
     *,
     name: str,
-    forbid_extra: bool,
+    extra: ExtraPolicy,
 ) -> type[BaseModel]:
     field_definitions = _build_param_fields(func)
-    if forbid_extra:
-        return create_model(
-            f"{name}Params",
-            __config__=ConfigDict(extra="forbid"),
-            **field_definitions,
-        )
-    return create_model(f"{name}Params", **field_definitions)
+    return create_model(
+        f"{name}Params",
+        __config__=ConfigDict(extra=extra),
+        **field_definitions,
+    )
 
 
 class PydanticFunctionModelFactory:
@@ -120,14 +154,14 @@ class PydanticFunctionModelFactory:
         func: Callable[..., Any],
         *,
         name: str,
-        forbid_extra: bool,
+        extra: ExtraPolicy = "forbid",
     ) -> type[BaseModel]:
-        key = (cache_key(func), name, forbid_extra)
+        key = (cache_key(func), name, extra)
         if key not in self._params_model_cache:
             self._params_model_cache[key] = _create_params_model(
                 func,
                 name=name,
-                forbid_extra=forbid_extra,
+                extra=extra,
             )
         return self._params_model_cache[key]
 

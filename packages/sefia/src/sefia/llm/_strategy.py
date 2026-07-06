@@ -7,11 +7,11 @@ from typing import Any, Callable, Never
 
 from .._interfaces import (
     DecisionModel,
+    DecisionModelBuilder,
     DecisionModelSpec,
     DecisionToolCall,
     InferenceStrategy,
     LLMDecision,
-    ModelBackend,
     ResultLLMDecision,
     ToolCallsLLMDecision,
 )
@@ -44,11 +44,11 @@ class _ExecutionDirector(ABC):
 
     def __init__(
         self,
-        model_backend: ModelBackend,
+        decision_builder: DecisionModelBuilder,
         output_type: Any,
         tools: list[Tool],
     ):
-        self.model_backend = model_backend
+        self.decision_builder = decision_builder
         self.output_type = output_type
         self.tools = tools
         self.decision_model = self._build_decision_model()
@@ -77,13 +77,7 @@ class _ExecutionDirector(ABC):
         raise NotImplementedError
 
     def _tool_definitions(self) -> list[dict]:
-        return [
-            self.model_backend.get_function_schema(
-                tool.schema_source,
-                name=tool.name,
-            ).get("function", {})
-            for tool in self.tools
-        ]
+        return [tool.definition().to_dict() for tool in self.tools]
 
     def _tool_call_decision(
         self, tool_calls: list[DecisionToolCall]
@@ -122,7 +116,7 @@ class _ToolOnlyDirector(_ExecutionDirector):
     """Director for tool-only execution mode."""
 
     def _build_decision_model(self) -> DecisionModel:
-        return self.model_backend.build_decision_model(
+        return self.decision_builder.build(
             DecisionModelSpec.tool_only(
                 name="LLMDecision",
                 output_type=self.output_type,
@@ -154,7 +148,7 @@ class _ToolEnabledDirector(_ExecutionDirector):
     """Director for tool-enabled execution mode (tools or result)."""
 
     def _build_decision_model(self) -> DecisionModel:
-        return self.model_backend.build_decision_model(
+        return self.decision_builder.build(
             DecisionModelSpec.tool_enabled(
                 name="LLMDecision",
                 output_type=self.output_type,
@@ -192,7 +186,7 @@ class _OutputOnlyDirector(_ExecutionDirector):
     """Director for result-only execution mode."""
 
     def _build_decision_model(self) -> DecisionModel:
-        return self.model_backend.build_decision_model(
+        return self.decision_builder.build(
             DecisionModelSpec.output_only(
                 name="LLMDecision",
                 output_type=self.output_type,
@@ -230,13 +224,13 @@ class LLMInferenceStrategy(InferenceStrategy):
     def __init__(
         self,
         llm_client: LLMClient,
-        model_backend: ModelBackend,
+        decision_builder: DecisionModelBuilder,
         prompt_formatter: PromptFormatter,
         json_default: JsonDefault | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
-        self.model_backend = model_backend
+        self.decision_builder = decision_builder
         self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
@@ -251,10 +245,10 @@ class LLMInferenceStrategy(InferenceStrategy):
                     "An @infer function returning Never must have tools available, "
                     "otherwise the inference loop can never make progress."
                 )
-            return _ToolOnlyDirector(self.model_backend, output_type, tools)
+            return _ToolOnlyDirector(self.decision_builder, output_type, tools)
         if tools:
-            return _ToolEnabledDirector(self.model_backend, output_type, tools)
-        return _OutputOnlyDirector(self.model_backend, output_type, tools)
+            return _ToolEnabledDirector(self.decision_builder, output_type, tools)
+        return _OutputOnlyDirector(self.decision_builder, output_type, tools)
 
     async def decide_next_step(
         self,

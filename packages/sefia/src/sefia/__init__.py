@@ -3,7 +3,6 @@ from ._interfaces import (
     InferenceContext,
     InferenceMiddleware,
     InferenceStrategy,
-    ModelBackend,
     Policy,
     StepContext,
     StepMiddleware,
@@ -11,7 +10,16 @@ from ._interfaces import (
 from ._markers import AsRawText
 from ._profiles import Profile
 from ._session import Session
-from ._tool_system import Tool, ToolCollector, ToolRegistry
+from ._tool_system import (
+    CompositeToolCollector,
+    JsonSchemaTool,
+    SignatureTool,
+    StaticToolCollector,
+    Tool,
+    ToolCollector,
+    ToolDefinition,
+    ToolRegistry,
+)
 
 __all__ = [
     "infer",
@@ -28,7 +36,11 @@ __all__ = [
     "InferenceContext",
     "StepContext",
     "Tool",
+    "SignatureTool",
+    "JsonSchemaTool",
+    "ToolDefinition",
     "ToolCollector",
+    "StaticToolCollector",
+    "CompositeToolCollector",
     "ToolRegistry",
-    "ModelBackend",
 ]
