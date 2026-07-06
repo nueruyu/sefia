@@ -7,10 +7,10 @@ from typing import Annotated, TypeVar
 from glyff import engrave
 from pydantic import Field
 from sefia import preview
-from sefia.exceptions import NeedsInput
 from sefia.streaming import ArgStream, StringDelta
 
 from .._session_state import get_session_state
+from ..exceptions import NeedsInput
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]

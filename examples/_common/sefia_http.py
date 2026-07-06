@@ -9,11 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.responses import StreamingResponse
-from sefia.exceptions import NeedsInput
 from sefia import Policy
 from sefia.event_system import EventHandler
 from sefia.llm.events import LLMTokenReceived
-from sefios import SessionScope, get_session_state
+from sefios import NeedsInput, SessionScope, get_session_state
 from sefios.handlers import CostCalculator
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputTool

@@ -135,7 +135,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 from sefia import infer
-from sefia.exceptions import NeedsInput          # raised when the run pauses
+from sefios import NeedsInput          # raised when the run pauses
 from sefios import SessionScope
 from sefios.tools import HumanInputTool, WebSearchTool
 
@@ -207,7 +207,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from pydantic import BaseModel
-from sefia.exceptions import NeedsInput
+from sefios import NeedsInput
 from sefios import SessionScope
 from sefios.tools import HumanInputTool, WebSearchTool
 

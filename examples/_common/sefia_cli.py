@@ -6,8 +6,8 @@ from typing import Protocol, TypeVar, cast
 
 import typer
 from sefia import Policy
-from sefia.exceptions import InferenceError, NeedsInput
-from sefios import SessionScope, get_session_state, get_state
+from sefia.exceptions import InferenceError
+from sefios import NeedsInput, SessionScope, get_session_state, get_state
 from sefios.handlers import CostCalculator, CostState
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputRequest, HumanInputTool

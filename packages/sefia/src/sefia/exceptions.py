@@ -16,23 +16,10 @@ class PauseException(SefiaError):
     glyff records completed executions durably and leaves an interrupted one in
     its ``STARTED`` state, so re-invoking the workflow re-runs only the
     unfinished step and resumes from where it paused.
+
+    Concrete pause signals (such as ``sefios.exceptions.NeedsInput``) subclass
+    this; the core only depends on the base contract.
     """
-
-
-class NeedsInput(PauseException):
-    """
-    Raised by an input-awaiting tool (such as human input) to pause the run
-    until an answer is available.
-
-    Carries the ``question`` that needs answering. Catch it to surface the pause
-    to your caller; once the answer is recorded, re-invoking the same session
-    replays the completed steps and re-runs the tool, which now returns the
-    answer.
-    """
-
-    def __init__(self, question: str = "") -> None:
-        super().__init__(question)
-        self.question = question
 
 
 class ToolError(SefiaError):

@@ -1,8 +1,8 @@
 import pytest
 import typer
-from sefia.exceptions import NeedsInput
 from pytest_mock import MockerFixture
 from sefia.exceptions import InvalidInferenceResponseError
+from sefios import NeedsInput
 
 from examples._common.sefia_cli import SefiaCLI
 
