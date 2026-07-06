@@ -9,7 +9,6 @@ from glyff.store import MemoryBackend
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Session, infer, policy
 from sefia.llm import LLMClient, LLMResponse, Message
-from sefia.stores import MemorySessionStore as SefiaMemoryStore
 from sefios.middleware import StagnationDetector
 from sefios.policies import CustomPolicy
 
@@ -80,10 +79,7 @@ class Researcher:
 
 
 def _make_stores(serializer: Serializer):
-    return (
-        MemoryBackend(),
-        SefiaMemoryStore(serializer=serializer),
-    )
+    return MemoryBackend()
 
 
 async def test_stagnation_state_is_isolated_between_infer_calls():
@@ -137,7 +133,7 @@ async def test_stagnation_state_is_isolated_between_infer_calls():
         ]
     )
 
-    glyff_store, sefia_store = _make_stores(serializer)
+    glyff_store = _make_stores(serializer)
 
     async with glyff.Session(
         id="stagnation-isolation-test",
@@ -145,9 +141,7 @@ async def test_stagnation_state_is_isolated_between_infer_calls():
         serializer=serializer,
         hasher=hasher,
     ) as gs:
-        async with Session(
-            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-        ):
+        async with Session(llm_client=mock_llm, glyff_session=gs):
             researcher = Researcher(WebToolkit())
 
             report1 = await researcher.generate_report(topic="first")

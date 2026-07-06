@@ -1,23 +1,52 @@
 import json
 import uuid
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable, Coroutine
 
 import glyff
 import pytest
 from glyff import ArgsHasher, Serializer, engrave
-from sefia.exceptions import PauseException
 from glyff.store import MemoryBackend
+from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 
-from sefia import (
-    Session,
-    get_context,
-    infer,
-)
-from sefia.llm import LLMResponse
-from sefia.stores import MemorySessionStore as SefiaMemoryStore
+from sefia import Session, infer
+from sefia.exceptions import PauseException
+from sefia.llm import LLMClient, LLMResponse, Message
+from sefios import MemorySessionStore, bind_session_state, get_session_state
 
-from ..conftest import MockLLMClient, Report
+
+class MockLLMClient(LLMClient):
+    """A mock LLM client that returns pre-defined responses."""
+
+    def __init__(self, responses: list[LLMResponse]):
+        self.responses = responses
+        self.requests: list[dict[str, Any]] = []
+
+    async def complete(
+        self,
+        messages: list[Message],
+        tools: list[dict] | None = None,
+        output_schema: dict | None = None,
+        stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
+    ) -> LLMResponse:
+        self.requests.append(
+            {
+                "messages": [m.to_dict(exclude_none=True) for m in messages],
+                "tools": tools,
+                "output_schema": output_schema,
+                "stream_callback": stream_callback,
+            }
+        )
+        if not self.responses:
+            raise AssertionError("MockLLMClient has no more responses.")
+        return self.responses.pop(0)
+
+
+@dataclass
+class Report:
+    topic: str
+    summary: str
+    sources: list[str]
 
 
 # --- State models for testing ---
@@ -44,8 +73,8 @@ class HumanInputTool:
 
     @engrave
     async def ask_user(self, question: str) -> str:
-        ctx = get_context()
-        call_store = ctx.get_call_state_store("internal_state", _AskUserState)
+        session_state = get_session_state()
+        call_store = session_state.get_call_state_store("internal_state", _AskUserState)
         call_state = await call_store.ensure()
 
         try:
@@ -54,7 +83,9 @@ class HumanInputTool:
                 await call_store.save(call_state)
                 raise PauseException()
 
-            session_store = ctx.get_state_store("interaction_state", InteractionState)
+            session_store = session_state.get_state_store(
+                "interaction_state", InteractionState
+            )
             interaction_state = await session_store.get()
 
             if (
@@ -70,6 +101,16 @@ class HumanInputTool:
             if self._on_interrupt and call_state.interaction_id:
                 self._on_interrupt(call_state.interaction_id, question)
             raise
+
+
+@pytest.fixture
+def serializer() -> Serializer:
+    return PydanticSerializer()
+
+
+@pytest.fixture
+def hasher() -> ArgsHasher:
+    return PydanticArgsHasher()
 
 
 class TestStatefulTool:
@@ -123,17 +164,16 @@ class TestStatefulTool:
         agent = Agent(HumanInputTool(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-1"
         glyff_store = MemoryBackend()
-        sefia_store = SefiaMemoryStore(serializer=serializer)
+        sefia_store = MemorySessionStore(serializer=serializer)
 
         # --- First run: Should interrupt ---
         with pytest.raises(PauseException):
             async with glyff.Session(
                 id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
             ) as gs:
-                async with Session(
-                    llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-                ) as sefia_session:
-                    await agent.get_user_name()
+                with bind_session_state(sefia_store):
+                    async with Session(llm_client=mock_llm, glyff_session=gs):
+                        await agent.get_user_name()
 
         assert "id" in interrupt_details
         assert interrupt_details["question"] == "What is your name?"
@@ -142,17 +182,16 @@ class TestStatefulTool:
         async with glyff.Session(
             id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
         ) as gs:
-            async with Session(
-                llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-            ) as sefia_session:
-                interaction_store = sefia_session.get_state_store(
-                    "interaction_state", InteractionState
-                )
-                state = await interaction_store.ensure()
-                state.answers[interrupt_details["id"]] = Answer(content="Alice")
-                await interaction_store.save(state)
+            with bind_session_state(sefia_store) as session_state:
+                async with Session(llm_client=mock_llm, glyff_session=gs):
+                    interaction_store = session_state.get_state_store(
+                        "interaction_state", InteractionState
+                    )
+                    state = await interaction_store.ensure()
+                    state.answers[interrupt_details["id"]] = Answer(content="Alice")
+                    await interaction_store.save(state)
 
-                report = await agent.get_user_name()
+                    report = await agent.get_user_name()
 
         assert report.summary == "The user's name is Alice."
         assert len(mock_llm.requests) == 2
@@ -223,17 +262,16 @@ class TestStatefulTool:
         agent = Agent(HumanInputTool(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-2"
         glyff_store = MemoryBackend()
-        sefia_store = SefiaMemoryStore(serializer=serializer)
+        sefia_store = MemorySessionStore(serializer=serializer)
 
         # --- 1. Ask for name, should interrupt ---
         with pytest.raises(PauseException):
             async with glyff.Session(
                 id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
             ) as gs:
-                async with Session(
-                    llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-                ):
-                    await agent.get_profile()
+                with bind_session_state(sefia_store):
+                    async with Session(llm_client=mock_llm, glyff_session=gs):
+                        await agent.get_profile()
         assert "Name?" in interrupts
 
         # --- 2. Provide name, ask for age, should interrupt again ---
@@ -241,32 +279,30 @@ class TestStatefulTool:
             async with glyff.Session(
                 id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
             ) as gs:
-                async with Session(
-                    llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-                ) as sefia_session:
-                    interaction_store = sefia_session.get_state_store(
-                        "interaction_state", InteractionState
-                    )
-                    state = await interaction_store.ensure()
-                    state.answers[interrupts["Name?"]] = Answer(content="Alice")
-                    await interaction_store.save(state)
-                    await agent.get_profile()
+                with bind_session_state(sefia_store) as session_state:
+                    async with Session(llm_client=mock_llm, glyff_session=gs):
+                        interaction_store = session_state.get_state_store(
+                            "interaction_state", InteractionState
+                        )
+                        state = await interaction_store.ensure()
+                        state.answers[interrupts["Name?"]] = Answer(content="Alice")
+                        await interaction_store.save(state)
+                        await agent.get_profile()
         assert "Age?" in interrupts
 
         # --- 3. Provide age, should complete ---
         async with glyff.Session(
             id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
         ) as gs:
-            async with Session(
-                llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-            ) as sefia_session:
-                interaction_store = sefia_session.get_state_store(
-                    "interaction_state", InteractionState
-                )
-                state = await interaction_store.ensure()
-                state.answers[interrupts["Age?"]] = Answer(content="99")
-                await interaction_store.save(state)
-                report = await agent.get_profile()
+            with bind_session_state(sefia_store) as session_state:
+                async with Session(llm_client=mock_llm, glyff_session=gs):
+                    interaction_store = session_state.get_state_store(
+                        "interaction_state", InteractionState
+                    )
+                    state = await interaction_store.ensure()
+                    state.answers[interrupts["Age?"]] = Answer(content="99")
+                    await interaction_store.save(state)
+                    report = await agent.get_profile()
 
         assert report.summary == "Alice is 99."
         assert len(mock_llm.requests) == 3

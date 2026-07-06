@@ -2,11 +2,11 @@ from typing import Any
 
 from glyff import Serializer
 
-from .._interfaces.session_store import SessionStore
+from ._base import SessionStore
 
 
 class MemorySessionStore(SessionStore):
-    """An in-memory metadata store for session-scoped sefia state.
+    """An in-memory metadata store for session-scoped state.
 
     Values are serialized and held in a plain dict, and every write takes effect
     immediately — so state written before a pause survives the interrupt and is

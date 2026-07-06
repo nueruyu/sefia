@@ -5,13 +5,13 @@ from typing import Any
 
 from glyff import Serializer
 
-from .._interfaces.session_store import SessionStore
+from ._base import SessionStore
 
 _UNSAFE = re.compile(r'[<>:"\\|?*%' + r"\x00-\x1f]")
 
 
 class FileSessionStore(SessionStore):
-    """A file-based metadata store for session-scoped sefia state.
+    """A file-based metadata store for session-scoped state.
 
     Each key maps to a JSON file under ``base_dir``. Writes are committed
     immediately (temp file + atomic rename), so state written before a pause is

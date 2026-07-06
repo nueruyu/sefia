@@ -5,12 +5,13 @@ from pathlib import Path
 import glyff
 import glyff_file_store
 import sefia
-import sefia.stores
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Profile, Policy
 from sefia.llm import LLMClient
 
+from ._session_state import bind_session_state
 from .policies import DefaultPolicy
+from .stores import FileSessionStore
 
 
 class SessionScope:
@@ -77,7 +78,7 @@ class SessionScope:
             serializer=serializer,
             hasher=PydanticArgsHasher(),
         )
-        session_store = sefia.stores.FileSessionStore(
+        session_store = FileSessionStore(
             base_dir=self.session_dir / "sefia_metadata" / session_id,
             serializer=serializer,
         )
@@ -92,12 +93,12 @@ class SessionScope:
             final_profiles.extend(profiles)
 
         async with gs:
-            async with sefia.Session(
-                llm_client=llm_client,
-                glyff_session=gs,
-                session_store=session_store,
-                policies=final_policies,
-                profiles=final_profiles,
-                stream=resolved_stream,
-            ) as session:
-                yield session
+            with bind_session_state(session_store):
+                async with sefia.Session(
+                    llm_client=llm_client,
+                    glyff_session=gs,
+                    policies=final_policies,
+                    profiles=final_profiles,
+                    stream=resolved_stream,
+                ) as session:
+                    yield session

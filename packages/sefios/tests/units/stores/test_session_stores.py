@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 from glyff_pydantic import PydanticSerializer
 
-from sefia.stores import FileSessionStore, MemorySessionStore
+from sefios.stores import FileSessionStore, MemorySessionStore
 
 
 def _make_store(store_type: type, tmp_path, serializer):

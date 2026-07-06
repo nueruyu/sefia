@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TypeVar
 
-from sefia import SessionStore
+from sefios import SessionStore
 from sefios.tools import HumanInputRequest, HumanInputResult, HumanInputTool
 
 _PENDING_HUMAN_INPUTS_KEY = "pending_human_inputs"

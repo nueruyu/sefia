@@ -1,6 +1,6 @@
 import pytest
 from glyff_pydantic import PydanticSerializer
-from sefia.stores import MemorySessionStore
+from sefios.stores import MemorySessionStore
 
 
 @pytest.fixture

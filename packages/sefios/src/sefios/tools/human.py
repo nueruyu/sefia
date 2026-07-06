@@ -6,9 +6,11 @@ from typing import Annotated, TypeVar
 
 from glyff import engrave
 from pydantic import Field
-from sefia import get_context, preview
+from sefia import preview
 from sefia.exceptions import NeedsInput
 from sefia.streaming import ArgStream, StringDelta
+
+from .._session_state import get_session_state
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -91,8 +93,9 @@ class HumanInputTool:
         answer is immediately available, the current session is interrupted until
         input is provided.
         """
-        ctx = get_context()
-        call_store = ctx.get_call_state_store("internal_state", _AskUserState)
+        call_store = get_session_state().get_call_state_store(
+            "internal_state", _AskUserState
+        )
         call_state = await call_store.ensure()
 
         if call_state.interaction_id is None:

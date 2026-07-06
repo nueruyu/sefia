@@ -195,20 +195,21 @@ answer is delivered with `accept_input` and you re-invoke the same session: ever
 completed step replays, and the human tool runs again, now with an answer available,
 and returns it.
 
-The idempotency hinge is `get_call_state_store` (`_context.py`): it scopes a small
-state store to the **current engraved call's `ExecutionId`** (hashed). Because a
-resumed invocation re-enters the *same* engraved call with the *same* execution id,
-the tool reads back the *same* `interaction_id` it stored before — so the pending
-question is keyed stably and a re-entry doesn't create a duplicate. State that must
-survive a pause lives here; everything else is just function arguments and return
-values.
+The idempotency hinge is `get_call_state_store` on the bound `SessionState`
+(`sefios/_session_state.py`): it scopes a small state store to the **current engraved
+call's `ExecutionId`** (hashed). Because a resumed invocation re-enters the *same*
+engraved call with the *same* execution id, the tool reads back the *same*
+`interaction_id` it stored before — so the pending question is keyed stably and a
+re-entry doesn't create a duplicate. The store commits immediately, so this state
+survives the pause; everything else is just function arguments and return values.
 
 ## Sessions and context
 
 `sefia.Session` (`_session.py`) wraps a `glyff.Session`, builds the strategy/tool
-collector/stores, and on `__aenter__` installs a `SessionContext` into a contextvar
-that `@infer` reads. `SessionScope` in `sefios` is the configured front door that
-constructs all of this (LLM client, glyff session, file store, default policies) so
+collector, and on `__aenter__` installs a `SessionContext` into a contextvar that
+`@infer` reads. Session-scoped state persistence lives one layer up: `SessionScope` in
+`sefios` is the configured front door that constructs all of this (LLM client, glyff
+session, the `SessionStore` bound via `bind_session_state`, default policies) so
 application code only writes `async with scope.session(session_id=...)`. Profiles let
 a single call swap the model/policies by key, resolved per-call in
 `SessionContext.resolve_profile`.

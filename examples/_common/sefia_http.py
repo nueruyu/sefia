@@ -13,7 +13,7 @@ from sefia.exceptions import NeedsInput
 from sefia import Policy
 from sefia.event_system import EventHandler
 from sefia.llm.events import LLMTokenReceived
-from sefios import SessionScope
+from sefios import SessionScope, get_session_state
 from sefios.handlers import CostCalculator
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputTool
@@ -169,8 +169,10 @@ class SefiaHTTP:
                 model=model,
                 stream=resolved_stream,
                 policies=session_policies or None,
-            ) as scoped:
-                with self._human_input.store.use_session_store(scoped.session_store):
+            ):
+                with self._human_input.store.use_session_store(
+                    get_session_state().store
+                ):
                     try:
                         yield SefiaHTTPSession(human_input=self._human_input_receiver)
                     except NeedsInput:
