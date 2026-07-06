@@ -64,13 +64,13 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state; call-scoped state stores. | `SessionContext`, `get_context`, `get_call_state_store` |
 | `_profiles.py` / `_metadata.py` | Per-call model/policy selection; the `__sefia_metadata__` store. | `Profile` |
-| `_tool_system.py` | The tool registry and the collector interface. | `Tool`, `ToolRegistry`, `ToolCollector` |
+| `_tool_system.py` | The tool hierarchy, registry, and collector interfaces. | `Tool`, `SignatureTool`, `JsonSchemaTool`, `ToolDefinition`, `ToolRegistry`, `ToolCollector` |
 | `tool_collectors/_collector.py` | Default discovery: a held field's public surface, by class-level annotation or runtime type. | `DefaultToolCollector` |
 | `_state_store.py` / `stores/` | Typed state persistence; memory & file backends. | `StateStore`, `MemorySessionStore`, `FileSessionStore` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
 | `llm/` | The **default** `InferenceStrategy`: function → prompt+schema → decision. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
-| `pydantic/` | The **default** `ModelBackend`: schema gen & validation via Pydantic. | `PydanticModelBackend` |
+| `pydantic/` | The **default** `ToolFunctionInspector` + `DecisionModelBuilder`: schema gen & validation via Pydantic. | `PydanticModelBackend` |
 
 ### The seams (`_interfaces/`) — the extension ports
 
@@ -81,7 +81,7 @@ implementation noted in parentheses.
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
-| `ModelBackend` | non-Pydantic schema/validation | `pydantic/PydanticModelBackend` |
+| `ToolFunctionInspector` / `DecisionModelBuilder` | non-Pydantic schema gen & validation | `pydantic/PydanticModelBackend` |
 | `SessionStore` | a new persistence backend | `stores/Memory`/`File` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards | `sefios` middleware/policies |
@@ -109,7 +109,8 @@ implementation noted in parentheses.
 | Add a persistence backend | implement `SessionStore`; reference `stores/_file.py` |
 | Change which methods are tools | `tool_collectors/_collector.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
-| Support a new output type system | `ModelBackend` in `pydantic/_model_backend.py` |
+| Support a new output type system | `ToolFunctionInspector` / `DecisionModelBuilder` in `pydantic/_model_backend.py` |
+| Register a tool from a raw JSON Schema (no signature) | `JsonSchemaTool` / `ToolRegistry.add_json_tool` in `_tool_system.py` |
 | Trace the runtime end to end | [how-it-works.md](./how-it-works.md) |
 
 ## Conventions

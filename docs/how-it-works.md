@@ -134,20 +134,25 @@ held dependencies. Keep multiple inferred methods together only when that shared
 surface is intentional; split services when different operations need different
 tools or different write permissions.
 
-**Schema** (`_strategy.py`): each tool's signature becomes a function schema
-(`model_backend.get_function_schema`) and is embedded as JSON in the system prompt —
-not sent as a native tool spec. The schema is built from the tool's
-`schema_source` — the *interface* method (a `Protocol`'s own docstring and
-signature when the field was narrowed that way) — while `function` stays the
-concrete, bound callable that actually runs; they are the same callable unless a
+**Schema** (`_strategy.py`): each tool produces a `ToolDefinition` (`tool.definition()`),
+embedded as JSON in the system prompt — not sent as a native tool spec. A
+`SignatureTool` reflects its definition from a callable's signature via the
+inspector; its `schema_source` is the *interface* method (a `Protocol`'s own
+docstring and signature when the field was narrowed that way), while the callable
+that runs stays the concrete, bound implementation — the same callable unless a
 `Protocol` narrowed the field. The model is told the *Protocol's* parameter names,
 and the executor calls the concrete implementation with those same names as
 keyword arguments, so a `Protocol` and the implementation it narrows must agree on
 parameter names, not just behavior — nothing checks this at runtime, so a mismatch
 surfaces as a tool-execution error on the first call rather than at discovery time.
+A `JsonSchemaTool` instead carries its parameters as a raw JSON Schema (no
+signature to introspect) and passes that schema through verbatim.
 
 **Execution** (`InferenceExecutor._call_tools`): the model's requested call is matched
-in the registry and invoked; sync or async returns are normalized. A tool that
+in the registry and dispatched through `tool.invoke(arguments)`; sync or async
+returns are normalized. For a `SignatureTool` the decoded arguments are coerced to
+the callable's declared types before the call; a `JsonSchemaTool` forwards them to
+its handler verbatim. A tool that
 **raises `NeedsInput` propagates immediately** — that is the durable pause (see below)
 — so it reaches your handler; any *other* tool exception is stringified into the
 history and fed back to the model so it can recover and continue, rather than failing

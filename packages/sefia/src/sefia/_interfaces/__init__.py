@@ -1,6 +1,7 @@
 from .decision_model import (
     DecisionMode,
     DecisionModel,
+    DecisionModelBuilder,
     DecisionModelSpec,
     DecisionToolCall,
     ResultLLMDecision,
@@ -14,7 +15,6 @@ from .middleware import (
     StepContext,
     StepMiddleware,
 )
-from .model_backend import ModelBackend
 from .policy import Policy
 from .session_store import SessionStore
 
@@ -24,10 +24,10 @@ __all__ = [
     "StepMiddleware",
     "InferenceContext",
     "StepContext",
-    "ModelBackend",
     "Policy",
     "SessionStore",
     "DecisionModel",
+    "DecisionModelBuilder",
     "DecisionModelSpec",
     "DecisionMode",
     "DecisionToolCall",

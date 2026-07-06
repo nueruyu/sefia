@@ -2,8 +2,12 @@ import inspect
 import types
 from typing import Any, Callable, Union, get_args, get_origin, get_type_hints
 
-from .._interfaces import ModelBackend
-from .._tool_system import ToolCollector, ToolRegistry, get_stream_handler
+from .._tool_system import (
+    ToolCollector,
+    ToolFunctionInspector,
+    ToolRegistry,
+    get_stream_handler,
+)
 from ..streaming import StreamHandler
 
 # Annotations that declare no usable interface; a field so annotated falls
@@ -35,12 +39,12 @@ class DefaultToolCollector(ToolCollector):
     method, or the runtime type's, whichever supplied the surface).
     """
 
-    def __init__(self, model_backend: ModelBackend | None = None):
-        if model_backend is None:
+    def __init__(self, inspector: ToolFunctionInspector | None = None):
+        if inspector is None:
             from ..pydantic._model_backend import PydanticModelBackend
 
-            model_backend = PydanticModelBackend()
-        self._model_backend = model_backend
+            inspector = PydanticModelBackend()
+        self._inspector = inspector
 
     def collect(self, instance: object) -> ToolRegistry:
         registry = ToolRegistry()
@@ -61,8 +65,9 @@ class DefaultToolCollector(ToolCollector):
                     continue
                 registry.add(
                     bound,
-                    name=self._model_backend.get_function_name(schema_fn),
+                    name=self._inspector.tool_name(schema_fn),
                     schema_source=schema_fn,
+                    inspector=self._inspector,
                     stream_handler=_resolve_stream_handler(bound),
                 )
 

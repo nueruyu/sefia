@@ -5,7 +5,6 @@ import glyff
 
 from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import Policy
-from ._interfaces.model_backend import ModelBackend
 from ._interfaces.session_store import SessionStore
 from ._profiles import Profile
 from ._state_store import StateStore
@@ -34,7 +33,7 @@ class Session:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
-        model_backend: ModelBackend | None = None,
+        model_backend: PydanticModelBackend | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
@@ -45,8 +44,10 @@ class Session:
 
         model_backend = model_backend or PydanticModelBackend()
 
+        # ``PydanticModelBackend`` is both a ToolFunctionInspector (for the
+        # collector) and a DecisionModelBuilder (for the strategy).
         self._tool_collector = tool_collector or DefaultToolCollector(
-            model_backend=model_backend
+            inspector=model_backend
         )
         prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
 
@@ -54,7 +55,7 @@ class Session:
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
-                model_backend=model_backend,
+                decision_builder=model_backend,
                 prompt_formatter=prompt_formatter,
                 json_default=pydantic_json_default,
                 stream=stream,
