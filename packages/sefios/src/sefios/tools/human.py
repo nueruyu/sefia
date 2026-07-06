@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from typing import Annotated, TypeVar
 
 from glyff import engrave
-from glyff.exceptions import YieldException
 from pydantic import Field
 from sefia import get_context, preview
+from sefia.exceptions import NeedsInput
 from sefia.streaming import ArgStream, StringDelta
 
 T = TypeVar("T")
@@ -115,7 +115,7 @@ class HumanInputTool:
             return answer
 
         await self._notify_request(request)
-        raise YieldException()
+        raise NeedsInput(question)
 
     @preview(get_human_input)
     async def _stream_get_human_input(self, events: ArgStream) -> None:

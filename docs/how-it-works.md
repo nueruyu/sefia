@@ -171,13 +171,15 @@ paused at step 4 replays steps 1–3 and the tools they called, then runs step 4
 **Exceptions never poison a run.** glyff **never engraves an exception as a permanent
 result**: any exception that escapes an engraved call leaves that call **resumable**
 while the work that already completed stays committed, and the exception then
-propagates normally. So there is no special control-flow type: a transient
+propagates normally. So no exception type changes glyff's durability: a transient
 provider hiccup or a response that failed schema validation simply propagates and is
 re-run on the next invocation (an in-loop `Retrier` may retry it first); a
 human-input tool raises `NeedsInput` to pause; an ordinary bug raises and surfaces to
 you. In every case the completed engraved steps are safe and the interrupted one runs
-again on re-invocation. (Today's code still routes recoverable errors through a
-transitional `InferenceError` base; that distinction is being removed.)
+again on re-invocation. sefia's control-flow pauses subclass `PauseException`
+(`sefia.exceptions`), which the executor propagates untouched instead of reporting as
+a failure: `NeedsInput` (a tool awaiting input) and the recoverable `InferenceError`
+base are both pauses.
 
 ## Human-in-the-loop: pause = raise, resume = re-invoke
 

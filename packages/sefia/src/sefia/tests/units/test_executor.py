@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from glyff.exceptions import YieldException
+from sefia.exceptions import PauseException
 from pytest_mock import MockerFixture
 
 from sefia import (
@@ -426,7 +426,7 @@ class TestInferenceExecutor:
     async def test_recoverable_inference_error_yields_without_failing_run(
         self, executor_dependencies
     ):
-        # A recoverable InferenceError is also a YieldException, so it must
+        # A recoverable InferenceError is also a PauseException, so it must
         # propagate as a graceful interrupt: the step's failure is still
         # published for observation (InferenceStepFailed), but the run is NOT
         # reported as failed (no InferenceFailed), and the original typed error
@@ -469,7 +469,7 @@ class TestInferenceExecutor:
         self, executor_dependencies
     ):
         # An observation handler cannot steer control flow: if it reacts to
-        # InferenceStepFailed by raising YieldException, the publisher isolates
+        # InferenceStepFailed by raising PauseException, the publisher isolates
         # it, so the original error propagates and is engraved as a genuine
         # failure. Resumable interrupts must come from the control layer (tools),
         # not from observers.
@@ -478,7 +478,7 @@ class TestInferenceExecutor:
 
         class InterruptOnFailure(EventHandler[events.InferenceStepFailed]):
             async def handle(self, event):
-                raise YieldException("interrupted for resume")
+                raise PauseException("interrupted for resume")
 
         publisher = EventPublisher([InterruptOnFailure()])
         executor = InferenceExecutor(

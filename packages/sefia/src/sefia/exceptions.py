@@ -1,8 +1,38 @@
-from glyff.exceptions import YieldException
-
-
 class SefiaError(Exception):
     """Base class for errors raised by sefia."""
+
+
+class PauseException(SefiaError):
+    """
+    Base control-flow signal that pauses the current run so it can be resumed
+    later.
+
+    A tool (for example, one waiting on external human input) raises a subclass
+    of this to interrupt the running inference and hand control back to the
+    caller instead of returning a value. It is a *control* signal, not a
+    failure: the executor lets it propagate untouched rather than stringifying it
+    into the tool history or reporting it through ``InferenceFailed``.
+
+    glyff records completed executions durably and leaves an interrupted one in
+    its ``STARTED`` state, so re-invoking the workflow re-runs only the
+    unfinished step and resumes from where it paused.
+    """
+
+
+class NeedsInput(PauseException):
+    """
+    Raised by an input-awaiting tool (such as human input) to pause the run
+    until an answer is available.
+
+    Carries the ``question`` that needs answering. Catch it to surface the pause
+    to your caller; once the answer is recorded, re-invoking the same session
+    replays the completed steps and re-runs the tool, which now returns the
+    answer.
+    """
+
+    def __init__(self, question: str = "") -> None:
+        super().__init__(question)
+        self.question = question
 
 
 class ToolError(SefiaError):
@@ -13,7 +43,7 @@ class ToolConflictError(SefiaError):
     """Raised when two tools with the same name are found."""
 
 
-class InferenceError(SefiaError, YieldException):
+class InferenceError(PauseException):
     """
     Base class for *recoverable* errors raised while performing an inference
     step.
@@ -25,19 +55,20 @@ class InferenceError(SefiaError, YieldException):
     that did not conform to the expected schema. Genuinely permanent failures
     (authentication, malformed request, content policy, ...) are deliberately
     *not* mapped to ``InferenceError`` and propagate as their own exceptions,
-    which glyff engraves as genuine failures.
+    which the executor reports through ``InferenceFailed``.
 
     Adapters may define their own provider-shaped subclasses of this base (for
     example ``sefia_litellm`` defines ``InferenceTimeoutError`` and friends);
     the framework only depends on this abstract base.
 
-    Because an ``InferenceError`` is recoverable, it also subclasses glyff's
-    ``YieldException``. glyff therefore does **not** engrave it as a permanent
-    ``FAILED`` record; instead the step is left resumable, so re-invoking the
-    workflow re-runs the step from scratch (and an in-loop ``Retrier`` may retry
-    it within the same process first). The error object is preserved as it
-    propagates, so callers can catch it either as an ``InferenceError`` (to
-    inspect what went wrong) or as a ``YieldException`` (to treat it as a pause).
+    Because an ``InferenceError`` is recoverable, it also subclasses
+    :class:`PauseException`. The executor therefore does **not** report it
+    through ``InferenceFailed``; instead the run pauses and stays resumable, so
+    re-invoking the workflow re-runs the step from scratch (and an in-loop
+    ``Retrier`` may retry it within the same process first). The error object is
+    preserved as it propagates, so callers can catch it either as an
+    ``InferenceError`` (to inspect what went wrong) or as a ``PauseException``
+    (to treat it as a pause).
     """
 
 

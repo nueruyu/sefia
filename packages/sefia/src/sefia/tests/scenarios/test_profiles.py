@@ -5,8 +5,7 @@ from enum import Enum, auto
 import glyff
 import pytest
 from glyff import ArgsHasher, Serializer
-from glyff.store import MemoryClient
-from glyff.store import MemorySessionStore as GlyffMemoryStore
+from glyff.store import MemoryBackend
 
 from sefia import Policy, Profile, Session, infer, policy, profile
 from sefia._metadata import KEY_PROFILE_KEY, get_metadata
@@ -18,10 +17,9 @@ from ..conftest import MockLLMClient, Report
 
 
 def _make_stores(serializer):
-    client = MemoryClient()
     return (
-        GlyffMemoryStore(client=client, serializer=serializer),
-        SefiaMemoryStore(client=client, serializer=serializer),
+        MemoryBackend(),
+        SefiaMemoryStore(serializer=serializer),
     )
 
 
@@ -120,7 +118,9 @@ async def test_infer_uses_selected_profile_client(
     fast_llm = MockLLMClient(responses=[_result("from fast")])
 
     glyff_store, sefia_store = _make_stores(serializer)
-    async with glyff.Session(id="profiles", store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id="profiles", backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=default_llm,
             glyff_session=gs,
@@ -156,7 +156,9 @@ async def test_policy_layering_session_profile_function(
 
     fast_llm = MockLLMClient(responses=[_result("ok")])
     glyff_store, sefia_store = _make_stores(serializer)
-    async with glyff.Session(id="layering", store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id="layering", backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=fast_llm,
             glyff_session=gs,
@@ -181,7 +183,9 @@ async def test_unknown_profile_raises(serializer: Serializer, hasher: ArgsHasher
 
     default_llm = MockLLMClient(responses=[_result("unused")])
     glyff_store, sefia_store = _make_stores(serializer)
-    async with glyff.Session(id="unknown", store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id="unknown", backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=default_llm,
             glyff_session=gs,
@@ -200,7 +204,9 @@ def test_duplicate_profile_keys_rejected(serializer: Serializer, hasher: ArgsHas
     with pytest.raises(ValueError, match="Duplicate profile key: 'dup'"):
         Session(
             llm_client=a,
-            glyff_session=glyff.Session(id="dup", store=glyff_store, hasher=hasher),
+            glyff_session=glyff.Session(
+                id="dup", backend=glyff_store, serializer=serializer, hasher=hasher
+            ),
             session_store=sefia_store,
             profiles=[
                 Profile(key="dup", client=a),
@@ -228,7 +234,9 @@ async def test_enum_key_selects_profile(serializer: Serializer, hasher: ArgsHash
     smart_llm = MockLLMClient(responses=[_result("from smart")])
 
     glyff_store, sefia_store = _make_stores(serializer)
-    async with glyff.Session(id="enum-key", store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id="enum-key", backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=default_llm,
             glyff_session=gs,
@@ -257,7 +265,9 @@ async def test_unknown_enum_key_lists_registered(
 
     default_llm = MockLLMClient(responses=[_result("unused")])
     glyff_store, sefia_store = _make_stores(serializer)
-    async with glyff.Session(id="enum-miss", store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id="enum-miss", backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=default_llm,
             glyff_session=gs,

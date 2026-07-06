@@ -1,9 +1,9 @@
+import os
 import re
 from pathlib import Path
 from typing import Any
 
 from glyff import Serializer
-from glyff_file_store import FileClient
 
 from .._interfaces.session_store import SessionStore
 
@@ -11,10 +11,15 @@ _UNSAFE = re.compile(r'[<>:"\\|?*%' + r"\x00-\x1f]")
 
 
 class FileSessionStore(SessionStore):
-    """A file-based metadata store backed by glyff's FileClient."""
+    """A file-based metadata store for session-scoped sefia state.
 
-    def __init__(self, client: FileClient, serializer: Serializer):
-        self._client = client
+    Each key maps to a JSON file under ``base_dir``. Writes are committed
+    immediately (temp file + atomic rename), so state written before a pause is
+    durably persisted and visible when the run resumes.
+    """
+
+    def __init__(self, base_dir: str | Path, serializer: Serializer):
+        self._base_dir = Path(base_dir)
         self._serializer = serializer
 
     def _key_to_path(self, key: str) -> Path:
@@ -24,11 +29,16 @@ class FileSessionStore(SessionStore):
             if not p or p in (".", ".."):
                 raise ValueError(f"Invalid key part: {p!r}")
             safe_parts.append(_UNSAFE.sub(lambda m: f"%{ord(m.group()):02X}", p))
-        return Path("sefia", "metadata", *safe_parts).with_suffix(".json")
+        return self._base_dir.joinpath("sefia", "metadata", *safe_parts).with_suffix(
+            ".json"
+        )
 
     async def get(self, key: str, type_hint: type) -> Any | None:
         path = self._key_to_path(key)
-        data = await self._client.read(path)
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError:
+            return None
         if data:
             return await self._serializer.deserialize(data, type_hint)
         return None
@@ -36,12 +46,14 @@ class FileSessionStore(SessionStore):
     async def set(self, key: str, value: Any, type_hint: type) -> None:
         path = self._key_to_path(key)
         data = await self._serializer.serialize(value, type_hint)
-
-        async def _write() -> bytes:
-            return data
-
-        await self._client.stage_write(path, _write)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f"{path.name}.tmp")
+        tmp.write_bytes(data)
+        os.replace(tmp, path)
 
     async def delete(self, key: str) -> None:
         path = self._key_to_path(key)
-        await self._client.stage_delete(path)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass

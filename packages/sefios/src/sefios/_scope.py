@@ -67,19 +67,19 @@ class SessionScope:
 
         serializer = PydanticSerializer()
 
-        file_client = glyff_file_store.FileClient(
+        backend = glyff_file_store.JsonFileBackend(
             base_dir=self.session_dir / "glyff_sessions",
             session_id=session_id,
         )
         gs = glyff.Session(
             id=session_id,
-            store=glyff_file_store.JsonFileSessionStore(
-                client=file_client, serializer=serializer
-            ),
+            backend=backend,
+            serializer=serializer,
             hasher=PydanticArgsHasher(),
         )
         session_store = sefia.stores.FileSessionStore(
-            client=file_client, serializer=serializer
+            base_dir=self.session_dir / "sefia_metadata" / session_id,
+            serializer=serializer,
         )
 
         final_policies: list[Policy] = list(self.policies)

@@ -6,9 +6,8 @@ from typing import Callable
 import glyff
 import pytest
 from glyff import ArgsHasher, Serializer, engrave
-from glyff.exceptions import YieldException
-from glyff.store import MemoryClient
-from glyff.store import MemorySessionStore as GlyffMemoryStore
+from sefia.exceptions import PauseException
+from glyff.store import MemoryBackend
 
 from sefia import (
     Session,
@@ -53,7 +52,7 @@ class HumanInputTool:
             if call_state.interaction_id is None:
                 call_state.interaction_id = str(uuid.uuid4())
                 await call_store.save(call_state)
-                raise YieldException()
+                raise PauseException()
 
             session_store = ctx.get_state_store("interaction_state", InteractionState)
             interaction_state = await session_store.get()
@@ -62,12 +61,12 @@ class HumanInputTool:
                 interaction_state is None
                 or call_state.interaction_id not in interaction_state.answers
             ):
-                raise YieldException()
+                raise PauseException()
 
             answer = interaction_state.answers.pop(call_state.interaction_id)
             await session_store.save(interaction_state)
             return answer.content
-        except YieldException:
+        except PauseException:
             if self._on_interrupt and call_state.interaction_id:
                 self._on_interrupt(call_state.interaction_id, question)
             raise
@@ -123,15 +122,13 @@ class TestStatefulTool:
 
         agent = Agent(HumanInputTool(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-1"
-
-        client = MemoryClient()
-        glyff_store = GlyffMemoryStore(client=client, serializer=serializer)
-        sefia_store = SefiaMemoryStore(client=client, serializer=serializer)
+        glyff_store = MemoryBackend()
+        sefia_store = SefiaMemoryStore(serializer=serializer)
 
         # --- First run: Should interrupt ---
-        with pytest.raises(YieldException):
+        with pytest.raises(PauseException):
             async with glyff.Session(
-                id=session_id, store=glyff_store, hasher=hasher
+                id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
             ) as gs:
                 async with Session(
                     llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
@@ -142,7 +139,9 @@ class TestStatefulTool:
         assert interrupt_details["question"] == "What is your name?"
 
         # --- Second run (with answer): Should succeed ---
-        async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+        async with glyff.Session(
+            id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+        ) as gs:
             async with Session(
                 llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
             ) as sefia_session:
@@ -223,15 +222,13 @@ class TestStatefulTool:
 
         agent = Agent(HumanInputTool(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-2"
-
-        client = MemoryClient()
-        glyff_store = GlyffMemoryStore(client=client, serializer=serializer)
-        sefia_store = SefiaMemoryStore(client=client, serializer=serializer)
+        glyff_store = MemoryBackend()
+        sefia_store = SefiaMemoryStore(serializer=serializer)
 
         # --- 1. Ask for name, should interrupt ---
-        with pytest.raises(YieldException):
+        with pytest.raises(PauseException):
             async with glyff.Session(
-                id=session_id, store=glyff_store, hasher=hasher
+                id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
             ) as gs:
                 async with Session(
                     llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
@@ -240,9 +237,9 @@ class TestStatefulTool:
         assert "Name?" in interrupts
 
         # --- 2. Provide name, ask for age, should interrupt again ---
-        with pytest.raises(YieldException):
+        with pytest.raises(PauseException):
             async with glyff.Session(
-                id=session_id, store=glyff_store, hasher=hasher
+                id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
             ) as gs:
                 async with Session(
                     llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
@@ -257,7 +254,9 @@ class TestStatefulTool:
         assert "Age?" in interrupts
 
         # --- 3. Provide age, should complete ---
-        async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+        async with glyff.Session(
+            id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+        ) as gs:
             async with Session(
                 llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
             ) as sefia_session:

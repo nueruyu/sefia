@@ -1,6 +1,6 @@
 import pytest
 import typer
-from glyff.exceptions import YieldException
+from sefia.exceptions import NeedsInput
 from pytest_mock import MockerFixture
 from sefia.exceptions import InvalidInferenceResponseError
 
@@ -23,7 +23,7 @@ class TestCostReporting:
         reporter.on_session_finished.assert_called_once()
 
     async def test_reports_on_yield(self, tmp_path, mocker: MockerFixture):
-        # A human-input interrupt (chat-style loop) raises YieldException from
+        # A human-input interrupt (chat-style loop) raises NeedsInput from
         # inside the session block; cost should still be reported at that point.
         reporter = mocker.Mock()
         cli = SefiaCLI(
@@ -35,7 +35,7 @@ class TestCostReporting:
 
         with pytest.raises(typer.Exit):
             async with cli.session():
-                raise YieldException()
+                raise NeedsInput()
 
         # On a yield, the interrupt hook fires (reporters may read running cost
         # via get_state there) but the session did not finish normally.

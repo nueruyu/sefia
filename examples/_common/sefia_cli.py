@@ -5,9 +5,8 @@ from pathlib import Path
 from typing import Protocol, TypeVar, cast
 
 import typer
-from glyff.exceptions import YieldException
 from sefia import Policy
-from sefia.exceptions import InferenceError
+from sefia.exceptions import InferenceError, NeedsInput
 from sefios import SessionScope, get_state
 from sefios.handlers import CostCalculator, CostState
 from sefios.policies import CustomPolicy
@@ -201,7 +200,7 @@ class SefiaCLI:
                     except InferenceError as e:
                         await self._report_inference_error(e)
                         raise
-                    except YieldException:
+                    except NeedsInput:
                         # The session context is still alive here, so reporters
                         # may read running state (e.g. cost) via get_state().
                         await self._report_interrupted(resolved_session)
@@ -210,7 +209,7 @@ class SefiaCLI:
                         await self._report_session_finished()
         except InferenceError:
             raise typer.Exit(code=1) from None
-        except YieldException:
+        except NeedsInput:
             raise typer.Exit(code=0)
 
     async def _report_session_resolved(self, session: ResolvedSession) -> None:

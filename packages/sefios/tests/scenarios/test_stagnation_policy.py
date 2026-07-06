@@ -5,8 +5,7 @@ from typing import Any, Callable, Coroutine
 
 import glyff
 from glyff import ArgsHasher, Serializer
-from glyff.store import MemoryClient
-from glyff.store import MemorySessionStore as GlyffMemoryStore
+from glyff.store import MemoryBackend
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Session, infer, policy
 from sefia.llm import LLMClient, LLMResponse, Message
@@ -81,10 +80,9 @@ class Researcher:
 
 
 def _make_stores(serializer: Serializer):
-    client = MemoryClient()
     return (
-        GlyffMemoryStore(client=client, serializer=serializer),
-        SefiaMemoryStore(client=client, serializer=serializer),
+        MemoryBackend(),
+        SefiaMemoryStore(serializer=serializer),
     )
 
 
@@ -142,7 +140,10 @@ async def test_stagnation_state_is_isolated_between_infer_calls():
     glyff_store, sefia_store = _make_stores(serializer)
 
     async with glyff.Session(
-        id="stagnation-isolation-test", store=glyff_store, hasher=hasher
+        id="stagnation-isolation-test",
+        backend=glyff_store,
+        serializer=serializer,
+        hasher=hasher,
     ) as gs:
         async with Session(
             llm_client=mock_llm, glyff_session=gs, session_store=sefia_store

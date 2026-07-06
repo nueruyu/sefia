@@ -1,31 +1,30 @@
 from typing import Any
 
 from glyff import Serializer
-from glyff.store import MemoryClient
 
 from .._interfaces.session_store import SessionStore
 
 
 class MemorySessionStore(SessionStore):
-    """An in-memory metadata store backed by glyff's MemoryClient."""
+    """An in-memory metadata store for session-scoped sefia state.
 
-    def __init__(self, client: MemoryClient, serializer: Serializer):
-        self._client = client
+    Values are serialized and held in a plain dict, and every write takes effect
+    immediately — so state written before a pause survives the interrupt and is
+    visible when the run resumes.
+    """
+
+    def __init__(self, serializer: Serializer):
         self._serializer = serializer
-
-    def _prefix(self, key: str) -> str:
-        return f"sefia::metadata::{key}"
+        self._data: dict[str, bytes] = {}
 
     async def get(self, key: str, type_hint: type) -> Any | None:
-        raw_value = await self._client.read(self._prefix(key))
+        raw_value = self._data.get(key)
         if raw_value is not None:
             return await self._serializer.deserialize(raw_value, type_hint)
         return None
 
     async def set(self, key: str, value: Any, type_hint: type) -> None:
-        self._client.stage_write(
-            self._prefix(key), await self._serializer.serialize(value, type_hint)
-        )
+        self._data[key] = await self._serializer.serialize(value, type_hint)
 
     async def delete(self, key: str) -> None:
-        self._client.stage_delete(self._prefix(key))
+        self._data.pop(key, None)

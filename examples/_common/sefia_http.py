@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.responses import StreamingResponse
-from glyff.exceptions import YieldException
+from sefia.exceptions import NeedsInput
 from sefia import Policy
 from sefia.event_system import EventHandler
 from sefia.llm.events import LLMTokenReceived
@@ -173,7 +173,7 @@ class SefiaHTTP:
                 with self._human_input.store.use_session_store(scoped.session_store):
                     try:
                         yield SefiaHTTPSession(human_input=self._human_input_receiver)
-                    except YieldException:
+                    except NeedsInput:
                         # Read the pending request while the session store is
                         # still bound, so no second session scope is needed, then
                         # re-raise so the session scope handles the pause exactly
@@ -184,11 +184,11 @@ class SefiaHTTP:
                         pending = await self._human_input.store.pending_requests()
                         if not pending:
                             raise RuntimeError(
-                                "YieldException raised but no pending input request found."
+                                "NeedsInput raised but no pending input request found."
                             ) from None
                         paused_request = next(iter(sorted(pending.items())))[1]
                         raise
-        except YieldException:
+        except NeedsInput:
             request = paused_request
             assert request is not None  # set before the re-raise above
             await self._events.publish(

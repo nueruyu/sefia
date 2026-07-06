@@ -4,8 +4,7 @@ from dataclasses import dataclass
 import glyff
 import pytest
 from glyff import ArgsHasher, Serializer
-from glyff.store import MemoryClient
-from glyff.store import MemorySessionStore as GlyffMemoryStore
+from glyff.store import MemoryBackend
 
 from sefia import Policy, Session, infer, policy
 from sefia._metadata import get_metadata
@@ -24,10 +23,9 @@ from ..conftest import (
 
 
 def _make_stores(serializer):
-    client = MemoryClient()
     return (
-        GlyffMemoryStore(client=client, serializer=serializer),
-        SefiaMemoryStore(client=client, serializer=serializer),
+        MemoryBackend(),
+        SefiaMemoryStore(serializer=serializer),
     )
 
 
@@ -87,7 +85,9 @@ async def test_inference_with_tool_calls(
     session_id = "basic-inference-tools"
     glyff_store, sefia_store = _make_stores(serializer)
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
@@ -128,7 +128,9 @@ async def test_inference_without_tool_calls(serializer: Serializer, hasher: Args
     session_id = "basic-inference-no-tools"
     glyff_store, sefia_store = _make_stores(serializer)
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
@@ -187,7 +189,9 @@ async def test_inference_with_tool_exception(
             """Run a tool and report on the outcome."""
             ...
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
@@ -229,7 +233,9 @@ async def test_inference_with_nonexistent_tool_call(
     session_id = "nonexistent-tool-test"
     glyff_store, sefia_store = _make_stores(serializer)
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
@@ -247,7 +253,7 @@ async def test_inference_with_invalid_output_schema(
 ):
     # Scenario: The LLM returns a result that doesn't match the schema.
     # An invalid response is recoverable, so it is NOT engraved as a permanent
-    # failure: it surfaces as an InvalidInferenceResponseError (a YieldException),
+    # failure: it surfaces as an InvalidInferenceResponseError (a PauseException),
     # leaving the step resumable on re-invocation.
     mock_response = LLMResponse(
         content=json.dumps(
@@ -261,7 +267,9 @@ async def test_inference_with_invalid_output_schema(
     session_id = "invalid-schema-test"
     glyff_store, sefia_store = _make_stores(serializer)
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
@@ -289,7 +297,9 @@ async def test_inference_on_standalone_function(
     session_id = "standalone-function-test"
     glyff_store, sefia_store = _make_stores(serializer)
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
         async with Session(
             llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
         ):
