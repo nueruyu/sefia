@@ -1,7 +1,18 @@
-from sefia import StepContext
+from sefia import StepContext, ToolRegistry
 from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
 from sefios.middleware import HumanInputCallComposer
-from sefios.tools import HUMAN_INPUT_TOOL_NAME
+from sefios.tools import HumanInputTool
+
+HUMAN_INPUT_TOOL_NAME = "ask_human"
+
+
+def _human_registry() -> ToolRegistry:
+    registry = ToolRegistry()
+    registry.add(
+        HumanInputTool().get_human_input,
+        name=HUMAN_INPUT_TOOL_NAME,
+    )
+    return registry
 
 
 def _human_call(id_: str, question: str) -> ToolCallRequest:
@@ -20,7 +31,14 @@ async def _run(middleware: HumanInputCallComposer, decision, step: int = 0):
     async def nxt():
         return decision
 
-    return await middleware.wrap(StepContext(step=step, history=[]), nxt)
+    return await middleware.wrap(
+        StepContext(
+            step=step,
+            history=[],
+            tool_registry=_human_registry(),
+        ),
+        nxt,
+    )
 
 
 class TestHumanInputCallComposer:
@@ -127,3 +145,30 @@ class TestHumanInputCallComposer:
         )
 
         assert await _run(HumanInputCallComposer(), decision) is decision
+
+    async def test_unregistered_human_input_name_is_left_unchanged(self):
+        decision = ToolCallDecision(
+            calls=[
+                ToolCallRequest(
+                    id="h1",
+                    name="HumanInputTool_get_human_input",
+                    arguments={"question": "First?"},
+                ),
+                ToolCallRequest(
+                    id="h2",
+                    name="HumanInputTool_get_human_input",
+                    arguments={"question": "Second?"},
+                ),
+            ]
+        )
+
+        async def nxt():
+            return decision
+
+        assert (
+            await HumanInputCallComposer().wrap(
+                StepContext(step=0, history=[]),
+                nxt,
+            )
+            is decision
+        )

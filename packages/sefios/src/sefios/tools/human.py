@@ -36,11 +36,6 @@ HumanInputRequestCallback = Callable[[HumanInputRequest], MaybeAwaitable[None]]
 HumanInputCompleteCallback = Callable[[HumanInputResult], MaybeAwaitable[None]]
 HumanInputQuestionDeltaCallback = Callable[[str], MaybeAwaitable[None]]
 
-# Name generated for ``HumanInputTool.get_human_input`` by the default model
-# backend. The compose middleware uses this as the explicit HITL tool marker
-# without widening the core StepMiddleware context.
-HUMAN_INPUT_TOOL_NAME = "HumanInputTool_get_human_input"
-
 
 @dataclass
 class _AskUserState:

@@ -2,13 +2,16 @@ from typing import Awaitable, Callable
 
 from sefia._interfaces.middleware import StepContext, StepMiddleware
 from sefia.inference import InferenceDecision, ToolCallDecision, ToolCallRequest
-from sefios.tools.human import HUMAN_INPUT_TOOL_NAME
+from sefios.tools.human import HumanInputTool
 
 
-def _compose_human_input_calls(decision: ToolCallDecision) -> ToolCallDecision:
+def _compose_human_input_calls(
+    decision: ToolCallDecision,
+    human_input_tool_names: set[str],
+) -> ToolCallDecision:
     """Compose batched human-input calls in one decision into one prompt."""
     human_calls = [
-        call for call in decision.calls if call.name == HUMAN_INPUT_TOOL_NAME
+        call for call in decision.calls if call.name in human_input_tool_names
     ]
     if len(human_calls) <= 1:
         return decision
@@ -33,7 +36,7 @@ def _compose_human_input_calls(decision: ToolCallDecision) -> ToolCallDecision:
     calls: list[ToolCallRequest] = []
     composed_inserted = False
     for call in decision.calls:
-        if call.name != HUMAN_INPUT_TOOL_NAME:
+        if call.name not in human_input_tool_names:
             calls.append(call)
             continue
         if not composed_inserted:
@@ -65,4 +68,14 @@ class HumanInputCallComposer(StepMiddleware):
         decision = await nxt()
         if not isinstance(decision, ToolCallDecision):
             return decision
-        return _compose_human_input_calls(decision)
+
+        human_input_tool_names = {
+            tool.name
+            for tool in ctx.tool_registry.get_by_function(
+                HumanInputTool.get_human_input
+            )
+        }
+        if not human_input_tool_names:
+            return decision
+
+        return _compose_human_input_calls(decision, human_input_tool_names)

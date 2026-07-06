@@ -213,7 +213,11 @@ class InferenceExecutor:
         while True:
             await self.publisher.publish(events.StepStarted(step=step, history=history))
 
-            step_ctx = StepContext(step=step, history=history)
+            step_ctx = StepContext(
+                step=step,
+                history=history,
+                tool_registry=self._tool_registry,
+            )
 
             async def core() -> InferenceDecision:
                 return await self._next_step_engraved(history)

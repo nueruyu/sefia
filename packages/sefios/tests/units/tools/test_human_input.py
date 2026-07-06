@@ -1,7 +1,7 @@
 from sefia.llm._arg_stream import _ArgStreamChannel
 from sefia.streaming import StringDelta
 from sefia.tool_collectors import DefaultToolCollector
-from sefios.tools import HUMAN_INPUT_TOOL_NAME, HumanInputTool
+from sefios.tools import HumanInputTool
 
 
 class Agent:
@@ -31,8 +31,11 @@ async def test_human_input_tool_streams_question_deltas():
     assert seen == ["What ", "topic?"]
 
 
-def test_human_input_tool_name_marker_matches_collected_tool():
+def test_human_input_tool_is_resolvable_by_function():
     agent = Agent(HumanInputTool())
     registry = DefaultToolCollector().collect(agent)
+    registered = next(
+        tool for tool in registry.get_all() if "get_human_input" in tool.name
+    )
 
-    assert HUMAN_INPUT_TOOL_NAME in registry.get_names()
+    assert registry.get_by_function(HumanInputTool.get_human_input) == [registered]
