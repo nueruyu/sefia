@@ -1,13 +1,29 @@
-from typing import Awaitable, Callable
+import inspect
+from typing import Awaitable, Callable, TypeVar
 
 from sefia._interfaces.middleware import StepContext, StepMiddleware
 from sefia.inference import InferenceDecision, ToolCallDecision, ToolCallRequest
 from sefios.tools.human import HumanInputTool
 
+T = TypeVar("T")
+MaybeAwaitable = T | Awaitable[T]
+QuestionComposer = Callable[[list[str]], MaybeAwaitable[str]]
 
-def _compose_human_input_calls(
+
+async def _maybe_await(value: MaybeAwaitable[T]) -> T:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+def _join_questions(questions: list[str]) -> str:
+    return "\n".join(questions)
+
+
+async def _compose_human_input_calls(
     decision: ToolCallDecision,
     human_input_tool_names: set[str],
+    compose_questions: QuestionComposer,
 ) -> ToolCallDecision:
     """Compose batched human-input calls in one decision into one prompt."""
     human_calls = [
@@ -23,13 +39,14 @@ def _compose_human_input_calls(
             return decision
         questions.append(question)
 
+    composed_question = await _maybe_await(compose_questions(questions))
     first_human_call = human_calls[0]
     composed_call = ToolCallRequest(
         id=first_human_call.id,
         name=first_human_call.name,
         arguments={
             **first_human_call.arguments,
-            "question": _compose_question(questions),
+            "question": composed_question,
         },
     )
 
@@ -46,12 +63,6 @@ def _compose_human_input_calls(
     return ToolCallDecision(calls=calls)
 
 
-def _compose_question(questions: list[str]) -> str:
-    lines = ["Please answer these together:"]
-    lines.extend(f"{i}. {question}" for i, question in enumerate(questions, start=1))
-    return "\n".join(lines)
-
-
 class HumanInputCallComposer(StepMiddleware):
     """
     Composes multiple human-input requests emitted in the same inference step.
@@ -59,6 +70,9 @@ class HumanInputCallComposer(StepMiddleware):
     The middleware only rewrites one ``ToolCallDecision`` batch at a time. Later
     resumed steps still produce their own independent human-input requests.
     """
+
+    def __init__(self, compose_questions: QuestionComposer = _join_questions) -> None:
+        self._compose_questions = compose_questions
 
     async def wrap(
         self,
@@ -78,4 +92,8 @@ class HumanInputCallComposer(StepMiddleware):
         if not human_input_tool_names:
             return decision
 
-        return _compose_human_input_calls(decision, human_input_tool_names)
+        return await _compose_human_input_calls(
+            decision,
+            human_input_tool_names,
+            self._compose_questions,
+        )
