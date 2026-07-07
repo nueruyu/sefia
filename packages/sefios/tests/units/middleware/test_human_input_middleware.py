@@ -78,8 +78,7 @@ class TestHumanInputCallComposer:
                 name=HUMAN_INPUT_TOOL_NAME,
                 arguments={
                     "question": (
-                        "What is the target audience?\n"
-                        "What is the goal of the article?"
+                        "What is the target audience?\nWhat is the goal of the article?"
                     )
                 },
             )
