@@ -1,7 +1,7 @@
 """Official stack for building applications with the Sefia framework."""
 
 from ._scope import SessionScope
-from ._session_state import SessionState, bind_session_state, get_session_state
+from ._session_state import SessionState, get_session_state
 from ._state_store import StateStore
 from .exceptions import NeedsInput
 from .state import StateContainer, StateRegistry, get_state, state
@@ -15,7 +15,6 @@ __all__ = [
     "StateStore",
     "MemorySessionStore",
     "FileSessionStore",
-    "bind_session_state",
     "get_session_state",
     "StateContainer",
     "StateRegistry",

@@ -11,7 +11,8 @@ from glyff.store import MemoryBackend
 from sefia import Session, infer
 from sefia.exceptions import PauseException
 from sefia.llm import LLMResponse
-from sefios import MemorySessionStore, bind_session_state, get_session_state
+from sefios import MemorySessionStore, get_session_state
+from sefios._session_state import bind_session_state
 
 
 @dataclass

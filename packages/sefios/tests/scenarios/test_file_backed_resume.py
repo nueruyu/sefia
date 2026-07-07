@@ -17,7 +17,8 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Session, infer
 from sefia.llm import LLMResponse
 
-from sefios import FileSessionStore, NeedsInput, bind_session_state
+from sefios import FileSessionStore, NeedsInput
+from sefios._session_state import bind_session_state
 from sefios.tools import HumanInputRequest, HumanInputTool
 
 _SESSION_ID = "file-backed-resume-test"
