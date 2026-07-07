@@ -2346,6 +2346,9 @@ name = "sefios"
 version = "0.1.0"
 source = { editable = "packages/sefios" }
 dependencies = [
+    { name = "glyff" },
+    { name = "glyff-file-store" },
+    { name = "glyff-pydantic" },
     { name = "sefia" },
 ]
 
@@ -2372,6 +2375,9 @@ web = [
 [package.metadata]
 requires-dist = [
     { name = "ddgs", marker = "extra == 'web'" },
+    { name = "glyff", specifier = ">=0.13.0" },
+    { name = "glyff-file-store", specifier = ">=0.13.0" },
+    { name = "glyff-pydantic", specifier = ">=0.13.0" },
     { name = "python-dotenv", marker = "extra == 'cli'" },
     { name = "rich", marker = "extra == 'cli'" },
     { name = "sefia", editable = "packages/sefia" },

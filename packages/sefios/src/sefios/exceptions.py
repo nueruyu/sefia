@@ -16,6 +16,6 @@ class NeedsInput(PauseException):
     needing to know about human input specifically.
     """
 
-    def __init__(self, question: str = "") -> None:
+    def __init__(self, question: str) -> None:
         super().__init__(question)
         self.question = question

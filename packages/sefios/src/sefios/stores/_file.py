@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 from pathlib import Path
@@ -15,7 +16,8 @@ class FileSessionStore(SessionStore):
 
     Each key maps to a JSON file under ``base_dir``. Writes are committed
     immediately (temp file + atomic rename), so state written before a pause is
-    durably persisted and visible when the run resumes.
+    durably persisted and visible when the run resumes. File I/O runs in a
+    worker thread so the event loop is never blocked.
     """
 
     def __init__(self, base_dir: str | Path, serializer: Serializer):
@@ -29,16 +31,28 @@ class FileSessionStore(SessionStore):
             if not p or p in (".", ".."):
                 raise ValueError(f"Invalid key part: {p!r}")
             safe_parts.append(_UNSAFE.sub(lambda m: f"%{ord(m.group()):02X}", p))
-        return self._base_dir.joinpath("sefia", "metadata", *safe_parts).with_suffix(
-            ".json"
-        )
+        # Append (not with_suffix) so keys differing only in a dotted tail
+        # ("state.v1" vs "state.v2") cannot collide on the same file.
+        safe_parts[-1] += ".json"
+        return self._base_dir.joinpath(*safe_parts)
+
+    @staticmethod
+    def _read_bytes(path: Path) -> bytes | None:
+        try:
+            return path.read_bytes()
+        except FileNotFoundError:
+            return None
+
+    @staticmethod
+    def _write_bytes(path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f"{path.name}.tmp")
+        tmp.write_bytes(data)
+        os.replace(tmp, path)
 
     async def get(self, key: str, type_hint: type) -> Any | None:
         path = self._key_to_path(key)
-        try:
-            data = path.read_bytes()
-        except FileNotFoundError:
-            return None
+        data = await asyncio.to_thread(self._read_bytes, path)
         if data:
             return await self._serializer.deserialize(data, type_hint)
         return None
@@ -46,14 +60,8 @@ class FileSessionStore(SessionStore):
     async def set(self, key: str, value: Any, type_hint: type) -> None:
         path = self._key_to_path(key)
         data = await self._serializer.serialize(value, type_hint)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(f"{path.name}.tmp")
-        tmp.write_bytes(data)
-        os.replace(tmp, path)
+        await asyncio.to_thread(self._write_bytes, path, data)
 
     async def delete(self, key: str) -> None:
         path = self._key_to_path(key)
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
+        await asyncio.to_thread(path.unlink, missing_ok=True)

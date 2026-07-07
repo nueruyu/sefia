@@ -6,8 +6,8 @@ from typing import Protocol, TypeVar, cast
 
 import typer
 from sefia import Policy
-from sefia.exceptions import InferenceError
-from sefios import NeedsInput, SessionScope, get_session_state, get_state
+from sefia.exceptions import InferenceError, PauseException
+from sefios import SessionScope, get_session_state, get_state
 from sefios.handlers import CostCalculator, CostState
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputRequest, HumanInputTool
@@ -202,16 +202,18 @@ class SefiaCLI:
                     except InferenceError as e:
                         await self._report_inference_error(e)
                         raise
-                    except NeedsInput:
-                        # The session context is still alive here, so reporters
-                        # may read running state (e.g. cost) via get_state().
+                    except PauseException:
+                        # Any pause (NeedsInput, or a future pause type) is a
+                        # graceful interrupt, not a failure. The session context
+                        # is still alive here, so reporters may read running
+                        # state (e.g. cost) via get_state().
                         await self._report_interrupted(resolved_session)
                         raise
                     else:
                         await self._report_session_finished()
         except InferenceError:
             raise typer.Exit(code=1) from None
-        except NeedsInput:
+        except PauseException:
             raise typer.Exit(code=0)
 
     async def _report_session_resolved(self, session: ResolvedSession) -> None:

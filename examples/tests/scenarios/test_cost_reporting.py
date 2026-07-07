@@ -35,7 +35,7 @@ class TestCostReporting:
 
         with pytest.raises(typer.Exit):
             async with cli.session():
-                raise NeedsInput()
+                raise NeedsInput("What is your name?")
 
         # On a yield, the interrupt hook fires (reporters may read running cost
         # via get_state there) but the session did not finish normally.

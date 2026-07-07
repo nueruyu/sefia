@@ -1,45 +1,17 @@
 import json
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine
+from typing import Callable
 
 import glyff
 import pytest
 from glyff import ArgsHasher, Serializer, engrave
 from glyff.store import MemoryBackend
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 
 from sefia import Session, infer
 from sefia.exceptions import PauseException
-from sefia.llm import LLMClient, LLMResponse, Message
+from sefia.llm import LLMResponse
 from sefios import MemorySessionStore, bind_session_state, get_session_state
-
-
-class MockLLMClient(LLMClient):
-    """A mock LLM client that returns pre-defined responses."""
-
-    def __init__(self, responses: list[LLMResponse]):
-        self.responses = responses
-        self.requests: list[dict[str, Any]] = []
-
-    async def complete(
-        self,
-        messages: list[Message],
-        tools: list[dict] | None = None,
-        output_schema: dict | None = None,
-        stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
-    ) -> LLMResponse:
-        self.requests.append(
-            {
-                "messages": [m.to_dict(exclude_none=True) for m in messages],
-                "tools": tools,
-                "output_schema": output_schema,
-                "stream_callback": stream_callback,
-            }
-        )
-        if not self.responses:
-            raise AssertionError("MockLLMClient has no more responses.")
-        return self.responses.pop(0)
 
 
 @dataclass
@@ -103,19 +75,9 @@ class HumanInputTool:
             raise
 
 
-@pytest.fixture
-def serializer() -> Serializer:
-    return PydanticSerializer()
-
-
-@pytest.fixture
-def hasher() -> ArgsHasher:
-    return PydanticArgsHasher()
-
-
 class TestStatefulTool:
     async def test_ask_user_interrupts_and_resumes_correctly(
-        self, serializer: Serializer, hasher: ArgsHasher
+        self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
     ):
         mock_responses = [
             LLMResponse(
@@ -144,7 +106,7 @@ class TestStatefulTool:
                 )
             ),
         ]
-        mock_llm = MockLLMClient(responses=mock_responses)
+        mock_llm = make_mock_llm(mock_responses)
         interrupt_details = {}
 
         def on_interrupt(interaction_id, question):
@@ -201,7 +163,7 @@ class TestStatefulTool:
         assert json.loads(final_messages[3]["content"]) == "Alice"
 
     async def test_multiple_ask_user_calls_are_independent(
-        self, serializer: Serializer, hasher: ArgsHasher
+        self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
     ):
         mock_responses = [
             LLMResponse(
@@ -243,7 +205,7 @@ class TestStatefulTool:
                 )
             ),
         ]
-        mock_llm = MockLLMClient(responses=mock_responses)
+        mock_llm = make_mock_llm(mock_responses)
         interrupts = {}
 
         def on_interrupt(interaction_id, question):

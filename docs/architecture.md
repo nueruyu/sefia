@@ -25,6 +25,7 @@ Arrows point from a package to what it imports or depends on.
 examples ─▶ sefios[all]
 
 sefios ─┬▶ sefia
+        ├▶ glyff / glyff-file-store / glyff-pydantic
         ├▶ sefia_litellm        (optional: sefios[litellm])
         ├▶ ddgs                 (optional: sefios[web])
         └▶ typer / rich / python-dotenv

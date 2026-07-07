@@ -43,23 +43,37 @@ async def test_get_returns_none_when_data_is_missing(store_type: type, tmp_path)
 
 
 @pytest.mark.parametrize("store_type", [FileSessionStore, MemorySessionStore])
-async def test_set_is_committed_immediately_and_delete_removes(
-    store_type: type, tmp_path
-):
+async def test_set_then_delete_round_trip(store_type: type, tmp_path):
     serializer = PydanticSerializer()
     store = _make_store(store_type, tmp_path, serializer)
 
     await store.set("session/state", {"value": "kept"}, dict)
-
-    # A separately constructed store over the same backing observes the write,
-    # confirming set() commits immediately rather than staging.
-    reader = _make_store(store_type, tmp_path, serializer)
-    if store_type is MemorySessionStore:
-        reader = store  # in-memory backing is the store instance itself
-    assert await reader.get("session/state", dict) == {"value": "kept"}
+    assert await store.get("session/state", dict) == {"value": "kept"}
 
     await store.delete("session/state")
     assert await store.get("session/state", dict) is None
+
+
+async def test_file_store_commits_immediately(tmp_path):
+    serializer = PydanticSerializer()
+    store = FileSessionStore(base_dir=tmp_path, serializer=serializer)
+
+    await store.set("session/state", {"value": "kept"}, dict)
+
+    # A separately constructed store over the same directory observes the
+    # write, confirming set() commits to disk immediately rather than staging.
+    reader = FileSessionStore(base_dir=tmp_path, serializer=serializer)
+    assert await reader.get("session/state", dict) == {"value": "kept"}
+
+
+async def test_file_store_keys_with_dotted_tails_do_not_collide(tmp_path):
+    store = FileSessionStore(base_dir=tmp_path, serializer=PydanticSerializer())
+
+    await store.set("state.v1", {"value": "one"}, dict)
+    await store.set("state.v2", {"value": "two"}, dict)
+
+    assert await store.get("state.v1", dict) == {"value": "one"}
+    assert await store.get("state.v2", dict) == {"value": "two"}
 
 
 async def test_file_store_rejects_unsafe_key_parts(tmp_path):
