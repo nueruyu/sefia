@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,13 +11,18 @@ from sefia.llm import LLMClient
 
 from ._session_state import bind_session_state
 from .policies import DefaultPolicy
-from .stores import FileSessionStore
+from .stores import FileSessionStore, SessionStore
 
 
 class SessionScope:
     """
     Manages shared configuration for Sefia sessions and provides helpers to run
     code within a configured session context.
+
+    ``session_store_factory`` is the seam for a custom session-state
+    persistence backend: it receives the session id and returns the
+    :class:`SessionStore` to bind for that session. By default a
+    :class:`FileSessionStore` under ``session_dir`` is used.
     """
 
     def __init__(
@@ -30,6 +35,7 @@ class SessionScope:
         profiles: list[Profile] | None = None,
         stream: bool = False,
         max_steps: int | None = 25,
+        session_store_factory: Callable[[str], SessionStore] | None = None,
     ):
         self.session_dir = session_dir
         self.model = model
@@ -38,6 +44,7 @@ class SessionScope:
         self.profiles = list(profiles or [])
         self.stream = stream
         self.max_steps = max_steps
+        self.session_store_factory = session_store_factory
 
     @asynccontextmanager
     async def session(
@@ -78,10 +85,13 @@ class SessionScope:
             serializer=serializer,
             hasher=PydanticArgsHasher(),
         )
-        session_store = FileSessionStore(
-            base_dir=self.session_dir / "sefia_metadata" / session_id,
-            serializer=serializer,
-        )
+        if self.session_store_factory is not None:
+            session_store = self.session_store_factory(session_id)
+        else:
+            session_store = FileSessionStore(
+                base_dir=self.session_dir / "sefia_metadata" / session_id,
+                serializer=serializer,
+            )
 
         final_policies: list[Policy] = list(self.policies)
         if policies is not None:

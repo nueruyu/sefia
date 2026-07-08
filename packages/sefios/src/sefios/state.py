@@ -6,6 +6,12 @@ retrieve a :class:`~sefios._state_store.StateStore` for it via the
 :class:`StateContainer`, keyed by the type itself. The container does not know
 about any individual state (such as cost); it only resolves the registered
 string key and delegates persistence to the bound :class:`SessionState`.
+
+This type-keyed container is the app-facing tier of the state API. Tool
+implementations that need call-scoped state (or direct string-keyed access to
+the raw :class:`~sefios.stores.SessionStore`) drop down to
+:func:`~sefios._session_state.get_session_state`, the lower-level tier this
+container is built on.
 """
 
 from __future__ import annotations

@@ -39,6 +39,10 @@ class SessionState:
     Holds the session's :class:`SessionStore` and hands out typed, caching
     :class:`StateStore` views of it — either keyed directly (session scope) or
     scoped to the current engraved call (call scope, for resumable tool state).
+
+    This is the low-level, string-keyed tier of the state API, meant for tool
+    implementations. Application and handler state should normally go through
+    the type-keyed container returned by :func:`sefios.get_state` instead.
     """
 
     def __init__(self, store: SessionStore):
@@ -83,7 +87,7 @@ class SessionState:
                 state_type=state_type,
             )
         store = self._state_stores[key]
-        if store._state_type != state_type:
+        if store.state_type != state_type:
             raise TypeError(
                 f"State store for key '{key}' was already created with a different type."
             )

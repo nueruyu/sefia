@@ -17,8 +17,9 @@ class PauseException(SefiaError):
     its ``STARTED`` state, so re-invoking the workflow re-runs only the
     unfinished step and resumes from where it paused.
 
-    Concrete pause signals (such as ``sefios.exceptions.NeedsInput``) subclass
-    this; the core only depends on the base contract.
+    Concrete pause signals (for example, a human-input pause defined by an
+    application-facing layer) subclass this; the core only depends on the base
+    contract.
     """
 
 

@@ -19,6 +19,11 @@ class StateStore(Generic[T]):
         self._cache: T | None = None
         self._is_loaded = False
 
+    @property
+    def state_type(self) -> Type[T]:
+        """The state type this store was created for."""
+        return self._state_type
+
     async def ensure(self) -> T:
         """
         Ensures the state is loaded. If it doesn't exist, returns a
