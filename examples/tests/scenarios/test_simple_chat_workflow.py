@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from examples._common.sefia_cli import SefiaCLI, SefiaCLISession
+from sefios.cli import SefiaCLI, SefiaCLISession
 
 main = import_module("examples.00_simple_chat.main")
 

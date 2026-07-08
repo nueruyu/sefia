@@ -66,7 +66,10 @@ pip install 'sefios[litellm]'
 - **`sefios`** — the official batteries: the `SessionScope` front door, ready-made
   policies/middleware, and tools (human input, web search). The `[litellm]` extra
   pulls in **`sefia_litellm`** for provider support via
-  [LiteLLM](https://github.com/BerriAI/litellm).
+  [LiteLLM](https://github.com/BerriAI/litellm). The `[cli]` and `[fastapi]` extras
+  pull in **`sefia_typer`** / **`sefia_fastapi`** and unlock the `sefios.cli` /
+  `sefios.fastapi` integrations — Typer and FastAPI apps with persisted sessions
+  and human-in-the-loop pause/resume.
 
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.

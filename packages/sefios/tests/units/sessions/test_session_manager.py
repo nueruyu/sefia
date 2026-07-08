@@ -1,9 +1,5 @@
 import pytest
-
-from examples._common.session import (
-    SessionManager,
-    UnknownSessionError,
-)
+from sefios.sessions import SessionManager, UnknownSessionError
 
 
 @pytest.fixture

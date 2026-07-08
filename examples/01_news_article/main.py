@@ -6,10 +6,10 @@ from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from sefios.cli import SefiaCLI, add_session_commands, async_command
 from sefios.tools import WebSearchTool
 
-from .._common.sefia_cli import SefiaCLI
-from .._common.typer_utils import add_session_commands, async_command
+from .._common.policies import VerbosePolicy
 from .agents import NewsWriter, RequirementsClarifier, Researcher
 from .models import ArticleRequest, NewsArticle
 from .rendering import render_article_request, render_news_article
@@ -95,7 +95,7 @@ async def chat(
     async with sefia_cli.session(
         session_id=session_id,
         model=model,
-        verbose=verbose,
+        policies=[VerbosePolicy()] if verbose else None,
     ) as session:
         await session.accept_input(message, reply_to=reply_to)
 

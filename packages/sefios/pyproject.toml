@@ -13,11 +13,13 @@ dependencies = [
 [project.optional-dependencies]
 litellm = ["sefia-litellm>=0.1.0"]
 web = ["ddgs"]
-cli = ["typer", "rich", "python-dotenv"]
+cli = ["sefia-typer>=0.1.0"]
+fastapi = ["sefia-fastapi>=0.1.0"]
 all = [
     "sefios[litellm]",
     "sefios[web]",
     "sefios[cli]",
+    "sefios[fastapi]",
 ]
 
 [build-system]

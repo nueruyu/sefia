@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from examples._common.sefia_http import SefiaHTTP
+from sefios.fastapi import SefiaHTTP
 
 app_module = import_module("examples.03_fastapi_api.app")
 agents_module = import_module("examples.03_fastapi_api.agents")

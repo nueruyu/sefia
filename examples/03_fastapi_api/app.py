@@ -3,13 +3,14 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
-
-from .._common.human_input import (
+from sefios.fastapi import (
     AmbiguousHumanInputError,
+    InputRequired,
+    SefiaHTTP,
     UnknownHumanInputError,
+    UnknownSessionError,
 )
-from .._common.sefia_http import InputRequired, SefiaHTTP
-from .._common.session import UnknownSessionError
+
 from .agents import Interviewer
 from .models import (
     BriefSchema,

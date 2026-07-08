@@ -8,9 +8,9 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from sefios import get_state
+from sefios.cli import SefiaCLI, add_session_commands, async_command
 
-from .._common.sefia_cli import SefiaCLI
-from .._common.typer_utils import add_session_commands, async_command
+from .._common.policies import VerbosePolicy
 from .agents import (
     CodingStyleAuditor,
     DependencySpecialist,
@@ -184,7 +184,7 @@ async def chat(
     async with sefia_cli.session(
         session_id=session_id,
         model=model,
-        verbose=verbose,
+        policies=[VerbosePolicy()] if verbose else None,
     ) as session:
         await session.accept_input(message, reply_to=reply_to)
 
