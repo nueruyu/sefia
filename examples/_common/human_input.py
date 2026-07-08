@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TypeVar
 
-from sefia import SessionStore
+from sefios import SessionStorage
 from sefios.tools import HumanInputRequest, HumanInputResult, HumanInputTool
 
 _PENDING_HUMAN_INPUTS_KEY = "pending_human_inputs"
@@ -39,7 +39,7 @@ class HumanInputSessionStore:
     """Small persistence wrapper for human-input state in the active session.
 
     Reads observe writes made earlier in the same session because the bound
-    Sefia ``SessionStore`` provides read-your-writes consistency.
+    Sefia ``SessionStorage`` provides read-your-writes consistency.
 
     The active binding is held in a :class:`~contextvars.ContextVar` rather than a
     plain attribute so that a single shared store instance stays correct when
@@ -49,13 +49,13 @@ class HumanInputSessionStore:
     """
 
     def __init__(self):
-        self._active_store: ContextVar[SessionStore | None] = ContextVar(
+        self._active_store: ContextVar[SessionStorage | None] = ContextVar(
             "human_input_active_store", default=None
         )
 
     @contextmanager
-    def use_session_store(self, session_store: SessionStore):
-        token = self._active_store.set(session_store)
+    def use_session_storage(self, session_storage: SessionStorage):
+        token = self._active_store.set(session_storage)
         try:
             yield
         finally:
@@ -109,7 +109,7 @@ class HumanInputSessionStore:
             await store.delete(_UNCLAIMED_HUMAN_INPUTS_KEY)
         return next_input
 
-    def _store(self) -> SessionStore:
+    def _store(self) -> SessionStorage:
         store = self._active_store.get()
         if store is None:
             raise RuntimeError("Human input session store is not bound to a session.")

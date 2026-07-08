@@ -78,21 +78,22 @@ class TestStateDecorator:
 
 
 class TestStateContainer:
-    def test_get_resolves_key_and_delegates_to_context(self, mocker: MockerFixture):
+    def test_get_resolves_key_and_delegates_to_bound_state(self, mocker: MockerFixture):
         registry = StateRegistry()
         registry.register(_SampleState, "sample.key")
-        ctx = mocker.Mock()
         sentinel_store = object()
-        ctx.get_state_store.return_value = sentinel_store
+        get_state_store = mocker.patch(
+            "sefios.state.get_state_store", return_value=sentinel_store
+        )
 
-        container = StateContainer(ctx, registry=registry)
+        container = StateContainer(registry=registry)
         result = container.get(_SampleState)
 
         assert result is sentinel_store
-        ctx.get_state_store.assert_called_once_with("sample.key", _SampleState)
+        get_state_store.assert_called_once_with("sample.key", _SampleState)
 
 
 class TestGetState:
     def test_raises_outside_session(self):
-        with pytest.raises(RuntimeError, match="Inference context is not set"):
+        with pytest.raises(RuntimeError, match="No sefios session state is bound"):
             get_state()

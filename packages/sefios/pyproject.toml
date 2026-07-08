@@ -5,6 +5,9 @@ description = "Official Stack for building applications with the Sefia framework
 requires-python = ">=3.11"
 dependencies = [
     "sefia>=0.1.0",
+    "glyff>=0.13.0",
+    "glyff-file-store>=0.13.0",
+    "glyff-pydantic>=0.13.0",
 ]
 
 [project.optional-dependencies]

@@ -1,14 +1,12 @@
 from collections.abc import Hashable
-from typing import Self, Type, TypeVar
+from typing import Self
 
 import glyff
 
 from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import Policy
 from ._interfaces.model_backend import ModelBackend
-from ._interfaces.session_store import SessionStore
 from ._profiles import Profile
-from ._state_store import StateStore
 from ._tool_system import ToolCollector
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
@@ -16,8 +14,6 @@ from .llm._xml_prompt_formatter import XmlPromptFormatter
 from .pydantic._json_utils import pydantic_json_default
 from .pydantic._model_backend import PydanticModelBackend
 from .tool_collectors import DefaultToolCollector
-
-T = TypeVar("T")
 
 
 class Session:
@@ -30,7 +26,6 @@ class Session:
         self,
         llm_client: LLMClient,
         glyff_session: glyff.Session,
-        session_store: SessionStore,
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
@@ -39,7 +34,6 @@ class Session:
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
-        self.session_store = session_store
         self._context_token = None
         self._policies: list[Policy] = list(policies) if policies is not None else []
 
@@ -73,21 +67,9 @@ class Session:
 
         self._context: SessionContext | None = None
 
-    def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:
-        """
-        Gets a StateStore for the given key and type, which can be used to
-        manage persistent state within the session.
-        """
-        if self._context is None:
-            raise RuntimeError(
-                "Cannot get a state store before the session is entered."
-            )
-        return self._context.get_state_store(key, state_type)
-
     async def __aenter__(self) -> Self:
         self._context = SessionContext(
             glyff_session=self._glyff_session,
-            session_store=self.session_store,
             inference_strategy=self._inference_strategy,
             policies=tuple(self._policies),
             tool_collector=self._tool_collector,

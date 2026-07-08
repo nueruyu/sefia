@@ -2,17 +2,26 @@
 
 Handlers and applications should not hand-roll string keys when persisting
 state. Instead they register a state type once with :func:`state` and then
-retrieve a :class:`~sefia._state_store.StateStore` for it via the
+retrieve a :class:`~sefios._state_store.StateStore` for it via the
 :class:`StateContainer`, keyed by the type itself. The container does not know
 about any individual state (such as cost); it only resolves the registered
-string key and delegates persistence to the underlying sefia ``SessionStore``.
+string key and delegates persistence to the session's bound storage.
+
+This type-keyed container is the app-facing tier of the state API. Tool
+implementations that need call-scoped state drop down to
+:func:`~sefios._session_state.get_call_state_store`, and application code that
+manages its own keys can reach the raw
+:class:`~sefios.storage.SessionStorage` via
+:func:`~sefios._session_state.get_session_storage` — the lower-level tier this
+container is built on.
 """
 
 from __future__ import annotations
 
 from typing import Type, TypeVar
 
-from sefia import SessionContext, StateStore, get_context
+from ._session_state import _get_session_state, get_state_store
+from ._state_store import StateStore
 
 T = TypeVar("T")
 
@@ -90,27 +99,22 @@ class StateContainer:
 
     The container is generic: it has no knowledge of individual states. It
     resolves the registered string key for a type and delegates to the
-    session's :meth:`SessionContext.get_state_store`, reusing the existing
-    sefia persistence machinery.
+    session's bound state via :func:`~sefios._session_state.get_state_store`.
     """
 
-    def __init__(
-        self,
-        ctx: SessionContext,
-        registry: StateRegistry = _default_registry,
-    ) -> None:
-        self._ctx = ctx
+    def __init__(self, registry: StateRegistry = _default_registry) -> None:
         self._registry = registry
 
     def get(self, state_type: Type[T]) -> StateStore[T]:
         """Returns the ``StateStore`` for ``state_type``."""
         key = self._registry.key_for(state_type)
-        return self._ctx.get_state_store(key, state_type)
+        return get_state_store(key, state_type)
 
 
 def get_state() -> StateContainer:
-    """Returns a :class:`StateContainer` bound to the current session context."""
-    return StateContainer(get_context())
+    """Returns a :class:`StateContainer` for the current session's state."""
+    _get_session_state()  # fail fast when called outside an active session
+    return StateContainer()
 
 
 __all__ = [

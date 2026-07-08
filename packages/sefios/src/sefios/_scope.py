@@ -1,22 +1,28 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import glyff
 import glyff_file_store
 import sefia
-import sefia.stores
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Profile, Policy
 from sefia.llm import LLMClient
 
+from ._session_state import bind_session_storage
 from .policies import DefaultPolicy
+from .storage import FileSessionStorage, SessionStorage
 
 
 class SessionScope:
     """
     Manages shared configuration for Sefia sessions and provides helpers to run
     code within a configured session context.
+
+    ``session_storage_factory`` is the seam for a custom session-state
+    persistence backend: it receives the session id and returns the
+    :class:`SessionStorage` to bind for that session. By default a
+    :class:`FileSessionStorage` under ``session_dir`` is used.
     """
 
     def __init__(
@@ -29,6 +35,7 @@ class SessionScope:
         profiles: list[Profile] | None = None,
         stream: bool = False,
         max_steps: int | None = 25,
+        session_storage_factory: Callable[[str], SessionStorage] | None = None,
     ):
         self.session_dir = session_dir
         self.model = model
@@ -37,6 +44,7 @@ class SessionScope:
         self.profiles = list(profiles or [])
         self.stream = stream
         self.max_steps = max_steps
+        self.session_storage_factory = session_storage_factory
 
     @asynccontextmanager
     async def session(
@@ -67,20 +75,23 @@ class SessionScope:
 
         serializer = PydanticSerializer()
 
-        file_client = glyff_file_store.FileClient(
+        backend = glyff_file_store.JsonFileBackend(
             base_dir=self.session_dir / "glyff_sessions",
             session_id=session_id,
         )
         gs = glyff.Session(
             id=session_id,
-            store=glyff_file_store.JsonFileSessionStore(
-                client=file_client, serializer=serializer
-            ),
+            backend=backend,
+            serializer=serializer,
             hasher=PydanticArgsHasher(),
         )
-        session_store = sefia.stores.FileSessionStore(
-            client=file_client, serializer=serializer
-        )
+        if self.session_storage_factory is not None:
+            session_storage = self.session_storage_factory(session_id)
+        else:
+            session_storage = FileSessionStorage(
+                base_dir=self.session_dir / "sefia_metadata" / session_id,
+                serializer=serializer,
+            )
 
         final_policies: list[Policy] = list(self.policies)
         if policies is not None:
@@ -92,12 +103,12 @@ class SessionScope:
             final_profiles.extend(profiles)
 
         async with gs:
-            async with sefia.Session(
-                llm_client=llm_client,
-                glyff_session=gs,
-                session_store=session_store,
-                policies=final_policies,
-                profiles=final_profiles,
-                stream=resolved_stream,
-            ) as session:
-                yield session
+            with bind_session_storage(session_storage):
+                async with sefia.Session(
+                    llm_client=llm_client,
+                    glyff_session=gs,
+                    policies=final_policies,
+                    profiles=final_profiles,
+                    stream=resolved_stream,
+                ) as session:
+                    yield session

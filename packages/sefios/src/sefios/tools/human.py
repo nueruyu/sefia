@@ -5,10 +5,12 @@ from dataclasses import dataclass
 from typing import Annotated, TypeVar
 
 from glyff import engrave
-from glyff.exceptions import YieldException
 from pydantic import Field
-from sefia import get_context, preview
+from sefia import preview
 from sefia.streaming import ArgStream, StringDelta
+
+from .._session_state import get_call_state_store
+from ..exceptions import NeedsInput
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -91,8 +93,7 @@ class HumanInputTool:
         answer is immediately available, the current session is interrupted until
         input is provided.
         """
-        ctx = get_context()
-        call_store = ctx.get_call_state_store("internal_state", _AskUserState)
+        call_store = get_call_state_store("internal_state", _AskUserState)
         call_state = await call_store.ensure()
 
         if call_state.interaction_id is None:
@@ -115,7 +116,7 @@ class HumanInputTool:
             return answer
 
         await self._notify_request(request)
-        raise YieldException()
+        raise NeedsInput(question)
 
     @preview(get_human_input)
     async def _stream_get_human_input(self, events: ArgStream) -> None:

@@ -1,45 +1,13 @@
-import asyncio
 import json
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine
 
 import glyff
 from glyff import ArgsHasher, Serializer
-from glyff.store import MemoryClient
-from glyff.store import MemorySessionStore as GlyffMemoryStore
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
+from glyff.store import MemoryBackend
 from sefia import Session, infer, policy
-from sefia.llm import LLMClient, LLMResponse, Message
-from sefia.stores import MemorySessionStore as SefiaMemoryStore
+from sefia.llm import LLMResponse
 from sefios.middleware import StagnationDetector
 from sefios.policies import CustomPolicy
-
-
-class MockLLMClient(LLMClient):
-    """A mock LLM client that returns pre-defined responses."""
-
-    def __init__(self, responses: list[LLMResponse]):
-        self.responses = responses
-        self.requests: list[dict[str, Any]] = []
-
-    async def complete(
-        self,
-        messages: list[Message],
-        tools: list[dict] | None = None,
-        output_schema: dict | None = None,
-        stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
-    ) -> LLMResponse:
-        self.requests.append(
-            {
-                "messages": [m.to_dict(exclude_none=True) for m in messages],
-                "tools": tools,
-                "output_schema": output_schema,
-                "stream_callback": stream_callback,
-            }
-        )
-        if not self.responses:
-            raise asyncio.InvalidStateError("MockLLMClient has no more responses.")
-        return self.responses.pop(0)
 
 
 @dataclass
@@ -81,17 +49,12 @@ class Researcher:
 
 
 def _make_stores(serializer: Serializer):
-    client = MemoryClient()
-    return (
-        GlyffMemoryStore(client=client, serializer=serializer),
-        SefiaMemoryStore(client=client, serializer=serializer),
-    )
+    return MemoryBackend()
 
 
-async def test_stagnation_state_is_isolated_between_infer_calls():
-    serializer = PydanticSerializer()
-    hasher: ArgsHasher = PydanticArgsHasher()
-
+async def test_stagnation_state_is_isolated_between_infer_calls(
+    serializer: Serializer, hasher: ArgsHasher, make_mock_llm
+):
     repeated_call_response = LLMResponse(
         content=json.dumps(
             {
@@ -115,8 +78,8 @@ async def test_stagnation_state_is_isolated_between_infer_calls():
         )
     )
 
-    mock_llm = MockLLMClient(
-        responses=[
+    mock_llm = make_mock_llm(
+        [
             repeated_call_response,
             LLMResponse(
                 content=json.dumps(
@@ -139,14 +102,15 @@ async def test_stagnation_state_is_isolated_between_infer_calls():
         ]
     )
 
-    glyff_store, sefia_store = _make_stores(serializer)
+    glyff_store = _make_stores(serializer)
 
     async with glyff.Session(
-        id="stagnation-isolation-test", store=glyff_store, hasher=hasher
+        id="stagnation-isolation-test",
+        backend=glyff_store,
+        serializer=serializer,
+        hasher=hasher,
     ) as gs:
-        async with Session(
-            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-        ):
+        async with Session(llm_client=mock_llm, glyff_session=gs):
             researcher = Researcher(WebToolkit())
 
             report1 = await researcher.generate_report(topic="first")

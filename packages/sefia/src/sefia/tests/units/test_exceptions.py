@@ -1,8 +1,7 @@
-from glyff.exceptions import YieldException
-
 from sefia.exceptions import (
     InferenceError,
     InvalidInferenceResponseError,
+    PauseException,
     SefiaError,
     ToolConflictError,
     ToolError,
@@ -20,13 +19,13 @@ def test_inference_errors_share_inference_base():
 
 
 def test_inference_errors_are_recoverable_yields():
-    # An InferenceError is recoverable: it is also a YieldException, so glyff
+    # An InferenceError is recoverable: it is also a PauseException, so glyff
     # treats it as a non-engraved, resumable interrupt rather than a permanent
     # failure. It remains a SefiaError so it is still catchable as one.
-    assert issubclass(InferenceError, YieldException)
+    assert issubclass(InferenceError, PauseException)
     assert issubclass(InferenceError, SefiaError)
     for exc in (InferenceError, InvalidInferenceResponseError):
-        assert issubclass(exc, YieldException)
+        assert issubclass(exc, PauseException)
         instance = exc("boom")
-        assert isinstance(instance, YieldException)
+        assert isinstance(instance, PauseException)
         assert isinstance(instance, InferenceError)

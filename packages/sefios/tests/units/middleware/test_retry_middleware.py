@@ -1,5 +1,5 @@
 import pytest
-from glyff.exceptions import YieldException
+from sefia.exceptions import PauseException
 from sefia import InferenceContext
 from sefia.exceptions import InvalidInferenceResponseError, SefiaError
 from sefios.middleware import (
@@ -81,7 +81,7 @@ class TestRetrier:
 
     async def test_inference_error_yields_after_exhausting_retries(self):
         # When the recoverable budget is spent, the original InferenceError is
-        # re-raised untouched. It is a YieldException, so it propagates as a
+        # re-raised untouched. It is a PauseException, so it propagates as a
         # non-engraved, resumable interrupt rather than a hard, engraved failure.
         middleware = Retrier(max_retries=2)
         calls = 0
@@ -96,7 +96,7 @@ class TestRetrier:
             await middleware.wrap(_ctx(), always_fail)
 
         assert exc_info.value is original
-        assert isinstance(exc_info.value, YieldException)
+        assert isinstance(exc_info.value, PauseException)
         # initial attempt + 2 retries
         assert calls == 3
 
@@ -104,7 +104,7 @@ class TestRetrier:
         middleware = Retrier(max_retries=3)
 
         async def interrupt():
-            raise YieldException("resume later")
+            raise PauseException("resume later")
 
-        with pytest.raises(YieldException):
+        with pytest.raises(PauseException):
             await middleware.wrap(_ctx(), interrupt)

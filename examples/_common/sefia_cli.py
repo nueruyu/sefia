@@ -5,10 +5,9 @@ from pathlib import Path
 from typing import Protocol, TypeVar, cast
 
 import typer
-from glyff.exceptions import YieldException
 from sefia import Policy
-from sefia.exceptions import InferenceError
-from sefios import SessionScope, get_state
+from sefia.exceptions import InferenceError, PauseException
+from sefios import SessionScope, get_session_storage, get_state
 from sefios.handlers import CostCalculator, CostState
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputRequest, HumanInputTool
@@ -194,23 +193,25 @@ class SefiaCLI:
                 model=model,
                 stream=stream,
                 policies=session_policies,
-            ) as session:
-                with self._human_input.store.use_session_store(session.session_store):
+            ):
+                with self._human_input.store.use_session_storage(get_session_storage()):
                     try:
                         yield SefiaCLISession(human_input=self._human_input_receiver)
                     except InferenceError as e:
                         await self._report_inference_error(e)
                         raise
-                    except YieldException:
-                        # The session context is still alive here, so reporters
-                        # may read running state (e.g. cost) via get_state().
+                    except PauseException:
+                        # Any pause (NeedsInput, or a future pause type) is a
+                        # graceful interrupt, not a failure. The session context
+                        # is still alive here, so reporters may read running
+                        # state (e.g. cost) via get_state().
                         await self._report_interrupted(resolved_session)
                         raise
                     else:
                         await self._report_session_finished()
         except InferenceError:
             raise typer.Exit(code=1) from None
-        except YieldException:
+        except PauseException:
             raise typer.Exit(code=0)
 
     async def _report_session_resolved(self, session: ResolvedSession) -> None:
