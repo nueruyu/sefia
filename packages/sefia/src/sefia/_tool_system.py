@@ -1,3 +1,4 @@
+import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -19,6 +20,10 @@ def set_stream_handler(func: Callable[..., Any], handler: StreamHandler) -> None
 def get_stream_handler(func: Callable[..., Any]) -> StreamHandler | None:
     """Return the stream handler attached to ``func``, or ``None``."""
     return getattr(func, _STREAM_HANDLER_ATTR, None)
+
+
+def _callable_identity(func: Callable[..., Any]) -> Callable[..., Any]:
+    return inspect.unwrap(getattr(func, "__func__", func))
 
 
 @dataclass(frozen=True)
@@ -64,6 +69,15 @@ class ToolRegistry:
 
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
+
+    def get_by_function(self, func: Callable[..., Any]) -> list[Tool]:
+        """Return tools whose executable callable matches ``func``."""
+        target = _callable_identity(func)
+        return [
+            tool
+            for tool in self._tools.values()
+            if _callable_identity(tool.function) is target
+        ]
 
     def get_all(self) -> list[Tool]:
         return list(self._tools.values())

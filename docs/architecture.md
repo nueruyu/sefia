@@ -90,8 +90,8 @@ implementation noted in parentheses.
 | Path | Responsibility |
 | --- | --- |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
-| `policies/` | `DefaultPolicy` (step cap, default handlers) and a `CustomPolicy` builder. |
-| `middleware/` | `_max_steps`, `_retry`, `_stagnation` — control-seam behaviors. |
+| `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition) and a `CustomPolicy` builder. |
+| `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_human_input` — control-seam behaviors. |
 | `handlers/` | `_cost` — an observation-seam handler (cost accounting). |
 | `tools/` | `human.py` (HITL pause-by-raise), `web.py` (DuckDuckGo search). |
 | `storage/` | Session-scoped persistence: the `SessionStorage` interface + `MemorySessionStorage` / `FileSessionStorage`. |

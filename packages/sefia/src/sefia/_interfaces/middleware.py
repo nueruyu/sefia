@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
+from .._tool_system import ToolRegistry
 from ..inference import HistoryItem, InferenceDecision
 
 
@@ -28,6 +29,7 @@ class StepContext:
 
     step: int
     history: list[HistoryItem]
+    tool_registry: ToolRegistry = field(default_factory=ToolRegistry)
 
 
 class InferenceMiddleware(ABC):
