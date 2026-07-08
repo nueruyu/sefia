@@ -132,10 +132,10 @@ class EventPublisher:
         Dispatches an event to all handlers registered for its type.
 
         Event handlers are pure observers: they cannot steer the inference loop.
-        Any exception a handler raises — including ``YieldException`` — is logged
+        Any exception a handler raises — including ``PauseException`` — is logged
         and swallowed here, so a misbehaving observer can never affect control
         flow. Genuine resumable interrupts are driven by the control/execution
-        layer (for example, a tool raising ``YieldException``), never by an
+        layer (for example, a tool raising ``PauseException``), never by an
         observer.
         """
         event_type = type(event)

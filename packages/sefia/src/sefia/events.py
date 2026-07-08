@@ -36,11 +36,12 @@ class InferenceStepFailed(Event):
     """
     Event fired when a single inference step raises an exception.
 
-    The step is engraved, so the exception is re-raised and persisted by glyff as
-    a permanent failure. This event is for observation only: handlers cannot
-    change the outcome, because the publisher isolates their exceptions. A
-    resumable interrupt must instead come from the control/execution layer (for
-    example, a tool raising ``glyff.exceptions.YieldException``).
+    The exception is re-raised, and glyff leaves the interrupted execution in its
+    ``STARTED`` state so it re-runs on resume. This event is for observation
+    only: handlers cannot change the outcome, because the publisher isolates
+    their exceptions. A resumable interrupt must instead come from the
+    control/execution layer (for example, a tool raising
+    ``sefia.exceptions.PauseException``).
     """
 
     error: Exception

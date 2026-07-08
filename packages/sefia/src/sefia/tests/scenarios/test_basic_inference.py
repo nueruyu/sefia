@@ -4,14 +4,12 @@ from dataclasses import dataclass
 import glyff
 import pytest
 from glyff import ArgsHasher, Serializer
-from glyff.store import MemoryClient
-from glyff.store import MemorySessionStore as GlyffMemoryStore
+from glyff.store import MemoryBackend
 
 from sefia import Policy, Session, infer, policy
 from sefia._metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.llm import LLMResponse
-from sefia.stores import MemorySessionStore as SefiaMemoryStore
 
 from ..conftest import (
     BrokenToolkit,
@@ -24,11 +22,7 @@ from ..conftest import (
 
 
 def _make_stores(serializer):
-    client = MemoryClient()
-    return (
-        GlyffMemoryStore(client=client, serializer=serializer),
-        SefiaMemoryStore(client=client, serializer=serializer),
-    )
+    return MemoryBackend()
 
 
 @dataclass
@@ -85,12 +79,12 @@ async def test_inference_with_tool_calls(
 
     mock_llm = MockLLMClient(responses=mock_responses)
     session_id = "basic-inference-tools"
-    glyff_store, sefia_store = _make_stores(serializer)
+    glyff_store = _make_stores(serializer)
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
-        async with Session(
-            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-        ):
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
+        async with Session(llm_client=mock_llm, glyff_session=gs):
             researcher = Researcher(web_toolkit)
             report = await researcher.generate_report(topic="sefia")
 
@@ -126,12 +120,12 @@ async def test_inference_without_tool_calls(serializer: Serializer, hasher: Args
     )
     mock_llm = MockLLMClient(responses=[mock_response])
     session_id = "basic-inference-no-tools"
-    glyff_store, sefia_store = _make_stores(serializer)
+    glyff_store = _make_stores(serializer)
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
-        async with Session(
-            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-        ):
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
+        async with Session(llm_client=mock_llm, glyff_session=gs):
             agent = SimpleAgent()
             report = await agent.generate_report(topic="direct")
 
@@ -175,7 +169,7 @@ async def test_inference_with_tool_exception(
     ]
     mock_llm = MockLLMClient(responses=mock_responses)
     session_id = "tool-exception-test"
-    glyff_store, sefia_store = _make_stores(serializer)
+    glyff_store = _make_stores(serializer)
 
     @dataclass
     class AgentWithBrokenTool:
@@ -187,10 +181,10 @@ async def test_inference_with_tool_exception(
             """Run a tool and report on the outcome."""
             ...
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
-        async with Session(
-            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-        ):
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
+        async with Session(llm_client=mock_llm, glyff_session=gs):
             agent = AgentWithBrokenTool(broken_toolkit)
             report = await agent.run_and_report()
 
@@ -227,12 +221,12 @@ async def test_inference_with_nonexistent_tool_call(
     ]
     mock_llm = MockLLMClient(responses=mock_responses)
     session_id = "nonexistent-tool-test"
-    glyff_store, sefia_store = _make_stores(serializer)
+    glyff_store = _make_stores(serializer)
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
-        async with Session(
-            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-        ):
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
+        async with Session(llm_client=mock_llm, glyff_session=gs):
             researcher = Researcher(web_toolkit)
             with pytest.raises(InvalidInferenceResponseError) as exc_info:
                 await researcher.generate_report(topic="sefia")
@@ -247,7 +241,7 @@ async def test_inference_with_invalid_output_schema(
 ):
     # Scenario: The LLM returns a result that doesn't match the schema.
     # An invalid response is recoverable, so it is NOT engraved as a permanent
-    # failure: it surfaces as an InvalidInferenceResponseError (a YieldException),
+    # failure: it surfaces as an InvalidInferenceResponseError (a PauseException),
     # leaving the step resumable on re-invocation.
     mock_response = LLMResponse(
         content=json.dumps(
@@ -259,12 +253,12 @@ async def test_inference_with_invalid_output_schema(
     )
     mock_llm = MockLLMClient(responses=[mock_response])
     session_id = "invalid-schema-test"
-    glyff_store, sefia_store = _make_stores(serializer)
+    glyff_store = _make_stores(serializer)
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
-        async with Session(
-            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-        ):
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
+        async with Session(llm_client=mock_llm, glyff_session=gs):
             agent = SimpleAgent()
             with pytest.raises(
                 InvalidInferenceResponseError, match="LLM output failed validation"
@@ -287,12 +281,12 @@ async def test_inference_on_standalone_function(
     )
     mock_llm = MockLLMClient(responses=[mock_response])
     session_id = "standalone-function-test"
-    glyff_store, sefia_store = _make_stores(serializer)
+    glyff_store = _make_stores(serializer)
 
-    async with glyff.Session(id=session_id, store=glyff_store, hasher=hasher) as gs:
-        async with Session(
-            llm_client=mock_llm, glyff_session=gs, session_store=sefia_store
-        ):
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
+        async with Session(llm_client=mock_llm, glyff_session=gs):
             summary = await summarize_text(text="This is a long text...", length=1)
 
     assert summary == "This is a summary."

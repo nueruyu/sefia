@@ -171,13 +171,15 @@ paused at step 4 replays steps 1–3 and the tools they called, then runs step 4
 **Exceptions never poison a run.** glyff **never engraves an exception as a permanent
 result**: any exception that escapes an engraved call leaves that call **resumable**
 while the work that already completed stays committed, and the exception then
-propagates normally. So there is no special control-flow type: a transient
+propagates normally. So no exception type changes glyff's durability: a transient
 provider hiccup or a response that failed schema validation simply propagates and is
 re-run on the next invocation (an in-loop `Retrier` may retry it first); a
 human-input tool raises `NeedsInput` to pause; an ordinary bug raises and surfaces to
 you. In every case the completed engraved steps are safe and the interrupted one runs
-again on re-invocation. (Today's code still routes recoverable errors through a
-transitional `InferenceError` base; that distinction is being removed.)
+again on re-invocation. sefia's control-flow pauses subclass `PauseException`
+(`sefia.exceptions`), which the executor propagates untouched instead of reporting as
+a failure: `NeedsInput` (a tool awaiting input) and the recoverable `InferenceError`
+base are both pauses.
 
 ## Human-in-the-loop: pause = raise, resume = re-invoke
 
@@ -193,20 +195,21 @@ answer is delivered with `accept_input` and you re-invoke the same session: ever
 completed step replays, and the human tool runs again, now with an answer available,
 and returns it.
 
-The idempotency hinge is `get_call_state_store` (`_context.py`): it scopes a small
-state store to the **current engraved call's `ExecutionId`** (hashed). Because a
-resumed invocation re-enters the *same* engraved call with the *same* execution id,
-the tool reads back the *same* `interaction_id` it stored before — so the pending
-question is keyed stably and a re-entry doesn't create a duplicate. State that must
-survive a pause lives here; everything else is just function arguments and return
-values.
+The idempotency hinge is `get_call_state_store`
+(`sefios/_session_state.py`): it scopes a small state store to the **current engraved
+call's `ExecutionId`** (hashed). Because a resumed invocation re-enters the *same*
+engraved call with the *same* execution id, the tool reads back the *same*
+`interaction_id` it stored before — so the pending question is keyed stably and a
+re-entry doesn't create a duplicate. The store commits immediately, so this state
+survives the pause; everything else is just function arguments and return values.
 
 ## Sessions and context
 
 `sefia.Session` (`_session.py`) wraps a `glyff.Session`, builds the strategy/tool
-collector/stores, and on `__aenter__` installs a `SessionContext` into a contextvar
-that `@infer` reads. `SessionScope` in `sefios` is the configured front door that
-constructs all of this (LLM client, glyff session, file store, default policies) so
+collector, and on `__aenter__` installs a `SessionContext` into a contextvar that
+`@infer` reads. Session-scoped state persistence lives one layer up: `SessionScope` in
+`sefios` is the configured front door that constructs all of this (LLM client, glyff
+session, the session's `SessionStorage`, default policies) so
 application code only writes `async with scope.session(session_id=...)`. Profiles let
 a single call swap the model/policies by key, resolved per-call in
 `SessionContext.resolve_profile`.

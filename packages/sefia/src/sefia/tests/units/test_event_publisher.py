@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar, Union
 
 import pytest
-from glyff.exceptions import YieldException
+from sefia.exceptions import PauseException
 from pytest_mock import MockerFixture
 
 from sefia.event_system import EventHandler, EventPublisher
@@ -208,13 +208,13 @@ class TestEventPublisher:
     async def test_yield_exception_is_swallowed(
         self, mocker: MockerFixture, before_tool_call_event: BeforeToolCall
     ):
-        # Observers cannot steer control flow: even a YieldException raised by a
+        # Observers cannot steer control flow: even a PauseException raised by a
         # handler is logged and swallowed, never leaked out of publish(). Genuine
         # resumable interrupts come from the control layer (e.g. tools), not
         # observers. Later handlers still run.
         class YieldingHandler(EventHandler[BeforeToolCall]):
             async def handle(self, event: BeforeToolCall) -> None:
-                raise YieldException("resume later")
+                raise PauseException("resume later")
 
         good_handler = MyEventHandler()
         spy = mocker.spy(good_handler, "handle")

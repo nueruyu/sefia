@@ -1,8 +1,6 @@
 import inspect
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
-from glyff.exceptions import YieldException
-
 from . import events
 from ._interfaces import InferenceStrategy
 from ._interfaces.middleware import (
@@ -13,6 +11,7 @@ from ._interfaces.middleware import (
 )
 from ._tool_system import ToolCollector, ToolRegistry
 from .event_system import EventPublisher
+from .exceptions import PauseException
 from .inference import (
     ResultDecision,
     FunctionInfo,
@@ -109,15 +108,15 @@ class InferenceExecutor:
         except Exception as e:
             # This method is engraved. The failure is published for observation
             # (handlers cannot change the outcome — the publisher isolates their
-            # exceptions), then the original exception is re-raised. What glyff
-            # does next depends on the exception type: a recoverable
-            # InferenceError is also a YieldException, so glyff leaves the step
-            # resumable instead of engraving it — a transient hiccup or invalid
-            # LLM response never poisons the step, and a re-invocation re-runs it.
-            # Any other exception is engraved as a genuine, permanent FAILED
-            # record. (Resumable interrupts otherwise come from the
-            # control/execution layer, e.g. a tool raising YieldException, not
-            # from observation handlers.)
+            # exceptions), then the original exception is re-raised. glyff leaves
+            # any interrupted execution in its STARTED state, so a re-invocation
+            # re-runs it regardless of the exception type. A recoverable
+            # InferenceError is also a PauseException, so the executor treats it
+            # as a pause (no InferenceFailed) — a transient hiccup or invalid LLM
+            # response pauses the run and a re-invocation re-runs the step. Any
+            # other exception is reported through InferenceFailed. (Resumable
+            # interrupts otherwise come from the control/execution layer, e.g. a
+            # tool raising PauseException, not from observation handlers.)
             await self.publisher.publish(events.InferenceStepFailed(error=e))
             raise
 
@@ -152,7 +151,7 @@ class InferenceExecutor:
                     await self.publisher.publish(
                         events.AfterToolCall(tool_call=call, result=result)
                     )
-                except YieldException:
+                except PauseException:
                     raise
                 except Exception as e:
                     # A tool failure is never a retryable inference failure: we
@@ -199,7 +198,7 @@ class InferenceExecutor:
             result = await chain()
             await self.publisher.publish(events.InferenceEnd(result=result))
             return result
-        except YieldException:
+        except PauseException:
             raise
         except Exception as e:
             await self.publisher.publish(events.InferenceFailed(error=e))

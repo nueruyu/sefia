@@ -16,7 +16,6 @@ from .middleware import (
 )
 from .model_backend import ModelBackend
 from .policy import Policy
-from .session_store import SessionStore
 
 __all__ = [
     "InferenceStrategy",
@@ -26,7 +25,6 @@ __all__ = [
     "StepContext",
     "ModelBackend",
     "Policy",
-    "SessionStore",
     "DecisionModel",
     "DecisionModelSpec",
     "DecisionMode",
