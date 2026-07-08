@@ -1,7 +1,9 @@
+import jsonschema
 import pytest
 
 from sefia import JsonSchemaTool, ToolRegistry
 from sefia.exceptions import ToolConflictError
+from sefia.pydantic._function_models import json_schema_argument_type
 
 _SEARCH_SCHEMA = {
     "type": "object",
@@ -75,3 +77,8 @@ def test_registration_shares_the_namespace_with_introspected_tools():
             description="dup",
             parameters=_SEARCH_SCHEMA,
         )
+
+
+def test_a_malformed_schema_is_rejected_up_front():
+    with pytest.raises(jsonschema.SchemaError):
+        json_schema_argument_type({"type": "not-a-type"})

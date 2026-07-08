@@ -72,7 +72,11 @@ class PydanticModelBackend(ToolFunctionInspector, DecisionModelBuilder):
             name="ToolArguments",
             extra="allow",
         )
-        return param_model.model_validate(arguments).model_dump(mode="python")
+        validated = param_model.model_validate(arguments)
+        # A shallow dump: ``model_dump`` would recursively turn the coerced
+        # sub-model/dataclass instances back into dicts, undoing the coercion
+        # the callable's annotations asked for.
+        return {**dict(validated), **(validated.model_extra or {})}
 
     def build(self, spec: DecisionModelSpec) -> DecisionModel:
         return self._decision_model_factory.build(spec)

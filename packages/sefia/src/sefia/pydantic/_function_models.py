@@ -26,6 +26,11 @@ def json_schema_argument_type(schema: dict[str, Any]) -> Any:
     the raw type never crosses a tool or interface boundary.
     """
 
+    # Draft 2020-12 is the dialect Pydantic v2 itself generates, so raw and
+    # introspected tool schemas are validated under the same rules. Checking
+    # the schema up front surfaces a malformed user-supplied schema as a
+    # ``jsonschema.SchemaError`` instead of a confusing per-call failure.
+    jsonschema.Draft202012Validator.check_schema(schema)
     validator = jsonschema.Draft202012Validator(schema)
 
     def _validate(value: Any) -> dict[str, Any]:

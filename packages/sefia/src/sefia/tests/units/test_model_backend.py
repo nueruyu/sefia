@@ -1,7 +1,9 @@
 import gc
 import weakref
+from dataclasses import dataclass
 
 import pytest
+from pydantic import BaseModel
 
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._function_models import PydanticFunctionModelFactory, cache_key
@@ -102,6 +104,27 @@ class TestPydanticModelBackend:
         # Declared params are coerced; the shape is enforced upstream, so bind
         # passes any additional keys through unchanged.
         assert backend.bind(_sample_func, {"a": "1", "b": "y"}) == {"a": 1, "b": "y"}
+
+    def test_bind_preserves_coerced_model_and_dataclass_instances(self):
+        class Point(BaseModel):
+            x: int
+            y: int
+
+        @dataclass
+        class Box:
+            width: int
+
+        def func(point: Point, box: Box) -> None: ...
+
+        bound = PydanticModelBackend().bind(
+            func, {"point": {"x": 1, "y": 2}, "box": {"width": 3}}
+        )
+
+        # The coerced instances survive binding — a recursive dump would
+        # flatten them back into dicts.
+        assert bound["point"] == Point(x=1, y=2)
+        assert isinstance(bound["box"], Box)
+        assert bound["box"].width == 3
 
     def test_function_model_factory_reuses_params_model(self):
         factory = PydanticFunctionModelFactory()

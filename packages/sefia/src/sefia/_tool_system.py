@@ -1,7 +1,7 @@
 import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol, Sequence
+from typing import Any, Callable, Sequence
 
 from .exceptions import ToolConflictError
 from .streaming import StreamHandler
@@ -47,7 +47,7 @@ class ToolDefinition:
         }
 
 
-class ToolFunctionInspector(Protocol):
+class ToolFunctionInspector(ABC):
     """Inspects a tool's Python function.
 
     A ``SignatureTool`` delegates to this to turn its callable into a neutral
@@ -57,14 +57,17 @@ class ToolFunctionInspector(Protocol):
     boundary.
     """
 
+    @abstractmethod
     def tool_name(self, func: Callable[..., Any]) -> str:
         """A stable, sanitized tool-call name derived from ``func``."""
         ...
 
+    @abstractmethod
     def definition(self, func: Callable[..., Any], *, name: str) -> ToolDefinition:
         """The tool definition (JSON Schema parameters) reflected from ``func``."""
         ...
 
+    @abstractmethod
     def bind(
         self, func: Callable[..., Any], arguments: dict[str, Any]
     ) -> dict[str, Any]:
@@ -101,6 +104,15 @@ class Tool(ABC):
         """Execute the call for decoded ``arguments`` and return its result."""
         ...
 
+    @property
+    def function(self) -> Callable[..., Any] | None:
+        """The local Python callable this tool executes, if any.
+
+        Used by function-based lookups (``ToolRegistry.get_by_function``).
+        ``None`` for tools executed over a transport with no local callable.
+        """
+        return None
+
 
 class SignatureTool(Tool):
     """A tool whose schema is introspected from a typed Python callable.
@@ -133,6 +145,10 @@ class SignatureTool(Tool):
     async def invoke(self, arguments: dict[str, Any]) -> Any:
         bound = self._inspector.bind(self._function, arguments)
         return await _maybe_await(self._function(**bound))
+
+    @property
+    def function(self) -> Callable[..., Any]:
+        return self._function
 
 
 class JsonSchemaTool(Tool):
@@ -168,24 +184,16 @@ class JsonSchemaTool(Tool):
     async def invoke(self, arguments: dict[str, Any]) -> Any:
         return await _maybe_await(self._handler(**arguments))
 
+    @property
+    def function(self) -> Callable[..., Any]:
+        return self._handler
+
 
 async def _maybe_await(value: Any) -> Any:
     """Await ``value`` if it is awaitable, otherwise return it unchanged."""
     if inspect.isawaitable(value):
         return await value
     return value
-
-
-_default_inspector: ToolFunctionInspector | None = None
-
-
-def _get_default_inspector() -> ToolFunctionInspector:
-    global _default_inspector
-    if _default_inspector is None:
-        from .pydantic._model_backend import PydanticModelBackend
-
-        _default_inspector = PydanticModelBackend()
-    return _default_inspector
 
 
 class ToolRegistry:
@@ -212,12 +220,16 @@ class ToolRegistry:
         stream_handler: StreamHandler | None = None,
     ) -> None:
         """Register a ``SignatureTool`` built from a typed callable."""
+        if inspector is None:
+            from .pydantic._model_backend import PydanticModelBackend
+
+            inspector = PydanticModelBackend()
         self.register(
             SignatureTool(
                 func,
                 name=name,
                 schema_source=schema_source or func,
-                inspector=inspector or _get_default_inspector(),
+                inspector=inspector,
                 stream_handler=stream_handler,
             )
         )
@@ -251,7 +263,7 @@ class ToolRegistry:
         return [
             tool
             for tool in self._tools.values()
-            if _callable_identity(tool.function) is target
+            if tool.function is not None and _callable_identity(tool.function) is target
         ]
 
     def get_all(self) -> list[Tool]:

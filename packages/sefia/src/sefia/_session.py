@@ -4,9 +4,9 @@ from typing import Self
 import glyff
 
 from ._context import ProfileBinding, SessionContext, context_var
-from ._interfaces import Policy
+from ._interfaces import DecisionModelBuilder, Policy
 from ._profiles import Profile
-from ._tool_system import ToolCollector
+from ._tool_system import ToolCollector, ToolFunctionInspector
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
 from .llm._xml_prompt_formatter import XmlPromptFormatter
@@ -28,7 +28,8 @@ class Session:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
-        model_backend: PydanticModelBackend | None = None,
+        inspector: ToolFunctionInspector | None = None,
+        decision_builder: DecisionModelBuilder | None = None,
         stream: bool = False,
     ):
         self.llm_client = llm_client
@@ -36,12 +37,16 @@ class Session:
         self._context_token = None
         self._policies: list[Policy] = list(policies) if policies is not None else []
 
-        model_backend = model_backend or PydanticModelBackend()
-
         # ``PydanticModelBackend`` is both a ToolFunctionInspector (for the
-        # collector) and a DecisionModelBuilder (for the strategy).
+        # collector) and a DecisionModelBuilder (for the strategy); one shared
+        # instance backs whichever of the two seams the caller didn't supply.
+        if inspector is None or decision_builder is None:
+            default_backend = PydanticModelBackend()
+            inspector = inspector or default_backend
+            decision_builder = decision_builder or default_backend
+
         self._tool_collector = tool_collector or DefaultToolCollector(
-            inspector=model_backend
+            inspector=inspector
         )
         prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
 
@@ -49,7 +54,7 @@ class Session:
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
-                decision_builder=model_backend,
+                decision_builder=decision_builder,
                 prompt_formatter=prompt_formatter,
                 json_default=pydantic_json_default,
                 stream=stream,
