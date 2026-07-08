@@ -7,7 +7,7 @@ from typing import Protocol, TypeVar, cast
 import typer
 from sefia import Policy
 from sefia.exceptions import InferenceError, PauseException
-from sefios import SessionScope, get_session_state, get_state
+from sefios import SessionScope, get_session_storage, get_state
 from sefios.handlers import CostCalculator, CostState
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputRequest, HumanInputTool
@@ -194,9 +194,7 @@ class SefiaCLI:
                 stream=stream,
                 policies=session_policies,
             ):
-                with self._human_input.store.use_session_store(
-                    get_session_state().store
-                ):
+                with self._human_input.store.use_session_storage(get_session_storage()):
                     try:
                         yield SefiaCLISession(human_input=self._human_input_receiver)
                     except InferenceError as e:

@@ -9,9 +9,9 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Profile, Policy
 from sefia.llm import LLMClient
 
-from ._session_state import bind_session_state
+from ._session_state import bind_session_storage
 from .policies import DefaultPolicy
-from .stores import FileSessionStore, SessionStore
+from .storage import FileSessionStorage, SessionStorage
 
 
 class SessionScope:
@@ -19,10 +19,10 @@ class SessionScope:
     Manages shared configuration for Sefia sessions and provides helpers to run
     code within a configured session context.
 
-    ``session_store_factory`` is the seam for a custom session-state
+    ``session_storage_factory`` is the seam for a custom session-state
     persistence backend: it receives the session id and returns the
-    :class:`SessionStore` to bind for that session. By default a
-    :class:`FileSessionStore` under ``session_dir`` is used.
+    :class:`SessionStorage` to bind for that session. By default a
+    :class:`FileSessionStorage` under ``session_dir`` is used.
     """
 
     def __init__(
@@ -35,7 +35,7 @@ class SessionScope:
         profiles: list[Profile] | None = None,
         stream: bool = False,
         max_steps: int | None = 25,
-        session_store_factory: Callable[[str], SessionStore] | None = None,
+        session_storage_factory: Callable[[str], SessionStorage] | None = None,
     ):
         self.session_dir = session_dir
         self.model = model
@@ -44,7 +44,7 @@ class SessionScope:
         self.profiles = list(profiles or [])
         self.stream = stream
         self.max_steps = max_steps
-        self.session_store_factory = session_store_factory
+        self.session_storage_factory = session_storage_factory
 
     @asynccontextmanager
     async def session(
@@ -85,10 +85,10 @@ class SessionScope:
             serializer=serializer,
             hasher=PydanticArgsHasher(),
         )
-        if self.session_store_factory is not None:
-            session_store = self.session_store_factory(session_id)
+        if self.session_storage_factory is not None:
+            session_storage = self.session_storage_factory(session_id)
         else:
-            session_store = FileSessionStore(
+            session_storage = FileSessionStorage(
                 base_dir=self.session_dir / "sefia_metadata" / session_id,
                 serializer=serializer,
             )
@@ -103,7 +103,7 @@ class SessionScope:
             final_profiles.extend(profiles)
 
         async with gs:
-            with bind_session_state(session_store):
+            with bind_session_storage(session_storage):
                 async with sefia.Session(
                     llm_client=llm_client,
                     glyff_session=gs,

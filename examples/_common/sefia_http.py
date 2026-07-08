@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from sefia import Policy
 from sefia.event_system import EventHandler
 from sefia.llm.events import LLMTokenReceived
-from sefios import NeedsInput, SessionScope, get_session_state
+from sefios import NeedsInput, SessionScope, get_session_storage
 from sefios.handlers import CostCalculator
 from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputTool
@@ -169,9 +169,7 @@ class SefiaHTTP:
                 stream=resolved_stream,
                 policies=session_policies or None,
             ):
-                with self._human_input.store.use_session_store(
-                    get_session_state().store
-                ):
+                with self._human_input.store.use_session_storage(get_session_storage()):
                     try:
                         yield SefiaHTTPSession(human_input=self._human_input_receiver)
                     except NeedsInput:

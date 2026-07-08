@@ -16,9 +16,9 @@ def _request(interaction_id: str) -> dict:
 
 class TestHumanInputSessionStore:
     @pytest.fixture
-    def store(self, session_store):
+    def store(self, session_storage):
         human_store = HumanInputSessionStore()
-        with human_store.use_session_store(session_store):
+        with human_store.use_session_storage(session_storage):
             yield human_store
 
     async def test_requires_bound_session(self):
@@ -63,9 +63,9 @@ class TestHumanInputSessionStore:
 
 class TestCLIHumanInputReceiver:
     @pytest.fixture
-    def store(self, session_store):
+    def store(self, session_storage):
         human_store = HumanInputSessionStore()
-        with human_store.use_session_store(session_store):
+        with human_store.use_session_storage(session_storage):
             yield human_store
 
     async def test_input_is_queued_when_nothing_pending(self, store):
@@ -113,9 +113,9 @@ class TestCLIHumanInputReceiver:
 
 class TestCLIHumanInputAdapter:
     @pytest.fixture
-    def adapter(self, session_store):
+    def adapter(self, session_storage):
         adapter = CLIHumanInputAdapter()
-        with adapter.store.use_session_store(session_store):
+        with adapter.store.use_session_storage(session_storage):
             yield adapter
 
     def test_create_tool_returns_human_input_tool(self, adapter):
@@ -123,11 +123,11 @@ class TestCLIHumanInputAdapter:
 
         assert isinstance(adapter.create_tool(), HumanInputTool)
 
-    async def test_handle_request_records_pending_and_notifies(self, session_store):
+    async def test_handle_request_records_pending_and_notifies(self, session_storage):
         seen: list[HumanInputRequest] = []
         adapter = CLIHumanInputAdapter(on_request=seen.append)
 
-        with adapter.store.use_session_store(session_store):
+        with adapter.store.use_session_storage(session_storage):
             request = HumanInputRequest(interaction_id="x", question="why?")
             await adapter._handle_request(request)
 
@@ -136,11 +136,11 @@ class TestCLIHumanInputAdapter:
         assert "x" in pending
         assert seen == [request]
 
-    async def test_handle_question_delta_notifies(self, session_store):
+    async def test_handle_question_delta_notifies(self, session_storage):
         seen: list[str] = []
         adapter = CLIHumanInputAdapter(on_question_delta=seen.append)
 
-        with adapter.store.use_session_store(session_store):
+        with adapter.store.use_session_storage(session_storage):
             await adapter._handle_question_delta("What ")
             await adapter._handle_question_delta("topic?")
 

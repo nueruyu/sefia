@@ -36,8 +36,8 @@ class TestSefiaCLISession:
         return HumanInputSessionStore()
 
     @pytest.fixture
-    def session(self, store, session_store):
-        with store.use_session_store(session_store):
+    def session(self, store, session_storage):
+        with store.use_session_storage(session_storage):
             receiver = CLIHumanInputReceiver(store)
             yield SefiaCLISession(human_input=receiver)
 

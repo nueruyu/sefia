@@ -94,8 +94,8 @@ implementation noted in parentheses.
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation` — control-seam behaviors. |
 | `handlers/` | `_cost` — an observation-seam handler (cost accounting). |
 | `tools/` | `human.py` (HITL pause-by-raise), `web.py` (DuckDuckGo search). |
-| `stores/` | Session-scoped persistence: the `SessionStore` interface + `MemorySessionStore` / `FileSessionStore`. |
-| `_state_store.py` / `_session_state.py` | Typed `StateStore`; the bound `SessionState` (session- and call-scoped) and `get_session_state` / `bind_session_state`. |
+| `storage/` | Session-scoped persistence: the `SessionStorage` interface + `MemorySessionStorage` / `FileSessionStorage`. |
+| `_state_store.py` / `_session_state.py` | Typed `StateStore`; the session-state binding and its accessors (`get_state`'s type-keyed tier sits on top; `get_call_state_store` / `get_session_storage` are the tool-facing tier). |
 | `state.py` | App-level state helpers: `StateRegistry`, `StateContainer`, `state`, `get_state`. |
 
 ## Where to change what
@@ -107,7 +107,7 @@ implementation noted in parentheses.
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
-| Add a session-state persistence backend | implement `sefios` `SessionStore`; reference `sefios/stores/_file.py` |
+| Add a session-state persistence backend | implement `sefios` `SessionStorage` and pass a `session_storage_factory` to `SessionScope`; reference `sefios/storage/_file.py` |
 | Change which methods are tools | `tool_collectors/_collector.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
 | Support a new output type system | `ModelBackend` in `pydantic/_model_backend.py` |

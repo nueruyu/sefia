@@ -1,3 +1,12 @@
+"""The session-scoped state binding and its accessor functions.
+
+This is the low-level, string-keyed tier of the state API, meant for tool
+implementations: :func:`get_call_state_store` for call-scoped resumable state,
+:func:`get_session_storage` for raw key-value access. Application and handler
+state should normally go through the type-keyed container returned by
+:func:`sefios.get_state` instead.
+"""
+
 from __future__ import annotations
 
 import contextvars
@@ -12,7 +21,7 @@ from glyff import get_context as get_glyff_context
 from glyff.exceptions import ContextNotSetError
 
 from ._state_store import StateStore
-from .stores import SessionStore
+from .storage import SessionStorage
 
 T = TypeVar("T")
 
@@ -33,34 +42,26 @@ def _execution_id_scope_key(execution_id: ExecutionId) -> str:
     return hashlib.sha256(stable_repr.encode("utf-8")).hexdigest()
 
 
-class SessionState:
-    """Session-scoped state persistence bound to a single active session.
+class _SessionState:
+    """Internal per-session binding over a :class:`SessionStorage`.
 
-    Holds the session's :class:`SessionStore` and hands out typed, caching
-    :class:`StateStore` views of it — either keyed directly (session scope) or
-    scoped to the current engraved call (call scope, for resumable tool state).
-
-    This is the low-level, string-keyed tier of the state API, meant for tool
-    implementations. Application and handler state should normally go through
-    the type-keyed container returned by :func:`sefios.get_state` instead.
+    Hands out typed, caching :class:`StateStore` views of the storage — either
+    keyed directly (session scope) or scoped to the current engraved call (call
+    scope). Not exported: callers use the module-level accessor functions.
     """
 
-    def __init__(self, store: SessionStore):
-        self._store = store
+    def __init__(self, storage: SessionStorage):
+        self._storage = storage
         self._state_stores: dict[str, StateStore] = {}
 
     @property
-    def store(self) -> SessionStore:
-        """The underlying :class:`SessionStore`."""
-        return self._store
+    def storage(self) -> SessionStorage:
+        """The underlying :class:`SessionStorage`."""
+        return self._storage
 
     def get_call_state_store(
         self, key_suffix: str, state_type: Type[T]
     ) -> StateStore[T]:
-        """
-        Gets a StateStore scoped to the current engraved function call.
-        This provides call-local state for a single invocation of an engraved tool.
-        """
         try:
             glyff_ctx = get_glyff_context()
         except ContextNotSetError:
@@ -79,10 +80,9 @@ class SessionState:
         return self.get_state_store(scoped_key, state_type)
 
     def get_state_store(self, key: str, state_type: Type[T]) -> StateStore[T]:
-        """Gets a StateStore for the given key and type, creating one if needed."""
         if key not in self._state_stores:
             self._state_stores[key] = StateStore(
-                store=self._store,
+                storage=self._storage,
                 key=key,
                 state_type=state_type,
             )
@@ -94,30 +94,54 @@ class SessionState:
         return store
 
 
-_session_state_var = contextvars.ContextVar[SessionState]("sefios_session_state")
+_session_state_var = contextvars.ContextVar[_SessionState]("sefios_session_state")
 
 
-def get_session_state() -> SessionState:
-    """Returns the :class:`SessionState` bound to the current session.
-
-    Raises ``RuntimeError`` if called outside an active session (for example,
-    outside ``SessionScope.session()`` or ``bind_session_state``).
-    """
+def _get_session_state() -> _SessionState:
     try:
         return _session_state_var.get()
     except LookupError:
         raise RuntimeError(
             "No sefios session state is bound. Are you running outside a "
-            "SessionScope.session() (or bind_session_state) block?"
+            "SessionScope.session() (or bind_session_storage) block?"
         ) from None
 
 
+def get_session_storage() -> SessionStorage:
+    """Returns the :class:`SessionStorage` bound to the current session.
+
+    This is the raw key-value escape hatch for application code that manages
+    its own keys. Raises ``RuntimeError`` if called outside an active session
+    (for example, outside ``SessionScope.session()``).
+    """
+    return _get_session_state().storage
+
+
+def get_call_state_store(key_suffix: str, state_type: Type[T]) -> StateStore[T]:
+    """Returns a :class:`StateStore` scoped to the current engraved call.
+
+    The store's key is derived from the call's execution id, so a resumed
+    invocation that re-enters the same engraved call reads back the same state
+    it stored before pausing. Raises ``RuntimeError`` outside an engraved
+    function or an active session.
+    """
+    return _get_session_state().get_call_state_store(key_suffix, state_type)
+
+
+def get_state_store(key: str, state_type: Type[T]) -> StateStore[T]:
+    """Returns the session-scoped :class:`StateStore` for ``key``.
+
+    Prefer the type-keyed :func:`sefios.get_state` container in application
+    code; this exists for callers that must manage string keys themselves.
+    """
+    return _get_session_state().get_state_store(key, state_type)
+
+
 @contextmanager
-def bind_session_state(store: SessionStore) -> Iterator[SessionState]:
-    """Binds a fresh :class:`SessionState` over ``store`` for the current context."""
-    state = SessionState(store)
-    token = _session_state_var.set(state)
+def bind_session_storage(storage: SessionStorage) -> Iterator[None]:
+    """Binds ``storage`` as the current session's state storage."""
+    token = _session_state_var.set(_SessionState(storage))
     try:
-        yield state
+        yield
     finally:
         _session_state_var.reset(token)

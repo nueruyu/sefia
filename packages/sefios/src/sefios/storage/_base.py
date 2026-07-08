@@ -2,9 +2,9 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class SessionStore(ABC):
+class SessionStorage(ABC):
     """
-    Abstract interface for persisting session-scoped metadata.
+    Abstract interface for persisting session-scoped key-value data.
 
     Implementations back the session state facility (``StateStore`` /
     ``get_state``). Writes are expected to commit immediately, so state written

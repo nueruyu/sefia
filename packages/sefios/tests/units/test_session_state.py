@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from glyff import ExecutionId
 
-from sefios import SessionState
+from sefios._session_state import _SessionState
 
 
 @dataclass
@@ -19,7 +19,7 @@ class StateB:
 
 @pytest.fixture
 def session_state():
-    return SessionState(store=MagicMock())
+    return _SessionState(storage=MagicMock())
 
 
 class TestSessionState:

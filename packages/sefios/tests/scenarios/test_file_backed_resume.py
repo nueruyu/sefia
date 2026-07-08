@@ -1,7 +1,7 @@
 """File-backed pause/resume across simulated process restarts.
 
 Exercises the real ``HumanInputTool`` with glyff's ``JsonFileBackend`` and the
-sefios ``FileSessionStore``: every object (backend, store, tool, LLM client) is
+sefios ``FileSessionStorage``: every object (backend, store, tool, LLM client) is
 constructed fresh for the second run, so the only thing connecting the two runs
 is what was committed to disk before the pause. The resumed run must read back
 the *same* interaction id the paused run stored — the idempotency hinge of the
@@ -17,8 +17,8 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Session, infer
 from sefia.llm import LLMResponse
 
-from sefios import FileSessionStore, NeedsInput
-from sefios._session_state import bind_session_state
+from sefios import FileSessionStorage, NeedsInput
+from sefios._session_state import bind_session_storage
 from sefios.tools import HumanInputRequest, HumanInputTool
 
 _SESSION_ID = "file-backed-resume-test"
@@ -70,8 +70,8 @@ async def test_pause_resume_survives_process_restart(tmp_path, make_mock_llm):
             hasher=PydanticArgsHasher(),
         )
 
-    def make_state_store() -> FileSessionStore:
-        return FileSessionStore(
+    def make_state_storage() -> FileSessionStorage:
+        return FileSessionStorage(
             base_dir=tmp_path / "state", serializer=PydanticSerializer()
         )
 
@@ -79,7 +79,7 @@ async def test_pause_resume_survives_process_restart(tmp_path, make_mock_llm):
     mock_llm = make_mock_llm([_TOOL_CALL_RESPONSE])
     with pytest.raises(NeedsInput):
         async with make_glyff_session() as gs:
-            with bind_session_state(make_state_store()):
+            with bind_session_storage(make_state_storage()):
                 async with Session(llm_client=mock_llm, glyff_session=gs):
                     await _Agent(HumanInputTool(get_answer=get_answer)).get_user_name()
 
@@ -89,7 +89,7 @@ async def test_pause_resume_survives_process_restart(tmp_path, make_mock_llm):
     # --- Second run: everything is rebuilt from disk; the answer is found. ---
     resumed_llm = make_mock_llm([_RESULT_RESPONSE])
     async with make_glyff_session() as gs:
-        with bind_session_state(make_state_store()):
+        with bind_session_storage(make_state_storage()):
             async with Session(llm_client=resumed_llm, glyff_session=gs):
                 answer = await _Agent(
                     HumanInputTool(get_answer=get_answer)

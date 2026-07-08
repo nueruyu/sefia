@@ -195,7 +195,7 @@ answer is delivered with `accept_input` and you re-invoke the same session: ever
 completed step replays, and the human tool runs again, now with an answer available,
 and returns it.
 
-The idempotency hinge is `get_call_state_store` on the bound `SessionState`
+The idempotency hinge is `get_call_state_store`
 (`sefios/_session_state.py`): it scopes a small state store to the **current engraved
 call's `ExecutionId`** (hashed). Because a resumed invocation re-enters the *same*
 engraved call with the *same* execution id, the tool reads back the *same*
@@ -209,7 +209,7 @@ survives the pause; everything else is just function arguments and return values
 collector, and on `__aenter__` installs a `SessionContext` into a contextvar that
 `@infer` reads. Session-scoped state persistence lives one layer up: `SessionScope` in
 `sefios` is the configured front door that constructs all of this (LLM client, glyff
-session, the `SessionStore` bound via `bind_session_state`, default policies) so
+session, the session's `SessionStorage`, default policies) so
 application code only writes `async with scope.session(session_id=...)`. Profiles let
 a single call swap the model/policies by key, resolved per-call in
 `SessionContext.resolve_profile`.
