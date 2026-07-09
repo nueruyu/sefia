@@ -18,7 +18,6 @@ from ._tool_system import (
     ToolDefinition,
     ToolRegistry,
 )
-from .tool_collectors import CompositeToolCollector, StaticToolCollector
 
 __all__ = [
     "infer",
@@ -39,7 +38,5 @@ __all__ = [
     "JsonSchemaTool",
     "ToolDefinition",
     "ToolCollector",
-    "StaticToolCollector",
-    "CompositeToolCollector",
     "ToolRegistry",
 ]

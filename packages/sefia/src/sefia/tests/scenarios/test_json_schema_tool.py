@@ -4,8 +4,9 @@ import glyff
 from glyff import ArgsHasher, Serializer
 from glyff.store import MemoryBackend
 
-from sefia import JsonSchemaTool, Session, StaticToolCollector
+from sefia import JsonSchemaTool, Session
 from sefia.llm import LLMResponse
+from sefia.tool_collectors import StaticToolCollector
 
 from ..conftest import MockLLMClient, Report, SimpleAgent
 
