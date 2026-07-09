@@ -1,5 +1,6 @@
 import jsonschema
 import pytest
+from pydantic import TypeAdapter, ValidationError
 
 from sefia import JsonSchemaTool, ToolRegistry
 from sefia.exceptions import ToolConflictError
@@ -82,3 +83,22 @@ def test_registration_shares_the_namespace_with_introspected_tools():
 def test_a_malformed_schema_is_rejected_up_front():
     with pytest.raises(jsonschema.SchemaError):
         json_schema_argument_type({"type": "not-a-type"})
+
+
+def test_a_schema_is_validated_under_its_declared_dialect():
+    # Array-form ``items`` (tuple validation) is draft-07; under the default
+    # 2020-12 dialect it would be rejected as malformed.
+    schema = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+            "pair": {"items": [{"type": "string"}, {"type": "integer"}]},
+        },
+        "required": ["pair"],
+    }
+
+    adapter = TypeAdapter(json_schema_argument_type(schema))
+
+    assert adapter.validate_python({"pair": ["a", 1]}) == {"pair": ["a", 1]}
+    with pytest.raises(ValidationError):
+        adapter.validate_python({"pair": [1, "a"]})

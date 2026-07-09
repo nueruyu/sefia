@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Annotated, Any, Literal, cast
 
 import jsonschema
+import jsonschema.validators
 from pydantic import (
     BaseModel,
     BeforeValidator,
@@ -26,12 +27,18 @@ def json_schema_argument_type(schema: dict[str, Any]) -> Any:
     the raw type never crosses a tool or interface boundary.
     """
 
-    # Draft 2020-12 is the dialect Pydantic v2 itself generates, so raw and
-    # introspected tool schemas are validated under the same rules. Checking
-    # the schema up front surfaces a malformed user-supplied schema as a
-    # ``jsonschema.SchemaError`` instead of a confusing per-call failure.
-    jsonschema.Draft202012Validator.check_schema(schema)
-    validator = jsonschema.Draft202012Validator(schema)
+    # The schema's own ``$schema`` declaration picks the dialect (draft-04
+    # through 2020-12), so a client-supplied schema is validated under the
+    # rules it was written for. Absent a declaration, default to Draft 2020-12
+    # — the dialect Pydantic v2 itself generates, so raw and introspected tool
+    # schemas are validated under the same rules. Checking the schema up front
+    # surfaces a malformed user-supplied schema as a ``jsonschema.SchemaError``
+    # instead of a confusing per-call failure.
+    validator_cls = jsonschema.validators.validator_for(
+        schema, default=jsonschema.Draft202012Validator
+    )
+    validator_cls.check_schema(schema)
+    validator = validator_cls(schema)
 
     def _validate(value: Any) -> dict[str, Any]:
         if not isinstance(value, dict):
