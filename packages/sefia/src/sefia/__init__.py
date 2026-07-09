@@ -11,15 +11,14 @@ from ._markers import AsRawText
 from ._profiles import Profile
 from ._session import Session
 from ._tool_system import (
-    CompositeToolCollector,
     JsonSchemaTool,
     SignatureTool,
-    StaticToolCollector,
     Tool,
     ToolCollector,
     ToolDefinition,
     ToolRegistry,
 )
+from .tool_collectors import CompositeToolCollector, StaticToolCollector
 
 __all__ = [
     "infer",

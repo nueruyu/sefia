@@ -1,7 +1,7 @@
 import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any, Callable
 
 from .exceptions import ToolConflictError
 from .streaming import StreamHandler
@@ -278,37 +278,3 @@ class ToolCollector(ABC):
 
     @abstractmethod
     def collect(self, instance: object) -> ToolRegistry: ...
-
-
-class StaticToolCollector(ToolCollector):
-    """A collector that yields a fixed set of pre-built tools, ignoring the
-    instance. The seam for injecting tools that have no Python instance to
-    introspect (JSON-schema / client-side tools)."""
-
-    def __init__(self, tools: Sequence[Tool]):
-        self._tools = list(tools)
-
-    def collect(self, instance: object) -> ToolRegistry:
-        registry = ToolRegistry()
-        for tool in self._tools:
-            registry.register(tool)
-        return registry
-
-
-class CompositeToolCollector(ToolCollector):
-    """Composes several collectors into one, merging their registries.
-
-    Name collisions across collectors raise ``ToolConflictError`` (via
-    ``ToolRegistry.register``), so introspected and pre-built tools share a
-    single namespace.
-    """
-
-    def __init__(self, collectors: Sequence[ToolCollector]):
-        self._collectors = list(collectors)
-
-    def collect(self, instance: object) -> ToolRegistry:
-        registry = ToolRegistry()
-        for collector in self._collectors:
-            for tool in collector.collect(instance).get_all():
-                registry.register(tool)
-        return registry
