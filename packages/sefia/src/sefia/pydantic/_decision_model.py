@@ -7,6 +7,7 @@ from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, create_mod
 from .._interfaces.decision_model import (
     DecisionMode,
     DecisionModel,
+    DecisionModelBuilder,
     DecisionModelSpec,
     DecisionToolCall,
     LLMDecision,
@@ -15,7 +16,7 @@ from .._interfaces.decision_model import (
 )
 from .._tool_system import Tool
 from ..exceptions import UnknownToolDecisionError
-from ._function_models import PydanticFunctionModelFactory
+from ._function_models import json_schema_argument_type
 
 
 class PydanticDecisionModel(DecisionModel):
@@ -50,10 +51,12 @@ class PydanticDecisionModel(DecisionModel):
     def _extract_tool_calls(self, tool_calls: list[Any]) -> list[DecisionToolCall]:
         calls: list[DecisionToolCall] = []
         for tool_call in tool_calls:
+            # ``arguments`` is the decoded, schema-validated dict (see
+            # ``json_schema_argument_type``); no per-tool model to dump.
             calls.append(
                 DecisionToolCall(
                     name=tool_call.name,
-                    arguments=tool_call.arguments.model_dump(),
+                    arguments=dict(tool_call.arguments),
                 )
             )
         return calls
@@ -80,15 +83,7 @@ def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
     return None
 
 
-class PydanticDecisionModelFactory:
-    def __init__(
-        self,
-        function_model_factory: PydanticFunctionModelFactory | None = None,
-    ):
-        self._function_model_factory = (
-            function_model_factory or PydanticFunctionModelFactory()
-        )
-
+class PydanticDecisionModelFactory(DecisionModelBuilder):
     def build(self, spec: DecisionModelSpec) -> DecisionModel:
         return PydanticDecisionModel(
             model=self._model(spec),
@@ -100,11 +95,7 @@ class PydanticDecisionModelFactory:
                 f"{tool.name}ToolCall",
                 name=(Literal[tool.name], ...),
                 arguments=(
-                    self._function_model_factory.params_model(
-                        tool.schema_source,
-                        name=tool.name,
-                        forbid_extra=True,
-                    ),
+                    json_schema_argument_type(tool.definition().parameters),
                     ...,
                 ),
             )

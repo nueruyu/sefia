@@ -1,4 +1,3 @@
-import inspect
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from . import events
@@ -131,10 +130,10 @@ class InferenceExecutor:
         for call in tool_calls:
             await self.publisher.publish(events.BeforeToolCall(tool_call=call))
             tool_name = call.name
-            tool_info = self._tool_registry.get(tool_name)
+            tool = self._tool_registry.get(tool_name)
 
-            if not tool_info:
-                output = f"Error: Tool '{tool_name}' not found."
+            if not tool:
+                result = f"Error: Tool '{tool_name}' not found."
                 await self.publisher.publish(
                     events.ToolExecutionFailed(
                         tool_call=call,
@@ -143,11 +142,7 @@ class InferenceExecutor:
                 )
             else:
                 try:
-                    tool_func = tool_info.function
-                    result = tool_func(**call.arguments)
-                    if inspect.isawaitable(result):
-                        result = await result
-                    output = result
+                    result = await tool.invoke(call.arguments)
                     await self.publisher.publish(
                         events.AfterToolCall(tool_call=call, result=result)
                     )
@@ -160,10 +155,10 @@ class InferenceExecutor:
                     await self.publisher.publish(
                         events.ToolExecutionFailed(tool_call=call, error=e)
                     )
-                    output = (
+                    result = (
                         f"Error executing tool '{tool_name}': {type(e).__name__}({e})"
                     )
-            tool_results.append(ToolCallResult(tool_call_id=call.id, result=output))
+            tool_results.append(ToolCallResult(tool_call_id=call.id, result=result))
         return tool_results
 
     async def run(self) -> Any:

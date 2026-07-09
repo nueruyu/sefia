@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from sefia._tool_system import Tool, ToolRegistry
+from sefia._tool_system import SignatureTool, Tool, ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
@@ -66,18 +66,19 @@ _BACKEND = PydanticModelBackend()
 
 
 def _tool(func: Callable[..., Any]) -> Tool:
-    name = _BACKEND.get_function_name(func)
-    return Tool(
+    name = _BACKEND.tool_name(func)
+    return SignatureTool(
+        func,
         name=name,
-        function=func,
         schema_source=func,
+        inspector=_BACKEND,
     )
 
 
 def _tool_registry(*funcs: Callable[..., Any]) -> ToolRegistry:
     registry = ToolRegistry()
     for func in funcs:
-        registry.add(func, name=_BACKEND.get_function_name(func))
+        registry.add(func, name=_BACKEND.tool_name(func))
     return registry
 
 
@@ -131,7 +132,7 @@ class TestLLMInferenceStrategy:
         mock_formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=llm_client,
-            model_backend=PydanticModelBackend(),
+            decision_builder=PydanticModelBackend(),
             prompt_formatter=mock_formatter,
             json_default=pydantic_json_default,
             stream=stream,
@@ -374,7 +375,7 @@ class TestToolOnlyDirector:
         mock_formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=AsyncMock(),
-            model_backend=PydanticModelBackend(),
+            decision_builder=PydanticModelBackend(),
             prompt_formatter=mock_formatter,
             json_default=pydantic_json_default,
         )
@@ -436,7 +437,7 @@ class TestToolOnlyDirector:
         mock_formatter.format_arguments.return_value = "<arguments/>"
         strategy = LLMInferenceStrategy(
             llm_client=mock_client,
-            model_backend=PydanticModelBackend(),
+            decision_builder=PydanticModelBackend(),
             prompt_formatter=mock_formatter,
         )
 
@@ -460,7 +461,7 @@ class TestToolOnlyDirector:
         mock_formatter.format_arguments.return_value = "<arguments/>"
         strategy = LLMInferenceStrategy(
             llm_client=mock_client,
-            model_backend=PydanticModelBackend(),
+            decision_builder=PydanticModelBackend(),
             prompt_formatter=mock_formatter,
         )
 

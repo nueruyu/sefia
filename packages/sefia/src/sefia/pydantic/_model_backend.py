@@ -1,9 +1,11 @@
 from typing import Any, Callable
 
-from pydantic import TypeAdapter
-
-from .._interfaces.decision_model import DecisionModel, DecisionModelSpec
-from .._interfaces.model_backend import ModelBackend
+from .._interfaces.decision_model import (
+    DecisionModel,
+    DecisionModelBuilder,
+    DecisionModelSpec,
+)
+from .._tool_system import ToolDefinition, ToolFunctionInspector
 from ._decision_model import PydanticDecisionModelFactory
 from ._function_models import (
     PydanticFunctionModelFactory,
@@ -14,9 +16,9 @@ from ._function_models import (
 )
 
 
-class PydanticModelBackend(ModelBackend):
+class PydanticModelBackend(ToolFunctionInspector, DecisionModelBuilder):
     """
-    Pydantic-backed implementation for schema generation and validation.
+    Pydantic-backed tool-function inspector and decision-model builder.
     Supports dataclasses, Pydantic models, primitives, and typing constructs.
     """
 
@@ -27,42 +29,54 @@ class PydanticModelBackend(ModelBackend):
         self._function_model_factory = (
             function_model_factory or PydanticFunctionModelFactory()
         )
-        self._decision_model_factory = PydanticDecisionModelFactory(
-            function_model_factory=self._function_model_factory
-        )
-        self._function_schema_cache: dict[Any, dict] = {}
+        self._decision_model_factory = PydanticDecisionModelFactory()
+        self._definition_cache: dict[Any, ToolDefinition] = {}
 
-    def get_function_name(self, func: Callable[..., Any]) -> str:
+    def tool_name(self, func: Callable[..., Any]) -> str:
         return sanitize_function_name(get_callable_qualname(func))
 
-    def get_function_schema(
+    def definition(
         self,
         func: Callable[..., Any],
         *,
-        name: str | None = None,
-    ) -> dict:
-        schema_name = name or self.get_function_name(func)
-        cache_key_value = (cache_key(func), schema_name)
-        if cache_key_value in self._function_schema_cache:
-            return self._function_schema_cache[cache_key_value]
+        name: str,
+    ) -> ToolDefinition:
+        cache_key_value = (cache_key(func), name)
+        cached = self._definition_cache.get(cache_key_value)
+        if cached is not None:
+            return cached
 
         param_model = self._function_model_factory.params_model(
             func,
-            name=schema_name,
-            forbid_extra=True,
+            name=name,
+            extra="forbid",
         )
-        schema = TypeAdapter(param_model).json_schema()
+        definition = ToolDefinition(
+            name=name,
+            description=get_callable_doc(func),
+            parameters=param_model.model_json_schema(),
+        )
+        self._definition_cache[cache_key_value] = definition
+        return definition
 
-        result = {
-            "type": "function",
-            "function": {
-                "name": schema_name,
-                "description": get_callable_doc(func),
-                "parameters": schema,
-            },
-        }
-        self._function_schema_cache[cache_key_value] = result
-        return result
+    def bind(
+        self,
+        func: Callable[..., Any],
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        # Shape is already enforced upstream by the decision model; this only
+        # coerces values to the callable's declared types. ``extra="allow"``
+        # passes any additional keys through (e.g. for ``**kwargs`` handlers).
+        param_model = self._function_model_factory.params_model(
+            func,
+            name="ToolArguments",
+            extra="allow",
+        )
+        validated = param_model.model_validate(arguments)
+        # A shallow dump: ``model_dump`` would recursively turn the coerced
+        # sub-model/dataclass instances back into dicts, undoing the coercion
+        # the callable's annotations asked for.
+        return {**dict(validated), **(validated.model_extra or {})}
 
-    def build_decision_model(self, spec: DecisionModelSpec) -> DecisionModel:
+    def build(self, spec: DecisionModelSpec) -> DecisionModel:
         return self._decision_model_factory.build(spec)

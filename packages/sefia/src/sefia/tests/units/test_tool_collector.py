@@ -16,15 +16,12 @@ def example_func(a: int, b: str = "default") -> bool:
 
 
 def test_create_tool_schema_from_function():
-    schema = PydanticModelBackend().get_function_schema(example_func)
+    definition = PydanticModelBackend().definition(example_func, name="example_func")
 
-    assert schema["type"] == "function"
-    function_spec = schema["function"]
+    assert definition.name == "example_func"
+    assert definition.description == "An example function."
 
-    assert function_spec["name"] == "example_func"
-    assert function_spec["description"] == "An example function."
-
-    params = function_spec["parameters"]
+    params = definition.parameters
     assert params["type"] == "object"
     assert "a" in params["properties"]
     assert "b" in params["properties"]
@@ -43,7 +40,7 @@ def test_schema_builder_sanitizes_complex_names():
             def my_method(self):
                 pass
 
-    name = backend.get_function_name(Outer.Inner.my_method)
+    name = backend.tool_name(Outer.Inner.my_method)
     # __qualname__ includes enclosing scope; verify it ends with the expected suffix
     assert name.endswith("Outer_Inner_my_method")
     # verify no dots or other unsafe characters remain
@@ -53,9 +50,9 @@ def test_schema_builder_sanitizes_complex_names():
 
 def test_schema_builder_caches_results():
     backend = PydanticModelBackend()
-    schema1 = backend.get_function_schema(example_func)
-    schema2 = backend.get_function_schema(example_func)
-    assert schema1 is schema2
+    definition1 = backend.definition(example_func, name="example_func")
+    definition2 = backend.definition(example_func, name="example_func")
+    assert definition1 is definition2
 
 
 class GreetingToolkit:
@@ -218,14 +215,11 @@ async def test_collect_uses_the_protocol_method_docstring_for_the_schema():
     tool_info = registry.get("ReadOnlyWeb_search")
     assert tool_info is not None
 
-    schema = PydanticModelBackend().get_function_schema(
-        tool_info.schema_source, name=tool_info.name
-    )
     # The Protocol's own docstring is used, not the implementation's.
-    assert schema["function"]["description"] == "Search the web."
+    assert tool_info.definition().description == "Search the web."
 
     # Invocation still dispatches to the concrete implementation.
-    result = await tool_info.function(q="sefia")
+    result = await tool_info.invoke({"q": "sefia"})
     assert result == ["sefia"]
 
 
