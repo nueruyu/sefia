@@ -42,11 +42,11 @@ class SessionCreatedResponse(BaseModel):
 
 
 class InputRequiredResponse(BaseModel):
-    """The workflow paused to wait for human input."""
+    """The workflow paused to wait for input."""
 
     status: Literal["input_required"] = "input_required"
     interaction_id: str
-    question: str
+    prompt: str
 
 
 class BriefSchema(BaseModel):

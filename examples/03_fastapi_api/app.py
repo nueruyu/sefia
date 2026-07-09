@@ -4,10 +4,10 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from sefios.fastapi import (
-    AmbiguousHumanInputError,
+    AmbiguousInputError,
     InputRequired,
     SefiaHTTP,
-    UnknownHumanInputError,
+    UnknownInputError,
     UnknownSessionError,
 )
 
@@ -33,19 +33,19 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
         session_dir=EXAMPLE_DIR / ".local",
         model=os.environ.get("EXAMPLE_DEFAULT_MODEL", "gpt-4o-mini"),
     )
-    interviewer = Interviewer(api.human_input_tool)
+    interviewer = Interviewer(api.input_tool)
     app = FastAPI(title="Sefia FastAPI Example")
 
     @app.exception_handler(UnknownSessionError)
     async def _unknown_session(request: Request, exc: UnknownSessionError):
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
-    @app.exception_handler(UnknownHumanInputError)
-    async def _unknown_human_input(request: Request, exc: UnknownHumanInputError):
+    @app.exception_handler(UnknownInputError)
+    async def _unknown_input(request: Request, exc: UnknownInputError):
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
-    @app.exception_handler(AmbiguousHumanInputError)
-    async def _ambiguous_human_input(request: Request, exc: AmbiguousHumanInputError):
+    @app.exception_handler(AmbiguousInputError)
+    async def _ambiguous_input(request: Request, exc: AmbiguousInputError):
         return JSONResponse(
             status_code=409,
             content={"detail": str(exc), "interaction_ids": exc.interaction_ids},
@@ -57,7 +57,7 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
             status_code=200,
             content=InputRequiredResponse(
                 interaction_id=exc.interaction_id,
-                question=exc.question,
+                prompt=exc.prompt,
             ).model_dump(),
         )
 

@@ -10,11 +10,11 @@ from sefia.exceptions import InferenceError, PauseException
 from sefia_typer import (
     CLIReporter,
     DefaultCLIReporter,
-    HumanInputCoordinator,
-    HumanInputReceiver,
+    InputCoordinator,
+    InputReceiver,
     ResolvedSessionLike,
 )
-from sefia_typer import HumanInputRequest as CLIHumanInputRequest
+from sefia_typer import InputRequest as CLIInputRequest
 from sefia_typer import UnknownSessionError as CLIUnknownSessionError
 
 from .._scope import SessionScope
@@ -23,7 +23,7 @@ from ..handlers import CostCalculator, CostState
 from ..policies import CustomPolicy
 from ..sessions import ResolvedSession, SessionManager, UnknownSessionError
 from ..state import get_state
-from ..tools import HumanInputRequest, HumanInputResult, HumanInputTool
+from ..tools import InputRequest, InputResult, InputTool
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -44,13 +44,11 @@ class CostReportingCLIReporter(CLIReporter):
     def on_session_resolved(self, session: ResolvedSessionLike) -> MaybeAwaitable[None]:
         return self._inner.on_session_resolved(session)
 
-    def on_human_input_request(
-        self, request: CLIHumanInputRequest
-    ) -> MaybeAwaitable[None]:
-        return self._inner.on_human_input_request(request)
+    def on_input_request(self, request: CLIInputRequest) -> MaybeAwaitable[None]:
+        return self._inner.on_input_request(request)
 
-    def on_human_input_question_delta(self, text: str) -> MaybeAwaitable[None]:
-        return self._inner.on_human_input_question_delta(text)
+    def on_input_prompt_delta(self, text: str) -> MaybeAwaitable[None]:
+        return self._inner.on_input_prompt_delta(text)
 
     async def on_interrupted(self, session: ResolvedSessionLike) -> None:
         await _maybe_await(self._inner.on_interrupted(session))
@@ -74,8 +72,8 @@ class CostReportingCLIReporter(CLIReporter):
 class SefiaCLISession:
     """Operations available inside a Sefia CLI session context."""
 
-    def __init__(self, *, human_input: HumanInputReceiver):
-        self._human_input = human_input
+    def __init__(self, *, input_receiver: InputReceiver):
+        self._input = input_receiver
 
     async def accept_input(
         self,
@@ -83,15 +81,15 @@ class SefiaCLISession:
         *,
         reply_to: str | None = None,
     ) -> None:
-        """Store CLI input as an answer for a pending or upcoming interaction."""
-        await self._human_input.receive_input(input_value, reply_to=reply_to)
+        """Store CLI input for a pending or upcoming interaction."""
+        await self._input.receive_input(input_value, reply_to=reply_to)
 
 
 class SefiaCLI:
     """Creates Sefia session contexts for Typer commands.
 
     The integration facade over the ``sefia_typer`` building blocks: it wires
-    the CLI human-input core to :class:`HumanInputTool` and the bound session
+    the CLI input core to :class:`InputTool` and the bound session
     storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), and maps pauses and inference errors to CLI exit
     codes.
@@ -109,16 +107,16 @@ class SefiaCLI:
     ):
         self._reporter = self._resolve_reporter(reporter)
         self._session_manager = SessionManager(session_dir)
-        self._human_input = HumanInputCoordinator(
-            on_request=self._report_human_input_request,
-            on_question_delta=self._report_human_input_question_delta,
+        self._input = InputCoordinator(
+            on_request=self._report_input_request,
+            on_prompt_delta=self._report_input_prompt_delta,
         )
-        self._human_input_receiver = HumanInputReceiver(self._human_input.store)
-        self._human_input_tool = HumanInputTool(
-            get_answer=self._provide_answer,
+        self._input_receiver = InputReceiver(self._input.store)
+        self._input_tool = InputTool(
+            get_input=self._provide_input,
             on_request=self._record_request,
             on_complete=self._complete_request,
-            on_question_delta=self._human_input.notify_question_delta,
+            on_prompt_delta=self._input.notify_prompt_delta,
         )
 
         scope_policies: list[Policy] = [
@@ -135,8 +133,8 @@ class SefiaCLI:
         )
 
     @property
-    def human_input_tool(self) -> HumanInputTool:
-        return self._human_input_tool
+    def input_tool(self) -> InputTool:
+        return self._input_tool
 
     def create_session(self) -> str:
         """Create a new active CLI session and return its ID."""
@@ -176,9 +174,9 @@ class SefiaCLI:
                 stream=stream,
                 policies=policies,
             ):
-                with self._human_input.store.use_store(get_session_storage()):
+                with self._input.store.use_store(get_session_storage()):
                     try:
-                        yield SefiaCLISession(human_input=self._human_input_receiver)
+                        yield SefiaCLISession(input_receiver=self._input_receiver)
                     except InferenceError as e:
                         await self._report_inference_error(e)
                         raise
@@ -196,26 +194,26 @@ class SefiaCLI:
         except PauseException:
             raise typer.Exit(code=0)
 
-    async def _provide_answer(self, request: HumanInputRequest) -> str | None:
-        return await self._human_input.provide_answer(request.interaction_id)
+    async def _provide_input(self, request: InputRequest) -> str | None:
+        return await self._input.provide_input(request.interaction_id)
 
-    async def _record_request(self, request: HumanInputRequest) -> None:
-        await self._human_input.record_request(request.interaction_id, request.question)
+    async def _record_request(self, request: InputRequest) -> None:
+        await self._input.record_request(request.interaction_id, request.prompt)
 
-    async def _complete_request(self, result: HumanInputResult) -> None:
-        await self._human_input.complete_request(result.interaction_id)
+    async def _complete_request(self, result: InputResult) -> None:
+        await self._input.complete_request(result.interaction_id)
 
     async def _report_session_resolved(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
             await _maybe_await(self._reporter.on_session_resolved(session))
 
-    async def _report_human_input_request(self, request: CLIHumanInputRequest) -> None:
+    async def _report_input_request(self, request: CLIInputRequest) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_human_input_request(request))
+            await _maybe_await(self._reporter.on_input_request(request))
 
-    async def _report_human_input_question_delta(self, text: str) -> None:
+    async def _report_input_prompt_delta(self, text: str) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_human_input_question_delta(text))
+            await _maybe_await(self._reporter.on_input_prompt_delta(text))
 
     async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:

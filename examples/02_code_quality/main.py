@@ -34,14 +34,14 @@ from .tools import FileTool, GitTool
 console = Console()
 SESSION_DIR = Path(__file__).parent / ".local"
 sefia_cli = SefiaCLI(session_dir=SESSION_DIR, stream=True)
-human_input_tool = sefia_cli.human_input_tool
+input_tool = sefia_cli.input_tool
 
 git_tool = GitTool()
 file_tool = FileTool()
 
-scoping_agent = ScopingAgent(human_input_tool)
+scoping_agent = ScopingAgent(input_tool)
 understanding_agent = UnderstandingAgent(file_tool)
-review_scoping_agent = ReviewScopingAgent(human_input_tool)
+review_scoping_agent = ReviewScopingAgent(input_tool)
 reporting_agent = ReportingAgent()
 
 review_agents = {
@@ -154,7 +154,7 @@ async def chat(
         str | None,
         typer.Option(
             "--reply-to",
-            help="The human input interaction ID to answer.",
+            help="The input interaction ID to answer.",
         ),
     ] = None,
     session_id: Annotated[

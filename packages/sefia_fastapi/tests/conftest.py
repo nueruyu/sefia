@@ -4,7 +4,7 @@ import pytest
 
 
 class InMemoryKeyValueStore:
-    """A dict-backed KeyValueStore for exercising the human-input core."""
+    """A dict-backed KeyValueStore for exercising the input core."""
 
     def __init__(self):
         self._data: dict[str, Any] = {}

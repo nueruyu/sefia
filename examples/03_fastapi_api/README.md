@@ -21,7 +21,7 @@ or `/docs` for the interactive API docs.
 
 Open `http://127.0.0.1:8000/` for a dependency-free chat UI that creates a
 session and sends messages to the human-in-the-loop interview endpoint. When the
-agent needs more detail, the UI displays the `input_required` question as the
+agent needs more detail, the UI displays the `input_required` prompt as the
 next assistant message and remembers the `interaction_id` for the next user
 reply. When the workflow completes, the UI renders the structured brief.
 

@@ -3,7 +3,7 @@ from typing import Protocol
 import typer
 from sefia.exceptions import InferenceError
 
-from ._human_input import HumanInputRequest, MaybeAwaitable
+from ._input import InputRequest, MaybeAwaitable
 
 
 class ResolvedSessionLike(Protocol):
@@ -28,12 +28,12 @@ class CLIReporter(Protocol):
         session: ResolvedSessionLike,
     ) -> MaybeAwaitable[None]: ...
 
-    def on_human_input_request(
+    def on_input_request(
         self,
-        request: HumanInputRequest,
+        request: InputRequest,
     ) -> MaybeAwaitable[None]: ...
 
-    def on_human_input_question_delta(self, text: str) -> MaybeAwaitable[None]: ...
+    def on_input_prompt_delta(self, text: str) -> MaybeAwaitable[None]: ...
 
     def on_interrupted(
         self,
@@ -57,25 +57,25 @@ class DefaultCLIReporter(CLIReporter):
         elif session.source == "active":
             typer.secho(f"> Resuming session {session.session_id}", bold=True)
 
-    def on_human_input_request(self, request: HumanInputRequest) -> None:
+    def on_input_request(self, request: InputRequest) -> None:
         typer.echo()
         typer.secho(
-            f"[USER_INPUT_REQUIRED:{request.interaction_id}]",
+            f"[INPUT_REQUIRED:{request.interaction_id}]",
             fg=typer.colors.YELLOW,
             bold=True,
             nl=False,
         )
-        typer.echo(f" {request.question}")
+        typer.echo(f" {request.prompt}")
         typer.echo()
 
-    def on_human_input_question_delta(self, text: str) -> None:
+    def on_input_prompt_delta(self, text: str) -> None:
         typer.echo(text, nl=False)
 
     def on_interrupted(self, session: ResolvedSessionLike) -> None:
         typer.echo()
         typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
         typer.echo("Session interrupted to wait for your input.")
-        typer.echo("To resume, run the script again with your answer.")
+        typer.echo("To resume, run the script again with your input.")
 
     def on_inference_error(self, error: InferenceError) -> None:
         typer.echo()

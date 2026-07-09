@@ -1,11 +1,11 @@
 import pytest
 from glyff_pydantic import PydanticSerializer
-from sefia_typer import HumanInputReceiver, HumanInputStore
+from sefia_typer import InputReceiver, InputStore
 from sefia_typer import UnknownSessionError as CLIUnknownSessionError
 from sefios.cli import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
 from sefios.cli._app import _USE_DEFAULT_REPORTER
 from sefios.storage import MemorySessionStorage
-from sefios.tools import HumanInputTool
+from sefios.tools import InputTool
 
 
 @pytest.fixture
@@ -15,14 +15,14 @@ def session_storage() -> MemorySessionStorage:
 
 class TestSefiaCLISession:
     @pytest.fixture
-    def store(self) -> HumanInputStore:
-        return HumanInputStore()
+    def store(self) -> InputStore:
+        return InputStore()
 
     @pytest.fixture
     def session(self, store, session_storage):
         with store.use_store(session_storage):
-            receiver = HumanInputReceiver(store)
-            yield SefiaCLISession(human_input=receiver)
+            receiver = InputReceiver(store)
+            yield SefiaCLISession(input_receiver=receiver)
 
     async def test_none_input_is_ignored(self, session, store):
         await session.accept_input(None)
@@ -40,11 +40,11 @@ class TestSefiaCLISession:
         assert await store.pop_queued_input() == "hello world"
 
     async def test_reply_to_answers_pending_request(self, session, store):
-        await store.save_pending_requests({"a": {"id": "a", "question": "q?"}})
+        await store.save_pending_requests({"a": {"id": "a", "prompt": "q?"}})
 
         await session.accept_input("answer", reply_to="a")
 
-        assert await store.get_answer("a") == "answer"
+        assert await store.get_input("a") == "answer"
 
 
 class TestSefiaCLISessionManagement:
@@ -52,8 +52,8 @@ class TestSefiaCLISessionManagement:
     def cli(self, tmp_path) -> SefiaCLI:
         return SefiaCLI(session_dir=tmp_path / "sessions", model="gpt-4o")
 
-    def test_human_input_tool_is_exposed(self, cli: SefiaCLI):
-        assert isinstance(cli.human_input_tool, HumanInputTool)
+    def test_input_tool_is_exposed(self, cli: SefiaCLI):
+        assert isinstance(cli.input_tool, InputTool)
 
     def test_create_session_becomes_active(self, cli: SefiaCLI):
         session_id = cli.create_session()

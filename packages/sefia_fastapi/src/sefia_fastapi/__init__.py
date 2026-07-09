@@ -14,21 +14,21 @@ from ._events import (
     TokenEventPublisher,
     format_sse_event,
 )
-from ._human_input import HumanInputCoordinator, HumanInputReceiver, HumanInputStore
+from ._input import InputCoordinator, InputReceiver, InputStore
 from ._kv import KeyValueStore
 from ._responses import session_event_response
 from .exceptions import (
-    AmbiguousHumanInputError,
+    AmbiguousInputError,
     InputRequired,
-    UnknownHumanInputError,
+    UnknownInputError,
     UnknownSessionError,
 )
 
 __all__ = [
     "KeyValueStore",
-    "HumanInputStore",
-    "HumanInputReceiver",
-    "HumanInputCoordinator",
+    "InputStore",
+    "InputReceiver",
+    "InputCoordinator",
     "SessionEvent",
     "SessionEventBroker",
     "TokenEventPublisher",
@@ -36,6 +36,6 @@ __all__ = [
     "session_event_response",
     "InputRequired",
     "UnknownSessionError",
-    "UnknownHumanInputError",
-    "AmbiguousHumanInputError",
+    "UnknownInputError",
+    "AmbiguousInputError",
 ]

@@ -2,7 +2,7 @@ from typing import Any, Protocol
 
 
 class KeyValueStore(Protocol):
-    """Async key-value persistence required by the CLI human-input state.
+    """Async key-value persistence required by the CLI input state.
 
     Structurally matches ``sefios.SessionStorage``, so a bound session storage
     can be passed in directly; any other implementation with the same shape

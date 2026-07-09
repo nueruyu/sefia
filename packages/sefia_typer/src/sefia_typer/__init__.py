@@ -7,27 +7,27 @@ management, persistence, and the pausing tool — is provided by an integration
 layer such as ``sefios.cli``.
 """
 
-from ._human_input import (
-    HumanInputCoordinator,
-    HumanInputReceiver,
-    HumanInputRequest,
-    HumanInputStore,
+from ._input import (
+    InputCoordinator,
+    InputReceiver,
+    InputRequest,
+    InputStore,
 )
 from ._kv import KeyValueStore
 from ._reporter import CLIReporter, DefaultCLIReporter, ResolvedSessionLike
 from ._typer_utils import SessionCommands, add_session_commands, async_command
 from .exceptions import (
-    AmbiguousHumanInputError,
-    UnknownHumanInputError,
+    AmbiguousInputError,
+    UnknownInputError,
     UnknownSessionError,
 )
 
 __all__ = [
     "KeyValueStore",
-    "HumanInputStore",
-    "HumanInputReceiver",
-    "HumanInputCoordinator",
-    "HumanInputRequest",
+    "InputStore",
+    "InputReceiver",
+    "InputCoordinator",
+    "InputRequest",
     "CLIReporter",
     "DefaultCLIReporter",
     "ResolvedSessionLike",
@@ -35,6 +35,6 @@ __all__ = [
     "add_session_commands",
     "async_command",
     "UnknownSessionError",
-    "UnknownHumanInputError",
-    "AmbiguousHumanInputError",
+    "UnknownInputError",
+    "AmbiguousInputError",
 ]

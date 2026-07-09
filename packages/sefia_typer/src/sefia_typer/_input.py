@@ -1,6 +1,6 @@
 """The CLI-side human-in-the-loop core.
 
-Pending questions, answers, and queued inputs are persisted through a
+Pending prompts, provided inputs, and queued inputs are persisted through a
 :class:`KeyValueStore`, so a paused CLI invocation can be resumed by a later
 one. The store only sees primitives; how the runtime provides persistence (and
 which tool raises the pause) is wired up by the integration layer.
@@ -14,27 +14,27 @@ from dataclasses import dataclass
 from typing import TypeVar
 
 from ._kv import KeyValueStore
-from .exceptions import AmbiguousHumanInputError, UnknownHumanInputError
+from .exceptions import AmbiguousInputError, UnknownInputError
 
-_PENDING_HUMAN_INPUTS_KEY = "pending_human_inputs"
-_UNCLAIMED_HUMAN_INPUTS_KEY = "unclaimed_human_inputs"
+_PENDING_INPUTS_KEY = "pending_inputs"
+_QUEUED_INPUTS_KEY = "queued_inputs"
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
-HumanInputRequestHandler = Callable[["HumanInputRequest"], MaybeAwaitable[None]]
-HumanInputQuestionDeltaHandler = Callable[[str], MaybeAwaitable[None]]
+InputRequestHandler = Callable[["InputRequest"], MaybeAwaitable[None]]
+InputPromptDeltaHandler = Callable[[str], MaybeAwaitable[None]]
 
 
 @dataclass(frozen=True)
-class HumanInputRequest:
-    """A pending request for external human input."""
+class InputRequest:
+    """A pending request for external input."""
 
     interaction_id: str
-    question: str
+    prompt: str
 
 
-class HumanInputStore:
-    """Small persistence wrapper for human-input state in the active session.
+class InputStore:
+    """Small persistence wrapper for input state in the active session.
 
     Reads observe writes made earlier in the same session because the bound
     :class:`KeyValueStore` is expected to provide read-your-writes consistency.
@@ -48,7 +48,7 @@ class HumanInputStore:
 
     def __init__(self):
         self._active_store: ContextVar[KeyValueStore | None] = ContextVar(
-            "human_input_active_store", default=None
+            "input_active_store", default=None
         )
 
     @contextmanager
@@ -61,67 +61,67 @@ class HumanInputStore:
 
     async def pending_requests(self) -> dict[str, dict]:
         store = self._store()
-        pending = await store.get(_PENDING_HUMAN_INPUTS_KEY, dict) or {}
+        pending = await store.get(_PENDING_INPUTS_KEY, dict) or {}
         if not pending:
             return {}
 
-        unanswered = {}
+        unresolved = {}
         for interaction_id, request in pending.items():
-            answer = await self.get_answer(interaction_id)
-            if answer is None:
-                unanswered[interaction_id] = request
+            provided = await self.get_input(interaction_id)
+            if provided is None:
+                unresolved[interaction_id] = request
 
-        await self.save_pending_requests(unanswered)
-        return dict(unanswered)
+        await self.save_pending_requests(unresolved)
+        return dict(unresolved)
 
     async def save_pending_requests(self, pending: dict[str, dict]) -> None:
         store = self._store()
         if pending:
-            await store.set(_PENDING_HUMAN_INPUTS_KEY, pending, dict)
+            await store.set(_PENDING_INPUTS_KEY, pending, dict)
             return
 
-        await store.delete(_PENDING_HUMAN_INPUTS_KEY)
+        await store.delete(_PENDING_INPUTS_KEY)
 
-    async def get_answer(self, interaction_id: str) -> str | None:
-        return await self._store().get(self._answer_key(interaction_id), str)
+    async def get_input(self, interaction_id: str) -> str | None:
+        return await self._store().get(self._input_key(interaction_id), str)
 
-    async def set_answer(self, interaction_id: str, answer: str) -> None:
-        await self._store().set(self._answer_key(interaction_id), answer, str)
+    async def set_input(self, interaction_id: str, input_text: str) -> None:
+        await self._store().set(self._input_key(interaction_id), input_text, str)
 
     async def queue_input(self, input_text: str) -> None:
         store = self._store()
-        queue = await store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list) or []
+        queue = await store.get(_QUEUED_INPUTS_KEY, list) or []
         queue.append(input_text)
-        await store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
+        await store.set(_QUEUED_INPUTS_KEY, queue, list)
 
     async def pop_queued_input(self) -> str | None:
         store = self._store()
-        queue = await store.get(_UNCLAIMED_HUMAN_INPUTS_KEY, list)
+        queue = await store.get(_QUEUED_INPUTS_KEY, list)
         if not queue:
             return None
 
         next_input = queue.pop(0)
         if queue:
-            await store.set(_UNCLAIMED_HUMAN_INPUTS_KEY, queue, list)
+            await store.set(_QUEUED_INPUTS_KEY, queue, list)
         else:
-            await store.delete(_UNCLAIMED_HUMAN_INPUTS_KEY)
+            await store.delete(_QUEUED_INPUTS_KEY)
         return next_input
 
     def _store(self) -> KeyValueStore:
         store = self._active_store.get()
         if store is None:
-            raise RuntimeError("Human input store is not bound to a session.")
+            raise RuntimeError("Input store is not bound to a session.")
         return store
 
     @staticmethod
-    def _answer_key(interaction_id: str) -> str:
-        return f"human_input__{interaction_id}"
+    def _input_key(interaction_id: str) -> str:
+        return f"input__{interaction_id}"
 
 
-class HumanInputReceiver:
-    """Accepts CLI input and stores it for pending or future human-input requests."""
+class InputReceiver:
+    """Accepts CLI input and stores it for pending or future input requests."""
 
-    def __init__(self, store: HumanInputStore):
+    def __init__(self, store: InputStore):
         self._store = store
 
     async def receive_input(
@@ -133,10 +133,10 @@ class HumanInputReceiver:
         """Route CLI input to a pending request, or queue it for the next one.
 
         ``None`` and blank input are ignored. With ``reply_to`` the input
-        answers that specific request; otherwise a single pending request is
-        answered directly, multiple pending requests raise
-        :class:`AmbiguousHumanInputError`, and no pending request queues the
-        input for the next question.
+        resolves that specific request; otherwise a single pending request is
+        resolved directly, multiple pending requests raise
+        :class:`AmbiguousInputError`, and no pending request queues the
+        input for the next prompt.
         """
         if input_value is None:
             return
@@ -148,44 +148,44 @@ class HumanInputReceiver:
 
         if reply_to is not None:
             if reply_to not in pending:
-                raise UnknownHumanInputError(reply_to)
-            await self._store.set_answer(reply_to, input_text)
+                raise UnknownInputError(reply_to)
+            await self._store.set_input(reply_to, input_text)
             return
 
         if len(pending) == 1:
-            await self._store.set_answer(next(iter(pending)), input_text)
+            await self._store.set_input(next(iter(pending)), input_text)
             return
 
         if len(pending) > 1:
-            raise AmbiguousHumanInputError(sorted(pending))
+            raise AmbiguousInputError(sorted(pending))
 
         await self._store.queue_input(input_text)
 
 
-class HumanInputCoordinator:
-    """Serves a human-input tool's lifecycle from the CLI human-input store.
+class InputCoordinator:
+    """Serves a input tool's lifecycle from the CLI input store.
 
     The methods take and return primitives, so the integration layer can wire
     them to whichever tool implementation raises the pause. ``on_request`` and
-    ``on_question_delta`` are the rendering hooks (e.g. a :class:`CLIReporter`).
+    ``on_prompt_delta`` are the rendering hooks (e.g. a :class:`CLIReporter`).
     """
 
     def __init__(
         self,
-        store: HumanInputStore | None = None,
+        store: InputStore | None = None,
         *,
-        on_request: HumanInputRequestHandler | None = None,
-        on_question_delta: HumanInputQuestionDeltaHandler | None = None,
+        on_request: InputRequestHandler | None = None,
+        on_prompt_delta: InputPromptDeltaHandler | None = None,
     ):
-        self.store = store or HumanInputStore()
+        self.store = store or InputStore()
         self._on_request = on_request
-        self._on_question_delta = on_question_delta
+        self._on_prompt_delta = on_prompt_delta
 
-    async def provide_answer(self, interaction_id: str) -> str | None:
-        """Return the stored answer, or claim a queued input if unambiguous."""
-        answer = await self.store.get_answer(interaction_id)
-        if answer is not None:
-            return answer
+    async def provide_input(self, interaction_id: str) -> str | None:
+        """Return the stored input, or claim a queued one if unambiguous."""
+        provided = await self.store.get_input(interaction_id)
+        if provided is not None:
+            return provided
 
         pending = await self.store.pending_requests()
         if any(other_id != interaction_id for other_id in pending):
@@ -193,14 +193,14 @@ class HumanInputCoordinator:
 
         return await self.store.pop_queued_input()
 
-    async def record_request(self, interaction_id: str, question: str) -> None:
+    async def record_request(self, interaction_id: str, prompt: str) -> None:
         pending = await self.store.pending_requests()
-        pending[interaction_id] = {"id": interaction_id, "question": question}
+        pending[interaction_id] = {"id": interaction_id, "prompt": prompt}
         await self.store.save_pending_requests(pending)
         if self._on_request is not None:
             await _maybe_await(
                 self._on_request(
-                    HumanInputRequest(interaction_id=interaction_id, question=question)
+                    InputRequest(interaction_id=interaction_id, prompt=prompt)
                 )
             )
 
@@ -209,9 +209,9 @@ class HumanInputCoordinator:
         pending.pop(interaction_id, None)
         await self.store.save_pending_requests(pending)
 
-    async def notify_question_delta(self, text: str) -> None:
-        if self._on_question_delta is not None:
-            await _maybe_await(self._on_question_delta(text))
+    async def notify_prompt_delta(self, text: str) -> None:
+        if self._on_prompt_delta is not None:
+            await _maybe_await(self._on_prompt_delta(text))
 
 
 def _to_input_text(input_value: str | list[str]) -> str:

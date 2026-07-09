@@ -1,28 +1,28 @@
 """Agents for the FastAPI human-in-the-loop example.
 
-The example exposes one workflow: ``Interviewer`` uses ``HumanInputTool`` to ask
+The example exposes one workflow: ``Interviewer`` uses ``InputTool`` to ask
 at most one clarifying question, which lets the API demonstrate pause/resume over
 normal HTTP requests while lifecycle events stream over SSE.
 """
 
 from sefia import infer
-from sefios.tools import HumanInputTool
+from sefios.tools import InputTool
 
 from .models import Brief
 
 
 class Interviewer:
-    """Clarifies a vague request into a structured brief via human input."""
+    """Clarifies a vague request into a structured brief via input."""
 
-    def __init__(self, human_input: HumanInputTool):
-        self._human_input = human_input
+    def __init__(self, input_tool: InputTool):
+        self._input = input_tool
 
     @infer
     async def run(self) -> Brief:
         """
         Turn a user's request into a concrete content brief.
 
-        First, use the HumanInputTool to obtain the user's initial request. Treat
+        First, use the InputTool to obtain the user's initial request. Treat
         that answer as the source request; do not ask the user to restate it.
 
         This is a demo workflow, so keep the human-in-the-loop interaction short:

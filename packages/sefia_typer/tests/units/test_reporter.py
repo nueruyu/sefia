@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sefia.exceptions import InvalidInferenceResponseError
-from sefia_typer import DefaultCLIReporter, HumanInputRequest
+from sefia_typer import DefaultCLIReporter, InputRequest
 
 
 @dataclass(frozen=True)
@@ -38,22 +38,22 @@ class TestDefaultCLIReporter:
 
         assert capsys.readouterr().out == ""
 
-    def test_human_input_request_includes_marker(self, capsys):
+    def test_input_request_includes_marker(self, capsys):
         reporter = DefaultCLIReporter()
 
-        reporter.on_human_input_request(
-            HumanInputRequest(interaction_id="xyz", question="What topic?")
+        reporter.on_input_request(
+            InputRequest(interaction_id="xyz", prompt="What topic?")
         )
 
         output = capsys.readouterr().out
-        assert "USER_INPUT_REQUIRED:xyz" in output
+        assert "INPUT_REQUIRED:xyz" in output
         assert "What topic?" in output
 
-    def test_human_input_question_delta_is_printed_without_newline(self, capsys):
+    def test_input_prompt_delta_is_printed_without_newline(self, capsys):
         reporter = DefaultCLIReporter()
 
-        reporter.on_human_input_question_delta("What ")
-        reporter.on_human_input_question_delta("topic?")
+        reporter.on_input_prompt_delta("What ")
+        reporter.on_input_prompt_delta("topic?")
 
         assert capsys.readouterr().out == "What topic?"
 

@@ -17,11 +17,11 @@ from .rendering import render_article_request, render_news_article
 console = Console()
 SESSION_DIR = Path(__file__).parent / ".local"
 sefia_cli = SefiaCLI(session_dir=SESSION_DIR, stream=True)
-human_input_tool = sefia_cli.human_input_tool
+input_tool = sefia_cli.input_tool
 
-clarifier = RequirementsClarifier(human_input_tool)
+clarifier = RequirementsClarifier(input_tool)
 researcher = Researcher(WebSearchTool())
-writer = NewsWriter(human_input_tool, researcher)
+writer = NewsWriter(input_tool, researcher)
 
 app = typer.Typer(
     help="A multi-agent workflow for generating news articles with human-in-the-loop."
@@ -65,7 +65,7 @@ async def chat(
         str | None,
         typer.Option(
             "--reply-to",
-            help="The human input interaction ID to answer.",
+            help="The input interaction ID to answer.",
         ),
     ] = None,
     session_id: Annotated[

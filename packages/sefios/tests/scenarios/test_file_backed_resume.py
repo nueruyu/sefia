@@ -1,6 +1,6 @@
 """File-backed pause/resume across simulated process restarts.
 
-Exercises the real ``HumanInputTool`` with glyff's ``JsonFileBackend`` and the
+Exercises the real ``InputTool`` with glyff's ``JsonFileBackend`` and the
 sefios ``FileSessionStorage``: every object (backend, store, tool, LLM client) is
 constructed fresh for the second run, so the only thing connecting the two runs
 is what was committed to disk before the pause. The resumed run must read back
@@ -19,7 +19,7 @@ from sefia.llm import LLMResponse
 
 from sefios import FileSessionStorage, NeedsInput
 from sefios._session_state import bind_session_storage
-from sefios.tools import HumanInputRequest, HumanInputTool
+from sefios.tools import InputRequest, InputTool
 
 _SESSION_ID = "file-backed-resume-test"
 
@@ -29,8 +29,8 @@ _TOOL_CALL_RESPONSE = LLMResponse(
             "decision": "tool_calls",
             "tool_calls": [
                 {
-                    "name": "HumanInputTool_get_human_input",
-                    "arguments": {"question": "What is your name?"},
+                    "name": "InputTool_get_input",
+                    "arguments": {"prompt": "What is your name?"},
                 }
             ],
         }
@@ -42,7 +42,7 @@ _RESULT_RESPONSE = LLMResponse(
 
 
 class _Agent:
-    def __init__(self, tool: HumanInputTool):
+    def __init__(self, tool: InputTool):
         self._tool = tool
 
     @infer
@@ -52,10 +52,10 @@ class _Agent:
 
 
 async def test_pause_resume_survives_process_restart(tmp_path, make_mock_llm):
-    seen: list[HumanInputRequest] = []
+    seen: list[InputRequest] = []
     answers: dict[str, str] = {}
 
-    def get_answer(request: HumanInputRequest) -> str | None:
+    def get_input(request: InputRequest) -> str | None:
         seen.append(request)
         return answers.get(request.interaction_id)
 
@@ -81,7 +81,7 @@ async def test_pause_resume_survives_process_restart(tmp_path, make_mock_llm):
         async with make_glyff_session() as gs:
             with bind_session_storage(make_state_storage()):
                 async with Session(llm_client=mock_llm, glyff_session=gs):
-                    await _Agent(HumanInputTool(get_answer=get_answer)).get_user_name()
+                    await _Agent(InputTool(get_input=get_input)).get_user_name()
 
     assert len(seen) == 1
     answers[seen[0].interaction_id] = "Alice"
@@ -91,13 +91,11 @@ async def test_pause_resume_survives_process_restart(tmp_path, make_mock_llm):
     async with make_glyff_session() as gs:
         with bind_session_storage(make_state_storage()):
             async with Session(llm_client=resumed_llm, glyff_session=gs):
-                answer = await _Agent(
-                    HumanInputTool(get_answer=get_answer)
-                ).get_user_name()
+                answer = await _Agent(InputTool(get_input=get_input)).get_user_name()
 
     assert answer == "The user's name is Alice."
     # The resumed call read the same interaction id back from the file store,
-    # so the pending question was keyed stably across the restart.
+    # so the pending prompt was keyed stably across the restart.
     assert [r.interaction_id for r in seen] == [seen[0].interaction_id] * 2
     # The completed first step was replayed from the engraved record: the
     # resumed run only asked the LLM for the final decision.

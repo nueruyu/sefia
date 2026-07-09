@@ -7,8 +7,8 @@ from pathlib import Path
 from fastapi.responses import StreamingResponse
 from sefia import Policy
 from sefia_fastapi import (
-    HumanInputCoordinator,
-    HumanInputReceiver,
+    InputCoordinator,
+    InputReceiver,
     InputRequired,
     SessionEventBroker,
     TokenEventPublisher,
@@ -22,14 +22,14 @@ from ..exceptions import NeedsInput
 from ..handlers import CostCalculator
 from ..policies import CustomPolicy
 from ..sessions import SessionManager
-from ..tools import HumanInputRequest, HumanInputResult, HumanInputTool
+from ..tools import InputRequest, InputResult, InputTool
 
 
 class SefiaHTTPSession:
     """Operations available inside a Sefia HTTP session context."""
 
-    def __init__(self, *, human_input: HumanInputReceiver):
-        self._human_input = human_input
+    def __init__(self, *, input_receiver: InputReceiver):
+        self._input = input_receiver
 
     async def accept_input(
         self,
@@ -37,15 +37,15 @@ class SefiaHTTPSession:
         *,
         reply_to: str | None = None,
     ) -> None:
-        """Store request input as an answer for a pending or upcoming interaction."""
-        await self._human_input.receive_input(input_value, reply_to=reply_to)
+        """Store request input for a pending or upcoming interaction."""
+        await self._input.receive_input(input_value, reply_to=reply_to)
 
 
 class SefiaHTTP:
     """Creates Sefia session contexts for HTTP endpoints, with event streams.
 
     The integration facade over the ``sefia_fastapi`` building blocks: it
-    wires the HTTP human-input core to :class:`HumanInputTool` and the bound
+    wires the HTTP input core to :class:`InputTool` and the bound
     session storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), relays LLM tokens to per-session SSE streams, and
     surfaces pauses as :class:`sefia_fastapi.InputRequired`.
@@ -61,10 +61,10 @@ class SefiaHTTP:
     ):
         self._events = SessionEventBroker()
         self._session_manager = SessionManager(session_dir)
-        self._human_input = HumanInputCoordinator()
-        self._human_input_receiver = HumanInputReceiver(self._human_input.store)
-        self._human_input_tool = HumanInputTool(
-            get_answer=self._provide_answer,
+        self._input = InputCoordinator()
+        self._input_receiver = InputReceiver(self._input.store)
+        self._input_tool = InputTool(
+            get_input=self._provide_input,
             on_request=self._record_request,
             on_complete=self._complete_request,
         )
@@ -84,8 +84,8 @@ class SefiaHTTP:
         )
 
     @property
-    def human_input_tool(self) -> HumanInputTool:
-        return self._human_input_tool
+    def input_tool(self) -> InputTool:
+        return self._input_tool
 
     def create_session(self) -> str:
         return self._session_manager.create_new_active_session()
@@ -126,9 +126,9 @@ class SefiaHTTP:
                 stream=resolved_stream,
                 policies=session_policies or None,
             ):
-                with self._human_input.store.use_store(get_session_storage()):
+                with self._input.store.use_store(get_session_storage()):
                     try:
-                        yield SefiaHTTPSession(human_input=self._human_input_receiver)
+                        yield SefiaHTTPSession(input_receiver=self._input_receiver)
                     except NeedsInput:
                         # Read the pending request while the session store is
                         # still bound, so no second session scope is needed, then
@@ -137,7 +137,7 @@ class SefiaHTTP:
                         # exits, both to keep glyff's pause/resume semantics and
                         # because it is a frozen dataclass that cannot carry the
                         # traceback the scope's exit would set on it.
-                        pending = await self._human_input.store.pending_requests()
+                        pending = await self._input.store.pending_requests()
                         if not pending:
                             raise RuntimeError(
                                 "NeedsInput raised but no pending input request found."
@@ -152,12 +152,12 @@ class SefiaHTTP:
                 "input_required",
                 {
                     "interaction_id": request["id"],
-                    "question": request["question"],
+                    "prompt": request["prompt"],
                 },
             )
             raise InputRequired(
                 interaction_id=request["id"],
-                question=request["question"],
+                prompt=request["prompt"],
             ) from None
         except Exception as exc:
             await self._events.publish(
@@ -178,11 +178,11 @@ class SefiaHTTP:
         self.ensure_session(session_id)
         return session_event_response(self._events, session_id)
 
-    async def _provide_answer(self, request: HumanInputRequest) -> str | None:
-        return await self._human_input.provide_answer(request.interaction_id)
+    async def _provide_input(self, request: InputRequest) -> str | None:
+        return await self._input.provide_input(request.interaction_id)
 
-    async def _record_request(self, request: HumanInputRequest) -> None:
-        await self._human_input.record_request(request.interaction_id, request.question)
+    async def _record_request(self, request: InputRequest) -> None:
+        await self._input.record_request(request.interaction_id, request.prompt)
 
-    async def _complete_request(self, result: HumanInputResult) -> None:
-        await self._human_input.complete_request(result.interaction_id)
+    async def _complete_request(self, result: InputResult) -> None:
+        await self._input.complete_request(result.interaction_id)

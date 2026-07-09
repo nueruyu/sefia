@@ -188,7 +188,7 @@ base are both pauses.
 
 ## Human-in-the-loop: pause = raise, resume = re-invoke
 
-A human-input tool (`packages/sefios/src/sefios/tools/human.py`) is an engraved tool
+An input tool (`packages/sefios/src/sefios/tools/input.py`) is an engraved tool
 that:
 
 1. looks up whether an answer is recorded; if so, returns it;

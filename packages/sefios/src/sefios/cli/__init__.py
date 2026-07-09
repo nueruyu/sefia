@@ -1,7 +1,7 @@
 """Typer (CLI) integration for the sefios stack.
 
 The facade over the ``sefia_typer`` building blocks: :class:`SefiaCLI` wires
-the CLI human-input core to sefios' :class:`HumanInputTool`, session storage,
+the CLI input core to sefios' :class:`InputTool`, session storage,
 and cost accounting. The ``sefia_typer`` surface that applications need
 (reporters, Typer helpers, exceptions) is re-exported here, so a single
 ``from sefios.cli import ...`` suffices.
@@ -16,11 +16,11 @@ except ImportError as e:
     ) from e
 
 from sefia_typer import (
-    AmbiguousHumanInputError,
+    AmbiguousInputError,
     CLIReporter,
     DefaultCLIReporter,
-    HumanInputRequest,
-    UnknownHumanInputError,
+    InputRequest,
+    UnknownInputError,
     UnknownSessionError,
     add_session_commands,
     async_command,
@@ -34,10 +34,10 @@ __all__ = [
     "CLIReporter",
     "DefaultCLIReporter",
     "CostReportingCLIReporter",
-    "HumanInputRequest",
+    "InputRequest",
     "add_session_commands",
     "async_command",
     "UnknownSessionError",
-    "UnknownHumanInputError",
-    "AmbiguousHumanInputError",
+    "UnknownInputError",
+    "AmbiguousInputError",
 ]

@@ -137,7 +137,7 @@ from pydantic import BaseModel
 from sefia import infer
 from sefios import NeedsInput          # raised when the run pauses
 from sefios import SessionScope
-from sefios.tools import HumanInputTool, WebSearchTool
+from sefios.tools import InputTool, WebSearchTool
 
 
 class Report(BaseModel):
@@ -146,9 +146,9 @@ class Report(BaseModel):
 
 
 class ResearchService:
-    def __init__(self, web: WebSearchTool, human: HumanInputTool):
+    def __init__(self, web: WebSearchTool, input_tool: InputTool):
         self._web = web
-        self._human = human
+        self._input = input_tool
 
     @infer
     async def run(self, task: str) -> Report:
@@ -161,7 +161,7 @@ scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
 
 async def main() -> None:
     answer = sys.argv[1] if len(sys.argv) > 1 else None   # pass the answer on resume
-    service = ResearchService(web=WebSearchTool(), human=HumanInputTool())
+    service = ResearchService(web=WebSearchTool(), input_tool=InputTool())
     async with scope.session(session_id="approval-demo") as s:
         if answer is not None:
             await s.accept_input(answer)                  # deliver the answer on resume
@@ -169,7 +169,7 @@ async def main() -> None:
             report = await service.run("the state of durable LLM applications")
             print("DONE:", report.summary)
         except NeedsInput as e:
-            print("NEEDS INPUT:", e.question)
+            print("NEEDS INPUT:", e.prompt)
 
 
 asyncio.run(main())
@@ -209,13 +209,13 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from sefios import NeedsInput
 from sefios import SessionScope
-from sefios.tools import HumanInputTool, WebSearchTool
+from sefios.tools import InputTool, WebSearchTool
 
 # (ResearchService, Report from hitl.py)
 
 app = FastAPI()
 scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
-research_service = ResearchService(web=WebSearchTool(), human=HumanInputTool())
+research_service = ResearchService(web=WebSearchTool(), input_tool=InputTool())
 
 
 class TurnBody(BaseModel):
@@ -226,12 +226,12 @@ class TurnBody(BaseModel):
 @app.post("/sessions/{session_id}/turn")
 async def turn(session_id: str, body: TurnBody):
     async with scope.session(session_id=session_id) as s:
-        if body.answer is not None:
-            await s.accept_input(body.answer)     # deliver the human's answer
+        if body.input is not None:
+            await s.accept_input(body.input)      # deliver the user's input
         try:
             return {"status": "done", "report": await research_service.run(body.task)}
         except NeedsInput as e:
-            return {"status": "needs_input", "question": e.question}
+            return {"status": "needs_input", "prompt": e.prompt}
 ```
 
 ```bash
@@ -243,7 +243,7 @@ uvicorn server:app
 curl -X POST localhost:8000/sessions/abc/turn \
   -H 'content-type: application/json' \
   -d '{"task": "the state of durable LLM applications"}'
-# {"status":"needs_input","question":"Here's the draft ... Approve it?"}
+# {"status":"needs_input","prompt":"Here's the draft ... Approve it?"}
 
 # restart the server here if you like — the paused run survives
 

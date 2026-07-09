@@ -1,17 +1,17 @@
 import pytest
 from sefia_typer import (
-    AmbiguousHumanInputError,
-    HumanInputCoordinator,
-    HumanInputReceiver,
-    HumanInputRequest,
-    HumanInputStore,
-    UnknownHumanInputError,
+    AmbiguousInputError,
+    InputCoordinator,
+    InputReceiver,
+    InputRequest,
+    InputStore,
+    UnknownInputError,
 )
-from sefia_typer._human_input import _to_input_text
+from sefia_typer._input import _to_input_text
 
 
 def _request(interaction_id: str) -> dict:
-    return {"id": interaction_id, "question": f"question for {interaction_id}?"}
+    return {"id": interaction_id, "prompt": f"prompt for {interaction_id}?"}
 
 
 class TestToInputText:
@@ -28,15 +28,15 @@ class TestToInputText:
         assert _to_input_text([]) == ""
 
 
-class TestHumanInputStore:
+class TestInputStore:
     @pytest.fixture
     def store(self, kv_store):
-        human_store = HumanInputStore()
+        human_store = InputStore()
         with human_store.use_store(kv_store):
             yield human_store
 
     async def test_requires_bound_store(self):
-        store = HumanInputStore()
+        store = InputStore()
 
         with pytest.raises(RuntimeError):
             await store.pending_requests()
@@ -51,7 +51,7 @@ class TestHumanInputStore:
 
     async def test_answered_requests_are_dropped_from_pending(self, store):
         await store.save_pending_requests({"a": _request("a"), "b": _request("b")})
-        await store.set_answer("a", "answered")
+        await store.set_input("a", "answered")
 
         pending = await store.pending_requests()
 
@@ -63,8 +63,8 @@ class TestHumanInputStore:
 
         assert await store.pending_requests() == {}
 
-    async def test_get_answer_missing(self, store):
-        assert await store.get_answer("missing") is None
+    async def test_get_input_missing(self, store):
+        assert await store.get_input("missing") is None
 
     async def test_queue_inputs_are_returned_in_order(self, store):
         await store.queue_input("first")
@@ -75,36 +75,36 @@ class TestHumanInputStore:
         assert await store.pop_queued_input() is None
 
 
-class TestHumanInputReceiver:
+class TestInputReceiver:
     @pytest.fixture
     def store(self, kv_store):
-        human_store = HumanInputStore()
+        human_store = InputStore()
         with human_store.use_store(kv_store):
             yield human_store
 
     async def test_none_input_is_ignored(self, store):
-        receiver = HumanInputReceiver(store)
+        receiver = InputReceiver(store)
 
         await receiver.receive_input(None)
 
         assert await store.pop_queued_input() is None
 
     async def test_blank_input_is_ignored(self, store):
-        receiver = HumanInputReceiver(store)
+        receiver = InputReceiver(store)
 
         await receiver.receive_input("   ")
 
         assert await store.pop_queued_input() is None
 
     async def test_list_input_is_joined(self, store):
-        receiver = HumanInputReceiver(store)
+        receiver = InputReceiver(store)
 
         await receiver.receive_input(["hello", "world"])
 
         assert await store.pop_queued_input() == "hello world"
 
     async def test_input_is_queued_when_nothing_pending(self, store):
-        receiver = HumanInputReceiver(store)
+        receiver = InputReceiver(store)
 
         await receiver.receive_input("hello")
 
@@ -112,50 +112,50 @@ class TestHumanInputReceiver:
 
     async def test_single_pending_request_is_answered(self, store):
         await store.save_pending_requests({"only": _request("only")})
-        receiver = HumanInputReceiver(store)
+        receiver = InputReceiver(store)
 
         await receiver.receive_input("the answer")
 
-        assert await store.get_answer("only") == "the answer"
+        assert await store.get_input("only") == "the answer"
 
     async def test_multiple_pending_requires_reply_to(self, store):
         await store.save_pending_requests({"a": _request("a"), "b": _request("b")})
-        receiver = HumanInputReceiver(store)
+        receiver = InputReceiver(store)
 
-        with pytest.raises(AmbiguousHumanInputError) as exc_info:
+        with pytest.raises(AmbiguousInputError) as exc_info:
             await receiver.receive_input("ambiguous")
 
         assert sorted(exc_info.value.interaction_ids) == ["a", "b"]
 
     async def test_reply_to_targets_specific_request(self, store):
         await store.save_pending_requests({"a": _request("a"), "b": _request("b")})
-        receiver = HumanInputReceiver(store)
+        receiver = InputReceiver(store)
 
         await receiver.receive_input("for b", reply_to="b")
 
-        assert await store.get_answer("b") == "for b"
-        assert await store.get_answer("a") is None
+        assert await store.get_input("b") == "for b"
+        assert await store.get_input("a") is None
 
     async def test_reply_to_unknown_request_raises(self, store):
         await store.save_pending_requests({"a": _request("a")})
-        receiver = HumanInputReceiver(store)
+        receiver = InputReceiver(store)
 
-        with pytest.raises(UnknownHumanInputError) as exc_info:
+        with pytest.raises(UnknownInputError) as exc_info:
             await receiver.receive_input("oops", reply_to="missing")
 
         assert exc_info.value.interaction_id == "missing"
 
 
-class TestHumanInputCoordinator:
+class TestInputCoordinator:
     @pytest.fixture
     def coordinator(self, kv_store):
-        coordinator = HumanInputCoordinator()
+        coordinator = InputCoordinator()
         with coordinator.store.use_store(kv_store):
             yield coordinator
 
     async def test_record_request_records_pending_and_notifies(self, kv_store):
-        seen: list[HumanInputRequest] = []
-        coordinator = HumanInputCoordinator(on_request=seen.append)
+        seen: list[InputRequest] = []
+        coordinator = InputCoordinator(on_request=seen.append)
 
         with coordinator.store.use_store(kv_store):
             await coordinator.record_request("x", "why?")
@@ -163,15 +163,15 @@ class TestHumanInputCoordinator:
             pending = await coordinator.store.pending_requests()
 
         assert "x" in pending
-        assert seen == [HumanInputRequest(interaction_id="x", question="why?")]
+        assert seen == [InputRequest(interaction_id="x", prompt="why?")]
 
-    async def test_question_delta_notifies(self, kv_store):
+    async def test_prompt_delta_notifies(self, kv_store):
         seen: list[str] = []
-        coordinator = HumanInputCoordinator(on_question_delta=seen.append)
+        coordinator = InputCoordinator(on_prompt_delta=seen.append)
 
         with coordinator.store.use_store(kv_store):
-            await coordinator.notify_question_delta("What ")
-            await coordinator.notify_question_delta("topic?")
+            await coordinator.notify_prompt_delta("What ")
+            await coordinator.notify_prompt_delta("topic?")
 
         assert seen == ["What ", "topic?"]
 
@@ -182,24 +182,24 @@ class TestHumanInputCoordinator:
 
         assert await coordinator.store.pending_requests() == {}
 
-    async def test_provide_answer_returns_stored_answer(self, coordinator):
-        await coordinator.store.set_answer("x", "stored")
+    async def test_provide_input_returns_stored_input(self, coordinator):
+        await coordinator.store.set_input("x", "stored")
 
-        assert await coordinator.provide_answer("x") == "stored"
+        assert await coordinator.provide_input("x") == "stored"
 
-    async def test_provide_answer_consumes_queued_input_when_unblocked(
+    async def test_provide_input_consumes_queued_input_when_unblocked(
         self, coordinator
     ):
         await coordinator.store.queue_input("queued")
 
-        assert await coordinator.provide_answer("x") == "queued"
+        assert await coordinator.provide_input("x") == "queued"
 
-    async def test_provide_answer_does_not_consume_queue_with_other_pending(
+    async def test_provide_input_does_not_consume_queue_with_other_pending(
         self, coordinator
     ):
         await coordinator.store.save_pending_requests({"other": _request("other")})
         await coordinator.store.queue_input("queued")
 
-        assert await coordinator.provide_answer("x") is None
+        assert await coordinator.provide_input("x") is None
         # The queued input is left untouched for later.
         assert await coordinator.store.pop_queued_input() == "queued"
