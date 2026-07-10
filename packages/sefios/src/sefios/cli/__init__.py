@@ -3,7 +3,7 @@
 The facade over the ``sefia_typer`` building blocks: :class:`SefiaCLI` wires
 the CLI input core to sefios' :class:`InputTool`, session storage,
 and cost accounting. The ``sefia_typer`` surface that applications need
-(reporters, Typer helpers, exceptions) is re-exported here, so a single
+(reporters and exceptions) is re-exported here, so a single
 ``from sefios.cli import ...`` suffices.
 """
 
@@ -20,10 +20,9 @@ from sefia_typer import (
     CLIReporter,
     DefaultCLIReporter,
     InputRequest,
+    ResolvedSession,
     UnknownInputError,
     UnknownSessionError,
-    add_session_commands,
-    async_command,
 )
 
 from ._app import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
@@ -35,8 +34,7 @@ __all__ = [
     "DefaultCLIReporter",
     "CostReportingCLIReporter",
     "InputRequest",
-    "add_session_commands",
-    "async_command",
+    "ResolvedSession",
     "UnknownSessionError",
     "UnknownInputError",
     "AmbiguousInputError",

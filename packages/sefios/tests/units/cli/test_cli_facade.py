@@ -1,6 +1,6 @@
 import pytest
 from glyff_pydantic import PydanticSerializer
-from sefia_typer import InputReceiver, InputStore
+from sefia_typer import InputChannel
 from sefia_typer import UnknownSessionError as CLIUnknownSessionError
 from sefios.cli import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
 from sefios.cli._app import _USE_DEFAULT_REPORTER
@@ -15,36 +15,36 @@ def session_storage() -> MemorySessionStorage:
 
 class TestSefiaCLISession:
     @pytest.fixture
-    def store(self) -> InputStore:
-        return InputStore()
+    def channel(self) -> InputChannel:
+        return InputChannel()
 
     @pytest.fixture
-    def session(self, store, session_storage):
-        with store.use_store(session_storage):
-            receiver = InputReceiver(store)
-            yield SefiaCLISession(input_receiver=receiver)
+    def session(self, channel, session_storage):
+        # A bound SessionStorage satisfies the adapter's KeyValueStore protocol.
+        with channel.use_store(session_storage):
+            yield SefiaCLISession(channel=channel)
 
-    async def test_none_input_is_ignored(self, session, store):
+    async def test_none_input_is_ignored(self, session, channel):
         await session.accept_input(None)
 
-        assert await store.pop_queued_input() is None
+        assert await channel.provide_input("any") is None
 
-    async def test_string_input_is_stored(self, session, store):
+    async def test_string_input_is_stored(self, session, channel):
         await session.accept_input("hello")
 
-        assert await store.pop_queued_input() == "hello"
+        assert await channel.provide_input("any") == "hello"
 
-    async def test_list_input_is_joined_and_stored(self, session, store):
+    async def test_list_input_is_joined_and_stored(self, session, channel):
         await session.accept_input(["hello", "world"])
 
-        assert await store.pop_queued_input() == "hello world"
+        assert await channel.provide_input("any") == "hello world"
 
-    async def test_reply_to_answers_pending_request(self, session, store):
-        await store.save_pending_requests({"a": {"id": "a", "prompt": "q?"}})
+    async def test_reply_to_resolves_pending_request(self, session, channel):
+        await channel.record_request("a", "q?")
 
         await session.accept_input("answer", reply_to="a")
 
-        assert await store.get_input("a") == "answer"
+        assert await channel.provide_input("a") == "answer"
 
 
 class TestSefiaCLISessionManagement:
@@ -72,7 +72,7 @@ class TestSefiaCLISessionManagement:
 
     def test_switch_to_unknown_session_raises_cli_error(self, cli: SefiaCLI):
         # The facade translates the sefios-internal exception into the
-        # sefia_typer one that `add_session_commands` handles.
+        # sefia_typer one that applications catch.
         with pytest.raises(CLIUnknownSessionError) as exc_info:
             cli.switch_session("ghost")
 

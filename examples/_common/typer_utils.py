@@ -1,12 +1,13 @@
+"""Shared Typer conveniences for the example CLIs."""
+
 import asyncio
 import functools
 from typing import Annotated, Any, Callable, Coroutine, Protocol, TypeVar
 
 import typer
 from rich.console import Console
+from sefios.cli import UnknownSessionError
 from typing_extensions import ParamSpec
-
-from .exceptions import UnknownSessionError
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")

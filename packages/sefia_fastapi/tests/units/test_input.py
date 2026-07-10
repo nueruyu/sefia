@@ -7,174 +7,133 @@ suites aligned guards against unintentional drift.
 import pytest
 from sefia_fastapi import (
     AmbiguousInputError,
-    InputCoordinator,
-    InputReceiver,
-    InputStore,
+    InputChannel,
+    InputRequest,
     UnknownInputError,
 )
 
 
-def _request(interaction_id: str) -> dict:
-    return {"id": interaction_id, "prompt": f"prompt for {interaction_id}?"}
+@pytest.fixture
+def channel(kv_store):
+    channel = InputChannel()
+    with channel.use_store(kv_store):
+        yield channel
 
 
-class TestInputStore:
-    @pytest.fixture
-    def store(self, kv_store):
-        human_store = InputStore()
-        with human_store.use_store(kv_store):
-            yield human_store
-
+class TestBinding:
     async def test_requires_bound_store(self):
-        store = InputStore()
+        channel = InputChannel()
 
         with pytest.raises(RuntimeError):
-            await store.pending_requests()
-
-    async def test_pending_requests_empty_by_default(self, store):
-        assert await store.pending_requests() == {}
-
-    async def test_save_and_read_pending(self, store):
-        await store.save_pending_requests({"a": _request("a")})
-
-        assert await store.pending_requests() == {"a": _request("a")}
-
-    async def test_answered_requests_are_dropped_from_pending(self, store):
-        await store.save_pending_requests({"a": _request("a"), "b": _request("b")})
-        await store.set_input("a", "answered")
-
-        pending = await store.pending_requests()
-
-        assert set(pending) == {"b"}
-
-    async def test_saving_empty_pending_clears_state(self, store):
-        await store.save_pending_requests({"a": _request("a")})
-        await store.save_pending_requests({})
-
-        assert await store.pending_requests() == {}
-
-    async def test_get_input_missing(self, store):
-        assert await store.get_input("missing") is None
-
-    async def test_queue_inputs_are_returned_in_order(self, store):
-        await store.queue_input("first")
-        await store.queue_input("second")
-
-        assert await store.pop_queued_input() == "first"
-        assert await store.pop_queued_input() == "second"
-        assert await store.pop_queued_input() is None
+            await channel.pending()
 
 
-class TestInputReceiver:
-    @pytest.fixture
-    def store(self, kv_store):
-        human_store = InputStore()
-        with human_store.use_store(kv_store):
-            yield human_store
+class TestPending:
+    async def test_empty_by_default(self, channel):
+        assert await channel.pending() == []
 
-    async def test_none_input_is_ignored(self, store):
-        receiver = InputReceiver(store)
+    async def test_recorded_request_is_pending(self, channel):
+        await channel.record_request("a", "prompt a?")
 
-        await receiver.receive_input(None)
+        assert await channel.pending() == [
+            InputRequest(interaction_id="a", prompt="prompt a?")
+        ]
 
-        assert await store.pop_queued_input() is None
+    async def test_pending_is_ordered_by_interaction_id(self, channel):
+        await channel.record_request("b", "prompt b?")
+        await channel.record_request("a", "prompt a?")
 
-    async def test_blank_input_is_ignored(self, store):
-        receiver = InputReceiver(store)
+        pending = await channel.pending()
 
-        await receiver.receive_input("   ")
+        assert [request.interaction_id for request in pending] == ["a", "b"]
 
-        assert await store.pop_queued_input() is None
+    async def test_resolved_requests_are_dropped_from_pending(self, channel):
+        await channel.record_request("a", "prompt a?")
+        await channel.record_request("b", "prompt b?")
 
-    async def test_list_input_is_joined(self, store):
-        receiver = InputReceiver(store)
+        await channel.receive_input("resolved", reply_to="a")
 
-        await receiver.receive_input(["hello", "world"])
+        pending = await channel.pending()
+        assert [request.interaction_id for request in pending] == ["b"]
 
-        assert await store.pop_queued_input() == "hello world"
+    async def test_complete_request_removes_pending(self, channel):
+        await channel.record_request("x", "why?")
 
-    async def test_input_is_queued_when_nothing_pending(self, store):
-        receiver = InputReceiver(store)
+        await channel.complete_request("x")
 
-        await receiver.receive_input("hello")
+        assert await channel.pending() == []
 
-        assert await store.pop_queued_input() == "hello"
 
-    async def test_single_pending_request_is_answered(self, store):
-        await store.save_pending_requests({"only": _request("only")})
-        receiver = InputReceiver(store)
+class TestReceiveInput:
+    async def test_none_input_is_ignored(self, channel):
+        await channel.receive_input(None)
 
-        await receiver.receive_input("the answer")
+        assert await channel.provide_input("any") is None
 
-        assert await store.get_input("only") == "the answer"
+    async def test_blank_input_is_ignored(self, channel):
+        await channel.receive_input("   ")
 
-    async def test_multiple_pending_requires_reply_to(self, store):
-        await store.save_pending_requests({"a": _request("a"), "b": _request("b")})
-        receiver = InputReceiver(store)
+        assert await channel.provide_input("any") is None
+
+    async def test_list_input_is_joined(self, channel):
+        await channel.receive_input(["hello", "world"])
+
+        assert await channel.provide_input("any") == "hello world"
+
+    async def test_input_is_queued_when_nothing_pending(self, channel):
+        await channel.receive_input("hello")
+
+        assert await channel.provide_input("any") == "hello"
+
+    async def test_single_pending_request_is_resolved(self, channel):
+        await channel.record_request("only", "prompt?")
+
+        await channel.receive_input("the input")
+
+        assert await channel.provide_input("only") == "the input"
+
+    async def test_multiple_pending_requires_reply_to(self, channel):
+        await channel.record_request("a", "prompt a?")
+        await channel.record_request("b", "prompt b?")
 
         with pytest.raises(AmbiguousInputError) as exc_info:
-            await receiver.receive_input("ambiguous")
+            await channel.receive_input("ambiguous")
 
         assert sorted(exc_info.value.interaction_ids) == ["a", "b"]
 
-    async def test_reply_to_targets_specific_request(self, store):
-        await store.save_pending_requests({"a": _request("a"), "b": _request("b")})
-        receiver = InputReceiver(store)
+    async def test_reply_to_targets_specific_request(self, channel):
+        await channel.record_request("a", "prompt a?")
+        await channel.record_request("b", "prompt b?")
 
-        await receiver.receive_input("for b", reply_to="b")
+        await channel.receive_input("for b", reply_to="b")
 
-        assert await store.get_input("b") == "for b"
-        assert await store.get_input("a") is None
+        assert await channel.provide_input("b") == "for b"
 
-    async def test_reply_to_unknown_request_raises(self, store):
-        await store.save_pending_requests({"a": _request("a")})
-        receiver = InputReceiver(store)
+    async def test_reply_to_unknown_request_raises(self, channel):
+        await channel.record_request("a", "prompt a?")
 
         with pytest.raises(UnknownInputError) as exc_info:
-            await receiver.receive_input("oops", reply_to="missing")
+            await channel.receive_input("oops", reply_to="missing")
 
         assert exc_info.value.interaction_id == "missing"
 
 
-class TestInputCoordinator:
-    @pytest.fixture
-    def coordinator(self, kv_store):
-        coordinator = InputCoordinator()
-        with coordinator.store.use_store(kv_store):
-            yield coordinator
+class TestProvideInput:
+    async def test_returns_none_when_nothing_available(self, channel):
+        assert await channel.provide_input("x") is None
 
-    async def test_record_request_records_pending(self, coordinator):
-        await coordinator.record_request("x", "why?")
+    async def test_queued_inputs_are_claimed_in_order(self, channel):
+        await channel.receive_input("first")
+        await channel.receive_input("second")
 
-        pending = await coordinator.store.pending_requests()
+        assert await channel.provide_input("i1") == "first"
+        assert await channel.provide_input("i2") == "second"
+        assert await channel.provide_input("i3") is None
 
-        assert pending == {"x": {"id": "x", "prompt": "why?"}}
+    async def test_does_not_claim_queue_with_other_pending(self, channel):
+        await channel.receive_input("queued")
+        await channel.record_request("other", "other prompt?")
 
-    async def test_complete_request_removes_pending(self, coordinator):
-        await coordinator.store.save_pending_requests({"x": _request("x")})
-
-        await coordinator.complete_request("x")
-
-        assert await coordinator.store.pending_requests() == {}
-
-    async def test_provide_input_returns_stored_input(self, coordinator):
-        await coordinator.store.set_input("x", "stored")
-
-        assert await coordinator.provide_input("x") == "stored"
-
-    async def test_provide_input_consumes_queued_input_when_unblocked(
-        self, coordinator
-    ):
-        await coordinator.store.queue_input("queued")
-
-        assert await coordinator.provide_input("x") == "queued"
-
-    async def test_provide_input_does_not_consume_queue_with_other_pending(
-        self, coordinator
-    ):
-        await coordinator.store.save_pending_requests({"other": _request("other")})
-        await coordinator.store.queue_input("queued")
-
-        assert await coordinator.provide_input("x") is None
-        # The queued input is left untouched for later.
-        assert await coordinator.store.pop_queued_input() == "queued"
+        assert await channel.provide_input("mine") is None
+        # The queued input is left for the pending request.
+        assert await channel.provide_input("other") == "queued"

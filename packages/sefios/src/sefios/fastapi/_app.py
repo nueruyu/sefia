@@ -6,14 +6,8 @@ from pathlib import Path
 
 from fastapi.responses import StreamingResponse
 from sefia import Policy
-from sefia_fastapi import (
-    InputCoordinator,
-    InputReceiver,
-    InputRequired,
-    SessionEventBroker,
-    TokenEventPublisher,
-    session_event_response,
-)
+from sefia_fastapi import InputChannel, InputRequired, SessionEvents
+from sefia_fastapi import InputRequest as HTTPInputRequest
 from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
 
 from .._scope import SessionScope
@@ -28,8 +22,8 @@ from ..tools import InputRequest, InputResult, InputTool
 class SefiaHTTPSession:
     """Operations available inside a Sefia HTTP session context."""
 
-    def __init__(self, *, input_receiver: InputReceiver):
-        self._input = input_receiver
+    def __init__(self, *, channel: InputChannel):
+        self._input = channel
 
     async def accept_input(
         self,
@@ -59,10 +53,9 @@ class SefiaHTTP:
         max_steps: int | None = 25,
         policies: list[Policy] | None = None,
     ):
-        self._events = SessionEventBroker()
+        self._events = SessionEvents()
         self._session_manager = SessionManager(session_dir)
-        self._input = InputCoordinator()
-        self._input_receiver = InputReceiver(self._input.store)
+        self._input = InputChannel()
         self._input_tool = InputTool(
             get_input=self._provide_input,
             on_request=self._record_request,
@@ -113,12 +106,10 @@ class SefiaHTTP:
         session_policies: list[Policy] = list(policies or [])
         if resolved_stream:
             session_policies.append(
-                CustomPolicy(
-                    handlers=lambda: [TokenEventPublisher(self._events, session_id)]
-                )
+                CustomPolicy(handlers=lambda: [self._events.token_handler(session_id)])
             )
 
-        paused_request: dict | None = None
+        paused_request: HTTPInputRequest | None = None
         try:
             async with self._session_scope.session(
                 session_id=session_id,
@@ -126,9 +117,9 @@ class SefiaHTTP:
                 stream=resolved_stream,
                 policies=session_policies or None,
             ):
-                with self._input.store.use_store(get_session_storage()):
+                with self._input.use_store(get_session_storage()):
                     try:
-                        yield SefiaHTTPSession(input_receiver=self._input_receiver)
+                        yield SefiaHTTPSession(channel=self._input)
                     except NeedsInput:
                         # Read the pending request while the session store is
                         # still bound, so no second session scope is needed, then
@@ -137,12 +128,12 @@ class SefiaHTTP:
                         # exits, both to keep glyff's pause/resume semantics and
                         # because it is a frozen dataclass that cannot carry the
                         # traceback the scope's exit would set on it.
-                        pending = await self._input.store.pending_requests()
+                        pending = await self._input.pending()
                         if not pending:
                             raise RuntimeError(
                                 "NeedsInput raised but no pending input request found."
                             ) from None
-                        paused_request = next(iter(sorted(pending.items())))[1]
+                        paused_request = pending[0]
                         raise
         except NeedsInput:
             request = paused_request
@@ -151,13 +142,13 @@ class SefiaHTTP:
                 session_id,
                 "input_required",
                 {
-                    "interaction_id": request["id"],
-                    "prompt": request["prompt"],
+                    "interaction_id": request.interaction_id,
+                    "prompt": request.prompt,
                 },
             )
             raise InputRequired(
-                interaction_id=request["id"],
-                prompt=request["prompt"],
+                interaction_id=request.interaction_id,
+                prompt=request.prompt,
             ) from None
         except Exception as exc:
             await self._events.publish(
@@ -176,7 +167,7 @@ class SefiaHTTP:
 
     def events(self, session_id: str) -> StreamingResponse:
         self.ensure_session(session_id)
-        return session_event_response(self._events, session_id)
+        return self._events.response(session_id)
 
     async def _provide_input(self, request: InputRequest) -> str | None:
         return await self._input.provide_input(request.interaction_id)

@@ -10,11 +10,10 @@ from sefia.exceptions import InferenceError, PauseException
 from sefia_typer import (
     CLIReporter,
     DefaultCLIReporter,
-    InputCoordinator,
-    InputReceiver,
-    ResolvedSessionLike,
+    InputChannel,
 )
 from sefia_typer import InputRequest as CLIInputRequest
+from sefia_typer import ResolvedSession as CLIResolvedSession
 from sefia_typer import UnknownSessionError as CLIUnknownSessionError
 
 from .._scope import SessionScope
@@ -41,7 +40,7 @@ class CostReportingCLIReporter(CLIReporter):
     def __init__(self, inner: CLIReporter | None = None):
         self._inner = inner or DefaultCLIReporter()
 
-    def on_session_resolved(self, session: ResolvedSessionLike) -> MaybeAwaitable[None]:
+    def on_session_resolved(self, session: CLIResolvedSession) -> MaybeAwaitable[None]:
         return self._inner.on_session_resolved(session)
 
     def on_input_request(self, request: CLIInputRequest) -> MaybeAwaitable[None]:
@@ -50,7 +49,7 @@ class CostReportingCLIReporter(CLIReporter):
     def on_input_prompt_delta(self, text: str) -> MaybeAwaitable[None]:
         return self._inner.on_input_prompt_delta(text)
 
-    async def on_interrupted(self, session: ResolvedSessionLike) -> None:
+    async def on_interrupted(self, session: CLIResolvedSession) -> None:
         await _maybe_await(self._inner.on_interrupted(session))
         await self._echo_total_cost()
 
@@ -72,8 +71,8 @@ class CostReportingCLIReporter(CLIReporter):
 class SefiaCLISession:
     """Operations available inside a Sefia CLI session context."""
 
-    def __init__(self, *, input_receiver: InputReceiver):
-        self._input = input_receiver
+    def __init__(self, *, channel: InputChannel):
+        self._input = channel
 
     async def accept_input(
         self,
@@ -107,11 +106,10 @@ class SefiaCLI:
     ):
         self._reporter = self._resolve_reporter(reporter)
         self._session_manager = SessionManager(session_dir)
-        self._input = InputCoordinator(
+        self._input = InputChannel(
             on_request=self._report_input_request,
             on_prompt_delta=self._report_input_prompt_delta,
         )
-        self._input_receiver = InputReceiver(self._input.store)
         self._input_tool = InputTool(
             get_input=self._provide_input,
             on_request=self._record_request,
@@ -174,9 +172,9 @@ class SefiaCLI:
                 stream=stream,
                 policies=policies,
             ):
-                with self._input.store.use_store(get_session_storage()):
+                with self._input.use_store(get_session_storage()):
                     try:
-                        yield SefiaCLISession(input_receiver=self._input_receiver)
+                        yield SefiaCLISession(channel=self._input)
                     except InferenceError as e:
                         await self._report_inference_error(e)
                         raise

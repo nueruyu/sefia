@@ -8,9 +8,10 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from sefios import get_state
-from sefios.cli import SefiaCLI, add_session_commands, async_command
+from sefios.cli import SefiaCLI
 
 from .._common.policies import VerbosePolicy
+from .._common.typer_utils import add_session_commands, async_command
 from .agents import (
     CodingStyleAuditor,
     DependencySpecialist,

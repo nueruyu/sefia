@@ -10,8 +10,10 @@ from typing import Annotated, Never
 
 import typer
 from sefia import infer
-from sefios.cli import SefiaCLI, add_session_commands, async_command
+from sefios.cli import SefiaCLI
 from sefios.tools import InputTool
+
+from .._common.typer_utils import add_session_commands, async_command
 
 
 class ChatAgent:

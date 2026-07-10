@@ -6,7 +6,7 @@ from sefia.exceptions import InferenceError
 from ._input import InputRequest, MaybeAwaitable
 
 
-class ResolvedSessionLike(Protocol):
+class ResolvedSession(Protocol):
     """The session-resolution facts a reporter renders.
 
     Read-only by design: any object with these attributes (such as the
@@ -25,7 +25,7 @@ class CLIReporter(Protocol):
 
     def on_session_resolved(
         self,
-        session: ResolvedSessionLike,
+        session: ResolvedSession,
     ) -> MaybeAwaitable[None]: ...
 
     def on_input_request(
@@ -37,7 +37,7 @@ class CLIReporter(Protocol):
 
     def on_interrupted(
         self,
-        session: ResolvedSessionLike,
+        session: ResolvedSession,
     ) -> MaybeAwaitable[None]: ...
 
     def on_inference_error(self, error: InferenceError) -> MaybeAwaitable[None]: ...
@@ -48,7 +48,7 @@ class CLIReporter(Protocol):
 class DefaultCLIReporter(CLIReporter):
     """Default CLI reporter using Typer's standard terminal output helpers."""
 
-    def on_session_resolved(self, session: ResolvedSessionLike) -> None:
+    def on_session_resolved(self, session: ResolvedSession) -> None:
         if session.source == "created":
             typer.secho(
                 f"> No active session. Starting new session: {session.session_id}",
@@ -71,7 +71,7 @@ class DefaultCLIReporter(CLIReporter):
     def on_input_prompt_delta(self, text: str) -> None:
         typer.echo(text, nl=False)
 
-    def on_interrupted(self, session: ResolvedSessionLike) -> None:
+    def on_interrupted(self, session: ResolvedSession) -> None:
         typer.echo()
         typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
         typer.echo("Session interrupted to wait for your input.")

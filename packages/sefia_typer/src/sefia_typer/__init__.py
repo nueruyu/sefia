@@ -1,21 +1,16 @@
 """Typer (CLI) building blocks for Sefia applications.
 
 This package holds the CLI-side pieces that depend only on ``sefia`` and
-Typer: the human-in-the-loop core (persisted over a :class:`KeyValueStore`),
-the reporter surface, and Typer helpers. The runtime wiring — session
-management, persistence, and the pausing tool — is provided by an integration
-layer such as ``sefios.cli``.
+Typer: the input core (an :class:`InputChannel` persisted over a
+:class:`KeyValueStore`), the reporter surface, and the exceptions
+applications catch. The runtime wiring — session management, persistence,
+and the pausing tool — is provided by an integration layer such as
+``sefios.cli``.
 """
 
-from ._input import (
-    InputCoordinator,
-    InputReceiver,
-    InputRequest,
-    InputStore,
-)
+from ._input import InputChannel, InputRequest
 from ._kv import KeyValueStore
-from ._reporter import CLIReporter, DefaultCLIReporter, ResolvedSessionLike
-from ._typer_utils import SessionCommands, add_session_commands, async_command
+from ._reporter import CLIReporter, DefaultCLIReporter, ResolvedSession
 from .exceptions import (
     AmbiguousInputError,
     UnknownInputError,
@@ -23,17 +18,12 @@ from .exceptions import (
 )
 
 __all__ = [
-    "KeyValueStore",
-    "InputStore",
-    "InputReceiver",
-    "InputCoordinator",
+    "InputChannel",
     "InputRequest",
+    "KeyValueStore",
     "CLIReporter",
     "DefaultCLIReporter",
-    "ResolvedSessionLike",
-    "SessionCommands",
-    "add_session_commands",
-    "async_command",
+    "ResolvedSession",
     "UnknownSessionError",
     "UnknownInputError",
     "AmbiguousInputError",

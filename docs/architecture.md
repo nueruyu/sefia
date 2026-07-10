@@ -13,8 +13,8 @@ A `uv` workspace (`pyproject.toml` → `[tool.uv.workspace]`) of small packages:
 | **sefia** | `packages/sefia` | The core: `@infer`, the inference loop, tool model, sessions, the default LLM strategy. |
 | **sefios** | `packages/sefios` | Official batteries and integration layer: `SessionScope`, default policies/middleware/handlers, ready-made tools, and the extra-gated CLI/HTTP facades. |
 | **sefia_litellm** | `packages/sefia_litellm` | Provider adapter — an `LLMClient` implemented over LiteLLM. |
-| **sefia_typer** | `packages/sefia_typer` | Typer (CLI) building blocks: the CLI input core, reporter surface, Typer helpers. |
-| **sefia_fastapi** | `packages/sefia_fastapi` | FastAPI (HTTP) building blocks: the HTTP input core, SSE event broker, HTTP-facing exceptions. |
+| **sefia_typer** | `packages/sefia_typer` | Typer (CLI) building blocks: the CLI input core (`InputChannel`) and the reporter surface. |
+| **sefia_fastapi** | `packages/sefia_fastapi` | FastAPI (HTTP) building blocks: the HTTP input core (`InputChannel`), SSE streams (`SessionEvents`), and HTTP-facing exceptions. |
 | **examples** | `examples` | Runnable end-to-end workflows. |
 | **glyff** | *(separate repo)* | Content-addressed durable execution. A dependency, not vendored. |
 | **jsonweir** | *(separate repo / PyPI)* | Standalone incremental JSON parser used for streaming tool args. |
@@ -127,7 +127,7 @@ implementation noted in parentheses.
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
 | Add a session-state persistence backend | implement `sefios` `SessionStorage` and pass a `session_storage_factory` to `SessionScope`; reference `sefios/storage/_file.py` |
-| Change CLI rendering / Typer helpers / the CLI input rules | `packages/sefia_typer` |
+| Change CLI rendering / the CLI input rules | `packages/sefia_typer` |
 | Change HTTP events / SSE / the HTTP input rules | `packages/sefia_fastapi` |
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |
 | Change which methods are tools | `tool_collectors/_default.py` |

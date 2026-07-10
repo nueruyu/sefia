@@ -1,6 +1,8 @@
 import typer
-from sefia_typer import UnknownSessionError, add_session_commands, async_command
 from typer.testing import CliRunner
+
+from examples._common.typer_utils import add_session_commands, async_command
+from sefios.cli import UnknownSessionError
 
 runner = CliRunner()
 
