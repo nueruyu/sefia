@@ -65,11 +65,8 @@ class InvalidInferenceResponseError(InferenceError):
     The LLM produced a response that could not be parsed or validated against
     the expected schema.
 
-    Treated as recoverable: LLM output is non-deterministic, so re-running the
-    step (on resume, or via an in-loop retry) may yield a conforming response.
-    ``LLMInferenceStrategy`` first retries in place with corrective feedback
-    built from ``detail`` and ``raw_content``, so the model can repair its own
-    output before the error ever propagates.
+    Treated as recoverable: LLM output is non-deterministic, so another attempt
+    may yield a conforming response.
 
     ``detail`` describes what was wrong (the parse/validation error);
     ``raw_content`` carries the invalid response body when one was received.

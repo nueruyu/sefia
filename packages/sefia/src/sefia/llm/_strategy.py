@@ -220,14 +220,8 @@ class LLMInferenceStrategy(InferenceStrategy):
     It unifies tool calls and results into a single structured output schema,
     making it compatible with a wide range of LLMs' JSON modes.
 
-    An invalid response (empty content, malformed JSON, or a schema violation)
-    is retried in place up to ``max_repair_attempts`` times: the invalid output
-    and the validation error are appended to the conversation as corrective
-    feedback so the model can repair its own response. The repair exchange is
-    ephemeral — it never enters the step history, so an invalid decision is
-    never persisted. Once the budget is spent, the
-    ``InvalidInferenceResponseError`` propagates as before (pausing the run so
-    a resume, or an outer ``Retrier``, can still recover the step).
+    Invalid structured responses can be retried with corrective feedback before
+    ``InvalidInferenceResponseError`` propagates.
     """
 
     def __init__(
@@ -279,10 +273,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             director,
         )
 
-        # Repair loop: an invalid response is retried with corrective feedback
-        # appended to `messages` only — never to `history` — so the repair
-        # exchange stays inside this (engraved) step and an invalid decision is
-        # never persisted.
+        # Keep repair feedback local to this step's prompt messages.
         attempt = 0
         while True:
             try:
@@ -373,12 +364,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             ) from e
 
     def _repair_messages(self, error: InvalidInferenceResponseError) -> list[Message]:
-        """
-        Build the ephemeral feedback exchange for a repair attempt: the invalid
-        output echoed back as the assistant turn (when there was any), then a
-        corrective user message. The schema itself is not repeated — it is
-        already in the system prompt.
-        """
+        """Build the corrective feedback exchange for one repair attempt."""
         feedback_messages: list[Message] = []
         if error.raw_content:
             feedback_messages.append(
