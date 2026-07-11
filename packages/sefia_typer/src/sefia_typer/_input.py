@@ -16,8 +16,10 @@ from typing import TypeVar
 from ._kv import KeyValueStore
 from .exceptions import AmbiguousInputError, UnknownInputError
 
-_PENDING_INPUTS_KEY = "pending_inputs"
-_QUEUED_INPUTS_KEY = "queued_inputs"
+# Keys are namespaced so they cannot collide with application state
+# stored in the same session storage (e.g. @state or get_state_store keys).
+_PENDING_INPUTS_KEY = "input_channel/pending"
+_QUEUED_INPUTS_KEY = "input_channel/queued"
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -204,7 +206,7 @@ class InputChannel:
 
     @staticmethod
     def _input_key(interaction_id: str) -> str:
-        return f"input__{interaction_id}"
+        return f"input_channel/input/{interaction_id}"
 
 
 def _to_input_text(input_value: str | list[str]) -> str:

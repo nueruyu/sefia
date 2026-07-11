@@ -116,7 +116,7 @@ class InputTool:
             return value
 
         await self._notify_request(request)
-        raise NeedsInput(prompt)
+        raise NeedsInput(prompt, interaction_id=request.interaction_id)
 
     @preview(get_input)
     async def _stream_get_input(self, events: ArgStream) -> None:

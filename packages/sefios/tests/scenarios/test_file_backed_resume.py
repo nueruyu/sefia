@@ -77,13 +77,17 @@ async def test_pause_resume_survives_process_restart(tmp_path, make_mock_llm):
 
     # --- First run: no answer available, the run pauses. ---
     mock_llm = make_mock_llm([_TOOL_CALL_RESPONSE])
-    with pytest.raises(NeedsInput):
+    with pytest.raises(NeedsInput) as pause_info:
         async with make_glyff_session() as gs:
             with bind_session_storage(make_state_storage()):
                 async with Session(llm_client=mock_llm, glyff_session=gs):
                     await _Agent(InputTool(get_input=get_input)).get_user_name()
 
     assert len(seen) == 1
+    # The pause identifies its own request, so integration layers need not
+    # re-read state to learn which prompt is waiting.
+    assert pause_info.value.interaction_id == seen[0].interaction_id
+    assert pause_info.value.prompt == seen[0].prompt
     answers[seen[0].interaction_id] = "Alice"
 
     # --- Second run: everything is rebuilt from disk; the answer is found. ---

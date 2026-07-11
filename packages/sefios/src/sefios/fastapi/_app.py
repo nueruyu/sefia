@@ -7,7 +7,6 @@ from pathlib import Path
 from fastapi.responses import StreamingResponse
 from sefia import Policy
 from sefia_fastapi import InputChannel, InputRequired, SessionEvents
-from sefia_fastapi import InputRequest as HTTPInputRequest
 from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
 
 from .._scope import SessionScope
@@ -109,7 +108,6 @@ class SefiaHTTP:
                 CustomPolicy(handlers=lambda: [self._events.token_handler(session_id)])
             )
 
-        paused_request: HTTPInputRequest | None = None
         try:
             async with self._session_scope.session(
                 session_id=session_id,
@@ -118,37 +116,28 @@ class SefiaHTTP:
                 policies=session_policies or None,
             ):
                 with self._input.use_store(get_session_storage()):
-                    try:
-                        yield SefiaHTTPSession(channel=self._input)
-                    except NeedsInput:
-                        # Read the pending request while the session store is
-                        # still bound, so no second session scope is needed, then
-                        # re-raise so the session scope handles the pause exactly
-                        # as before. InputRequired is raised only after the scope
-                        # exits, both to keep glyff's pause/resume semantics and
-                        # because it is a frozen dataclass that cannot carry the
-                        # traceback the scope's exit would set on it.
-                        pending = await self._input.pending()
-                        if not pending:
-                            raise RuntimeError(
-                                "NeedsInput raised but no pending input request found."
-                            ) from None
-                        paused_request = pending[0]
-                        raise
-        except NeedsInput:
-            request = paused_request
-            assert request is not None  # set before the re-raise above
+                    yield SefiaHTTPSession(channel=self._input)
+        except NeedsInput as pause:
+            # The pause identifies its own request, so no state is re-read.
+            # InputRequired is raised only after the session scope has exited,
+            # both to keep glyff's pause/resume semantics and because it is a
+            # frozen dataclass that cannot carry the traceback the scope's
+            # exit would set on it. A pause from a tool that did not identify
+            # itself cannot be described to the HTTP client, so it propagates
+            # unchanged.
+            if pause.interaction_id is None:
+                raise
             await self._events.publish(
                 session_id,
                 "input_required",
                 {
-                    "interaction_id": request.interaction_id,
-                    "prompt": request.prompt,
+                    "interaction_id": pause.interaction_id,
+                    "prompt": pause.prompt,
                 },
             )
             raise InputRequired(
-                interaction_id=request.interaction_id,
-                prompt=request.prompt,
+                interaction_id=pause.interaction_id,
+                prompt=pause.prompt,
             ) from None
         except Exception as exc:
             await self._events.publish(
