@@ -8,6 +8,7 @@ from .decision_model import (
     LLMDecision,
     ToolCallsLLMDecision,
 )
+from .history_store import HistoryStore
 from .inference_strategy import InferenceStrategy
 from .middleware import (
     InferenceContext,
@@ -18,6 +19,7 @@ from .middleware import (
 from .policy import Policy
 
 __all__ = [
+    "HistoryStore",
     "InferenceStrategy",
     "InferenceMiddleware",
     "StepMiddleware",

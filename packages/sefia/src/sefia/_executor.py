@@ -1,7 +1,9 @@
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from . import events
+from ._history import TransientHistoryStore
 from ._interfaces import InferenceStrategy
+from ._interfaces.history_store import HistoryStore
 from ._interfaces.middleware import (
     InferenceContext,
     InferenceMiddleware,
@@ -72,10 +74,12 @@ class InferenceExecutor:
         publisher: EventPublisher,
         inference_middlewares: list[InferenceMiddleware] | None = None,
         step_middlewares: list[StepMiddleware] | None = None,
+        history_store: HistoryStore | None = None,
     ):
         self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy
         self.publisher = publisher
+        self._history_store = history_store or TransientHistoryStore()
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
 
@@ -201,8 +205,12 @@ class InferenceExecutor:
 
     async def _attempt_inference(self) -> Any:
         """Executes a single attempt of the inference loop, owning the step loop."""
-        history: list[HistoryItem] = []
-        step = 0
+        # The history store is the source of truth: with the default transient
+        # store this loads empty and history is rebuilt by replaying the
+        # engraved steps below; with a persistent store a resumed run continues
+        # from the saved snapshot without re-entering the completed steps.
+        history: list[HistoryItem] = await self._history_store.load()
+        step = sum(1 for item in history if isinstance(item, ToolCallDecision))
 
         while True:
             await self.publisher.publish(events.StepStarted(step=step, history=history))
@@ -211,6 +219,7 @@ class InferenceExecutor:
                 step=step,
                 history=history,
                 tool_registry=self._tool_registry,
+                history_store=self._history_store,
             )
 
             async def core() -> InferenceDecision:
@@ -226,9 +235,15 @@ class InferenceExecutor:
             if isinstance(decision, ToolCallDecision):
                 history.append(decision)
                 if not decision.calls:
+                    await self._history_store.save(history)
                     continue
 
                 tool_results = await self._call_tools_engraved(decision.calls)
                 history.extend(tool_results)
+                # Saved only after the step's engraved calls committed: a crash
+                # before this point resumes from the previous snapshot, and the
+                # engraved decision/tool records (keyed on that same history
+                # content) replay the missing step instead of re-running it.
+                await self._history_store.save(history)
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")

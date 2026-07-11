@@ -6,7 +6,7 @@ import glyff
 import glyff_file_store
 import sefia
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import Profile, Policy
+from sefia import HistoryStore, Profile, Policy
 from sefia.llm import LLMClient
 
 from ._session_state import bind_session_storage
@@ -23,6 +23,11 @@ class SessionScope:
     persistence backend: it receives the session id and returns the
     :class:`SessionStorage` to bind for that session. By default a
     :class:`FileSessionStorage` under ``session_dir`` is used.
+
+    ``history_store`` selects how each ``@infer`` run's history is persisted;
+    pass :class:`~sefios.DurableHistoryStore` to store it in the session
+    storage (required for history compaction on long-lived runs). By default
+    history stays derived from glyff replay.
     """
 
     def __init__(
@@ -36,6 +41,7 @@ class SessionScope:
         stream: bool = False,
         max_steps: int | None = 25,
         session_storage_factory: Callable[[str], SessionStorage] | None = None,
+        history_store: HistoryStore | None = None,
     ):
         self.session_dir = session_dir
         self.model = model
@@ -45,6 +51,7 @@ class SessionScope:
         self.stream = stream
         self.max_steps = max_steps
         self.session_storage_factory = session_storage_factory
+        self.history_store = history_store
 
     @asynccontextmanager
     async def session(
@@ -110,5 +117,6 @@ class SessionScope:
                     policies=final_policies,
                     profiles=final_profiles,
                     stream=resolved_stream,
+                    history_store=self.history_store,
                 ) as session:
                     yield session

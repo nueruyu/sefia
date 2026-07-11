@@ -64,6 +64,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `inference.py` | Plain data: the decision/history types and the call descriptor. | `FunctionInfo`, `ToolCallDecision`, `FinalAnswerDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |
+| `_history.py` | The default (no-op) history store; history stays replay-derived. | `TransientHistoryStore` |
 | `_profiles.py` / `_metadata.py` | Per-call model/policy selection; the `__sefia_metadata__` store. | `Profile` |
 | `_tool_system.py` | The tool hierarchy, registry, and collector interfaces. | `Tool`, `SignatureTool`, `JsonSchemaTool`, `ToolDefinition`, `ToolRegistry`, `ToolCollector` |
 | `tool_collectors/` | Collector implementations: default discovery (a held field's public surface, by class-level annotation or runtime type), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
@@ -84,6 +85,7 @@ implementation noted in parentheses.
 | `ToolFunctionInspector` / `DecisionModelBuilder` | non-Pydantic schema gen & validation | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards | `sefios` middleware/policies |
+| `HistoryStore` | persist run history as stored state (enables compaction) | `TransientHistoryStore` (replay-derived) |
 
 ## Inside `sefios` (the batteries)
 
@@ -91,7 +93,8 @@ implementation noted in parentheses.
 | --- | --- |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition) and a `CustomPolicy` builder. |
-| `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_human_input` — control-seam behaviors. |
+| `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_human_input`, `_compaction` — control-seam behaviors. |
+| `_history.py` | `DurableHistoryStore` — run history persisted in the session storage, keyed by the run's `ExecutionId`. |
 | `handlers/` | `_cost` — an observation-seam handler (cost accounting). |
 | `tools/` | `human.py` (HITL pause-by-raise), `web.py` (DuckDuckGo search). |
 | `storage/` | Session-scoped persistence: the `SessionStorage` interface + `MemorySessionStorage` / `FileSessionStorage`. |
@@ -108,6 +111,7 @@ implementation noted in parentheses.
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
 | Add a session-state persistence backend | implement `sefios` `SessionStorage` and pass a `session_storage_factory` to `SessionScope`; reference `sefios/storage/_file.py` |
+| Persist or compact a run's conversation history | pass `history_store=DurableHistoryStore()` (to `SessionScope`/`Session`) + `HistoryCompactor` in `sefios/middleware/_compaction.py`; the seam is `HistoryStore` in `sefia/_interfaces/history_store.py` |
 | Change which methods are tools | `tool_collectors/_default.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
 | Support a new output type system | `ToolFunctionInspector` / `DecisionModelBuilder` in `pydantic/_model_backend.py` |

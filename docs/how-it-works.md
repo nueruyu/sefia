@@ -63,7 +63,13 @@ loop:
 - **The tool batch is engraved** (`_call_tools_engraved`), so executed tools don't
   re-run on resume.
 - **History** is the accumulating list of `ToolCallDecision` / `ToolCallResult`
-  (`inference.py`) that gets rendered back into messages each step.
+  (`inference.py`) that gets rendered back into messages each step. Where it
+  lives is a seam: the run's `HistoryStore` (`_interfaces/history_store.py`)
+  is loaded at the start of each attempt and saved after every completed
+  step. The default `TransientHistoryStore` stores nothing — history stays
+  *derived*, rebuilt on resume by replaying the engraved steps (see below).
+  A persistent store (sefios' `DurableHistoryStore`) makes it *stored* state
+  instead; see "History: derived vs stored" below.
 - **Two seams, kept apart:** *middleware* wraps the loop and can retry or
   short-circuit (control); the *event publisher* emits `BeforeInferenceStep`,
   `AfterToolCall`, etc. for handlers that can only observe — the publisher isolates a
@@ -185,6 +191,42 @@ again on re-invocation. sefia's control-flow pauses subclass `PauseException`
 (`sefia.exceptions`), which the executor propagates untouched instead of reporting as
 a failure: `NeedsInput` (a tool awaiting input) and the recoverable `InferenceError`
 base are both pauses.
+
+## History: derived vs stored
+
+The step records above are keyed on their arguments — which include the
+history contents. Two consequences follow for the default (transient) setup:
+resuming rebuilds history by replaying **every** completed step, and mutating
+the history mid-run (compaction) changes the keys of all subsequent steps, so
+their replays would miss. For a run that terminates after a bounded number of
+steps this is exactly right: replay doubles as a correctness check, and the
+cost is bounded.
+
+For a long-lived run — a `Never`-returning chat loop that only ever pauses —
+both consequences bite: each resume replays an ever-growing prefix, and the
+history can never be compacted without invalidating the engraved steps. A
+persistent `HistoryStore` (`DurableHistoryStore` in sefios; pass it as
+`history_store=` to `Session` or `SessionScope`) cuts the dependency: the
+history is saved to the session storage after every completed step, keyed by
+the run's `ExecutionId` (the same scoping rule as `get_call_state_store`), and
+a resume loads that snapshot and continues — completed steps are never
+re-entered. Only the step that was interrupted mid-flight replays, via its
+engraved record, which still matches because the loaded snapshot is byte-for-
+byte the history that step was keyed on. The executor persists a step's
+decision and results only **after** its engraved calls committed, so a crash
+between the two is healed by that same replay.
+
+Compaction then becomes an ordinary rewrite of stored state:
+`HistoryCompactor` (a `StepMiddleware` in `sefios.middleware`) rewrites the
+history through `StepContext.rewrite_history` before the model call once it
+grows past a threshold — by default truncating to the most recent items at a
+decision boundary, or via a custom (even LLM-summarizing) compactor. The
+rewrite is persisted before the in-memory list is swapped, and glyff's
+execution log is untouched: the next step is simply a fresh model call keyed
+on the compacted content. With the transient store a compactor must be
+deterministic (a resume re-derives history by replay and re-applies it);
+with the durable store any compactor is safe — which is what makes an
+unbounded chat run compactable at all.
 
 ## Human-in-the-loop: pause = raise, resume = re-invoke
 
