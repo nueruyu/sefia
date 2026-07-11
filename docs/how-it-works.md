@@ -93,6 +93,15 @@ stripped of any ``` fence, `json.loads`-ed, validated into the decision model, a
 `process_decision` validates `final_answer` against the declared return type
 (`InvalidInferenceResponseError` if it doesn't conform).
 
+An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
+first **repaired in place**: the strategy appends the invalid output and the
+validation error to the conversation as corrective feedback and asks again, up to
+`max_repair_attempts` times (default 2; configurable on
+`LLMInferenceStrategy` / `Session` / `SessionScope`). The repair exchange lives only
+inside that one (engraved) step's messages — it never enters the step history, so an
+invalid decision is never persisted. Only when the budget is spent does the
+`InvalidInferenceResponseError` propagate as described below.
+
 (Why the unified schema rather than native tool-calling, and the tradeoff it makes:
 [tradeoffs.md](./tradeoffs.md).)
 
@@ -178,7 +187,8 @@ result**: any exception that escapes an engraved call leaves that call **resumab
 while the work that already completed stays committed, and the exception then
 propagates normally. So no exception type changes glyff's durability: a transient
 provider hiccup or a response that failed schema validation simply propagates and is
-re-run on the next invocation (an in-loop `Retrier` may retry it first); a
+re-run on the next invocation (the strategy's in-step feedback repair and an in-loop
+`Retrier` may retry it first); a
 human-input tool raises `NeedsInput` to pause; an ordinary bug raises and surfaces to
 you. In every case the completed engraved steps are safe and the interrupted one runs
 again on re-invocation. sefia's control-flow pauses subclass `PauseException`

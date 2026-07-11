@@ -226,7 +226,8 @@ async def test_inference_with_nonexistent_tool_call(
     async with glyff.Session(
         id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
     ) as gs:
-        async with Session(llm_client=mock_llm, glyff_session=gs):
+        # Repair is disabled so the propagation path itself is under test.
+        async with Session(llm_client=mock_llm, glyff_session=gs, max_repair_attempts=0):
             researcher = Researcher(web_toolkit)
             with pytest.raises(InvalidInferenceResponseError) as exc_info:
                 await researcher.generate_report(topic="sefia")
@@ -258,12 +259,53 @@ async def test_inference_with_invalid_output_schema(
     async with glyff.Session(
         id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
     ) as gs:
-        async with Session(llm_client=mock_llm, glyff_session=gs):
+        # Repair is disabled so the propagation path itself is under test.
+        async with Session(llm_client=mock_llm, glyff_session=gs, max_repair_attempts=0):
             agent = SimpleAgent()
             with pytest.raises(
                 InvalidInferenceResponseError, match="LLM output failed validation"
             ):
                 await agent.generate_report(topic="invalid")
+
+
+async def test_invalid_response_is_repaired_with_feedback(
+    serializer: Serializer, hasher: ArgsHasher
+):
+    # Scenario: the LLM first returns an empty body (the gemini-2.5-flash-lite
+    # failure from issue #35), then a valid decision once the validation error
+    # is fed back. The run succeeds without ever surfacing an error.
+    mock_responses = [
+        LLMResponse(content=""),
+        LLMResponse(
+            content=json.dumps(
+                {
+                    "decision": "result",
+                    "result": {
+                        "topic": "sefia",
+                        "summary": "Repaired.",
+                        "sources": [],
+                    },
+                }
+            )
+        ),
+    ]
+    mock_llm = MockLLMClient(responses=mock_responses)
+    session_id = "repair-test"
+    glyff_store = _make_stores(serializer)
+
+    async with glyff.Session(
+        id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+    ) as gs:
+        async with Session(llm_client=mock_llm, glyff_session=gs):
+            agent = SimpleAgent()
+            report = await agent.generate_report(topic="sefia")
+
+    assert report == Report(topic="sefia", summary="Repaired.", sources=[])
+    assert len(mock_llm.requests) == 2
+    feedback = mock_llm.requests[1]["messages"][-1]
+    assert feedback["role"] == "user"
+    assert "invalid" in feedback["content"]
+    assert "Your previous response was empty." in feedback["content"]
 
 
 async def test_inference_on_standalone_function(
