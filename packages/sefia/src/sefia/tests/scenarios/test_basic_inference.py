@@ -227,7 +227,9 @@ async def test_inference_with_nonexistent_tool_call(
         id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
     ) as gs:
         # Repair is disabled so the propagation path itself is under test.
-        async with Session(llm_client=mock_llm, glyff_session=gs, max_repair_attempts=0):
+        async with Session(
+            llm_client=mock_llm, glyff_session=gs, max_repair_attempts=0
+        ):
             researcher = Researcher(web_toolkit)
             with pytest.raises(InvalidInferenceResponseError) as exc_info:
                 await researcher.generate_report(topic="sefia")
@@ -260,7 +262,9 @@ async def test_inference_with_invalid_output_schema(
         id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
     ) as gs:
         # Repair is disabled so the propagation path itself is under test.
-        async with Session(llm_client=mock_llm, glyff_session=gs, max_repair_attempts=0):
+        async with Session(
+            llm_client=mock_llm, glyff_session=gs, max_repair_attempts=0
+        ):
             agent = SimpleAgent()
             with pytest.raises(
                 InvalidInferenceResponseError, match="LLM output failed validation"

@@ -372,9 +372,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 raw_content=response.content,
             ) from e
 
-    def _repair_messages(
-        self, error: InvalidInferenceResponseError
-    ) -> list[Message]:
+    def _repair_messages(self, error: InvalidInferenceResponseError) -> list[Message]:
         """
         Build the ephemeral feedback exchange for a repair attempt: the invalid
         output echoed back as the assistant turn (when there was any), then a
