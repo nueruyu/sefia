@@ -74,8 +74,8 @@ Modules with a leading underscore are internal; the public surface is whatever
 
 ### The seams (`_interfaces/`) — the extension ports
 
-These ABCs are where you swap behavior without touching the core. Each has a default
-implementation noted in parentheses.
+These interfaces are where you swap behavior without touching the core. Each has a
+default implementation noted in parentheses.
 
 | Interface | Swap to… | Default |
 | --- | --- | --- |
@@ -83,14 +83,14 @@ implementation noted in parentheses.
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
 | `ToolFunctionInspector` / `DecisionModelBuilder` | non-Pydantic schema gen & validation | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
-| `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards | `sefios` middleware/policies |
+| `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
 
 ## Inside `sefios` (the batteries)
 
 | Path | Responsibility |
 | --- | --- |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
-| `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition) and a `CustomPolicy` builder. |
+| `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_human_input` — control-seam behaviors. |
 | `handlers/` | `_cost` — an observation-seam handler (cost accounting). |
 | `tools/` | `human.py` (HITL pause-by-raise), `web.py` (DuckDuckGo search). |

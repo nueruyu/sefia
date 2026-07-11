@@ -14,7 +14,6 @@ from sefia.event_system import EventHandler
 from sefia.llm.events import LLMTokenReceived
 from sefios import NeedsInput, SessionScope, get_session_storage
 from sefios.handlers import CostCalculator
-from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputTool
 
 from .human_input import CLIHumanInputAdapter, CLIHumanInputReceiver
@@ -113,7 +112,7 @@ class SefiaHTTP:
         self._human_input_receiver = CLIHumanInputReceiver(self._human_input.store)
 
         scope_policies: list[Policy] = [
-            CustomPolicy(handlers=lambda: [CostCalculator()])
+            Policy(handlers=lambda: [CostCalculator()])
         ]
         if policies is not None:
             scope_policies.extend(policies)
@@ -156,7 +155,7 @@ class SefiaHTTP:
         session_policies: list[Policy] = list(policies or [])
         if resolved_stream:
             session_policies.append(
-                CustomPolicy(
+                Policy(
                     handlers=lambda: [_TokenEventPublisher(self._events, session_id)]
                 )
             )

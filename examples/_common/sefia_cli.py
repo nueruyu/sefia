@@ -9,7 +9,6 @@ from sefia import Policy
 from sefia.exceptions import InferenceError, PauseException
 from sefios import SessionScope, get_session_storage, get_state
 from sefios.handlers import CostCalculator, CostState
-from sefios.policies import CustomPolicy
 from sefios.tools import HumanInputRequest, HumanInputTool
 
 from .human_input import CLIHumanInputAdapter, CLIHumanInputReceiver
@@ -143,7 +142,7 @@ class SefiaCLI:
         self._verbose = verbose
 
         scope_policies: list[Policy] = [
-            CustomPolicy(handlers=lambda: [CostCalculator()])
+            Policy(handlers=lambda: [CostCalculator()])
         ]
         self._session_scope = SessionScope(
             session_dir=session_dir,
