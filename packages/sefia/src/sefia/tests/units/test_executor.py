@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -493,6 +494,385 @@ class TestInferenceExecutor:
 
         with pytest.raises(ValueError, match="transient"):
             await executor.run()
+
+    async def test_concurrent_tools_overlap_within_a_batch(
+        self, executor_dependencies
+    ):
+        # Two calls to @concurrent tools in one decision run overlapped: the
+        # first tool blocks until the second one has run, which can only
+        # complete if the executor does not serialize the batch.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(
+                calls=[
+                    ToolCallRequest(id="1", name="wait_for_peer", arguments={}),
+                    ToolCallRequest(id="2", name="release_peer", arguments={}),
+                ]
+            ),
+            ResultDecision(result="done"),
+        ]
+
+        peer_ran = asyncio.Event()
+
+        async def wait_for_peer() -> str:
+            await asyncio.wait_for(peer_ran.wait(), timeout=5)
+            return "waited"
+
+        async def release_peer() -> str:
+            peer_ran.set()
+            return "released"
+
+        tool_registry = ToolRegistry()
+        tool_registry.add(wait_for_peer, name="wait_for_peer", concurrent=True)
+        tool_registry.add(release_peer, name="release_peer", concurrent=True)
+        mock_collector.collect.return_value = tool_registry
+
+        executor = InferenceExecutor(
+            sample_func_with_self,
+            (object(), "value"),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        result = await executor.run()
+
+        assert result == "done"
+        # Results come back in request order even though the first call
+        # finished last.
+        history = mock_strategy.decide_next_step.call_args_list[1].kwargs["history"]
+        results = [item for item in history if isinstance(item, ToolCallResult)]
+        assert [(r.tool_call_id, r.result) for r in results] == [
+            ("1", "waited"),
+            ("2", "released"),
+        ]
+
+    async def test_unmarked_tools_stay_strictly_serial(self, executor_dependencies):
+        # Tools without @concurrent keep today's behavior: each call starts
+        # only after the previous one completed.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(
+                calls=[
+                    ToolCallRequest(id="1", name="tool_a", arguments={}),
+                    ToolCallRequest(id="2", name="tool_b", arguments={}),
+                ]
+            ),
+            ResultDecision(result="done"),
+        ]
+
+        timeline: list[str] = []
+
+        async def tool_a() -> str:
+            timeline.append("a:start")
+            await asyncio.sleep(0)
+            timeline.append("a:end")
+            return "a"
+
+        async def tool_b() -> str:
+            timeline.append("b:start")
+            await asyncio.sleep(0)
+            timeline.append("b:end")
+            return "b"
+
+        tool_registry = ToolRegistry()
+        tool_registry.add(tool_a, name="tool_a")
+        tool_registry.add(tool_b, name="tool_b")
+        mock_collector.collect.return_value = tool_registry
+
+        executor = InferenceExecutor(
+            sample_func_with_self,
+            (object(), "value"),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        await executor.run()
+
+        assert timeline == ["a:start", "a:end", "b:start", "b:end"]
+
+    async def test_serial_call_is_a_barrier_between_concurrent_calls(
+        self, executor_dependencies
+    ):
+        # In [concurrent, serial, concurrent], the serial call starts only
+        # after the first completed and the last starts only after the serial
+        # one completed.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(
+                calls=[
+                    ToolCallRequest(id="1", name="conc_a", arguments={}),
+                    ToolCallRequest(id="2", name="serial_s", arguments={}),
+                    ToolCallRequest(id="3", name="conc_b", arguments={}),
+                ]
+            ),
+            ResultDecision(result="done"),
+        ]
+
+        timeline: list[str] = []
+
+        def make_tool(label: str):
+            async def tool() -> str:
+                timeline.append(f"{label}:start")
+                await asyncio.sleep(0)
+                timeline.append(f"{label}:end")
+                return label
+
+            return tool
+
+        tool_registry = ToolRegistry()
+        tool_registry.add(make_tool("a"), name="conc_a", concurrent=True)
+        tool_registry.add(make_tool("s"), name="serial_s")
+        tool_registry.add(make_tool("b"), name="conc_b", concurrent=True)
+        mock_collector.collect.return_value = tool_registry
+
+        executor = InferenceExecutor(
+            sample_func_with_self,
+            (object(), "value"),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        await executor.run()
+
+        assert timeline == [
+            "a:start",
+            "a:end",
+            "s:start",
+            "s:end",
+            "b:start",
+            "b:end",
+        ]
+
+    async def test_pause_lets_concurrent_siblings_finish(self, executor_dependencies):
+        # A PauseException interrupts the batch, but overlapped siblings run
+        # to completion first (an engraved sibling's finished work must be
+        # committed before the run pauses).
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.return_value = ToolCallDecision(
+            calls=[
+                ToolCallRequest(id="1", name="pausing", arguments={}),
+                ToolCallRequest(id="2", name="sibling", arguments={}),
+            ]
+        )
+
+        sibling_finished = False
+
+        async def pausing() -> str:
+            raise PauseException("needs input")
+
+        async def sibling() -> str:
+            nonlocal sibling_finished
+            await asyncio.sleep(0)
+            sibling_finished = True
+            return "ok"
+
+        tool_registry = ToolRegistry()
+        tool_registry.add(pausing, name="pausing", concurrent=True)
+        tool_registry.add(sibling, name="sibling", concurrent=True)
+        mock_collector.collect.return_value = tool_registry
+
+        executor = InferenceExecutor(
+            sample_func_with_self,
+            (object(), "value"),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        with pytest.raises(PauseException, match="needs input"):
+            await executor.run()
+
+        assert sibling_finished
+
+    async def test_earliest_pause_in_request_order_wins(self, executor_dependencies):
+        # When several overlapped calls pause, the one earliest in request
+        # order propagates — even if it was raised last in wall-clock time —
+        # so the escaping exception is deterministic.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.return_value = ToolCallDecision(
+            calls=[
+                ToolCallRequest(id="1", name="pause_late", arguments={}),
+                ToolCallRequest(id="2", name="pause_early", arguments={}),
+            ]
+        )
+
+        second_paused = asyncio.Event()
+
+        async def pause_late() -> str:
+            await asyncio.wait_for(second_paused.wait(), timeout=5)
+            raise PauseException("first in request order")
+
+        async def pause_early() -> str:
+            second_paused.set()
+            raise PauseException("second in request order")
+
+        tool_registry = ToolRegistry()
+        tool_registry.add(pause_late, name="pause_late", concurrent=True)
+        tool_registry.add(pause_early, name="pause_early", concurrent=True)
+        mock_collector.collect.return_value = tool_registry
+
+        executor = InferenceExecutor(
+            sample_func_with_self,
+            (object(), "value"),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        with pytest.raises(PauseException, match="first in request order"):
+            await executor.run()
+
+    async def test_tool_failure_in_concurrent_batch_stays_isolated(
+        self, executor_dependencies
+    ):
+        # An ordinary tool failure inside an overlapped batch is stringified
+        # into its own slot; siblings are unaffected and the run continues.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(
+                calls=[
+                    ToolCallRequest(id="1", name="boom", arguments={}),
+                    ToolCallRequest(id="2", name="fine", arguments={}),
+                ]
+            ),
+            ResultDecision(result="recovered"),
+        ]
+
+        async def boom() -> str:
+            raise ValueError("kaboom")
+
+        async def fine() -> str:
+            return "ok"
+
+        tool_registry = ToolRegistry()
+        tool_registry.add(boom, name="boom", concurrent=True)
+        tool_registry.add(fine, name="fine", concurrent=True)
+        mock_collector.collect.return_value = tool_registry
+
+        executor = InferenceExecutor(
+            sample_func_with_self,
+            (object(), "value"),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        result = await executor.run()
+
+        assert result == "recovered"
+        history = mock_strategy.decide_next_step.call_args_list[1].kwargs["history"]
+        results = [item for item in history if isinstance(item, ToolCallResult)]
+        assert "Error executing tool 'boom'" in results[0].result
+        assert results[1].result == "ok"
+
+    async def test_identical_concurrent_calls_run_serially(
+        self, executor_dependencies
+    ):
+        # Two calls with the same tool and arguments never overlap (glyff's
+        # sequencer numbers repeated executions of one content key by arrival,
+        # so racing duplicates would make replay assignment nondeterministic).
+        # A third call with different arguments still overlaps with them.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(
+                calls=[
+                    ToolCallRequest(id="1", name="fetch", arguments={"key": "same"}),
+                    ToolCallRequest(id="2", name="fetch", arguments={"key": "same"}),
+                    ToolCallRequest(id="3", name="fetch", arguments={"key": "other"}),
+                ]
+            ),
+            ResultDecision(result="done"),
+        ]
+
+        active_same = 0
+        max_active_same = 0
+        saw_other_during_same = False
+        active_other = 0
+
+        async def fetch(key: str) -> str:
+            nonlocal active_same, max_active_same, saw_other_during_same, active_other
+            if key == "same":
+                active_same += 1
+                max_active_same = max(max_active_same, active_same)
+            else:
+                active_other += 1
+            await asyncio.sleep(0.01)
+            if key == "same" and active_other:
+                saw_other_during_same = True
+            if key == "same":
+                active_same -= 1
+            else:
+                active_other -= 1
+            return key
+
+        tool_registry = ToolRegistry()
+        tool_registry.add(fetch, name="fetch", concurrent=True)
+        mock_collector.collect.return_value = tool_registry
+
+        executor = InferenceExecutor(
+            sample_func_with_self,
+            (object(), "value"),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        await executor.run()
+
+        assert max_active_same == 1
+        assert saw_other_during_same
 
     async def test_retry_middleware_publishes_attempt_start_per_attempt(
         self, executor_dependencies

@@ -56,6 +56,11 @@ class ResearchService:
   still be held by another service and act as a dependency.)
 - **A held field is a tool; an `@infer` argument is task input.** So held fields
   should be dependency objects, not unrelated state.
+- **Batched calls run serially; overlap is opt-in.** When one model decision
+  contains several tool calls they execute one after another, unless a tool
+  method is marked `@concurrent` — the author's declaration that overlapping its
+  calls with batch siblings is safe. Results are always awaited and recorded in
+  request order; the marker never changes exposure, only scheduling.
 
 ## Principles
 

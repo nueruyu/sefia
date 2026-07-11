@@ -7,6 +7,7 @@ from .._tool_system import (
     ToolFunctionInspector,
     ToolRegistry,
     get_stream_handler,
+    is_concurrent,
 )
 from ..streaming import StreamHandler
 
@@ -69,6 +70,7 @@ class DefaultToolCollector(ToolCollector):
                     schema_source=schema_fn,
                     inspector=self._inspector,
                     stream_handler=_resolve_stream_handler(bound),
+                    concurrent=_resolve_concurrent(bound),
                 )
 
         return registry
@@ -145,6 +147,17 @@ def _public_methods(cls: type) -> dict[str, Callable[..., Any]]:
             elif inspect.isfunction(raw):
                 methods[name] = raw
     return methods
+
+
+def _resolve_concurrent(bound: Callable[..., Any]) -> bool:
+    """Whether the tool's *implementation* method carries ``@concurrent``.
+
+    Like the ``@preview`` handler, the marker describes a runtime property of
+    the concrete implementation, so it is read off ``bound``'s own underlying
+    function — never off the declared interface's method, which can be a
+    different object under ``Protocol`` narrowing.
+    """
+    return is_concurrent(getattr(bound, "__func__", bound))
 
 
 def _resolve_stream_handler(bound: Callable[..., Any]) -> StreamHandler | None:

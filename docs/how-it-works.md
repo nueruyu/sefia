@@ -61,7 +61,9 @@ loop:
 - **`decide_next_step` is engraved** (`_next_step_engraved`), so each model call is a
   separately replayable step.
 - **The tool batch is engraved** (`_call_tools_engraved`), so executed tools don't
-  re-run on resume.
+  re-run on resume. Within a batch, calls run serially unless their tools are
+  marked `@concurrent`; results always land in history in request order (see
+  [Tools](#tools-discovery-schema-execution)).
 - **History** is the accumulating list of `ToolCallDecision` / `ToolCallResult`
   (`inference.py`) that gets rendered back into messages each step.
 - **Two seams, kept apart:** *middleware* wraps the loop and can retry or
@@ -148,15 +150,35 @@ surfaces as a tool-execution error on the first call rather than at discovery ti
 A `JsonSchemaTool` instead carries its parameters as a raw JSON Schema (no
 signature to introspect) and passes that schema through verbatim.
 
-**Execution** (`InferenceExecutor._call_tools`): the model's requested call is matched
+**Execution** (`InferenceExecutor._call_tools`): each requested call is matched
 in the registry and dispatched through `tool.invoke(arguments)`; sync or async
 returns are normalized. For a `SignatureTool` the decoded arguments are coerced to
 the callable's declared types before the call; a `JsonSchemaTool` forwards them to
 its handler verbatim. A tool that
-**raises `NeedsInput` propagates immediately** — that is the durable pause (see below)
+**raises `NeedsInput` propagates** — that is the durable pause (see below)
 — so it reaches your handler; any *other* tool exception is stringified into the
 history and fed back to the model so it can recover and continue, rather than failing
 the run.
+
+When one decision contains **several calls**, the batch is walked in request
+order and runs **serially by default**. Marking a tool method `@concurrent`
+(`sefia.concurrent`) declares it safe to overlap: consecutive calls to marked
+tools run concurrently (`asyncio`), while any unmarked call is a barrier — it
+starts only after everything before it finished, and everything after it waits.
+This is batch-internal concurrency, not fire-and-forget: every result is
+awaited, results are appended to history **in request order** regardless of
+completion order (so replay sees an identical history), and the next model step
+starts only after the whole batch completed. Within an overlapped group,
+identical calls (same tool, same arguments) still run one after another so
+glyff's per-content-key sequencing stays deterministic between a live run and
+its replay. If an overlapped call raises a pause, its siblings run to
+completion first (an engraved sibling's finished work is committed and replays
+on resume), then the pause of the earliest call in request order propagates.
+Like `@preview`, the marker is orthogonal to exposure — a public method is a
+tool either way; `@concurrent` only changes how its calls are scheduled within
+a batch. Mark only tools whose calls tolerate overlapping (pure reads,
+independent external calls); tools whose side-effect ordering matters, or that
+read-modify-write shared state without their own locking, should stay unmarked.
 
 ## Durability and replay (glyff)
 

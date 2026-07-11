@@ -1,3 +1,5 @@
+import asyncio
+import json
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from . import events
@@ -125,41 +127,111 @@ class InferenceExecutor:
     async def _call_tools(
         self, tool_calls: list[ToolCallRequest]
     ) -> list[ToolCallResult]:
-        """Internal engraved method for executing a batch of tool calls."""
-        tool_results: list[ToolCallResult] = []
-        for call in tool_calls:
-            await self.publisher.publish(events.BeforeToolCall(tool_call=call))
-            tool_name = call.name
-            tool = self._tool_registry.get(tool_name)
+        """Internal engraved method for executing a batch of tool calls.
 
-            if not tool:
-                result = f"Error: Tool '{tool_name}' not found."
-                await self.publisher.publish(
-                    events.ToolExecutionFailed(
-                        tool_call=call,
-                        error=RuntimeError(f"Tool '{tool_name}' not found."),
-                    )
+        The batch is walked in request order. Consecutive calls to tools
+        declared ``@concurrent`` run overlapped; any other call runs strictly
+        serially (it starts only after everything before it completed, and
+        everything after it waits). Results always come back in request order,
+        so history — and therefore glyff replay — is independent of completion
+        order.
+        """
+        results: dict[int, ToolCallResult] = {}
+        index = 0
+        while index < len(tool_calls):
+            if not self._allows_concurrency(tool_calls[index]):
+                results[index] = await self._call_one(tool_calls[index])
+                index += 1
+                continue
+            end = index + 1
+            while end < len(tool_calls) and self._allows_concurrency(tool_calls[end]):
+                end += 1
+            results.update(
+                await self._call_concurrent_group(
+                    list(enumerate(tool_calls[index:end], start=index))
                 )
-            else:
+            )
+            index = end
+        return [results[i] for i in range(len(tool_calls))]
+
+    def _allows_concurrency(self, call: ToolCallRequest) -> bool:
+        tool = self._tool_registry.get(call.name)
+        return tool is not None and tool.concurrent
+
+    async def _call_concurrent_group(
+        self, indexed_calls: list[tuple[int, ToolCallRequest]]
+    ) -> dict[int, ToolCallResult]:
+        """Run one batch segment of concurrency-safe calls, overlapped.
+
+        Identical calls (same tool and arguments) share a lane and run in
+        request order: glyff's sequencer numbers repeated executions of the
+        same content key by arrival, so letting duplicates race would let a
+        live run and its replay assign results to occurrences differently.
+
+        A ``PauseException`` (or any unexpected error) stops only its own
+        lane; the other lanes still run to completion — an engraved sibling's
+        finished work is committed and survives the pause — and then the
+        failure of the earliest call in request order propagates, so which
+        exception escapes does not depend on completion order.
+        """
+        if len(indexed_calls) == 1:
+            index, call = indexed_calls[0]
+            return {index: await self._call_one(call)}
+
+        lanes: dict[str, list[tuple[int, ToolCallRequest]]] = {}
+        for index, call in indexed_calls:
+            args_key = json.dumps(call.arguments, sort_keys=True, default=repr)
+            lanes.setdefault(f"{call.name}:{args_key}", []).append((index, call))
+
+        results: dict[int, ToolCallResult] = {}
+        failures: list[tuple[int, Exception]] = []
+
+        async def run_lane(lane: list[tuple[int, ToolCallRequest]]) -> None:
+            for index, call in lane:
                 try:
-                    result = await tool.invoke(call.arguments)
-                    await self.publisher.publish(
-                        events.AfterToolCall(tool_call=call, result=result)
-                    )
-                except PauseException:
-                    raise
+                    results[index] = await self._call_one(call)
                 except Exception as e:
-                    # A tool failure is never a retryable inference failure: we
-                    # stringify it into the history and feed it back to the model
-                    # so it can recover, then keep going.
-                    await self.publisher.publish(
-                        events.ToolExecutionFailed(tool_call=call, error=e)
-                    )
-                    result = (
-                        f"Error executing tool '{tool_name}': {type(e).__name__}({e})"
-                    )
-            tool_results.append(ToolCallResult(tool_call_id=call.id, result=result))
-        return tool_results
+                    failures.append((index, e))
+                    return
+
+        await asyncio.gather(*(run_lane(lane) for lane in lanes.values()))
+
+        if failures:
+            _, error = min(failures, key=lambda failure: failure[0])
+            raise error
+        return results
+
+    async def _call_one(self, call: ToolCallRequest) -> ToolCallResult:
+        """Execute a single tool call and fold any tool failure into its result."""
+        await self.publisher.publish(events.BeforeToolCall(tool_call=call))
+        tool_name = call.name
+        tool = self._tool_registry.get(tool_name)
+
+        if not tool:
+            result = f"Error: Tool '{tool_name}' not found."
+            await self.publisher.publish(
+                events.ToolExecutionFailed(
+                    tool_call=call,
+                    error=RuntimeError(f"Tool '{tool_name}' not found."),
+                )
+            )
+        else:
+            try:
+                result = await tool.invoke(call.arguments)
+                await self.publisher.publish(
+                    events.AfterToolCall(tool_call=call, result=result)
+                )
+            except PauseException:
+                raise
+            except Exception as e:
+                # A tool failure is never a retryable inference failure: we
+                # stringify it into the history and feed it back to the model
+                # so it can recover, then keep going.
+                await self.publisher.publish(
+                    events.ToolExecutionFailed(tool_call=call, error=e)
+                )
+                result = f"Error executing tool '{tool_name}': {type(e).__name__}({e})"
+        return ToolCallResult(tool_call_id=call.id, result=result)
 
     async def run(self) -> Any:
         """
