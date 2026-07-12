@@ -219,7 +219,7 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
             publisher=publisher,
             inference_middlewares=inference_middlewares,
             step_middlewares=step_middlewares,
-            history_store=context.history_store,
+            history_storage=context.history_storage,
         )
 
         # Only the inference itself is engraved, so glyff can replay it. The

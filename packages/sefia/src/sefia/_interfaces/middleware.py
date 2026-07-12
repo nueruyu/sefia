@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from .._tool_system import ToolRegistry
-from ..inference import HistoryItem, InferenceDecision
-from .history_store import HistoryStore
+from ..inference import InferenceDecision
+
+if TYPE_CHECKING:
+    from .._history import HistoryStore
 
 
 @dataclass
@@ -26,21 +27,15 @@ class StepContext:
     Context handed to a :class:`StepMiddleware` wrapping a single inference step
     (one call to the inference strategy).
 
-    ``step`` is the 0-based index of the step about to run. Rewrite ``history``
-    through :meth:`rewrite_history` to keep its store in sync.
+    ``step`` is the 0-based index of the step about to run (it equals
+    ``history.completed_steps``). ``history`` is the run's :class:`HistoryStore`
+    service: read the current items via ``history.items`` (immutable) and
+    reshape them via ``await history.rewrite(...)``.
     """
 
     step: int
-    history: list[HistoryItem]
+    history: "HistoryStore"
     tool_registry: ToolRegistry = field(default_factory=ToolRegistry)
-    history_store: HistoryStore | None = None
-
-    async def rewrite_history(self, items: Sequence[HistoryItem]) -> None:
-        """Persist and replace the run's history for this and later steps."""
-        new_items = list(items)
-        if self.history_store is not None:
-            await self.history_store.save(new_items)
-        self.history[:] = new_items
 
 
 class InferenceMiddleware(ABC):

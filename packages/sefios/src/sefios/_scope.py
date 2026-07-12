@@ -6,7 +6,7 @@ import glyff
 import glyff_file_store
 import sefia
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import HistoryStore, Profile, Policy
+from sefia import HistoryStorage, Profile, Policy
 from sefia.llm import LLMClient
 
 from ._session_state import bind_session_storage
@@ -24,7 +24,11 @@ class SessionScope:
     :class:`SessionStorage` to bind for that session. By default a
     :class:`FileSessionStorage` under ``session_dir`` is used.
 
-    ``history_store`` optionally persists each ``@infer`` run's history.
+    ``history_storage`` selects where each ``@infer`` run's history is
+    persisted. By default (``None``) the core :class:`~sefia.GlyffHistoryStorage`
+    stores it in the run's glyff metadata — durable and compactable with no
+    extra setup. Pass :class:`~sefios.SessionHistoryStorage` to keep it in the
+    session storage instead.
     """
 
     def __init__(
@@ -39,7 +43,7 @@ class SessionScope:
         max_steps: int | None = 25,
         max_repair_attempts: int = 2,
         session_storage_factory: Callable[[str], SessionStorage] | None = None,
-        history_store: HistoryStore | None = None,
+        history_storage: HistoryStorage | None = None,
     ):
         self.session_dir = session_dir
         self.model = model
@@ -50,7 +54,7 @@ class SessionScope:
         self.max_steps = max_steps
         self.max_repair_attempts = max_repair_attempts
         self.session_storage_factory = session_storage_factory
-        self.history_store = history_store
+        self.history_storage = history_storage
 
     @asynccontextmanager
     async def session(
@@ -116,7 +120,7 @@ class SessionScope:
                     policies=final_policies,
                     profiles=final_profiles,
                     stream=resolved_stream,
-                    history_store=self.history_store,
+                    history_storage=self.history_storage,
                     max_repair_attempts=self.max_repair_attempts,
                 ) as session:
                     yield session

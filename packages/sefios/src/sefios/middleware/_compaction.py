@@ -29,6 +29,13 @@ class HistoryCompactor(StepMiddleware):
     """
     Compacts the run's history before a step once it grows past ``max_items``.
 
+    The rewrite goes through ``ctx.history.rewrite``, so it is persisted before
+    the model sees it. Because history is durable (the default
+    ``GlyffHistoryStorage`` and ``SessionHistoryStorage`` both save each
+    snapshot), a resume loads the compacted history directly, so any compactor
+    is safe. Compaction changes the content subsequent steps are keyed on, so
+    the first step after a rewrite is a fresh model call.
+
     ``compact`` receives a copy of the history and returns the replacement; it
     may be synchronous or asynchronous. The default keeps ``keep_items`` at a
     decision boundary; ``keep_items`` defaults to half of ``max_items``.
@@ -56,9 +63,9 @@ class HistoryCompactor(StepMiddleware):
         ctx: StepContext,
         nxt: Callable[[], Awaitable[InferenceDecision]],
     ) -> InferenceDecision:
-        if len(ctx.history) > self.max_items:
-            compacted = await self._run_compact(list(ctx.history))
-            await ctx.rewrite_history(compacted)
+        if len(ctx.history.items) > self.max_items:
+            compacted = await self._run_compact(list(ctx.history.items))
+            await ctx.history.rewrite(compacted)
         return await nxt()
 
     async def _run_compact(self, history: list[HistoryItem]) -> list[HistoryItem]:

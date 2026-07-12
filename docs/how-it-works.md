@@ -22,8 +22,8 @@ At a high level:
    executor, run inside an *engraved* boundary.
 2. The executor loops, asking the strategy for the next model decision.
 3. Each model step and tool batch is engraved separately.
-4. On re-invocation, completed work replays and the run continues from the unfinished
-   step.
+4. History is saved after each step, so on re-invocation the run loads it and
+   continues from the unfinished step without re-entering the completed ones.
 
 ## `@infer`: calling a function runs an inference
 
@@ -63,13 +63,12 @@ loop:
 - **The tool batch is engraved** (`_call_tools_engraved`), so executed tools don't
   re-run on resume.
 - **History** is the accumulating list of `ToolCallDecision` / `ToolCallResult`
-  (`inference.py`) that gets rendered back into messages each step. Where it
-  lives is a seam: the run's `HistoryStore` (`_interfaces/history_store.py`)
-  is loaded at the start of each attempt and saved after every completed
-  step. The default `TransientHistoryStore` stores nothing — history stays
-  *derived*, rebuilt on resume by replaying the engraved steps (see below).
-  A persistent store (sefios' `DurableHistoryStore`) makes it *stored* state
-  instead; see "History: derived vs stored" below.
+  (`inference.py`) that gets rendered back into messages each step. It is owned
+  by a `HistoryStore` service (`_history.py`) over a swappable `HistoryStorage`
+  seam (`_interfaces/history_storage.py`): the executor loads a `HistorySnapshot`
+  at the start of each attempt and saves one after every completed step, so a
+  resumed run continues from the stored step count without re-entering the
+  finished steps. See "History storage and compaction" below.
 - **Two seams, kept apart:** *middleware* wraps the loop and can retry or
   short-circuit (control); the *event publisher* emits `BeforeInferenceStep`,
   `AfterToolCall`, etc. for handlers that can only observe — the publisher isolates a
@@ -185,8 +184,13 @@ to the durable execution identity. On a later invocation of the same session:
   time (correctness, not just cost); and
 - only the **unfinished** call actually executes.
 
-The nesting (run ⊃ step ⊃ tool batch) makes replay granular: resuming a turn that
-paused at step 4 replays steps 1–3 and the tools they called, then runs step 4.
+The nesting (run ⊃ step ⊃ tool batch) makes replay granular. On its own, glyff
+would rebuild a paused turn by replaying every completed step from its stored
+output. sefia's history store shortcuts that: the executor loads the saved
+`HistorySnapshot` and resumes at `completed_steps`, so steps that already
+finished are **not re-entered at all** — only the step interrupted mid-flight
+runs again, and glyff hands back the stored outputs of any engraved calls it had
+already completed (see "History storage and compaction").
 
 **Exceptions never poison a run.** glyff **never engraves an exception as a permanent
 result**: any exception that escapes an engraved call leaves that call **resumable**
@@ -202,41 +206,39 @@ again on re-invocation. sefia's control-flow pauses subclass `PauseException`
 a failure: `NeedsInput` (a tool awaiting input) and the recoverable `InferenceError`
 base are both pauses.
 
-## History: derived vs stored
+## History storage and compaction
 
-The step records above are keyed on their arguments — which include the
-history contents. Two consequences follow for the default (transient) setup:
-resuming rebuilds history by replaying **every** completed step, and mutating
-the history mid-run (compaction) changes the keys of all subsequent steps, so
-their replays would miss. For a run that terminates after a bounded number of
-steps this is exactly right: replay doubles as a correctness check, and the
-cost is bounded.
+The run's history is durable state, saved through a `HistoryStorage` after
+every completed step. The default `GlyffHistoryStorage` (`sefia/_history.py`)
+writes each `HistorySnapshot` into the run execution's glyff metadata, inside
+its own transaction scope so it **commits immediately** — even though the
+surrounding `@infer` run has not finished (a `Never`-returning chat loop never
+would). A resumed invocation re-enters the same run execution, loads the
+snapshot, and continues from `completed_steps`; the finished steps are never
+re-entered. Only the step interrupted mid-flight runs again, from its engraved
+record, which still matches because the loaded snapshot is byte-for-byte the
+history that step was keyed on. The executor records a step **after** its
+engraved calls committed, so a crash between the two is healed by that same
+replay. `completed_steps` is tracked in the snapshot (not derived from
+`len(items)`), so compaction can shrink the item list without skewing the step
+count or the step cap.
 
-For a long-lived run — a `Never`-returning chat loop that only ever pauses —
-both consequences bite: each resume replays an ever-growing prefix, and the
-history can never be compacted without invalidating the engraved steps. A
-persistent `HistoryStore` (`DurableHistoryStore` in sefios; pass it as
-`history_store=` to `Session` or `SessionScope`) cuts the dependency: the
-history is saved to the session storage after every completed step, keyed by
-the run's `ExecutionId` (the same scoping rule as `get_call_state_store`), and
-a resume loads that snapshot and continues — completed steps are never
-re-entered. Only the step that was interrupted mid-flight replays, via its
-engraved record, which still matches because the loaded snapshot is byte-for-
-byte the history that step was keyed on. The executor persists a step's
-decision and results only **after** its engraved calls committed, so a crash
-between the two is healed by that same replay.
-
-Compaction then becomes an ordinary rewrite of stored state:
-`HistoryCompactor` (a `StepMiddleware` in `sefios.middleware`) rewrites the
-history through `StepContext.rewrite_history` before the model call once it
-grows past a threshold — by default truncating to the most recent items at a
+The snapshot lives outside glyff's execution log, so it can be rewritten
+freely. `HistoryCompactor` (a `StepMiddleware` in `sefios.middleware`) rewrites
+the history through `ctx.history.rewrite` before the model call once it grows
+past a threshold — by default truncating to the most recent items at a
 decision boundary, or via a custom (even LLM-summarizing) compactor. The
-rewrite is persisted before the in-memory list is swapped, and glyff's
-execution log is untouched: the next step is simply a fresh model call keyed
-on the compacted content. With the transient store a compactor must be
-deterministic (a resume re-derives history by replay and re-applies it);
-with the durable store any compactor is safe — which is what makes an
-unbounded chat run compactable at all.
+rewrite is persisted before the in-memory list is swapped, and the next step is
+simply a fresh model call keyed on the compacted content. Because the history
+is durable, a resume loads the compacted snapshot directly, so any compactor is
+safe.
+
+The `HistoryStorage` seam is swappable: sefios' `SessionHistoryStorage` keeps
+the history in the session storage (keyed by the run's `ExecutionId`, the same
+scoping rule as `get_call_state_store`) instead of glyff metadata — useful to
+keep the glyff records lean or to inspect history alongside application state.
+Both are durable and compactable; they only differ in where the snapshot
+lives.
 
 ## Human-in-the-loop: pause = raise, resume = re-invoke
 
@@ -282,14 +284,14 @@ a single call swap the model/policies by key, resolved per-call in
 2. `@infer` engraves the run; the executor loops: model step (engraved) → "search"
    tool call (engraved) → model step → "ask human to approve" tool call.
 3. The input tool finds no input, records the prompt under its call-scoped state,
-   and raises `NeedsInput`. glyff keeps the run's completed steps, leaves the input
-   call resumable, and the exception surfaces; the handler returns `needs_input` + the
-   prompt.
+   and raises `NeedsInput`. The search step had already been recorded to the history
+   snapshot; the ask-input step had not. glyff leaves the input call resumable, and
+   the exception surfaces; the handler returns `needs_input` + the prompt.
 4. `POST /turn` again with the input (delivered via `accept_input`). `service.run`
-   re-enters: the search step and the
-   earlier model steps **replay their stored outputs** (the draft is identical), the
-   input tool re-runs, now finds the input, and returns it; the loop continues to the
-   final answer.
+   re-enters: the executor loads the snapshot and resumes at the ask-input step —
+   the completed search step is **not re-entered**. That step's model decision
+   replays its stored output (the draft is identical), the input tool re-runs, now
+   finds the input, and returns it; the loop continues to the final answer.
 
 Nothing ran between the two requests; the only thing that crossed the gap was rows in
 the store.

@@ -4,9 +4,8 @@ from typing import Self
 import glyff
 
 from ._context import ProfileBinding, SessionContext, context_var
-from ._history import TransientHistoryStore
 from ._interfaces import DecisionModelBuilder, Policy
-from ._interfaces.history_store import HistoryStore
+from ._interfaces.history_storage import HistoryStorage
 from ._profiles import Profile
 from ._tool_system import ToolCollector, ToolFunctionInspector
 from .llm._client import LLMClient
@@ -33,14 +32,14 @@ class Session:
         inspector: ToolFunctionInspector | None = None,
         decision_builder: DecisionModelBuilder | None = None,
         stream: bool = False,
-        history_store: HistoryStore | None = None,
+        history_storage: HistoryStorage | None = None,
         max_repair_attempts: int = 2,
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
         self._context_token = None
         self._policies: list[Policy] = list(policies) if policies is not None else []
-        self._history_store = history_store or TransientHistoryStore()
+        self._history_storage = history_storage
 
         # ``PydanticModelBackend`` is both a ToolFunctionInspector (for the
         # collector) and a DecisionModelBuilder (for the strategy); one shared
@@ -85,7 +84,7 @@ class Session:
             inference_strategy=self._inference_strategy,
             policies=tuple(self._policies),
             tool_collector=self._tool_collector,
-            history_store=self._history_store,
+            history_storage=self._history_storage,
             _profiles=self._profiles,
         )
         self._context_token = context_var.set(self._context)

@@ -1,9 +1,21 @@
 from datetime import datetime
 
 import pytest
-from sefia import StepContext
+from sefia import HistorySnapshot, HistoryStorage, HistoryStore, StepContext
 from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
 from sefios.middleware import StagnationDetector, StagnationError
+
+
+class _NoHistory(HistoryStorage):
+    async def load(self) -> HistorySnapshot:
+        return HistorySnapshot()
+
+    async def save(self, snapshot: HistorySnapshot) -> None:
+        pass
+
+
+def _empty_history() -> HistoryStore:
+    return HistoryStore(_NoHistory())
 
 
 async def _step(middleware: StagnationDetector, name: str, args: dict, step: int = 0):
@@ -15,7 +27,7 @@ async def _step(middleware: StagnationDetector, name: str, args: dict, step: int
     async def nxt():
         return decision
 
-    return await middleware.wrap(StepContext(step=step, history=[]), nxt)
+    return await middleware.wrap(StepContext(step=step, history=_empty_history()), nxt)
 
 
 class TestStagnationDetector:
@@ -64,7 +76,7 @@ class TestStagnationDetector:
         async def nxt():
             return ResultDecision(result="done")
 
-        decision = await middleware.wrap(StepContext(step=0, history=[]), nxt)
+        decision = await middleware.wrap(StepContext(step=0, history=_empty_history()), nxt)
         assert isinstance(decision, ResultDecision)
 
     async def test_records_each_call_in_a_multi_call_decision(self):
@@ -80,7 +92,7 @@ class TestStagnationDetector:
             return decision
 
         with pytest.raises(StagnationError):
-            await middleware.wrap(StepContext(step=0, history=[]), nxt)
+            await middleware.wrap(StepContext(step=0, history=_empty_history()), nxt)
 
     def test_hashes_nested_dictionaries_consistently(self):
         middleware = StagnationDetector()

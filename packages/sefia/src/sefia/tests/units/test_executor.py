@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from unittest.mock import AsyncMock
 
 import pytest
@@ -6,7 +5,8 @@ from sefia.exceptions import PauseException
 from pytest_mock import MockerFixture
 
 from sefia import (
-    HistoryStore,
+    HistorySnapshot,
+    HistoryStorage,
     InferenceContext,
     InferenceMiddleware,
     InferenceStrategy,
@@ -20,7 +20,6 @@ from sefia._executor import InferenceExecutor
 from sefia.event_system import EventHandler, EventPublisher
 from sefia.events import AttemptStart, StepStarted
 from sefia.inference import (
-    HistoryItem,
     ResultDecision,
     InferenceDecision,
     ToolCallDecision,
@@ -29,17 +28,19 @@ from sefia.inference import (
 )
 
 
-class _RecordingHistoryStore(HistoryStore):
-    def __init__(self, initial: list[HistoryItem] | None = None):
-        self.items: list[HistoryItem] = list(initial or [])
-        self.saves: list[list[HistoryItem]] = []
+class _InMemoryHistoryStorage(HistoryStorage):
+    """A non-glyff storage for unit tests, recording every saved snapshot."""
 
-    async def load(self) -> list[HistoryItem]:
-        return list(self.items)
+    def __init__(self, initial: HistorySnapshot | None = None):
+        self.snapshot = initial if initial is not None else HistorySnapshot()
+        self.saves: list[HistorySnapshot] = []
 
-    async def save(self, items: Sequence[HistoryItem]) -> None:
-        self.items = list(items)
-        self.saves.append(list(items))
+    async def load(self) -> HistorySnapshot:
+        return self.snapshot
+
+    async def save(self, snapshot: HistorySnapshot) -> None:
+        self.snapshot = snapshot
+        self.saves.append(snapshot)
 
 
 class _MaxStepsExceededError(Exception):
@@ -95,6 +96,11 @@ def executor_dependencies(mocker: MockerFixture):
     mock_publisher = mocker.AsyncMock(spec=EventPublisher)
 
     mock_collector.collect.return_value = ToolRegistry()
+
+    # The executor's default history storage is glyff-backed and needs a glyff
+    # context, which these unit tests don't set up. Swap it for an in-memory
+    # one so constructions that don't inject a storage still run.
+    mocker.patch("sefia._executor.GlyffHistoryStorage", _InMemoryHistoryStorage)
 
     def non_engrave(f):
         return f
@@ -510,19 +516,25 @@ class TestInferenceExecutor:
         with pytest.raises(ValueError, match="transient"):
             await executor.run()
 
-    async def test_resumes_loop_from_stored_history(self, executor_dependencies):
+    async def test_resumes_loop_from_stored_snapshot(self, executor_dependencies):
+        # A persistent history storage is the source of truth: the loop starts
+        # from the loaded snapshot, with the step index taken from the stored
+        # completed_steps (not re-derived from the item list) so compaction
+        # cannot skew it.
         (
             mock_strategy,
             mock_collector,
             mock_publisher,
             non_engrave,
         ) = executor_dependencies
-        stored: list[HistoryItem] = [
+        stored_items = (
             ToolCallDecision(
                 calls=[ToolCallRequest(id="1", name="a_tool", arguments={})]
             ),
             ToolCallResult(tool_call_id="1", result="earlier"),
-        ]
+        )
+        # completed_steps deliberately larger than the (compacted) item count.
+        snapshot = HistorySnapshot(items=stored_items, completed_steps=4)
         mock_strategy.decide_next_step.return_value = ResultDecision(result="done")
 
         executor = InferenceExecutor(
@@ -533,24 +545,28 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            history_store=_RecordingHistoryStore(initial=stored),
+            history_storage=_InMemoryHistoryStorage(snapshot),
         )
 
         result = await executor.run()
 
         assert result == "done"
         history = mock_strategy.decide_next_step.call_args.kwargs["history"]
-        assert history == stored
+        assert list(history) == list(stored_items)
         step_events = [
             call.args[0]
             for call in mock_publisher.publish.call_args_list
             if isinstance(call.args[0], StepStarted)
         ]
-        assert [event.step for event in step_events] == [1]
+        assert [event.step for event in step_events] == [4]
 
-    async def test_saves_history_snapshot_after_each_completed_step(
+    async def test_saves_snapshot_after_each_completed_step(
         self, executor_dependencies
     ):
+        # A snapshot is saved once the step's decision and tool results are
+        # complete — including a decision with no calls — so a resume never
+        # loads a history ending in a half-finished step, and completed_steps
+        # advances by one each time.
         (
             mock_strategy,
             mock_collector,
@@ -571,7 +587,7 @@ class TestInferenceExecutor:
         tool_registry.add(AsyncMock(return_value="tool result"), name="my_tool")
         mock_collector.collect.return_value = tool_registry
 
-        store = _RecordingHistoryStore()
+        storage = _InMemoryHistoryStorage()
         executor = InferenceExecutor(
             sample_func_with_self,
             (object(), "value"),
@@ -580,13 +596,16 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            history_store=store,
+            history_storage=storage,
         )
 
         await executor.run()
 
-        first_step = [decision, ToolCallResult(tool_call_id="1", result="tool result")]
-        assert store.saves == [first_step, [*first_step, empty_decision]]
+        first = (decision, ToolCallResult(tool_call_id="1", result="tool result"))
+        assert [(s.items, s.completed_steps) for s in storage.saves] == [
+            (first, 1),
+            ((*first, empty_decision), 2),
+        ]
 
     async def test_retry_middleware_publishes_attempt_start_per_attempt(
         self, executor_dependencies

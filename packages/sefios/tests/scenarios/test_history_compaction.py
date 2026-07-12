@@ -1,4 +1,10 @@
-"""Durable history compaction across a simulated process restart."""
+"""Durable history + compaction across a simulated process restart.
+
+Runs against both durable backends: the default ``GlyffHistoryStorage`` (history
+in the run's glyff metadata) and ``SessionHistoryStorage`` (history in the
+session storage). Every object is rebuilt for the second run, so the only bridge
+between runs is what was committed to disk before the pause.
+"""
 
 import json
 
@@ -9,7 +15,7 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Policy, Session, infer
 from sefia.llm import LLMResponse
 
-from sefios import DurableHistoryStore, FileSessionStorage, NeedsInput
+from sefios import FileSessionStorage, NeedsInput, SessionHistoryStorage
 from sefios._session_state import bind_session_storage
 from sefios.middleware import HistoryCompactor
 from sefios.tools import InputRequest, InputTool
@@ -62,8 +68,15 @@ class _Agent:
         ...
 
 
+# None exercises the default GlyffHistoryStorage (glyff metadata); the factory
+# exercises the sefios SessionStorage-backed alternative.
+@pytest.mark.parametrize(
+    "make_history_storage",
+    [None, lambda: SessionHistoryStorage()],
+    ids=["glyff-metadata", "session-storage"],
+)
 async def test_compacted_history_survives_restart_without_replaying_old_steps(
-    tmp_path, make_mock_llm
+    tmp_path, make_mock_llm, make_history_storage
 ):
     seen: list[InputRequest] = []
     answers: dict[str, str] = {}
@@ -87,6 +100,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
             base_dir=tmp_path / "state", serializer=PydanticSerializer()
         )
 
+    history_storage = make_history_storage() if make_history_storage else None
     compaction_policy = Policy(
         middleware=lambda: [HistoryCompactor(max_items=5, keep_items=2)]
     )
@@ -106,7 +120,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                     llm_client=mock_llm,
                     glyff_session=gs,
                     policies=[compaction_policy],
-                    history_store=DurableHistoryStore(),
+                    history_storage=history_storage,
                 ):
                     await _Agent(Notes(), InputTool(get_input=get_input)).chat()
 
@@ -122,7 +136,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                 llm_client=resumed_llm,
                 glyff_session=gs,
                 policies=[compaction_policy],
-                history_store=DurableHistoryStore(),
+                history_storage=history_storage,
             ):
                 result = await _Agent(Notes(), InputTool(get_input=get_input)).chat()
 

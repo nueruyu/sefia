@@ -1,9 +1,9 @@
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from . import events
-from ._history import TransientHistoryStore
+from ._history import GlyffHistoryStorage, HistoryStore
 from ._interfaces import InferenceStrategy
-from ._interfaces.history_store import HistoryStore
+from ._interfaces.history_storage import HistoryStorage
 from ._interfaces.middleware import (
     InferenceContext,
     InferenceMiddleware,
@@ -74,12 +74,12 @@ class InferenceExecutor:
         publisher: EventPublisher,
         inference_middlewares: list[InferenceMiddleware] | None = None,
         step_middlewares: list[StepMiddleware] | None = None,
-        history_store: HistoryStore | None = None,
+        history_storage: HistoryStorage | None = None,
     ):
         self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy
         self.publisher = publisher
-        self._history_store = history_store or TransientHistoryStore()
+        self._history = HistoryStore(history_storage or GlyffHistoryStorage())
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
 
@@ -205,38 +205,42 @@ class InferenceExecutor:
 
     async def _attempt_inference(self) -> Any:
         """Executes a single attempt of the inference loop, owning the step loop."""
-        history: list[HistoryItem] = await self._history_store.load()
-        step = sum(1 for item in history if isinstance(item, ToolCallDecision))
+        # The history store is the source of truth. The default persists to the
+        # run's glyff metadata, so a resumed run loads the saved snapshot and
+        # continues from the completed step count without re-entering the
+        # finished steps.
+        await self._history._load()
 
         while True:
-            await self.publisher.publish(events.StepStarted(step=step, history=history))
+            step = self._history.completed_steps
+            await self.publisher.publish(
+                events.StepStarted(step=step, history=self._history.items)
+            )
 
             step_ctx = StepContext(
                 step=step,
-                history=history,
+                history=self._history,
                 tool_registry=self._tool_registry,
-                history_store=self._history_store,
             )
 
             async def core() -> InferenceDecision:
-                return await self._next_step_engraved(history)
+                return await self._next_step_engraved(self._history._current())
 
             step_chain = _compose(self._step_middlewares, step_ctx, core)
             decision = await step_chain()
-            step += 1
 
             if isinstance(decision, ResultDecision):
                 return decision.result
 
             if isinstance(decision, ToolCallDecision):
-                history.append(decision)
-                if not decision.calls:
-                    await self._history_store.save(history)
-                    continue
-
-                tool_results = await self._call_tools_engraved(decision.calls)
-                history.extend(tool_results)
-                # Never persist a decision before all its tool calls commit.
-                await self._history_store.save(history)
+                if decision.calls:
+                    tool_results = await self._call_tools_engraved(decision.calls)
+                else:
+                    tool_results = []
+                # Recorded (and persisted) only after the step's engraved calls
+                # committed: a crash before this point resumes from the previous
+                # snapshot, and the engraved decision/tool records (keyed on that
+                # same history content) replay the missing step.
+                await self._history._record_step(decision, tool_results)
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")
