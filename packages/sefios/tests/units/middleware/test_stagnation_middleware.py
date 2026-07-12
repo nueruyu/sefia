@@ -1,7 +1,8 @@
 from datetime import datetime
 
 import pytest
-from sefia import HistorySnapshot, HistoryStorage, HistoryStore, StepContext
+from sefia import HistorySnapshot, HistoryStorage, StepContext
+from sefia._history import _History
 from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
 from sefios.middleware import StagnationDetector, StagnationError
 
@@ -14,8 +15,8 @@ class _NoHistory(HistoryStorage):
         pass
 
 
-def _empty_history() -> HistoryStore:
-    return HistoryStore(_NoHistory())
+def _empty_history() -> _History:
+    return _History(_NoHistory())
 
 
 async def _step(middleware: StagnationDetector, name: str, args: dict, step: int = 0):
@@ -76,7 +77,9 @@ class TestStagnationDetector:
         async def nxt():
             return ResultDecision(result="done")
 
-        decision = await middleware.wrap(StepContext(step=0, history=_empty_history()), nxt)
+        decision = await middleware.wrap(
+            StepContext(step=0, history=_empty_history()), nxt
+        )
         assert isinstance(decision, ResultDecision)
 
     async def test_records_each_call_in_a_multi_call_decision(self):

@@ -1,12 +1,22 @@
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Protocol
 
 from .._tool_system import ToolRegistry
-from ..inference import InferenceDecision
+from ..inference import HistoryItem, InferenceDecision
 
-if TYPE_CHECKING:
-    from .._history import HistoryStore
+
+class History(Protocol):
+    """History operations available to step middleware."""
+
+    @property
+    def items(self) -> Sequence[HistoryItem]: ...
+
+    @property
+    def completed_steps(self) -> int: ...
+
+    async def rewrite(self, items: Sequence[HistoryItem]) -> None: ...
 
 
 @dataclass
@@ -27,14 +37,12 @@ class StepContext:
     Context handed to a :class:`StepMiddleware` wrapping a single inference step
     (one call to the inference strategy).
 
-    ``step`` is the 0-based index of the step about to run (it equals
-    ``history.completed_steps``). ``history`` is the run's :class:`HistoryStore`
-    service: read the current items via ``history.items`` (immutable) and
-    reshape them via ``await history.rewrite(...)``.
+    ``step`` is the 0-based index of the step about to run. History items are
+    immutable; middleware may replace them through ``history.rewrite``.
     """
 
     step: int
-    history: "HistoryStore"
+    history: History
     tool_registry: ToolRegistry = field(default_factory=ToolRegistry)
 
 

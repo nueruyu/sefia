@@ -64,7 +64,7 @@ loop:
   re-run on resume.
 - **History** is the accumulating list of `ToolCallDecision` / `ToolCallResult`
   (`inference.py`) that gets rendered back into messages each step. It is owned
-  by a `HistoryStore` service (`_history.py`) over a swappable `HistoryStorage`
+  by an internal history service (`_history.py`) over a swappable `HistoryStorage`
   seam (`_interfaces/history_storage.py`): the executor loads a `HistorySnapshot`
   at the start of each attempt and saves one after every completed step, so a
   resumed run continues from the stored step count without re-entering the
@@ -226,12 +226,9 @@ count or the step cap.
 The snapshot lives outside glyff's execution log, so it can be rewritten
 freely. `HistoryCompactor` (a `StepMiddleware` in `sefios.middleware`) rewrites
 the history through `ctx.history.rewrite` before the model call once it grows
-past a threshold — by default truncating to the most recent items at a
-decision boundary, or via a custom (even LLM-summarizing) compactor. The
-rewrite is persisted before the in-memory list is swapped, and the next step is
-simply a fresh model call keyed on the compacted content. Because the history
-is durable, a resume loads the compacted snapshot directly, so any compactor is
-safe.
+past a threshold, truncating to the most recent items at a decision boundary.
+The rewrite is persisted before the in-memory list is swapped, and the next
+step is a fresh model call keyed on the compacted content.
 
 The `HistoryStorage` seam is swappable: sefios' `SessionHistoryStorage` keeps
 the history in the session storage (keyed by the run's `ExecutionId`, the same
@@ -250,9 +247,9 @@ that:
 
 The raise propagates out, glyff leaves that engraved tool call **resumable**, and the
 exception reaches your handler, which returns "needs input". On the next request the
-input is delivered with `accept_input` and you re-invoke the same session: every
-completed step replays, and the input tool runs again, now with input available,
-and returns it.
+input is delivered with `accept_input` and you re-invoke the same session. Its
+saved history is restored and the interrupted input tool continues with the
+provided value.
 
 Before tool execution, the default `sefios` policy also runs a step middleware that
 composes multiple input tool calls emitted in the same model decision into one

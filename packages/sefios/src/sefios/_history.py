@@ -27,9 +27,7 @@ class SessionHistoryStorage(HistoryStorage):
             glyff_ctx = get_glyff_context()
         except ContextNotSetError:
             glyff_ctx = None
-        execution_id = (
-            glyff_ctx.current_execution_id if glyff_ctx is not None else None
-        )
+        execution_id = glyff_ctx.current_execution_id if glyff_ctx is not None else None
         if execution_id is None:
             raise RuntimeError(
                 "SessionHistoryStorage can only be used inside an engraved "

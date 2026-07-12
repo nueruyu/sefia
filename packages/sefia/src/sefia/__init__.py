@@ -1,6 +1,7 @@
 from ._decorators import infer, policy, preview, profile
-from ._history import GlyffHistoryStorage, HistoryStore
+from ._history import GlyffHistoryStorage
 from ._interfaces import (
+    History,
     HistorySnapshot,
     HistoryStorage,
     InferenceContext,
@@ -33,7 +34,7 @@ __all__ = [
     "Policy",
     "HistorySnapshot",
     "HistoryStorage",
-    "HistoryStore",
+    "History",
     "GlyffHistoryStorage",
     "InferenceStrategy",
     "InferenceMiddleware",

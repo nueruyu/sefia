@@ -1,4 +1,4 @@
-from ._compaction import HistoryCompactor, truncate_history
+from ._compaction import HistoryCompactor
 from ._input import InputCallComposer
 from ._max_steps import MaxStepsExceededError, StepLimiter
 from ._retry import Retrier
@@ -12,5 +12,4 @@ __all__ = [
     "StagnationDetector",
     "MaxStepsExceededError",
     "StagnationError",
-    "truncate_history",
 ]

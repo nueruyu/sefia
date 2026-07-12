@@ -1,4 +1,5 @@
-from sefia import HistorySnapshot, HistoryStorage, HistoryStore
+from sefia import HistorySnapshot, HistoryStorage
+from sefia._history import _History
 from sefia.inference import (
     HistoryItem,
     ToolCallDecision,
@@ -35,7 +36,7 @@ class TestHistoryStore:
         storage = _InMemoryHistoryStorage(
             HistorySnapshot(items=(_decision(0), _result(0)), completed_steps=3)
         )
-        store = HistoryStore(storage)
+        store = _History(storage)
 
         await store._load()
 
@@ -43,7 +44,7 @@ class TestHistoryStore:
         assert store.completed_steps == 3
 
     async def test_items_is_an_immutable_snapshot(self):
-        store = HistoryStore(_InMemoryHistoryStorage())
+        store = _History(_InMemoryHistoryStorage())
         await store._record_step(_decision(0), [_result(0)])
 
         view = store.items
@@ -54,7 +55,7 @@ class TestHistoryStore:
 
     async def test_record_step_appends_and_persists_with_incremented_count(self):
         storage = _InMemoryHistoryStorage()
-        store = HistoryStore(storage)
+        store = _History(storage)
 
         await store._record_step(_decision(0), [_result(0)])
         await store._record_step(_decision(1), [])
@@ -67,7 +68,7 @@ class TestHistoryStore:
 
     async def test_rewrite_persists_before_swapping_and_keeps_step_count(self):
         storage = _InMemoryHistoryStorage()
-        store = HistoryStore(storage)
+        store = _History(storage)
         await store._record_step(_decision(0), [_result(0)])
         await store._record_step(_decision(1), [_result(1)])
 
@@ -82,9 +83,7 @@ class TestHistoryStore:
         store._storage = OrderProbe()
         await store.rewrite([_decision(1), _result(1)])
 
-        assert seen_in_memory == [
-            [_decision(0), _result(0), _decision(1), _result(1)]
-        ]
+        assert seen_in_memory == [[_decision(0), _result(0), _decision(1), _result(1)]]
         assert list(store.items) == [_decision(1), _result(1)]
         assert store.completed_steps == 2
         assert store._storage.saves[-1].completed_steps == 2

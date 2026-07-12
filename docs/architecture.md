@@ -80,7 +80,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `inference.py` | Plain data: the decision/history types and the call descriptor. | `FunctionInfo`, `ToolCallDecision`, `FinalAnswerDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |
-| `_history.py` | The history service + the default glyff-metadata-backed storage. | `HistoryStore`, `GlyffHistoryStorage` |
+| `_history.py` | Internal history state + the default glyff-metadata-backed storage. | `GlyffHistoryStorage` |
 | `_profiles.py` / `_metadata.py` | Per-call model/policy selection; the `__sefia_metadata__` store. | `Profile` |
 | `_tool_system.py` | The tool hierarchy, registry, and collector interfaces. | `Tool`, `SignatureTool`, `JsonSchemaTool`, `ToolDefinition`, `ToolRegistry`, `ToolCollector` |
 | `tool_collectors/` | Collector implementations: default discovery (a held field's public surface, by class-level annotation or runtime type), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |

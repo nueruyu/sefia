@@ -1,10 +1,10 @@
 from sefia import (
     HistorySnapshot,
     HistoryStorage,
-    HistoryStore,
     StepContext,
     ToolRegistry,
 )
+from sefia._history import _History
 from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
 from sefios.middleware import InputCallComposer
 from sefios.tools import InputTool
@@ -20,8 +20,8 @@ class _NoHistory(HistoryStorage):
         pass
 
 
-def _empty_history() -> HistoryStore:
-    return HistoryStore(_NoHistory())
+def _empty_history() -> _History:
+    return _History(_NoHistory())
 
 
 def _human_registry() -> ToolRegistry:

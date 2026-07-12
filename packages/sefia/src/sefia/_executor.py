@@ -1,7 +1,7 @@
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from . import events
-from ._history import GlyffHistoryStorage, HistoryStore
+from ._history import GlyffHistoryStorage, _History
 from ._interfaces import InferenceStrategy
 from ._interfaces.history_storage import HistoryStorage
 from ._interfaces.middleware import (
@@ -79,7 +79,7 @@ class InferenceExecutor:
         self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy
         self.publisher = publisher
-        self._history = HistoryStore(history_storage or GlyffHistoryStorage())
+        self._history = _History(history_storage or GlyffHistoryStorage())
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
 
@@ -205,10 +205,6 @@ class InferenceExecutor:
 
     async def _attempt_inference(self) -> Any:
         """Executes a single attempt of the inference loop, owning the step loop."""
-        # The history store is the source of truth. The default persists to the
-        # run's glyff metadata, so a resumed run loads the saved snapshot and
-        # continues from the completed step count without re-entering the
-        # finished steps.
         await self._history._load()
 
         while True:
@@ -237,10 +233,7 @@ class InferenceExecutor:
                     tool_results = await self._call_tools_engraved(decision.calls)
                 else:
                     tool_results = []
-                # Recorded (and persisted) only after the step's engraved calls
-                # committed: a crash before this point resumes from the previous
-                # snapshot, and the engraved decision/tool records (keyed on that
-                # same history content) replay the missing step.
+                # Do not persist a decision before its tool calls commit.
                 await self._history._record_step(decision, tool_results)
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")
