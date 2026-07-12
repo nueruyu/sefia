@@ -38,8 +38,6 @@ class TestTransientHistoryStore:
 
 class TestStepContextRewriteHistory:
     async def test_rewrites_the_shared_list_in_place(self):
-        # The executor holds the same list object; the rewrite must mutate it
-        # in place so the loop (and other middleware) see the new content.
         history = _sample_history()
         ctx = StepContext(step=1, history=history)
 
@@ -54,8 +52,6 @@ class TestStepContextRewriteHistory:
 
         class OrderProbe(_RecordingHistoryStore):
             async def save(self, items: Sequence[HistoryItem]) -> None:
-                # The in-memory history must still be the old content when the
-                # store commits, so a failed save loses nothing.
                 observed_at_save.append(list(history))
                 await super().save(items)
 

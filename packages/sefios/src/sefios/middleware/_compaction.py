@@ -11,12 +11,9 @@ Compactor = Callable[
 
 def truncate_history(history: list[HistoryItem], keep_items: int) -> list[HistoryItem]:
     """
-    Keep the most recent ``keep_items`` history items, aligned to a decision
-    boundary: leading ``ToolCallResult``s whose ``ToolCallDecision`` was cut
-    off are dropped too, so the history never starts with an orphaned result.
-    The run's task itself is not part of the history — the function's
-    arguments are rendered into the prompt every step — so truncation only
-    discards old tool interactions.
+    Keep the newest items starting at a decision boundary.
+
+    Results whose decision was discarded are dropped as well.
     """
     if len(history) <= keep_items:
         return list(history)
@@ -32,22 +29,9 @@ class HistoryCompactor(StepMiddleware):
     """
     Compacts the run's history before a step once it grows past ``max_items``.
 
-    The rewrite goes through ``StepContext.rewrite_history``, so it is
-    persisted to the run's history store before the model sees it. With a
-    persistent store (``DurableHistoryStore``) any compactor is safe: a resume
-    loads the compacted snapshot instead of rebuilding history by replay. With
-    the default transient store, only a *deterministic* compactor (like the
-    default truncation) is replay-safe — a resume re-derives history by replay
-    and must re-produce the same rewrite, or the engraved steps keyed on the
-    compacted content will not be found. Either way, compaction changes the
-    content subsequent steps are keyed on, so the first step after a rewrite
-    is a fresh model call.
-
     ``compact`` receives a copy of the history and returns the replacement; it
-    may be sync or async (e.g. an LLM summarizer — persistent store only).
-    When omitted, the default keeps the most recent ``keep_items`` items
-    (``max_items // 2`` if unset), cut at a decision boundary via
-    :func:`truncate_history`.
+    may be synchronous or asynchronous. The default keeps ``keep_items`` at a
+    decision boundary; ``keep_items`` defaults to half of ``max_items``.
     """
 
     def __init__(

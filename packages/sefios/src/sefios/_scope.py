@@ -24,10 +24,7 @@ class SessionScope:
     :class:`SessionStorage` to bind for that session. By default a
     :class:`FileSessionStorage` under ``session_dir`` is used.
 
-    ``history_store`` selects how each ``@infer`` run's history is persisted;
-    pass :class:`~sefios.DurableHistoryStore` to store it in the session
-    storage (required for history compaction on long-lived runs). By default
-    history stays derived from glyff replay.
+    ``history_store`` optionally persists each ``@infer`` run's history.
     """
 
     def __init__(

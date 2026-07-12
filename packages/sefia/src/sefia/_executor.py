@@ -205,10 +205,6 @@ class InferenceExecutor:
 
     async def _attempt_inference(self) -> Any:
         """Executes a single attempt of the inference loop, owning the step loop."""
-        # The history store is the source of truth: with the default transient
-        # store this loads empty and history is rebuilt by replaying the
-        # engraved steps below; with a persistent store a resumed run continues
-        # from the saved snapshot without re-entering the completed steps.
         history: list[HistoryItem] = await self._history_store.load()
         step = sum(1 for item in history if isinstance(item, ToolCallDecision))
 
@@ -240,10 +236,7 @@ class InferenceExecutor:
 
                 tool_results = await self._call_tools_engraved(decision.calls)
                 history.extend(tool_results)
-                # Saved only after the step's engraved calls committed: a crash
-                # before this point resumes from the previous snapshot, and the
-                # engraved decision/tool records (keyed on that same history
-                # content) replay the missing step instead of re-running it.
+                # Never persist a decision before all its tool calls commit.
                 await self._history_store.save(history)
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")

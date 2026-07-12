@@ -511,9 +511,6 @@ class TestInferenceExecutor:
             await executor.run()
 
     async def test_resumes_loop_from_stored_history(self, executor_dependencies):
-        # A persistent history store is the source of truth: the loop starts
-        # from the loaded snapshot (with the step index derived from it)
-        # instead of an empty history.
         (
             mock_strategy,
             mock_collector,
@@ -554,9 +551,6 @@ class TestInferenceExecutor:
     async def test_saves_history_snapshot_after_each_completed_step(
         self, executor_dependencies
     ):
-        # A snapshot is saved once the step's decision and tool results are
-        # complete — including a decision with no calls — so a resume never
-        # loads a history ending in a half-finished step.
         (
             mock_strategy,
             mock_collector,

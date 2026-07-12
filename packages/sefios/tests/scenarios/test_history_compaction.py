@@ -1,15 +1,4 @@
-"""Durable history + compaction across a simulated process restart.
-
-The distinguishing property of ``DurableHistoryStore``: the run's history is
-stored state, independent of glyff's engraved execution log. A
-``HistoryCompactor`` can therefore rewrite it mid-run without breaking replay,
-and a resumed run continues from the compacted snapshot — the compacted-away
-steps are never replayed, and the model never sees them again.
-
-Every object (glyff backend, session storage, tools, LLM client) is rebuilt
-for the second run, so the only bridge between the runs is what was committed
-to disk before the pause.
-"""
+"""Durable history compaction across a simulated process restart."""
 
 import json
 
@@ -98,13 +87,10 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
             base_dir=tmp_path / "state", serializer=PydanticSerializer()
         )
 
-    # Compacts once the history exceeds 5 items, keeping the last completed
-    # step: after three note-taking steps (6 items) only the third survives.
     compaction_policy = Policy(
         middleware=lambda: [HistoryCompactor(max_items=5, keep_items=2)]
     )
 
-    # --- First run: three tool steps, compaction, then a pause. ---
     mock_llm = make_mock_llm(
         [
             _note_response("zero"),
@@ -124,14 +110,11 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                 ):
                     await _Agent(Notes(), InputTool(get_input=get_input)).chat()
 
-    # The fourth model call ran after compaction: the model saw fewer history
-    # messages than the (uncompacted) third call did.
     assert len(mock_llm.requests) == 4
     assert len(mock_llm.requests[3]["messages"]) < len(mock_llm.requests[2]["messages"])
 
     answers[seen[0].interaction_id] = "No, that's all."
 
-    # --- Second run: rebuilt from disk; continues from the compacted history. ---
     resumed_llm = make_mock_llm([_RESULT_RESPONSE])
     async with make_glyff_session() as gs:
         with bind_session_storage(make_state_storage()):
@@ -144,11 +127,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                 result = await _Agent(Notes(), InputTool(get_input=get_input)).chat()
 
     assert result == "All done."
-    # One model call: the paused step replayed from its engraved record (keyed
-    # on the compacted history the store handed back), and the compacted-away
-    # steps were never re-entered at all.
     assert len(resumed_llm.requests) == 1
-    # The model still sees the surviving step but not the compacted-away ones.
     resumed_messages = json.dumps(resumed_llm.requests[0]["messages"])
     assert "noted: two" in resumed_messages
     assert "noted: zero" not in resumed_messages
