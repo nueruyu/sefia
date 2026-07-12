@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..event_system import Event
+from ..exceptions import InvalidInferenceResponseError
 from ._messages import LLMResponse, Message
 
 
@@ -13,6 +14,19 @@ class BeforeLLMCall(Event):
     messages: list[Message]
     tools: list[dict] | None
     output_schema: dict | None
+
+
+@dataclass(frozen=True)
+class LLMResponseRepairAttempt(Event):
+    """
+    Event fired when an invalid LLM response is about to be retried with
+    corrective feedback appended to the conversation.
+
+    ``attempt`` is the 1-based number of the repair attempt about to run.
+    """
+
+    error: InvalidInferenceResponseError
+    attempt: int
 
 
 @dataclass(frozen=True)
