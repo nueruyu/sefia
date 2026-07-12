@@ -1,12 +1,12 @@
 from sefia import infer
-from sefios.tools import HumanInputTool, WebSearchTool
+from sefios.tools import InputTool, WebSearchTool
 
 from .models import ArticleRequest, NewsArticle
 
 
 class RequirementsClarifier:
-    def __init__(self, human_input: HumanInputTool):
-        self._human_input = human_input
+    def __init__(self, input_tool: InputTool):
+        self._input = input_tool
 
     @infer
     async def clarify_request(self) -> ArticleRequest:
@@ -16,7 +16,7 @@ class RequirementsClarifier:
         Your goal is to produce a concrete article brief for the downstream
         researcher and writer.
 
-        First, use the HumanInputTool to obtain the user's initial article
+        First, use the InputTool to obtain the user's initial article
         request. Treat that answer as the source request; do not ask the user to
         restate it. Then, if the request lacks important details, ask one
         focused follow-up question at a time. Repeat this only until critical
@@ -55,8 +55,8 @@ class Researcher:
 
 
 class NewsWriter:
-    def __init__(self, human_input: HumanInputTool, researcher: Researcher):
-        self._human_input = human_input
+    def __init__(self, input_tool: InputTool, researcher: Researcher):
+        self._input = input_tool
         self._researcher = researcher
 
     @infer
@@ -67,10 +67,10 @@ class NewsWriter:
         Write a news article for the clarified request, using the provided sources.
         1. Briefly review the sources to understand the key points.
         2. Write a draft that follows the topic, angle, audience, and requirements.
-        3. Ask the user for feedback on the draft's direction using the HumanInputTool
+        3. Ask the user for feedback on the draft's direction using the InputTool
            at most once.
         4. After receiving any feedback, apply it and return the final NewsArticle.
-           Do not ask another HumanInputTool question unless the feedback is
+           Do not ask another InputTool question unless the feedback is
            impossible to apply without a specific missing fact from the user.
         5. If the feedback asks to see the draft, change language, continue, add
            a point, remove a point, or proceed, treat that as actionable feedback

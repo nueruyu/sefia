@@ -7,7 +7,7 @@ SessionSource = Literal["explicit", "active", "created"]
 
 
 class UnknownSessionError(Exception):
-    """Raised when a requested CLI session is not known."""
+    """Raised when a requested session is not known to the workspace."""
 
     def __init__(self, session_id: str):
         super().__init__(f"Unknown session: {session_id}")
@@ -16,7 +16,7 @@ class UnknownSessionError(Exception):
 
 @dataclass(frozen=True)
 class ResolvedSession:
-    """A resolved session for a CLI command invocation."""
+    """A resolved session for one application invocation."""
 
     session_id: str
     is_new: bool
@@ -24,12 +24,16 @@ class ResolvedSession:
 
 
 class SessionManager:
-    """Manages the lifecycle of CLI sessions, including the active session ID."""
+    """Manages the lifecycle of application sessions, including the active one.
+
+    Registered session ids and the active session id are persisted as plain
+    files under ``session_dir``, so they survive across process invocations.
+    """
 
     def __init__(self, session_dir: Path):
         self._active_session_file = session_dir / "active_session.txt"
         self._sessions_file = session_dir / "sessions.txt"
-        session_dir.mkdir(exist_ok=True)
+        session_dir.mkdir(parents=True, exist_ok=True)
 
     def get_active_session_id(self) -> str | None:
         """Gets the ID of the currently active session, if one exists."""
@@ -47,7 +51,7 @@ class SessionManager:
         return str(uuid.uuid4())
 
     def session_exists(self, session_id: str) -> bool:
-        """Returns whether the session is known to this CLI workspace."""
+        """Returns whether the session is known to this workspace."""
         return session_id in self._read_registered_session_ids()
 
     def switch_active_session(self, session_id: str) -> str:
@@ -70,7 +74,7 @@ class SessionManager:
         return session_id
 
     def resolve_session(self, session_id: str | None) -> ResolvedSession:
-        """Resolves the session to use for a CLI command."""
+        """Resolves the session to use for an application invocation."""
         if session_id is not None:
             if not self.session_exists(session_id):
                 raise UnknownSessionError(session_id)
