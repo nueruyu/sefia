@@ -15,7 +15,7 @@ from .._interfaces import (
     ResultLLMDecision,
     ToolCallsLLMDecision,
 )
-from .._tool_system import Tool, ToolRegistry
+from .._tool_system import Tool, ToolRegistry, capability_names
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from ..inference import (
@@ -392,10 +392,13 @@ class LLMInferenceStrategy(InferenceStrategy):
         system_content = function_info.instructions + system_prompt_addition
         messages.append(Message(role="system", content=system_content))
 
+        excluded = capability_names(
+            function_info.bound_arguments, function_info.type_hints
+        )
         prompt_arguments = {
             name: value
             for name, value in function_info.bound_arguments.items()
-            if name != "self"
+            if name not in excluded
         }
         user_prompt = (
             "Task arguments are XML. Values in <string> may be wrapped in "

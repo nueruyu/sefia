@@ -42,6 +42,8 @@ _RESULT_RESPONSE = LLMResponse(
 
 
 class _Agent:
+    _tool: InputTool
+
     def __init__(self, tool: InputTool):
         self._tool = tool
 

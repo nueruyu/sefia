@@ -1,13 +1,24 @@
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Protocol
 
 import pytest
 
-from sefia import infer
+from sefia import Tools, infer
+from sefia._tool_system import Capability, capabilities
 from sefia.exceptions import ToolConflictError
 from sefia.pydantic import PydanticModelBackend
 from sefia.tool_collectors import DefaultToolCollector
 
 from ..conftest import WebToolkit
+
+
+def _collect_self(instance: object):
+    """Collect tools with ``instance`` as an @infer method's ``self`` capability."""
+    return DefaultToolCollector().collect([Capability(value=instance, declared=None)])
+
+
+# --------------------------------------------------------------------------- #
+# Schema generation (unchanged surface)
+# --------------------------------------------------------------------------- #
 
 
 def example_func(a: int, b: str = "default") -> bool:
@@ -41,9 +52,7 @@ def test_schema_builder_sanitizes_complex_names():
                 pass
 
     name = backend.tool_name(Outer.Inner.my_method)
-    # __qualname__ includes enclosing scope; verify it ends with the expected suffix
     assert name.endswith("Outer_Inner_my_method")
-    # verify no dots or other unsafe characters remain
     assert "." not in name
     assert "<" not in name
 
@@ -55,7 +64,42 @@ def test_schema_builder_caches_results():
     assert definition1 is definition2
 
 
-class GreetingToolkit:
+# --------------------------------------------------------------------------- #
+# Capability classification
+# --------------------------------------------------------------------------- #
+
+
+class ToolkitA(Tools):
+    async def do_a(self) -> str:
+        """Do A."""
+        return "a"
+
+
+def test_self_is_a_capability_parameter_by_convention():
+    caps = capabilities({"self": object(), "topic": "x"}, {"topic": str})
+    names = {c.declared for c in caps}
+    # self classified (declared None); topic (plain data) excluded.
+    assert len(caps) == 1
+    assert names == {None}
+
+
+def test_a_role_marked_parameter_is_a_capability_parameter():
+    kit = ToolkitA()
+    caps = capabilities({"kit": kit, "topic": "x"}, {"kit": ToolkitA, "topic": str})
+    assert [c.value for c in caps] == [kit]
+
+
+def test_a_plain_typed_parameter_is_task_data_not_a_capability():
+    caps = capabilities({"topic": "x", "count": 3}, {"topic": str, "count": int})
+    assert caps == []
+
+
+# --------------------------------------------------------------------------- #
+# The Tools gate — held fields
+# --------------------------------------------------------------------------- #
+
+
+class GreetingToolkit(Tools):
     async def greet(self, name: str) -> str:
         """Greet someone by name."""
         return f"Hello, {name}"
@@ -64,133 +108,103 @@ class GreetingToolkit:
 
 
 class MyAgent:
+    _toolkit: WebToolkit  # private, Tools-bearing → scanned
+    greeter: GreetingToolkit  # public, Tools-bearing → scanned
+
     def __init__(self, toolkit: WebToolkit):
-        self._toolkit = toolkit  # private member → its public methods are scanned
-        self.greeter = GreetingToolkit()  # public member → also scanned
+        self._toolkit = toolkit
+        self.greeter = GreetingToolkit()
 
 
-def test_collect_tools_from_public_and_private_members():
-    agent = MyAgent(WebToolkit())
-    collector = DefaultToolCollector()
-    registry = collector.collect(agent)
+def test_collect_tools_from_public_and_private_role_marked_members():
+    registry = _collect_self(MyAgent(WebToolkit()))
 
     tool_names = set(registry.get_names())
-    # Held in a private attribute.
     assert "WebToolkit_search" in tool_names
     assert "WebToolkit_fetch_content" in tool_names
-    # Held in a public attribute.
     assert "GreetingToolkit_greet" in tool_names
     assert len(tool_names) == 3
-    # The private method of a held dependency stays internal.
+    # A held toolkit's own private method stays internal.
     assert not any("internal_helper" in name for name in tool_names)
 
 
-class ConflictingAgent:
-    def __init__(self):
-        self._kit1 = WebToolkit()
-        self._kit2 = WebToolkit()  # same tool names → conflict
+class AppConfig:
+    """A held dependency that is not a toolkit — must never leak."""
+
+    def public_setting(self) -> str:
+        return "leaked"
 
 
-def test_collect_tools_with_conflict_raises_error():
-    agent = ConflictingAgent()
-    collector = DefaultToolCollector()
-    with pytest.raises(ToolConflictError):
-        collector.collect(agent)
-
-
-class SelfMethodAgent:
-    """A class's own methods are never its own tools — public or private."""
+class AgentWithNonToolMember:
+    _web: WebToolkit
+    _config: AppConfig  # not Tools → gated out
 
     def __init__(self):
-        self._note = "held primitive, not a tool provider"
-
-    async def public_method(self, value: int) -> int:
-        """A public helper, but it belongs to the running instance."""
-        return value
-
-    async def _private_method(self, value: int) -> int:
-        """A private helper."""
-        return value
-
-    @infer
-    async def run(self, task: str) -> str:
-        """An inference entry point — also never a self-tool."""
-        ...
+        self._web = WebToolkit()
+        self._config = AppConfig()
 
 
-def test_collect_never_exposes_the_instance_own_methods():
-    collector = DefaultToolCollector()
-    registry = collector.collect(SelfMethodAgent())
+def test_a_non_tools_held_member_is_gated_out():
+    registry = _collect_self(AgentWithNonToolMember())
 
-    # Nothing is collected: the instance holds no dependencies, and its own
-    # methods (public, private, or @infer) are never offered back to itself.
+    tool_names = set(registry.get_names())
+    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+    assert not any("setting" in name for name in tool_names)
+
+
+class UnannotatedFieldAgent:
+    """No class-level annotation → fail-closed, nothing discovered."""
+
+    def __init__(self, web: WebToolkit):
+        self._web = web  # held, but undeclared at class level
+
+
+def test_an_undeclared_field_exposes_nothing_fail_closed():
+    registry = _collect_self(UnannotatedFieldAgent(WebToolkit()))
     assert registry.get_names() == []
 
 
-class SubAgent:
-    """A nested agent whose @infer method is a tool once held as a dependency."""
-
-    @infer
-    async def analyze(self, topic: str) -> str:
-        """Analyze the topic."""
-        ...
-
-    def _helper(self) -> None: ...
+# --------------------------------------------------------------------------- #
+# Plain functions get tools through a role-marked parameter
+# --------------------------------------------------------------------------- #
 
 
-class OuterAgent:
-    def __init__(self, sub: SubAgent):
-        self._sub = sub  # held agent → its public methods, incl. @infer, are tools
-
-
-def test_collect_exposes_a_held_agent_infer_method_as_a_tool():
-    registry = DefaultToolCollector().collect(OuterAgent(SubAgent()))
+def test_a_plain_function_gets_tools_from_a_role_marked_parameter():
+    kit = WebToolkit()
+    caps = capabilities({"kit": kit, "topic": "x"}, {"kit": WebToolkit, "topic": str})
+    registry = DefaultToolCollector().collect(caps)
 
     tool_names = set(registry.get_names())
-    assert "SubAgent_analyze" in tool_names
-    assert not any("_helper" in name for name in tool_names)
-    assert len(tool_names) == 1
+    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
 
 
-class ExternalLikeClient:
-    """Simulates a third-party class we cannot modify."""
+def test_annotated_use_site_marker_gates_a_field_in():
+    class VendorClient:  # third-party-like: does not inherit Tools
+        async def fetch(self, url: str) -> str:
+            """Fetch a URL."""
+            return url
 
-    async def fetch(self, url: str) -> str:
-        """Fetch a URL."""
-        return url
+    class Agent:
+        _client: Annotated[VendorClient, Tools]
 
-    def _internal(self) -> None: ...
+        def __init__(self):
+            self._client = VendorClient()
 
-
-class RuntimeFallbackAgent:
-    """No class-level annotation on the field → falls back to the runtime type."""
-
-    def __init__(self, client):
-        self._client = client
-
-
-def test_collect_falls_back_to_runtime_type_without_class_level_annotation():
-    registry = DefaultToolCollector().collect(
-        RuntimeFallbackAgent(ExternalLikeClient())
-    )
-
-    tool_names = set(registry.get_names())
-    assert "ExternalLikeClient_fetch" in tool_names
-    assert not any("internal" in name for name in tool_names)
-    assert len(tool_names) == 1
+    registry = _collect_self(Agent())
+    names = registry.get_names()
+    assert len(names) == 1
+    assert names[0].endswith("VendorClient_fetch")
 
 
-class ReadOnlyWeb(Protocol):
+# --------------------------------------------------------------------------- #
+# Surface protocol on `self`
+# --------------------------------------------------------------------------- #
+
+
+class ReadOnlyWeb(Tools, Protocol):
     async def search(self, q: str) -> list[str]:
         """Search the web."""
         ...
-
-
-class ProtocolNarrowedAgent:
-    _web: ReadOnlyWeb  # class-level annotation → only the Protocol's members
-
-    def __init__(self, web: "BroadWebClient"):
-        self._web = web
 
 
 class BroadWebClient:
@@ -203,38 +217,82 @@ class BroadWebClient:
         return None
 
 
+class ProtocolNarrowedAgent:
+    _web: ReadOnlyWeb  # declared as the narrowing protocol
+
+    def __init__(self, web: BroadWebClient):
+        self._web = web
+
+
 def test_collect_narrows_a_protocol_annotated_field_to_its_declared_members():
-    registry = DefaultToolCollector().collect(ProtocolNarrowedAgent(BroadWebClient()))
-
-    tool_names = set(registry.get_names())
-    assert tool_names == {"ReadOnlyWeb_search"}
+    registry = _collect_self(ProtocolNarrowedAgent(BroadWebClient()))
+    assert set(registry.get_names()) == {"ReadOnlyWeb_search"}
 
 
-async def test_collect_uses_the_protocol_method_docstring_for_the_schema():
-    registry = DefaultToolCollector().collect(ProtocolNarrowedAgent(BroadWebClient()))
-    tool_info = registry.get("ReadOnlyWeb_search")
-    assert tool_info is not None
-
+async def test_collect_uses_the_protocol_method_docstring_and_dispatches_to_impl():
+    registry = _collect_self(ProtocolNarrowedAgent(BroadWebClient()))
+    tool = registry.get("ReadOnlyWeb_search")
+    assert tool is not None
     # The Protocol's own docstring is used, not the implementation's.
-    assert tool_info.definition().description == "Search the web."
-
+    assert tool.definition().description == "Search the web."
     # Invocation still dispatches to the concrete implementation.
-    result = await tool_info.invoke({"q": "sefia"})
-    assert result == ["sefia"]
+    assert await tool.invoke({"q": "sefia"}) == ["sefia"]
+
+
+class ResearchSurface(Tools, Protocol):
+    """Surface that opts an instance's own private method in, and re-narrows a
+    held field via a read-only property (the invariance-safe form)."""
+
+    @property
+    def _web(self) -> ReadOnlyWeb: ...
+
+    async def _score(self, url: str) -> float: ...
+
+
+class Researcher:
+    _web: BroadWebClient
+
+    def __init__(self):
+        self._web = BroadWebClient()
+
+    async def _score(self, url: str) -> float:
+        """Score a URL."""
+        return 1.0
+
+    @infer
+    async def run(self, topic: str) -> str:
+        """Research the topic."""
+        ...
+
+
+def test_surface_protocol_opts_in_a_private_method_and_renarrows_a_field():
+    registry = DefaultToolCollector().collect(
+        [Capability(value=Researcher(), declared=ResearchSurface)]
+    )
+    tool_names = set(registry.get_names())
+    # tier 0: the instance's own _score (declared by the surface protocol)
+    assert "ResearchSurface__score" in tool_names
+    # tier 1: _web re-narrowed to ReadOnlyWeb, so only search (not delete_index)
+    assert "ReadOnlyWeb_search" in tool_names
+    assert not any("delete_index" in name for name in tool_names)
+    assert len(tool_names) == 2
+
+
+# --------------------------------------------------------------------------- #
+# Concrete annotations, Optional, Annotated-with-extras
+# --------------------------------------------------------------------------- #
 
 
 class ConcreteAnnotatedAgent:
-    _web: WebToolkit  # class-level annotation to a concrete class
+    _web: WebToolkit
 
     def __init__(self, web: WebToolkit):
         self._web = web
 
 
 def test_collect_uses_a_concrete_class_level_annotation():
-    registry = DefaultToolCollector().collect(ConcreteAnnotatedAgent(WebToolkit()))
-
-    tool_names = set(registry.get_names())
-    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+    registry = _collect_self(ConcreteAnnotatedAgent(WebToolkit()))
+    assert set(registry.get_names()) == {"WebToolkit_search", "WebToolkit_fetch_content"}
 
 
 class OptionalAnnotatedAgent:
@@ -245,25 +303,42 @@ class OptionalAnnotatedAgent:
 
 
 def test_collect_unwraps_an_optional_class_level_annotation():
-    registry = DefaultToolCollector().collect(OptionalAnnotatedAgent(WebToolkit()))
+    registry = _collect_self(OptionalAnnotatedAgent(WebToolkit()))
+    assert set(registry.get_names()) == {"WebToolkit_search", "WebToolkit_fetch_content"}
 
-    tool_names = set(registry.get_names())
-    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+
+class AnnotatedMetadataAgent:
+    _web: Annotated[WebToolkit, "some metadata"]
+
+    def __init__(self, web: WebToolkit):
+        self._web = web
+
+
+def test_collect_unwraps_annotated_metadata_to_the_underlying_class():
+    registry = _collect_self(AnnotatedMetadataAgent(WebToolkit()))
+    assert set(registry.get_names()) == {"WebToolkit_search", "WebToolkit_fetch_content"}
+
+
+# --------------------------------------------------------------------------- #
+# Non-tool held values, properties, slots, conflicts, self-recursion
+# --------------------------------------------------------------------------- #
 
 
 class PrimitiveHoldingAgent:
+    _name: str
+    _items: list
+
     def __init__(self):
         self._name = "just a string"
         self._items = [1, 2, 3]
-        self._nothing = None
 
 
-def test_collect_skips_builtin_primitives():
-    registry = DefaultToolCollector().collect(PrimitiveHoldingAgent())
+def test_collect_skips_non_tool_primitives():
+    registry = _collect_self(PrimitiveHoldingAgent())
     assert registry.get_names() == []
 
 
-class ToolkitWithProperty:
+class ToolkitWithProperty(Tools):
     @property
     def status(self) -> str:
         """A property must never be treated as a tool method."""
@@ -275,86 +350,107 @@ class ToolkitWithProperty:
 
 
 class PropertyAgent:
+    _toolkit: ToolkitWithProperty
+
     def __init__(self):
         self._toolkit = ToolkitWithProperty()
 
 
 def test_collect_excludes_properties_without_invoking_them():
-    registry = DefaultToolCollector().collect(PropertyAgent())
-
-    tool_names = set(registry.get_names())
-    assert tool_names == {"ToolkitWithProperty_check"}
+    registry = _collect_self(PropertyAgent())
+    assert set(registry.get_names()) == {"ToolkitWithProperty_check"}
 
 
 class SlottedAgent:
     __slots__ = ("_toolkit",)
+    _toolkit: WebToolkit
 
     def __init__(self, toolkit: WebToolkit):
         self._toolkit = toolkit
 
 
 def test_collect_finds_dependencies_in_slots():
-    # A slotted agent has no __dict__; its dependency must still be found.
-    agent = SlottedAgent(WebToolkit())
-    registry = DefaultToolCollector().collect(agent)
-
+    registry = _collect_self(SlottedAgent(WebToolkit()))
     tool_names = set(registry.get_names())
     assert "WebToolkit_search" in tool_names
     assert "WebToolkit_fetch_content" in tool_names
 
 
-class AnyAnnotatedAgent:
-    _web: Any  # a common escape-hatch annotation, not a usable interface
+class ConflictingAgent:
+    _kit1: WebToolkit
+    _kit2: WebToolkit  # same tool names → conflict
 
-    def __init__(self, web: WebToolkit):
-        self._web = web
-
-
-class ObjectAnnotatedAgent:
-    _web: object  # same as Any: no usable interface, must not resolve to it
-
-    def __init__(self, web: WebToolkit):
-        self._web = web
+    def __init__(self):
+        self._kit1 = WebToolkit()
+        self._kit2 = WebToolkit()
 
 
-def test_collect_falls_back_to_runtime_type_for_any_or_object_annotation():
-    # inspect.isclass(Any) is True on 3.11+, so Any/object must be treated as
-    # "no declared interface" rather than resolved to a type with no public
-    # methods (which would silently produce zero tools).
-    for agent in (AnyAnnotatedAgent(WebToolkit()), ObjectAnnotatedAgent(WebToolkit())):
-        registry = DefaultToolCollector().collect(agent)
-        tool_names = set(registry.get_names())
-        assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+def test_collect_tools_with_conflict_raises_error():
+    with pytest.raises(ToolConflictError):
+        _collect_self(ConflictingAgent())
 
 
-class AnnotatedMetadataAgent:
-    _web: Annotated[WebToolkit, "some metadata"]  # class-level, with extras
+class SelfMethodAgent:
+    """A plain service does not bear Tools, so its own methods — public,
+    private, or @infer — are never offered back to itself."""
 
-    def __init__(self, web: WebToolkit):
-        self._web = web
+    async def public_method(self, value: int) -> int:
+        """A public helper, but it belongs to the running instance."""
+        return value
+
+    @infer
+    async def run(self, task: str) -> str:
+        """An inference entry point — also never a self-tool."""
+        ...
 
 
-def test_collect_unwraps_annotated_metadata_to_the_underlying_class():
-    registry = DefaultToolCollector().collect(AnnotatedMetadataAgent(WebToolkit()))
+def test_collect_never_exposes_the_instance_own_methods():
+    registry = _collect_self(SelfMethodAgent())
+    assert registry.get_names() == []
 
+
+class SubAgent(Tools):
+    """A nested agent whose @infer method is a tool once held as a dependency."""
+
+    @infer
+    async def analyze(self, topic: str) -> str:
+        """Analyze the topic."""
+        ...
+
+    def _helper(self) -> None: ...
+
+
+class OuterAgent:
+    _sub: SubAgent  # held agent bearing Tools → its public methods are tools
+
+    def __init__(self, sub: SubAgent):
+        self._sub = sub
+
+
+def test_collect_exposes_a_held_agent_infer_method_as_a_tool():
+    registry = _collect_self(OuterAgent(SubAgent()))
     tool_names = set(registry.get_names())
-    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+    assert "SubAgent_analyze" in tool_names
+    assert not any("_helper" in name for name in tool_names)
+    assert len(tool_names) == 1
 
 
-class BadForwardRefAgent:
-    _unresolvable: "SomeNameThatDoesNotExist"  # noqa: F821  # pyright: ignore[reportUndefinedVariable]
-    _web: WebToolkit
+class UnmarkedSubAgent:
+    """A held object that does NOT bear Tools is gated out entirely."""
 
-    def __init__(self, web: WebToolkit):
-        self._unresolvable = None
-        self._web = web
+    @infer
+    async def analyze(self, topic: str) -> str:
+        """Analyze the topic."""
+        ...
 
 
-def test_collect_tolerates_an_unresolvable_forward_ref_on_another_field():
-    # A NameError from one bad annotation must not crash discovery for the
-    # whole instance; the unresolvable field itself has a None value and is
-    # skipped, while a sibling field still resolves normally.
-    registry = DefaultToolCollector().collect(BadForwardRefAgent(WebToolkit()))
+class OuterHoldingUnmarked:
+    _sub: UnmarkedSubAgent
 
-    tool_names = set(registry.get_names())
-    assert tool_names == {"WebToolkit_search", "WebToolkit_fetch_content"}
+    def __init__(self):
+        self._sub = UnmarkedSubAgent()
+
+
+def test_a_held_object_without_tools_is_not_exposed():
+    registry = _collect_self(OuterHoldingUnmarked())
+    assert registry.get_names() == []

@@ -16,6 +16,8 @@ RawCode = Annotated[str, AsRawText]
 
 
 class ScopingAgent:
+    _input: InputTool
+
     def __init__(self, input_tool: InputTool):
         self._input = input_tool
 
@@ -33,6 +35,8 @@ class ScopingAgent:
 
 
 class UnderstandingAgent:
+    _file_tool: FileTool
+
     def __init__(self, file_tool: FileTool):
         self._file_tool = file_tool
 
@@ -102,6 +106,8 @@ class UnderstandingAgent:
 
 
 class ReviewScopingAgent:
+    _input: InputTool
+
     def __init__(self, input_tool: InputTool):
         self._input = input_tool
 

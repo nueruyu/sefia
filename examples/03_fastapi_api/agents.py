@@ -14,6 +14,8 @@ from .models import Brief
 class Interviewer:
     """Clarifies a vague request into a structured brief via input."""
 
+    _input: InputTool
+
     def __init__(self, input_tool: InputTool):
         self._input = input_tool
 

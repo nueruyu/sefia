@@ -6,7 +6,7 @@ import pytest
 from glyff import ArgsHasher, Serializer
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 
-from sefia import infer
+from sefia import Tools, infer
 from sefia.llm import LLMClient, LLMResponse, Message
 
 
@@ -44,7 +44,7 @@ class SearchResult:
 
 
 @dataclass
-class WebToolkit:
+class WebToolkit(Tools):
     """A simple toolkit for web operations."""
 
     async def search(self, query: str) -> list[SearchResult]:
@@ -69,9 +69,10 @@ class Report:
     sources: list[str]
 
 
-@dataclass
 class Researcher:
     """An agent that uses WebToolkit to research topics."""
+
+    _web: WebToolkit
 
     def __init__(self, web: WebToolkit):
         self._web = web
@@ -86,7 +87,7 @@ class Researcher:
 
 
 @dataclass
-class BrokenToolkit:
+class BrokenToolkit(Tools):
     """A toolkit where tools can fail."""
 
     async def always_fail(self, reason: str) -> None:

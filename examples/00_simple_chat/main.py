@@ -17,6 +17,8 @@ from .._common.typer_utils import add_session_commands, async_command
 
 
 class ChatAgent:
+    _input: InputTool
+
     def __init__(self, input_tool: InputTool):
         self._input = input_tool
 

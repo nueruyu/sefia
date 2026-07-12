@@ -72,11 +72,6 @@ class FunctionInfo:
             kwargs=kwargs,
         )
 
-    @property
-    def instance(self) -> Any | None:
-        """Return the instance ('self') if the function is a method."""
-        return self.bound_arguments.get("self")
-
 
 __all__ = [
     "ToolCallRequest",

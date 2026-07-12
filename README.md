@@ -42,7 +42,7 @@ replayable model/tool execution underneath.
 | What you get | What you don't run or learn |
 | --- | --- |
 | LLM steps as plain typed functions (`@infer`) | an `Agent` object or a graph DSL |
-| Tools = the public methods of held dependencies | a tool registry or decorators |
+| Tools = public methods of held `Tools`-bearing types | a tool registry or decorators |
 | Runs that pause and resume across a restart (by replay) | a workflow engine, cluster, or worker |
 | Human-in-the-loop over plain stateless HTTP | websockets or background daemons |
 | One provider-portable output schema | per-provider native tool-calling quirks |
@@ -94,8 +94,10 @@ class Report(BaseModel):
 
 
 class ResearchService:
+    _web: WebSearchTool                       # a Tools-bearing dependency → its methods are tools
+
     def __init__(self, web: WebSearchTool):
-        self._web = web                       # held dependency → its public methods are tools
+        self._web = web
 
     @infer
     async def run(self, topic: str) -> Report:
@@ -128,6 +130,9 @@ from sefios.tools import InputTool, WebSearchTool
 
 
 class ResearchService:
+    _web: WebSearchTool
+    _input: InputTool
+
     def __init__(self, web: WebSearchTool, input_tool: InputTool):
         self._web = web
         self._input = input_tool
@@ -174,7 +179,7 @@ and what it removes.
 | Concept | What it is |
 | --- | --- |
 | **`@infer`** | An abstract async method implemented by an LLM. Signature = contract, docstring = instruction, return type = validated output. |
-| **Tools** | The public methods of held dependency objects. Public = tool, private = internal. Scoped to the holder; narrow with a `Protocol`. |
+| **Tools** | Public methods of a held dependency whose declared type bears the `Tools` role (`class WebToolkit(Tools)`). Public + `Tools` = tool, private = internal. No ambient authority; scoped to the holder; narrow with a `Protocol`. |
 | **Pause & resume** | Every call is engraved (content-addressed) via glyff and replays on re-invocation; exceptions are non-terminal, so pausing = raising. |
 | **Session** | The scope for a run. `SessionScope` (in `sefios`) is the configured front door; `sefia.Session` is the core primitive. |
 | **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). The `sefios` defaults give a step cap and ready-made behaviors. |

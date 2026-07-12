@@ -107,41 +107,56 @@ invalid decision is never persisted. Only when the budget is spent does the
 
 ## Tools: discovery, schema, execution
 
-**Discovery** (`DefaultToolCollector.collect`): tools are the **public surface of
-what the bound instance (`self` of the `@infer` method) holds** — plain Python
-visibility, no marker or registry. For **each dependency held in an attribute**
-(public or private; found via `__mro__`/`__slots__`, not `dir()`+`getattr` on every
-name, so a third-party object's lazy properties are never triggered), the collector
-resolves an *interface* for that field and exposes its public (non `_`-prefixed)
-methods:
+**Discovery** (`DefaultToolCollector.collect`) is gated by the `Tools` role marker
+— there is **no ambient authority**. A member becomes a tool only when it is
+reachable through an unbroken chain of `Tools`-bearing **declared** types, starting
+at a *capability parameter* of the `@infer` call:
 
-- If the field has a **class-level annotation** (`_web: WebToolkit`, `_web:
-  ReadOnlyWeb`, assigned in the class body — not just an `__init__` parameter, whose
-  mapping to the attribute is unrecoverable), that declared type is the interface: a
-  concrete class exposes its public methods, a `Protocol` exposes only its declared
-  members. `Any`/`object` declare no interface and behave as if unannotated.
-- Otherwise the interface falls back to the **runtime value's concrete type**.
+- **Capability parameters** carry tools; everything else is task data. A parameter
+  named `self`/`cls` is a capability parameter by convention; any *other* parameter
+  is one only if its declared type bears a role marker (so a plain function can take
+  tools: `async def run(kit: WebToolkit, topic: str)`). The classifier lives in
+  `capabilities` / `capability_names` (`_tool_system.py`) and is shared by the
+  executor (which collects) and the strategy (which excludes these params from the
+  prompt).
+- **The gate.** For each capability, the collector scans the **class-level
+  declared types** of the fields the value holds (found via `__annotations__` across
+  the MRO plus read-only `property` declarations — never `dir()`+`getattr` on the
+  instance, so a third-party object's lazy getters are never triggered). A field is
+  exposed **only if its declared type bears `Tools`**. A field with no class-level
+  annotation, or one whose declared type is not a toolkit, exposes nothing.
+- **The interface** exposed for a field is its declared type (`role_interface`,
+  after stripping `Optional`/`Annotated`): a concrete class exposes its public
+  methods; a `Protocol` exposes exactly its declared members — **including
+  `_`-prefixed ones**, since a protocol is an explicit allowlist (that is how a
+  surface opts a private method in as a tool).
+- **A role-bearing capability root** (a `self` annotated with a surface protocol, or
+  a directly-passed toolkit) also exposes its **own** declared members bound to the
+  value — this is how a `self: ResearchTools` surface adds the instance's own
+  methods, and how a plain `kit: WebToolkit` parameter contributes its methods.
 
-Narrowing is **best-effort and fails open**: the annotation is resolved with
-`typing.get_type_hints`, so a type it cannot resolve — most commonly a `Protocol`
-or class defined in a local scope (inside a function, e.g. a test), which
-`get_type_hints` cannot see — silently falls back to the runtime type and exposes
-the **full** public surface. If you use a `Protocol` to *restrict* a broad object's
-surface (hiding a destructive method), declare that `Protocol` at module level, not
-locally, or the restriction is silently lost.
+Discovery is a **pure function of static declarations** — runtime values never widen
+the surface. Resolution is **per field and fail-closed**: an annotation that cannot
+be resolved (a forward reference, a `TYPE_CHECKING`-only name, a locally-scoped type)
+is skipped with a debug log rather than falling back to the runtime type. If a held
+field's declared type is not a toolkit and the model never sees its methods, the
+usual cause is a missing `Tools` marker (or, for a third-party type, a missing
+`Annotated[T, Tools]` at the field).
 
-Properties and other non-function descriptors are never treated as tools (accessing
-them could execute a getter's side effects). The instance's **own** methods —
-including its `@infer` methods — are never offered back to itself as tools; that
-dissolves self-recursion entirely. A service becomes usable as a tool by being
-*held* as another service's dependency, not by marking its own methods — so a
-sub-agent's `@infer` method is a normal, callable tool once something else holds it.
+Marking a type is one word: `class WebToolkit(Tools):` (or `class ReadOnlyWeb(Tools,
+Protocol):` for a narrowing surface — note the explicit `Protocol` re-inheritance, or
+the class silently becomes concrete). Properties and other non-function descriptors
+are never treated as tools. A plain service class does **not** bear `Tools`, so its
+own methods — including its `@infer` methods — are never offered back to itself; that
+dissolves self-recursion. A service becomes usable as *another* agent's tool by
+declaring `Tools` and being *held* as that agent's dependency — so a sub-agent's
+`@infer` method is a normal, callable tool once a `Tools`-bearing service is held.
 
 This also means the bound object is a capability boundary. If a class has multiple
-`@infer` methods, they share the tool surface collected from that instance and its
-held dependencies. Keep multiple inferred methods together only when that shared
-surface is intentional; split services when different operations need different
-tools or different write permissions.
+`@infer` methods, they share the tool surface collected from that instance's held
+dependencies — unless a method narrows its own surface with a `self:` annotation.
+Split services (or annotate `self`) when different operations need different tools or
+different write permissions.
 
 **Schema** (`_strategy.py`): each tool produces a `ToolDefinition` (`tool.definition()`),
 embedded as JSON in the system prompt — not sent as a native tool spec. A

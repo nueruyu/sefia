@@ -1,15 +1,21 @@
 from typing import Protocol
 
-from sefia import preview
+from sefia import Tools, preview
+from sefia._tool_system import Capability, ToolRegistry
 from sefia.llm._arg_stream import _ArgStreamChannel
 from sefia.streaming import ArgStream, StringDelta
 from sefia.tool_collectors import DefaultToolCollector
 
 
+def _collect(instance: object) -> ToolRegistry:
+    """Collect tools for ``instance`` as its @infer method's ``self`` capability."""
+    return DefaultToolCollector().collect([Capability(value=instance, declared=None)])
+
+
 async def test_stream_handler_is_collected_and_bound_to_instance():
     seen_self = []
 
-    class Toolkit:
+    class Toolkit(Tools):
         async def ask_human(self, question: str) -> str:
             return question
 
@@ -20,11 +26,13 @@ async def test_stream_handler_is_collected_and_bound_to_instance():
                 pass
 
     class Agent:
+        _toolkit: Toolkit
+
         def __init__(self):
             self._toolkit = Toolkit()
 
     agent = Agent()
-    registry = DefaultToolCollector().collect(agent)
+    registry = _collect(agent)
 
     (registered,) = registry.get_all()
     assert registered.stream_handler is not None
@@ -38,7 +46,7 @@ async def test_stream_handler_is_collected_and_bound_to_instance():
 async def test_bound_stream_handler_consumes_events():
     received = []
 
-    class Toolkit:
+    class Toolkit(Tools):
         async def ask_human(self, question: str) -> str:
             return question
 
@@ -48,10 +56,12 @@ async def test_bound_stream_handler_consumes_events():
                 received.append(event)
 
     class Agent:
+        _toolkit: Toolkit
+
         def __init__(self):
             self._toolkit = Toolkit()
 
-    registry = DefaultToolCollector().collect(Agent())
+    registry = _collect(Agent())
     (registered,) = registry.get_all()
     assert registered.stream_handler is not None
 
@@ -64,15 +74,17 @@ async def test_bound_stream_handler_consumes_events():
 
 
 def test_tool_without_stream_handler_has_none():
-    class Toolkit:
+    class Toolkit(Tools):
         async def plain(self, x: str) -> str:
             return x
 
     class Agent:
+        _toolkit: Toolkit
+
         def __init__(self):
             self._toolkit = Toolkit()
 
-    registry = DefaultToolCollector().collect(Agent())
+    registry = _collect(Agent())
 
     (registered,) = registry.get_all()
     assert registered.stream_handler is None
@@ -81,7 +93,7 @@ def test_tool_without_stream_handler_has_none():
 async def test_static_tool_stream_handler_is_collected():
     received = []
 
-    class Toolkit:
+    class Toolkit(Tools):
         @staticmethod
         async def ask_human(question: str) -> str:
             return question
@@ -92,10 +104,12 @@ async def test_static_tool_stream_handler_is_collected():
                 received.append(event)
 
     class Agent:
+        _toolkit: Toolkit
+
         def __init__(self):
             self._toolkit = Toolkit()
 
-    registry = DefaultToolCollector().collect(Agent())
+    registry = _collect(Agent())
     registered = next(tool for tool in registry.get_all() if "ask_human" in tool.name)
     assert registered.stream_handler is not None
 
@@ -110,7 +124,7 @@ async def test_static_tool_stream_handler_is_collected():
 async def test_class_tool_stream_handler_is_bound_to_class():
     seen_cls = []
 
-    class Toolkit:
+    class Toolkit(Tools):
         @classmethod
         async def ask_human(cls, question: str) -> str:
             return question
@@ -122,10 +136,12 @@ async def test_class_tool_stream_handler_is_bound_to_class():
                 pass
 
     class Agent:
+        _toolkit: Toolkit
+
         def __init__(self):
             self._toolkit = Toolkit()
 
-    registry = DefaultToolCollector().collect(Agent())
+    registry = _collect(Agent())
     registered = next(tool for tool in registry.get_all() if "ask_human" in tool.name)
     assert registered.stream_handler is not None
 
@@ -142,7 +158,7 @@ async def test_stream_handler_is_found_when_the_field_is_protocol_narrowed():
     # handler lookup must not be tied to whichever one supplied the schema.
     received = []
 
-    class AskHuman(Protocol):
+    class AskHuman(Tools, Protocol):
         async def ask_human(self, question: str) -> str: ...
 
     class Toolkit:
@@ -160,7 +176,7 @@ async def test_stream_handler_is_found_when_the_field_is_protocol_narrowed():
         def __init__(self):
             self._toolkit = Toolkit()
 
-    registry = DefaultToolCollector().collect(Agent())
+    registry = _collect(Agent())
     (registered,) = registry.get_all()
     assert registered.stream_handler is not None
 

@@ -9,9 +9,10 @@ stated as one.
 
 There is no `Agent` object, chain, graph, or global tool registry. The unit of work
 is a **typed async function** (`@infer`), composed with ordinary `await` and ordinary
-Python control flow. Service classes can hold dependencies, and those dependencies'
-public methods become tools. If your logic is naturally a Python call graph, there is
-no framework shape to adopt; you write functions and classes.
+Python control flow. Service classes can hold dependencies, and the public methods of
+a dependency whose type bears the `Tools` role become tools. If your logic is
+naturally a Python call graph, there is no framework shape to adopt; you write
+functions and classes.
 
 ### How is it different from Pydantic AI?
 
@@ -79,12 +80,25 @@ across hand-rolled bookkeeping.
 
 ### How do tools work — really just public methods?
 
-A held dependency's **public methods are its tools**; private (`_`-prefixed) methods
-stay internal. Discovery follows ordinary OOP visibility on held dependency objects —
-no decorator, no registry. To expose a narrower surface than a class's full public
-API, hold it behind a `Protocol`: only the protocol's declared members are offered.
-By convention a service holds only tool dependencies; this is not statically enforced
-today.
+Almost: a held dependency's **public methods are its tools when its declared type
+bears the `Tools` role** (`class WebToolkit(Tools)`, or `Annotated[T, Tools]` at the
+field for a type you can't edit); private (`_`-prefixed) methods stay internal. This
+is one marker base class on top of ordinary OOP visibility — no decorator, no
+registry — and it means there is **no ambient authority**: a held config or store
+never leaks as a tool. Discovery is declared-only (a field needs a class-level
+annotation; a dataclass field is ideal) and fail-closed. To expose a narrower surface
+than a class's full public API, declare the field as a `Tools`-bearing `Protocol`, or
+narrow a single method by annotating its `self`: only the protocol's declared members
+are offered.
+
+### mypy flags my `@infer` methods as `[empty-body]`
+
+An `@infer` body is `...` by design (the LLM is the implementation), which mypy
+reports as a missing return. Disable that one check where your agents live — per
+module with `# mypy: disable-error-code="empty-body"`, or in config with
+`disable_error_code = empty-body`. Do **not** reach for `@abstractmethod`: it silences
+the message but makes the class abstract, so mypy then rejects instantiating it.
+pyright does not raise this at all.
 
 ### What can I not do — the determinism constraint?
 

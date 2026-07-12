@@ -6,7 +6,7 @@ from typing import Annotated, TypeVar
 
 from glyff import engrave
 from pydantic import Field
-from sefia import preview
+from sefia import Tools, preview
 from sefia.streaming import ArgStream, StringDelta
 
 from .._session_state import get_call_state_store
@@ -56,7 +56,7 @@ async def _no_input(_: InputRequest) -> str | None:
     return None
 
 
-class InputTool:
+class InputTool(Tools):
     def __init__(
         self,
         get_input: InputProvider = _no_input,

@@ -171,8 +171,9 @@ async def test_inference_with_tool_exception(
     session_id = "tool-exception-test"
     glyff_store = _make_stores(serializer)
 
-    @dataclass
     class AgentWithBrokenTool:
+        _kit: BrokenToolkit
+
         def __init__(self, kit: BrokenToolkit):
             self._kit = kit
 
