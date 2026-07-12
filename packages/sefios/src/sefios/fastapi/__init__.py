@@ -8,20 +8,22 @@ responses) is re-exported here, so a single ``from sefios.fastapi import ...``
 suffices.
 """
 
-try:
-    import sefia_fastapi as _sefia_fastapi  # noqa: F401
-except ImportError as e:
-    raise ImportError(
-        "The 'fastapi' extra is required to use sefios.fastapi. "
-        "Please install it with: pip install 'sefios[fastapi]'"
-    ) from e
+from importlib.util import find_spec
 
-from sefia_fastapi import (
-    AmbiguousInputError,
-    InputRequired,
-    UnknownInputError,
-    UnknownSessionError,
-)
+try:
+    from sefia_fastapi import (
+        AmbiguousInputError,
+        InputRequired,
+        UnknownInputError,
+        UnknownSessionError,
+    )
+except ImportError as e:
+    if find_spec("sefia_fastapi") is None:
+        raise ImportError(
+            "The 'fastapi' extra is required to use sefios.fastapi. "
+            "Please install it with: pip install 'sefios[fastapi]'"
+        ) from e
+    raise
 
 from ._app import SefiaHTTP, SefiaHTTPSession
 

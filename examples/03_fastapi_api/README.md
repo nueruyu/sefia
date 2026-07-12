@@ -86,5 +86,5 @@ events.addEventListener("error", (event) => console.error(JSON.parse(event.data)
 Each session persists to disk under the example's `.local/` directory. Send
 requests for a given session one at a time; concurrent turns against the *same*
 session are not supported. Different sessions are independent and safe to run
-concurrently: the shared human-input store binds the active session per task
+concurrently: the shared input store binds the active session per task
 (via a `ContextVar`), so overlapping requests do not see each other's state.

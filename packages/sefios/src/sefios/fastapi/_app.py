@@ -54,7 +54,7 @@ class SefiaHTTP:
     ):
         self._events = SessionEvents()
         self._session_manager = SessionManager(session_dir)
-        self._input = InputChannel()
+        self._input = InputChannel(namespace="http/input_channel")
         self._input_tool = InputTool(
             get_input=self._provide_input,
             on_request=self._record_request,

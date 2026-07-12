@@ -7,23 +7,25 @@ and cost accounting. The ``sefia_typer`` surface that applications need
 ``from sefios.cli import ...`` suffices.
 """
 
-try:
-    import sefia_typer as _sefia_typer  # noqa: F401
-except ImportError as e:
-    raise ImportError(
-        "The 'cli' extra is required to use sefios.cli. "
-        "Please install it with: pip install 'sefios[cli]'"
-    ) from e
+from importlib.util import find_spec
 
-from sefia_typer import (
-    AmbiguousInputError,
-    CLIReporter,
-    DefaultCLIReporter,
-    InputRequest,
-    ResolvedSession,
-    UnknownInputError,
-    UnknownSessionError,
-)
+try:
+    from sefia_typer import (
+        AmbiguousInputError,
+        CLIReporter,
+        DefaultCLIReporter,
+        InputRequest,
+        ResolvedSession,
+        UnknownInputError,
+        UnknownSessionError,
+    )
+except ImportError as e:
+    if find_spec("sefia_typer") is None:
+        raise ImportError(
+            "The 'cli' extra is required to use sefios.cli. "
+            "Please install it with: pip install 'sefios[cli]'"
+        ) from e
+    raise
 
 from ._app import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
 

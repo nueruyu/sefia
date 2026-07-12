@@ -36,6 +36,21 @@ class TestBinding:
         with pytest.raises(RuntimeError):
             await channel.pending()
 
+    def test_empty_namespace_raises(self):
+        with pytest.raises(ValueError, match="namespace"):
+            InputChannel(namespace="/")
+
+    async def test_namespace_scopes_persisted_keys(self, kv_store):
+        channel = InputChannel(namespace="custom/input")
+
+        with channel.use_store(kv_store):
+            await channel.record_request("x", "why?")
+            await channel.receive_input("answer", reply_to="x")
+
+        assert "custom/input/pending" in kv_store._data
+        assert kv_store._data["custom/input/input/x"] == "answer"
+        assert "input_channel/pending" not in kv_store._data
+
 
 class TestPending:
     async def test_empty_by_default(self, channel):

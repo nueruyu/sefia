@@ -16,10 +16,7 @@ from dataclasses import dataclass
 from ._kv import KeyValueStore
 from .exceptions import AmbiguousInputError, UnknownInputError
 
-# Keys are namespaced so they cannot collide with application state
-# stored in the same session storage (e.g. @state or get_state_store keys).
-_PENDING_INPUTS_KEY = "input_channel/pending"
-_QUEUED_INPUTS_KEY = "input_channel/queued"
+_DEFAULT_NAMESPACE = "input_channel"
 
 
 @dataclass(frozen=True)
@@ -47,7 +44,11 @@ class InputChannel:
     request): each task binds and reads its own store.
     """
 
-    def __init__(self):
+    def __init__(self, *, namespace: str = _DEFAULT_NAMESPACE):
+        namespace = namespace.strip("/")
+        if not namespace:
+            raise ValueError("Input channel namespace must not be empty.")
+        self._namespace = namespace
         self._active_store: ContextVar[KeyValueStore | None] = ContextVar(
             "input_active_store", default=None
         )
@@ -130,7 +131,7 @@ class InputChannel:
 
     async def _pending_map(self) -> dict[str, dict]:
         store = self._store()
-        pending = await store.get(_PENDING_INPUTS_KEY, dict) or {}
+        pending = await store.get(self._pending_key, dict) or {}
         if not pending:
             return {}
 
@@ -146,10 +147,10 @@ class InputChannel:
     async def _save_pending(self, pending: dict[str, dict]) -> None:
         store = self._store()
         if pending:
-            await store.set(_PENDING_INPUTS_KEY, pending, dict)
+            await store.set(self._pending_key, pending, dict)
             return
 
-        await store.delete(_PENDING_INPUTS_KEY)
+        await store.delete(self._pending_key)
 
     async def _stored_input(self, interaction_id: str) -> str | None:
         return await self._store().get(self._input_key(interaction_id), str)
@@ -159,21 +160,21 @@ class InputChannel:
 
     async def _queue_input(self, input_text: str) -> None:
         store = self._store()
-        queue = await store.get(_QUEUED_INPUTS_KEY, list) or []
+        queue = await store.get(self._queued_key, list) or []
         queue.append(input_text)
-        await store.set(_QUEUED_INPUTS_KEY, queue, list)
+        await store.set(self._queued_key, queue, list)
 
     async def _pop_queued_input(self) -> str | None:
         store = self._store()
-        queue = await store.get(_QUEUED_INPUTS_KEY, list)
+        queue = await store.get(self._queued_key, list)
         if not queue:
             return None
 
         next_input = queue.pop(0)
         if queue:
-            await store.set(_QUEUED_INPUTS_KEY, queue, list)
+            await store.set(self._queued_key, queue, list)
         else:
-            await store.delete(_QUEUED_INPUTS_KEY)
+            await store.delete(self._queued_key)
         return next_input
 
     def _store(self) -> KeyValueStore:
@@ -182,9 +183,16 @@ class InputChannel:
             raise RuntimeError("Input channel is not bound to a store.")
         return store
 
-    @staticmethod
-    def _input_key(interaction_id: str) -> str:
-        return f"input_channel/input/{interaction_id}"
+    @property
+    def _pending_key(self) -> str:
+        return f"{self._namespace}/pending"
+
+    @property
+    def _queued_key(self) -> str:
+        return f"{self._namespace}/queued"
+
+    def _input_key(self, interaction_id: str) -> str:
+        return f"{self._namespace}/input/{interaction_id}"
 
 
 def _to_input_text(input_value: str | list[str]) -> str:

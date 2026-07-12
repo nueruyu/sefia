@@ -64,7 +64,7 @@ pip install 'sefios[litellm]'
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
 - **`sefios`** — the official batteries: the `SessionScope` front door, ready-made
-  policies/middleware, and tools (human input, web search). The `[litellm]` extra
+  policies/middleware, and tools (external input, web search). The `[litellm]` extra
   pulls in **`sefia_litellm`** for provider support via
   [LiteLLM](https://github.com/BerriAI/litellm). The `[cli]` and `[fastapi]` extras
   pull in **`sefia_typer`** / **`sefia_fastapi`** and unlock the `sefios.cli` /
@@ -122,7 +122,9 @@ request/response handler: the pause is a tool that **raises**, and resume is cal
 the endpoint again.
 
 ```python
-from sefios.tools import InputTool
+from pathlib import Path
+from sefios.fastapi import InputRequired, SefiaHTTP
+from sefios.tools import InputTool, WebSearchTool
 
 
 class ResearchService:
@@ -136,26 +138,34 @@ class ResearchService:
         ...
 
 
-research_service = ResearchService(web=WebSearchTool(), input_tool=InputTool())
+api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
+research_service = ResearchService(web=WebSearchTool(), input_tool=api.input_tool)
+
+
+@app.post("/sessions")
+def create_session():
+    return {"session_id": api.create_session()}
 
 
 @app.post("/sessions/{session_id}/turn")
 async def turn(session_id: str, body: TurnBody):
-    async with scope.session(session_id=session_id) as s:
-        if body.input is not None:
-            await s.accept_input(body.input)       # deliver the user's input
-        try:
-            return {"status": "done", "report": await research_service.run(body.task)}
-        except NeedsInput as e:                     # the run paused; it will resume
-            return {"status": "needs_input", "prompt": e.prompt}
+    try:
+        async with api.session(session_id=session_id) as session:
+            if body.input is not None:
+                await session.accept_input(body.input)
+            report = await research_service.run(body.task)
+            return {"status": "done", "report": report}
+    except InputRequired as e:
+        return {"status": "needs_input", "prompt": e.prompt}
 ```
 
-When the input tool has no recorded input it raises `NeedsInput`; the run pauses and
-the handler returns "needs input". The input arrives in a later request and is
-delivered with `accept_input`; the same endpoint re-invokes, every completed LLM/tool
+When the input tool has no recorded input it raises `NeedsInput`; `SefiaHTTP`
+translates that pause into `InputRequired` after the session context exits, and the
+handler returns "needs input". The input arrives in a later request and is delivered
+with `session.accept_input`; the same endpoint re-invokes, every completed LLM/tool
 call **replays its exact output** (the approved draft is byte-for-byte the same), and
 only the pending step runs. You write no checkpoint code, step keys, idempotency
-plumbing, or 202 dance — see
+plumbing, or 202 dance; see
 [use case 01](./docs/usecases/01-human-in-the-loop.md) for the same turn hand-rolled,
 and what it removes.
 

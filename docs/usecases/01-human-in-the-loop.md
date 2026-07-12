@@ -94,10 +94,15 @@ async def research_turn(session_id: str, task: str, approval: str | None = None)
 The turn is an ordinary typed function; the pause is a tool that raises:
 
 ```python
+from pathlib import Path
+from sefios.fastapi import InputRequired, SefiaHTTP
+from sefios.tools import InputTool
+
+
 class Research:
-    def __init__(self, web: WebToolkit, human: HumanInput):
+    def __init__(self, web: WebToolkit, input_tool: InputTool):
         self._web = web
-        self._human = human
+        self._input = input_tool
 
     @infer
     async def run(self, task: str) -> Report:
@@ -105,12 +110,20 @@ class Research:
         human's approval of the draft, then finalize and send."""
         ...
 
+
+api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
+service = Research(web=WebToolkit(), input_tool=api.input_tool)
+
+
 # the endpoint stays an ordinary request/response handler
 @app.post("/sessions/{id}/research")
 async def research(id, body):
-    async with scope.session(session_id=id) as s:
-        await s.accept_input(body.approval)        # answer for a pending question
-        return await service.run(body.task)        # resumes where it paused
+    try:
+        async with api.session(session_id=id) as session:
+            await session.accept_input(body.input)
+            return await service.run(body.task)    # resumes where it paused
+    except InputRequired as e:
+        return {"status": "needs_input", "prompt": e.prompt}
 ```
 
 The service has no checkpoint code, step keys, or 202 plumbing. Each LLM call and
@@ -119,7 +132,7 @@ their exact outputs** (the approved draft is the same draft) and only the unfini
 step runs. Idempotency does not disappear entirely — a side effect that runs but
 crashes before it commits still needs a key at that boundary (see the traps above) —
 but it stays localized to the side-effecting step instead of spreading across the
-turn. The pause is just the human-input tool raising when no answer is recorded yet.
+turn. The pause is just the input tool raising when no input is recorded yet.
 
 ## What sefia removes
 

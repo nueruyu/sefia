@@ -16,6 +16,14 @@ class TestSessionManager:
 
         assert session_dir.is_dir()
 
+    def test_creates_nested_session_directory(self, tmp_path):
+        session_dir = tmp_path / "var" / "sefia" / "sessions"
+        assert not session_dir.parent.exists()
+
+        SessionManager(session_dir)
+
+        assert session_dir.is_dir()
+
     def test_no_active_session_initially(self, manager: SessionManager):
         assert manager.get_active_session_id() is None
 

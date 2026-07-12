@@ -109,6 +109,7 @@ class SefiaCLI:
         self._input = InputChannel(
             on_request=self._report_input_request,
             on_prompt_delta=self._report_input_prompt_delta,
+            namespace="cli/input_channel",
         )
         self._input_tool = InputTool(
             get_input=self._provide_input,

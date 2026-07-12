@@ -33,7 +33,7 @@ class SessionManager:
     def __init__(self, session_dir: Path):
         self._active_session_file = session_dir / "active_session.txt"
         self._sessions_file = session_dir / "sessions.txt"
-        session_dir.mkdir(exist_ok=True)
+        session_dir.mkdir(parents=True, exist_ok=True)
 
     def get_active_session_id(self) -> str | None:
         """Gets the ID of the currently active session, if one exists."""

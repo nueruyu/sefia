@@ -26,8 +26,8 @@ class TurnRequest(BaseModel):
     """A turn for a human-in-the-loop workflow.
 
     ``input`` is the initial request on the first turn, or the answer to a
-    pending question on later turns. ``reply_to`` targets a specific pending
-    question when more than one is outstanding.
+    pending prompt on later turns. ``reply_to`` targets a specific pending
+    prompt when more than one is outstanding.
     """
 
     input: str
