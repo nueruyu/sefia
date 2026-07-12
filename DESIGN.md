@@ -73,13 +73,13 @@ class ResearchService:
 ## Durability & resumable HITL
 
 ```python
-class HumanInput:
-    async def ask(self, question: str) -> str:
-        """Ask the user; resume when an answer is available."""
-        if answer := await self._pending.answer_for(question):
-            return answer
-        await self._pending.record(question)
-        raise NeedsInput(question)                 # pause — durably
+class UserInput:
+    async def get(self, prompt: str) -> str:
+        """Prompt the user; resume when input is available."""
+        if provided := await self._pending.input_for(prompt):
+            return provided
+        await self._pending.record(prompt)
+        raise NeedsInput(prompt)                   # pause — durably
 
 @app.post("/sessions/{id}/turn")
 async def turn(id, body):

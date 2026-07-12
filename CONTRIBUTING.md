@@ -16,6 +16,7 @@ uv sync                       # install the workspace
 uv run pytest                 # run all tests (asyncio auto-mode)
 uv run pytest packages/sefia  # run one package's tests
 uv run ruff check .           # lint
+uv run ruff format --check .  # formatting (CI enforces this; drop --check to fix)
 uv run pyright                # type-check
 ```
 
