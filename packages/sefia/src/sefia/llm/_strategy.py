@@ -219,6 +219,9 @@ class LLMInferenceStrategy(InferenceStrategy):
     An inference strategy that uses an LLM to decide the next step.
     It unifies tool calls and results into a single structured output schema,
     making it compatible with a wide range of LLMs' JSON modes.
+
+    Invalid structured responses can be retried with corrective feedback before
+    ``InvalidInferenceResponseError`` propagates.
     """
 
     def __init__(
@@ -228,12 +231,16 @@ class LLMInferenceStrategy(InferenceStrategy):
         prompt_formatter: PromptFormatter,
         json_default: JsonDefault | None = None,
         stream: bool = False,
+        max_repair_attempts: int = 2,
     ):
+        if max_repair_attempts < 0:
+            raise ValueError("max_repair_attempts must be non-negative")
         self.llm_client = llm_client
         self.decision_builder = decision_builder
         self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
+        self._max_repair_attempts = max_repair_attempts
 
     def _create_director(
         self, output_type: Any, tools: list[Tool]
@@ -266,6 +273,31 @@ class LLMInferenceStrategy(InferenceStrategy):
             director,
         )
 
+        # Keep repair feedback local to this step's prompt messages.
+        attempt = 0
+        while True:
+            try:
+                return await self._complete_once(
+                    messages, director, output_schema, tools, publisher
+                )
+            except InvalidInferenceResponseError as error:
+                if attempt >= self._max_repair_attempts:
+                    raise
+                attempt += 1
+                await publisher.publish(
+                    events.LLMResponseRepairAttempt(error=error, attempt=attempt)
+                )
+                messages = messages + self._repair_messages(error)
+
+    async def _complete_once(
+        self,
+        messages: list[Message],
+        director: _ExecutionDirector,
+        output_schema: dict,
+        tools: ToolRegistry,
+        publisher: EventPublisher,
+    ) -> InferenceDecision:
+        """One LLM call plus parsing/validation of its response."""
         await publisher.publish(
             events.BeforeLLMCall(
                 messages=messages,
@@ -316,12 +348,36 @@ class LLMInferenceStrategy(InferenceStrategy):
 
         except UnknownToolDecisionError as e:
             raise InvalidInferenceResponseError(
-                f"LLM output requested an unknown tool: {e.tool_name!r}, content: {response.content}"
+                f"LLM output requested an unknown tool: {e.tool_name!r}",
+                raw_content=response.content,
             ) from e
         except (json.JSONDecodeError, ValueError) as e:
             raise InvalidInferenceResponseError(
-                f"LLM output failed validation against the master schema: {e}, content: {response.content}"
+                f"LLM output failed validation against the master schema: {e}",
+                raw_content=response.content,
             ) from e
+
+    def _repair_messages(self, error: InvalidInferenceResponseError) -> list[Message]:
+        """Build the corrective feedback exchange for one repair attempt."""
+        feedback_messages: list[Message] = []
+        if error.raw_content:
+            feedback_messages.append(
+                Message(role="assistant", content=error.raw_content)
+            )
+            content_note = ""
+        else:
+            content_note = "Your previous response was empty.\n"
+        feedback = (
+            "Your previous response was invalid and could not be used as the "
+            "required decision JSON.\n"
+            f"Error: {error.detail}\n"
+            f"{content_note}"
+            "Respond again with exactly one valid raw JSON object matching the "
+            "decision schema in the system instructions. Do not include prose, "
+            "markdown, or code fences."
+        )
+        feedback_messages.append(Message(role="user", content=feedback))
+        return feedback_messages
 
     def _build_messages(
         self,

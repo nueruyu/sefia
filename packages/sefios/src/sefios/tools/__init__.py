@@ -1,9 +1,9 @@
-from .human import HumanInputRequest, HumanInputResult, HumanInputTool
+from .input import InputRequest, InputResult, InputTool
 from .web import WebSearchTool
 
 __all__ = [
-    "HumanInputRequest",
-    "HumanInputResult",
-    "HumanInputTool",
+    "InputRequest",
+    "InputResult",
+    "InputTool",
     "WebSearchTool",
 ]

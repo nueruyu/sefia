@@ -2,7 +2,7 @@ from importlib import import_module
 from unittest.mock import AsyncMock
 
 import pytest
-from examples._common.sefia_cli import SefiaCLI
+from sefios.cli import SefiaCLI
 
 # main.py uses ``from .._common ...`` imports, so it must be loaded with the
 # full ``examples.`` package prefix (two parent levels), unlike the rendering

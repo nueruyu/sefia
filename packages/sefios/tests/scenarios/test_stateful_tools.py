@@ -24,7 +24,7 @@ class Report:
 
 # --- State models for testing ---
 @dataclass
-class _AskUserState:
+class _InputCallState:
     interaction_id: str | None = None
 
 
@@ -40,13 +40,13 @@ class InteractionState:
 
 # --- Test tool with internal state management ---
 @dataclass
-class HumanInputTool:
+class InputTool:
     def __init__(self, on_interrupt: Callable[[str, str], None] | None = None):
         self._on_interrupt = on_interrupt
 
     @engrave
-    async def ask_user(self, question: str) -> str:
-        call_store = get_call_state_store("internal_state", _AskUserState)
+    async def ask_user(self, prompt: str) -> str:
+        call_store = get_call_state_store("internal_state", _InputCallState)
         call_state = await call_store.ensure()
 
         try:
@@ -69,7 +69,7 @@ class HumanInputTool:
             return answer.content
         except PauseException:
             if self._on_interrupt and call_state.interaction_id:
-                self._on_interrupt(call_state.interaction_id, question)
+                self._on_interrupt(call_state.interaction_id, prompt)
             raise
 
 
@@ -84,8 +84,8 @@ class TestStatefulTool:
                         "decision": "tool_calls",
                         "tool_calls": [
                             {
-                                "name": "HumanInputTool_ask_user",
-                                "arguments": {"question": "What is your name?"},
+                                "name": "InputTool_ask_user",
+                                "arguments": {"prompt": "What is your name?"},
                             }
                         ],
                     }
@@ -107,13 +107,13 @@ class TestStatefulTool:
         mock_llm = make_mock_llm(mock_responses)
         interrupt_details = {}
 
-        def on_interrupt(interaction_id, question):
+        def on_interrupt(interaction_id, prompt):
             interrupt_details["id"] = interaction_id
-            interrupt_details["question"] = question
+            interrupt_details["prompt"] = prompt
 
         @dataclass
         class Agent:
-            def __init__(self, tool: HumanInputTool):
+            def __init__(self, tool: InputTool):
                 self._tool = tool
 
             @infer
@@ -121,7 +121,7 @@ class TestStatefulTool:
                 """Ask the user for their name and create a report."""
                 ...
 
-        agent = Agent(HumanInputTool(on_interrupt=on_interrupt))
+        agent = Agent(InputTool(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-1"
         glyff_store = MemoryBackend()
         sefia_store = MemorySessionStorage(serializer=serializer)
@@ -136,7 +136,7 @@ class TestStatefulTool:
                         await agent.get_user_name()
 
         assert "id" in interrupt_details
-        assert interrupt_details["question"] == "What is your name?"
+        assert interrupt_details["prompt"] == "What is your name?"
 
         # --- Second run (with answer): Should succeed ---
         async with glyff.Session(
@@ -170,8 +170,8 @@ class TestStatefulTool:
                         "decision": "tool_calls",
                         "tool_calls": [
                             {
-                                "name": "HumanInputTool_ask_user",
-                                "arguments": {"question": "Name?"},
+                                "name": "InputTool_ask_user",
+                                "arguments": {"prompt": "Name?"},
                             }
                         ],
                     }
@@ -183,8 +183,8 @@ class TestStatefulTool:
                         "decision": "tool_calls",
                         "tool_calls": [
                             {
-                                "name": "HumanInputTool_ask_user",
-                                "arguments": {"question": "Age?"},
+                                "name": "InputTool_ask_user",
+                                "arguments": {"prompt": "Age?"},
                             }
                         ],
                     }
@@ -206,12 +206,12 @@ class TestStatefulTool:
         mock_llm = make_mock_llm(mock_responses)
         interrupts = {}
 
-        def on_interrupt(interaction_id, question):
-            interrupts[question] = interaction_id
+        def on_interrupt(interaction_id, prompt):
+            interrupts[prompt] = interaction_id
 
         @dataclass
         class Agent:
-            def __init__(self, tool: HumanInputTool):
+            def __init__(self, tool: InputTool):
                 self._tool = tool
 
             @infer
@@ -219,7 +219,7 @@ class TestStatefulTool:
                 """Ask for name, then age, then report."""
                 ...
 
-        agent = Agent(HumanInputTool(on_interrupt=on_interrupt))
+        agent = Agent(InputTool(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-2"
         glyff_store = MemoryBackend()
         sefia_store = MemorySessionStorage(serializer=serializer)

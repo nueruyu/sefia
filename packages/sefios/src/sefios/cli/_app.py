@@ -2,89 +2,62 @@ import inspect
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Protocol, TypeVar, cast
+from typing import TypeVar, cast
 
 import typer
 from sefia import Policy
 from sefia.exceptions import InferenceError, PauseException
-from sefios import SessionScope, get_session_storage, get_state
-from sefios.handlers import CostCalculator, CostState
-from sefios.tools import HumanInputRequest, HumanInputTool
+from sefia_typer import (
+    CLIReporter,
+    DefaultCLIReporter,
+    InputChannel,
+)
+from sefia_typer import InputRequest as CLIInputRequest
+from sefia_typer import ResolvedSession as CLIResolvedSession
+from sefia_typer import UnknownSessionError as CLIUnknownSessionError
 
-from .human_input import CLIHumanInputAdapter, CLIHumanInputReceiver
-from .policies import VerbosePolicy
-from .session import ResolvedSession, SessionManager
+from .._scope import SessionScope
+from .._session_state import get_session_storage
+from ..handlers import CostCalculator, CostState
+from ..sessions import ResolvedSession, SessionManager, UnknownSessionError
+from ..state import get_state
+from ..tools import InputRequest, InputResult, InputTool
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 _USE_DEFAULT_REPORTER = object()
 
 
-class CLIReporter(Protocol):
-    """Receives CLI lifecycle events and renders them for the host application."""
+class CostReportingCLIReporter(CLIReporter):
+    """Wraps a reporter to also echo the session's total cost.
 
-    def on_session_resolved(
-        self,
-        session: ResolvedSession,
-    ) -> MaybeAwaitable[None]: ...
+    Reads the :class:`CostState` accumulated by the scope's
+    :class:`CostCalculator`, so it only works inside a session run by
+    :class:`SefiaCLI`. This is the default reporter of :class:`SefiaCLI`.
+    """
 
-    def on_human_input_request(
-        self,
-        request: HumanInputRequest,
-    ) -> MaybeAwaitable[None]: ...
+    def __init__(self, inner: CLIReporter | None = None):
+        self._inner = inner or DefaultCLIReporter()
 
-    def on_human_input_question_delta(self, text: str) -> MaybeAwaitable[None]: ...
+    def on_session_resolved(self, session: CLIResolvedSession) -> MaybeAwaitable[None]:
+        return self._inner.on_session_resolved(session)
 
-    def on_interrupted(
-        self,
-        session: ResolvedSession,
-    ) -> MaybeAwaitable[None]: ...
+    def on_input_request(self, request: CLIInputRequest) -> MaybeAwaitable[None]:
+        return self._inner.on_input_request(request)
 
-    def on_inference_error(self, error: InferenceError) -> MaybeAwaitable[None]: ...
+    def on_input_prompt_delta(self, text: str) -> MaybeAwaitable[None]:
+        return self._inner.on_input_prompt_delta(text)
 
-    def on_session_finished(self) -> MaybeAwaitable[None]: ...
-
-
-class DefaultCLIReporter(CLIReporter):
-    """Default CLI reporter using Typer's standard terminal output helpers."""
-
-    def on_session_resolved(self, session: ResolvedSession) -> None:
-        if session.source == "created":
-            typer.secho(
-                f"> No active session. Starting new session: {session.session_id}",
-                bold=True,
-            )
-        elif session.source == "active":
-            typer.secho(f"> Resuming session {session.session_id}", bold=True)
-
-    def on_human_input_request(self, request: HumanInputRequest) -> None:
-        typer.echo()
-        typer.secho(
-            f"[USER_INPUT_REQUIRED:{request.interaction_id}]",
-            fg=typer.colors.YELLOW,
-            bold=True,
-            nl=False,
-        )
-        typer.echo(f" {request.question}")
-        typer.echo()
-
-    def on_human_input_question_delta(self, text: str) -> None:
-        typer.echo(text, nl=False)
-
-    async def on_interrupted(self, session: ResolvedSession) -> None:
-        typer.echo()
-        typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
-        typer.echo("Session interrupted to wait for your input.")
-        typer.echo("To resume, run the script again with your answer.")
+    async def on_interrupted(self, session: CLIResolvedSession) -> None:
+        await _maybe_await(self._inner.on_interrupted(session))
         await self._echo_total_cost()
 
     async def on_inference_error(self, error: InferenceError) -> None:
-        typer.echo()
-        typer.secho("INFERENCE ERROR", fg=typer.colors.RED, bold=True)
-        typer.echo(str(error))
+        await _maybe_await(self._inner.on_inference_error(error))
         await self._echo_total_cost()
 
     async def on_session_finished(self) -> None:
+        await _maybe_await(self._inner.on_session_finished())
         await self._echo_total_cost()
 
     @staticmethod
@@ -97,8 +70,8 @@ class DefaultCLIReporter(CLIReporter):
 class SefiaCLISession:
     """Operations available inside a Sefia CLI session context."""
 
-    def __init__(self, *, human_input: CLIHumanInputReceiver):
-        self._human_input = human_input
+    def __init__(self, *, channel: InputChannel):
+        self._input = channel
 
     async def accept_input(
         self,
@@ -106,44 +79,49 @@ class SefiaCLISession:
         *,
         reply_to: str | None = None,
     ) -> None:
-        """Store CLI input as an answer for a pending or upcoming interaction."""
-        if input_value is None:
-            return
-
-        input_text = _to_input_text(input_value)
-        if not input_text:
-            return
-
-        await self._human_input.receive_input(input_text, reply_to=reply_to)
+        """Store CLI input for a pending or upcoming interaction."""
+        await self._input.receive_input(input_value, reply_to=reply_to)
 
 
 class SefiaCLI:
-    """Creates Sefia session contexts for Typer commands."""
+    """Creates Sefia session contexts for Typer commands.
+
+    The integration facade over the ``sefia_typer`` building blocks: it wires
+    the CLI input core to :class:`InputTool` and the bound session
+    storage, runs sessions through a :class:`SessionScope` (with cost
+    accounting installed), and maps pauses and inference errors to CLI exit
+    codes.
+    """
 
     def __init__(
         self,
         *,
         session_dir: Path,
-        human_input_adapter: CLIHumanInputAdapter | None = None,
         reporter: CLIReporter | None | object = _USE_DEFAULT_REPORTER,
         model: str | None = None,
         stream: bool = True,
-        verbose: bool = False,
         max_steps: int | None = 25,
+        policies: list[Policy] | None = None,
     ):
         self._reporter = self._resolve_reporter(reporter)
         self._session_manager = SessionManager(session_dir)
-        self._human_input = human_input_adapter or CLIHumanInputAdapter(
-            on_request=self._report_human_input_request,
-            on_question_delta=self._report_human_input_question_delta,
+        self._input = InputChannel(
+            on_request=self._report_input_request,
+            on_prompt_delta=self._report_input_prompt_delta,
+            namespace="cli/input_channel",
         )
-        self._human_input_tool = self._human_input.create_tool()
-        self._human_input_receiver = CLIHumanInputReceiver(self._human_input.store)
-        self._verbose = verbose
+        self._input_tool = InputTool(
+            get_input=self._provide_input,
+            on_request=self._record_request,
+            on_complete=self._complete_request,
+            on_prompt_delta=self._input.notify_prompt_delta,
+        )
 
         scope_policies: list[Policy] = [
             Policy(handlers=lambda: [CostCalculator()])
         ]
+        if policies is not None:
+            scope_policies.extend(policies)
         self._session_scope = SessionScope(
             session_dir=session_dir,
             model=model,
@@ -153,8 +131,8 @@ class SefiaCLI:
         )
 
     @property
-    def human_input_tool(self) -> HumanInputTool:
-        return self._human_input_tool
+    def input_tool(self) -> InputTool:
+        return self._input_tool
 
     def create_session(self) -> str:
         """Create a new active CLI session and return its ID."""
@@ -162,7 +140,10 @@ class SefiaCLI:
 
     def switch_session(self, session_id: str) -> str:
         """Switch the active CLI session and return its ID."""
-        return self._session_manager.switch_active_session(session_id)
+        try:
+            return self._session_manager.switch_active_session(session_id)
+        except UnknownSessionError as e:
+            raise CLIUnknownSessionError(e.session_id) from None
 
     def get_active_session(self) -> str | None:
         """Return the active CLI session ID, if any."""
@@ -175,15 +156,13 @@ class SefiaCLI:
         session_id: str | None = None,
         model: str | None = None,
         stream: bool | None = None,
-        verbose: bool | None = None,
+        policies: list[Policy] | None = None,
     ) -> AsyncIterator[SefiaCLISession]:
         """Run code within a resolved Sefia CLI session context."""
-        resolved_session = self._session_manager.resolve_session(session_id)
-
-        resolved_verbose = self._verbose if verbose is None else verbose
-        session_policies: list[Policy] | None = None
-        if resolved_verbose:
-            session_policies = [VerbosePolicy()]
+        try:
+            resolved_session = self._session_manager.resolve_session(session_id)
+        except UnknownSessionError as e:
+            raise CLIUnknownSessionError(e.session_id) from None
 
         try:
             await self._report_session_resolved(resolved_session)
@@ -191,11 +170,11 @@ class SefiaCLI:
                 session_id=resolved_session.session_id,
                 model=model,
                 stream=stream,
-                policies=session_policies,
+                policies=policies,
             ):
-                with self._human_input.store.use_session_storage(get_session_storage()):
+                with self._input.use_store(get_session_storage()):
                     try:
-                        yield SefiaCLISession(human_input=self._human_input_receiver)
+                        yield SefiaCLISession(channel=self._input)
                     except InferenceError as e:
                         await self._report_inference_error(e)
                         raise
@@ -213,17 +192,26 @@ class SefiaCLI:
         except PauseException:
             raise typer.Exit(code=0)
 
+    async def _provide_input(self, request: InputRequest) -> str | None:
+        return await self._input.provide_input(request.interaction_id)
+
+    async def _record_request(self, request: InputRequest) -> None:
+        await self._input.record_request(request.interaction_id, request.prompt)
+
+    async def _complete_request(self, result: InputResult) -> None:
+        await self._input.complete_request(result.interaction_id)
+
     async def _report_session_resolved(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
             await _maybe_await(self._reporter.on_session_resolved(session))
 
-    async def _report_human_input_request(self, request: HumanInputRequest) -> None:
+    async def _report_input_request(self, request: CLIInputRequest) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_human_input_request(request))
+            await _maybe_await(self._reporter.on_input_request(request))
 
-    async def _report_human_input_question_delta(self, text: str) -> None:
+    async def _report_input_prompt_delta(self, text: str) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_human_input_question_delta(text))
+            await _maybe_await(self._reporter.on_input_prompt_delta(text))
 
     async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
@@ -240,14 +228,8 @@ class SefiaCLI:
     @staticmethod
     def _resolve_reporter(reporter: CLIReporter | None | object) -> CLIReporter | None:
         if reporter is _USE_DEFAULT_REPORTER:
-            return DefaultCLIReporter()
+            return CostReportingCLIReporter()
         return cast(CLIReporter | None, reporter)
-
-
-def _to_input_text(input_value: str | list[str]) -> str:
-    if isinstance(input_value, str):
-        return input_value.strip()
-    return " ".join(input_value).strip()
 
 
 async def _maybe_await(value: MaybeAwaitable[T]) -> T:

@@ -31,6 +31,7 @@ class Session:
         inspector: ToolFunctionInspector | None = None,
         decision_builder: DecisionModelBuilder | None = None,
         stream: bool = False,
+        max_repair_attempts: int = 2,
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
@@ -58,6 +59,7 @@ class Session:
                 prompt_formatter=prompt_formatter,
                 json_default=pydantic_json_default,
                 stream=stream,
+                max_repair_attempts=max_repair_attempts,
             )
 
         self._inference_strategy = make_strategy(llm_client)

@@ -93,6 +93,15 @@ stripped of any ``` fence, `json.loads`-ed, validated into the decision model, a
 `process_decision` validates `final_answer` against the declared return type
 (`InvalidInferenceResponseError` if it doesn't conform).
 
+An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
+first **repaired in place**: the strategy appends the invalid output and the
+validation error to the conversation as corrective feedback and asks again, up to
+`max_repair_attempts` times (default 2; configurable on
+`LLMInferenceStrategy` / `Session` / `SessionScope`). The repair exchange lives only
+inside that one (engraved) step's messages — it never enters the step history, so an
+invalid decision is never persisted. Only when the budget is spent does the
+`InvalidInferenceResponseError` propagate as described below.
+
 (Why the unified schema rather than native tool-calling, and the tradeoff it makes:
 [tradeoffs.md](./tradeoffs.md).)
 
@@ -178,8 +187,9 @@ result**: any exception that escapes an engraved call leaves that call **resumab
 while the work that already completed stays committed, and the exception then
 propagates normally. So no exception type changes glyff's durability: a transient
 provider hiccup or a response that failed schema validation simply propagates and is
-re-run on the next invocation (an in-loop `Retrier` may retry it first); a
-human-input tool raises `NeedsInput` to pause; an ordinary bug raises and surfaces to
+re-run on the next invocation (the strategy's in-step feedback repair and an in-loop
+`Retrier` may retry it first); an input tool raises `NeedsInput` to pause; an ordinary
+bug raises and surfaces to
 you. In every case the completed engraved steps are safe and the interrupted one runs
 again on re-invocation. sefia's control-flow pauses subclass `PauseException`
 (`sefia.exceptions`), which the executor propagates untouched instead of reporting as
@@ -188,28 +198,28 @@ base are both pauses.
 
 ## Human-in-the-loop: pause = raise, resume = re-invoke
 
-A human-input tool (`packages/sefios/src/sefios/tools/human.py`) is an engraved tool
+An input tool (`packages/sefios/src/sefios/tools/input.py`) is an engraved tool
 that:
 
-1. looks up whether an answer is recorded; if so, returns it;
-2. if not, records the pending question and **raises `NeedsInput`**.
+1. looks up whether input is recorded; if so, returns it;
+2. if not, records the pending prompt and **raises `NeedsInput`**.
 
 The raise propagates out, glyff leaves that engraved tool call **resumable**, and the
 exception reaches your handler, which returns "needs input". On the next request the
-answer is delivered with `accept_input` and you re-invoke the same session: every
-completed step replays, and the human tool runs again, now with an answer available,
+input is delivered with `accept_input` and you re-invoke the same session: every
+completed step replays, and the input tool runs again, now with input available,
 and returns it.
 
 Before tool execution, the default `sefios` policy also runs a step middleware that
-composes multiple human-input tool calls emitted in the same model decision into one
-question. It does not carry state across steps, so a follow-up question produced
+composes multiple input tool calls emitted in the same model decision into one
+prompt. It does not carry state across steps, so a follow-up question produced
 after resume remains a normal separate interaction.
 
 The idempotency hinge is `get_call_state_store`
 (`sefios/_session_state.py`): it scopes a small state store to the **current engraved
 call's `ExecutionId`** (hashed). Because a resumed invocation re-enters the *same*
 engraved call with the *same* execution id, the tool reads back the *same*
-`interaction_id` it stored before — so the pending question is keyed stably and a
+`interaction_id` it stored before — so the pending prompt is keyed stably and a
 re-entry doesn't create a duplicate. The store commits immediately, so this state
 survives the pause; everything else is just function arguments and return values.
 
@@ -229,14 +239,14 @@ a single call swap the model/policies by key, resolved per-call in
 1. `POST /turn` → `scope.session(id)` installs the context → `service.run(task)`.
 2. `@infer` engraves the run; the executor loops: model step (engraved) → "search"
    tool call (engraved) → model step → "ask human to approve" tool call.
-3. The human tool finds no answer, records the question under its call-scoped state,
-   and raises `NeedsInput`. glyff keeps the run's completed steps, leaves the human
+3. The input tool finds no input, records the prompt under its call-scoped state,
+   and raises `NeedsInput`. glyff keeps the run's completed steps, leaves the input
    call resumable, and the exception surfaces; the handler returns `needs_input` + the
-   question.
-4. `POST /turn` again with the answer (delivered via `accept_input`). `service.run`
+   prompt.
+4. `POST /turn` again with the input (delivered via `accept_input`). `service.run`
    re-enters: the search step and the
    earlier model steps **replay their stored outputs** (the draft is identical), the
-   human tool re-runs, now finds the answer, and returns it; the loop continues to the
+   input tool re-runs, now finds the input, and returns it; the loop continues to the
    final answer.
 
 Nothing ran between the two requests; the only thing that crossed the gap was rows in
