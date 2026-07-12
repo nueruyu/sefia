@@ -30,7 +30,9 @@ class Policy:
     # Class-level fallbacks so subclasses whose __init__ does not call
     # super().__init__() (e.g. dataclasses) still get empty defaults.
     _handlers_factory: Callable[[], list[EventHandler]] | None = None
-    _middleware_factory: Callable[[], list[InferenceMiddleware | StepMiddleware]] | None = None
+    _middleware_factory: (
+        Callable[[], list[InferenceMiddleware | StepMiddleware]] | None
+    ) = None
 
     def __init__(
         self,

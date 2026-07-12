@@ -60,9 +60,7 @@ class SefiaHTTP:
             on_complete=self._complete_request,
         )
 
-        scope_policies: list[Policy] = [
-            Policy(handlers=lambda: [CostCalculator()])
-        ]
+        scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
         if policies is not None:
             scope_policies.extend(policies)
 

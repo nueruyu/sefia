@@ -117,9 +117,7 @@ class SefiaCLI:
             on_prompt_delta=self._input.notify_prompt_delta,
         )
 
-        scope_policies: list[Policy] = [
-            Policy(handlers=lambda: [CostCalculator()])
-        ]
+        scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
         if policies is not None:
             scope_policies.extend(policies)
         self._session_scope = SessionScope(
