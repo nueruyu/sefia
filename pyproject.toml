@@ -2,6 +2,8 @@
 members = [
     "packages/sefia",
     "packages/sefia_litellm",
+    "packages/sefia_typer",
+    "packages/sefia_fastapi",
     "packages/sefios",
     "examples"
 ]
@@ -9,6 +11,8 @@ members = [
 [tool.uv.sources]
 sefia = { workspace = true }
 sefia-litellm = { workspace = true }
+sefia-typer = { workspace = true }
+sefia-fastapi = { workspace = true }
 sefios = { workspace = true }
 
 [tool.pytest.ini_options]
@@ -27,6 +31,8 @@ branch = true
 source = [
     "sefia",
     "sefia_litellm",
+    "sefia_typer",
+    "sefia_fastapi",
     "sefios",
 ]
 

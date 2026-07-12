@@ -4,7 +4,7 @@ from pytest_mock import MockerFixture
 from sefia.exceptions import InvalidInferenceResponseError
 from sefios import NeedsInput
 
-from examples._common.sefia_cli import SefiaCLI
+from sefios.cli import SefiaCLI
 
 
 class TestCostReporting:
@@ -23,7 +23,7 @@ class TestCostReporting:
         reporter.on_session_finished.assert_called_once()
 
     async def test_reports_on_yield(self, tmp_path, mocker: MockerFixture):
-        # A human-input interrupt (chat-style loop) raises NeedsInput from
+        # A input interrupt (chat-style loop) raises NeedsInput from
         # inside the session block; cost should still be reported at that point.
         reporter = mocker.Mock()
         cli = SefiaCLI(

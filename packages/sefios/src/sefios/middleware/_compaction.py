@@ -9,9 +9,7 @@ Compactor = Callable[
 ]
 
 
-def truncate_history(
-    history: list[HistoryItem], keep_items: int
-) -> list[HistoryItem]:
+def truncate_history(history: list[HistoryItem], keep_items: int) -> list[HistoryItem]:
     """
     Keep the most recent ``keep_items`` history items, aligned to a decision
     boundary: leading ``ToolCallResult``s whose ``ToolCallDecision`` was cut

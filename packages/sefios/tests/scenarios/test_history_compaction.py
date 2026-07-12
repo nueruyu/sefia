@@ -17,14 +17,13 @@ import glyff
 import pytest
 from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import Session, infer
+from sefia import Policy, Session, infer
 from sefia.llm import LLMResponse
 
 from sefios import DurableHistoryStore, FileSessionStorage, NeedsInput
 from sefios._session_state import bind_session_storage
 from sefios.middleware import HistoryCompactor
-from sefios.policies import CustomPolicy
-from sefios.tools import HumanInputRequest, HumanInputTool
+from sefios.tools import InputRequest, InputTool
 
 _SESSION_ID = "history-compaction-test"
 
@@ -34,9 +33,7 @@ def _note_response(text: str) -> LLMResponse:
         content=json.dumps(
             {
                 "decision": "tool_calls",
-                "tool_calls": [
-                    {"name": "Notes_add_note", "arguments": {"text": text}}
-                ],
+                "tool_calls": [{"name": "Notes_add_note", "arguments": {"text": text}}],
             }
         )
     )
@@ -48,8 +45,8 @@ _ASK_RESPONSE = LLMResponse(
             "decision": "tool_calls",
             "tool_calls": [
                 {
-                    "name": "HumanInputTool_get_human_input",
-                    "arguments": {"question": "Anything else?"},
+                    "name": "InputTool_get_input",
+                    "arguments": {"prompt": "Anything else?"},
                 }
             ],
         }
@@ -66,9 +63,9 @@ class Notes:
 
 
 class _Agent:
-    def __init__(self, notes: Notes, human: HumanInputTool):
+    def __init__(self, notes: Notes, input_tool: InputTool):
         self._notes = notes
-        self._human = human
+        self._input = input_tool
 
     @infer
     async def chat(self) -> str:
@@ -79,10 +76,10 @@ class _Agent:
 async def test_compacted_history_survives_restart_without_replaying_old_steps(
     tmp_path, make_mock_llm
 ):
-    seen: list[HumanInputRequest] = []
+    seen: list[InputRequest] = []
     answers: dict[str, str] = {}
 
-    def get_answer(request: HumanInputRequest) -> str | None:
+    def get_input(request: InputRequest) -> str | None:
         seen.append(request)
         return answers.get(request.interaction_id)
 
@@ -103,13 +100,18 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
 
     # Compacts once the history exceeds 5 items, keeping the last completed
     # step: after three note-taking steps (6 items) only the third survives.
-    compaction_policy = CustomPolicy(
+    compaction_policy = Policy(
         middleware=lambda: [HistoryCompactor(max_items=5, keep_items=2)]
     )
 
     # --- First run: three tool steps, compaction, then a pause. ---
     mock_llm = make_mock_llm(
-        [_note_response("zero"), _note_response("one"), _note_response("two"), _ASK_RESPONSE]
+        [
+            _note_response("zero"),
+            _note_response("one"),
+            _note_response("two"),
+            _ASK_RESPONSE,
+        ]
     )
     with pytest.raises(NeedsInput):
         async with make_glyff_session() as gs:
@@ -120,7 +122,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                     policies=[compaction_policy],
                     history_store=DurableHistoryStore(),
                 ):
-                    await _Agent(Notes(), HumanInputTool(get_answer=get_answer)).chat()
+                    await _Agent(Notes(), InputTool(get_input=get_input)).chat()
 
     # The fourth model call ran after compaction: the model saw fewer history
     # messages than the (uncompacted) third call did.
@@ -139,9 +141,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                 policies=[compaction_policy],
                 history_store=DurableHistoryStore(),
             ):
-                result = await _Agent(
-                    Notes(), HumanInputTool(get_answer=get_answer)
-                ).chat()
+                result = await _Agent(Notes(), InputTool(get_input=get_input)).chat()
 
     assert result == "All done."
     # One model call: the paused step replayed from its engraved record (keyed

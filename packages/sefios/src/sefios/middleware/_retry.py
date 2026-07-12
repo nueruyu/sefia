@@ -25,6 +25,13 @@ class Retrier(InferenceMiddleware):
     surface here either: the executor stringifies them into the history and
     feeds them back to the model, so the model can recover.
 
+    Invalid LLM responses rarely reach this middleware in practice:
+    ``LLMInferenceStrategy`` first retries them in place with corrective
+    feedback (``max_repair_attempts``), which is the better repair path — it
+    can tell the model what was wrong, while this middleware can only restart
+    the run with an identical prompt. ``Retrier`` remains useful as the outer
+    net for transient provider failures and for repair budgets that ran out.
+
     The retry counter is kept on the instance and persists across the attempts
     of a single run. Middleware is instantiated per inference run
     (``Policy.create_middleware`` is called once per ``@infer`` invocation in

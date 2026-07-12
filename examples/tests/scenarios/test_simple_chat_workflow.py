@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from examples._common.sefia_cli import SefiaCLI, SefiaCLISession
+from sefios.cli import SefiaCLI, SefiaCLISession
 
 main = import_module("examples.00_simple_chat.main")
 
@@ -13,7 +13,7 @@ def workflow(monkeypatch, tmp_path):
     """Point the simple chat example at a throwaway session directory."""
     cli = SefiaCLI(session_dir=tmp_path / "sessions", model="gpt-4o-mini", stream=False)
     monkeypatch.setattr(main, "sefia_cli", cli)
-    monkeypatch.setattr(main, "agent", main.ChatAgent(cli.human_input_tool))
+    monkeypatch.setattr(main, "agent", main.ChatAgent(cli.input_tool))
     return main
 
 

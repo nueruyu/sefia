@@ -53,10 +53,10 @@ the decision guide is [choosing.md](./choosing.md).
 
 ### How does the human-in-the-loop pause actually work? Exceptions?
 
-Yes. A human-input tool checks for a recorded answer; if there isn't one, it records
-the question and **raises `NeedsInput`**. glyff treats exceptions
+Yes. An input tool checks for recorded input; if there isn't one, it records
+the prompt and **raises `NeedsInput`**. glyff treats exceptions
 as non-terminal: completed engraved calls commit, the interrupted call stays resumable,
-and the exception propagates so your handler can return "needs input". When the answer
+and the exception propagates so your handler can return "needs input". When the input
 arrives in a later request (delivered with `accept_input`), you re-invoke the same
 call; the completed steps replay their exact outputs and only the pending step runs. No
 durable-execution engine, no websocket, no worker.
@@ -146,7 +146,7 @@ flight.
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, durability glue.
 - **`sefios`** — the official batteries: the `SessionScope` front door, default
-  policies/middleware, and tools (human input, web search).
+  policies/middleware, and tools (external input, web search).
 - **`sefia_litellm`** — provider support via [LiteLLM](https://github.com/BerriAI/litellm)
   (installed by the `sefios[litellm]` extra).
 - **[glyff](https://github.com/nueruyu/glyff)** — the content-addressed durable

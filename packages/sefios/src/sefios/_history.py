@@ -35,13 +35,10 @@ class DurableHistoryStore(HistoryStore):
             glyff_ctx = get_glyff_context()
         except ContextNotSetError:
             glyff_ctx = None
-        execution_id = (
-            glyff_ctx.current_execution_id if glyff_ctx is not None else None
-        )
+        execution_id = glyff_ctx.current_execution_id if glyff_ctx is not None else None
         if execution_id is None:
             raise RuntimeError(
-                "DurableHistoryStore can only be used inside an engraved "
-                "inference run."
+                "DurableHistoryStore can only be used inside an engraved inference run."
             )
         return f"{self._KEY_PREFIX}/{_execution_id_scope_key(execution_id)}"
 

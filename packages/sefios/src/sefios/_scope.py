@@ -40,6 +40,7 @@ class SessionScope:
         profiles: list[Profile] | None = None,
         stream: bool = False,
         max_steps: int | None = 25,
+        max_repair_attempts: int = 2,
         session_storage_factory: Callable[[str], SessionStorage] | None = None,
         history_store: HistoryStore | None = None,
     ):
@@ -50,6 +51,7 @@ class SessionScope:
         self.profiles = list(profiles or [])
         self.stream = stream
         self.max_steps = max_steps
+        self.max_repair_attempts = max_repair_attempts
         self.session_storage_factory = session_storage_factory
         self.history_store = history_store
 
@@ -118,5 +120,6 @@ class SessionScope:
                     profiles=final_profiles,
                     stream=resolved_stream,
                     history_store=self.history_store,
+                    max_repair_attempts=self.max_repair_attempts,
                 ) as session:
                     yield session

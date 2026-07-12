@@ -10,7 +10,9 @@ resolution-markers = [
 members = [
     "sefia",
     "sefia-examples",
+    "sefia-fastapi",
     "sefia-litellm",
+    "sefia-typer",
     "sefios",
 ]
 
@@ -2289,6 +2291,7 @@ version = "0.1.0"
 source = { editable = "examples" }
 dependencies = [
     { name = "fastapi" },
+    { name = "python-dotenv" },
     { name = "sefios", extra = ["all"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -2303,6 +2306,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.110" },
+    { name = "python-dotenv" },
     { name = "sefios", extras = ["all"], editable = "packages/sefios" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27" },
 ]
@@ -2310,6 +2314,33 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx", specifier = ">=0.27" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23" },
+]
+
+[[package]]
+name = "sefia-fastapi"
+version = "0.1.0"
+source = { editable = "packages/sefia_fastapi" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "sefia" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.110" },
+    { name = "sefia", editable = "packages/sefia" },
+]
+
+[package.metadata.requires-dev]
+dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
 ]
@@ -2344,6 +2375,37 @@ dev = [
 ]
 
 [[package]]
+name = "sefia-typer"
+version = "0.1.0"
+source = { editable = "packages/sefia_typer" }
+dependencies = [
+    { name = "rich" },
+    { name = "sefia" },
+    { name = "typer" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "rich" },
+    { name = "sefia", editable = "packages/sefia" },
+    { name = "typer" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23" },
+    { name = "pytest-mock", specifier = ">=3.12.0" },
+]
+
+[[package]]
 name = "sefios"
 version = "0.1.0"
 source = { editable = "packages/sefios" }
@@ -2357,15 +2419,15 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "ddgs" },
-    { name = "python-dotenv" },
-    { name = "rich" },
+    { name = "sefia-fastapi" },
     { name = "sefia-litellm" },
-    { name = "typer" },
+    { name = "sefia-typer" },
 ]
 cli = [
-    { name = "python-dotenv" },
-    { name = "rich" },
-    { name = "typer" },
+    { name = "sefia-typer" },
+]
+fastapi = [
+    { name = "sefia-fastapi" },
 ]
 litellm = [
     { name = "sefia-litellm" },
@@ -2380,16 +2442,16 @@ requires-dist = [
     { name = "glyff", specifier = ">=0.13.0" },
     { name = "glyff-file-store", specifier = ">=0.13.0" },
     { name = "glyff-pydantic", specifier = ">=0.13.0" },
-    { name = "python-dotenv", marker = "extra == 'cli'" },
-    { name = "rich", marker = "extra == 'cli'" },
     { name = "sefia", editable = "packages/sefia" },
+    { name = "sefia-fastapi", marker = "extra == 'fastapi'", editable = "packages/sefia_fastapi" },
     { name = "sefia-litellm", marker = "extra == 'litellm'", editable = "packages/sefia_litellm" },
+    { name = "sefia-typer", marker = "extra == 'cli'", editable = "packages/sefia_typer" },
     { name = "sefios", extras = ["cli"], marker = "extra == 'all'", editable = "packages/sefios" },
+    { name = "sefios", extras = ["fastapi"], marker = "extra == 'all'", editable = "packages/sefios" },
     { name = "sefios", extras = ["litellm"], marker = "extra == 'all'", editable = "packages/sefios" },
     { name = "sefios", extras = ["web"], marker = "extra == 'all'", editable = "packages/sefios" },
-    { name = "typer", marker = "extra == 'cli'" },
 ]
-provides-extras = ["litellm", "web", "cli", "all"]
+provides-extras = ["litellm", "web", "cli", "fastapi", "all"]
 
 [[package]]
 name = "shellingham"
