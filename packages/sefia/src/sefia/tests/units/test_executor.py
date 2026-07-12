@@ -607,6 +607,41 @@ class TestInferenceExecutor:
             ((*first, empty_decision), 2),
         ]
 
+    async def test_step_is_engraved_on_the_step_index(self, executor_dependencies):
+        # The engraved step call is keyed on the step ordinal, not the history
+        # contents — so the durable key stays O(1) and is stable under
+        # compaction. The strategy still receives the full live history.
+        mock_strategy, mock_collector, mock_publisher, _ = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(calls=[]),
+            ResultDecision(result="done"),
+        ]
+
+        engraved_step_args: list[tuple] = []
+
+        def recording_engrave(f):
+            async def wrapper(*args, **kwargs):
+                if getattr(f, "__name__", "") == "_next_step":
+                    engraved_step_args.append(args)
+                return await f(*args, **kwargs)
+
+            return wrapper
+
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            recording_engrave,
+            mock_publisher,
+        )
+
+        await executor.run()
+
+        # Two steps, engraved on their indices (0, 1), not on a history list.
+        assert engraved_step_args == [(0,), (1,)]
+
     async def test_retry_middleware_publishes_attempt_start_per_attempt(
         self, executor_dependencies
     ):

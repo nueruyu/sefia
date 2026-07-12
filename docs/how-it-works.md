@@ -215,20 +215,23 @@ its own transaction scope so it **commits immediately** — even though the
 surrounding `@infer` run has not finished (a `Never`-returning chat loop never
 would). A resumed invocation re-enters the same run execution, loads the
 snapshot, and continues from `completed_steps`; the finished steps are never
-re-entered. Only the step interrupted mid-flight runs again, from its engraved
-record, which still matches because the loaded snapshot is byte-for-byte the
-history that step was keyed on. The executor records a step **after** its
-engraved calls committed, so a crash between the two is healed by that same
-replay. `completed_steps` is tracked in the snapshot (not derived from
+re-entered. Each engraved step is keyed on its **step ordinal**, not on the
+history contents (`_next_step` takes the index; the history is read live and
+passed to the strategy). So the interrupted step runs again under the same key
+and returns its stored decision, the durable key stays O(1) instead of hashing
+the whole growing history each step, and compaction can rewrite the history
+without changing any step's key. The executor records a step **after** its
+engraved calls committed, so a crash between the two is healed by re-running
+that step. `completed_steps` is tracked in the snapshot (not derived from
 `len(items)`), so compaction can shrink the item list without skewing the step
-count or the step cap.
+ordinal or the step cap.
 
 The snapshot lives outside glyff's execution log, so it can be rewritten
 freely. `HistoryCompactor` (a `StepMiddleware` in `sefios.middleware`) rewrites
 the history through `ctx.history.rewrite` before the model call once it grows
 past a threshold, truncating to the most recent items at a decision boundary.
 The rewrite is persisted before the in-memory list is swapped, and the next
-step is a fresh model call keyed on the compacted content.
+step is a fresh model call over the compacted history.
 
 The `HistoryStorage` seam is swappable: sefios' `SessionHistoryStorage` keeps
 the history in the session storage (keyed by the run's `ExecutionId`, the same

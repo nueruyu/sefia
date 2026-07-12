@@ -16,7 +16,6 @@ from .exceptions import PauseException
 from .inference import (
     ResultDecision,
     FunctionInfo,
-    HistoryItem,
     InferenceDecision,
     ToolCallDecision,
     ToolCallRequest,
@@ -92,8 +91,18 @@ class InferenceExecutor:
         self._next_step_engraved = _wrap(self._next_step, engrave)
         self._call_tools_engraved = _wrap(self._call_tools, engrave)
 
-    async def _next_step(self, history: list[HistoryItem]) -> InferenceDecision:
-        """Internal engraved method for a single inference strategy call."""
+    async def _next_step(self, step: int) -> InferenceDecision:
+        """Internal engraved method for a single inference strategy call.
+
+        Keyed on the step index, not the history contents. Because the history
+        is durable (loaded from the snapshot on resume), the step ordinal alone
+        identifies the call: re-invoking the same step returns its stored
+        decision. Keying on ``step`` keeps the engrave args O(1) rather than
+        hashing the whole (growing) history each step, and lets compaction
+        rewrite the history without changing any step's key. The history itself
+        is read live from ``_History`` and passed to the strategy below.
+        """
+        history = self._history._current()
         await self.publisher.publish(
             events.BeforeInferenceStep(
                 history=history,
@@ -220,7 +229,7 @@ class InferenceExecutor:
             )
 
             async def core() -> InferenceDecision:
-                return await self._next_step_engraved(self._history._current())
+                return await self._next_step_engraved(step)
 
             step_chain = _compose(self._step_middlewares, step_ctx, core)
             decision = await step_chain()
