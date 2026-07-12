@@ -13,7 +13,6 @@ from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..exceptions import NeedsInput
 from ..handlers import CostCalculator
-from ..policies import CustomPolicy
 from ..sessions import SessionManager
 from ..tools import InputRequest, InputResult, InputTool
 
@@ -61,9 +60,7 @@ class SefiaHTTP:
             on_complete=self._complete_request,
         )
 
-        scope_policies: list[Policy] = [
-            CustomPolicy(handlers=lambda: [CostCalculator()])
-        ]
+        scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
         if policies is not None:
             scope_policies.extend(policies)
 
@@ -105,7 +102,7 @@ class SefiaHTTP:
         session_policies: list[Policy] = list(policies or [])
         if resolved_stream:
             session_policies.append(
-                CustomPolicy(handlers=lambda: [self._events.token_handler(session_id)])
+                Policy(handlers=lambda: [self._events.token_handler(session_id)])
             )
 
         try:

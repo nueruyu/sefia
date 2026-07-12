@@ -19,7 +19,6 @@ from sefia_typer import UnknownSessionError as CLIUnknownSessionError
 from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..handlers import CostCalculator, CostState
-from ..policies import CustomPolicy
 from ..sessions import ResolvedSession, SessionManager, UnknownSessionError
 from ..state import get_state
 from ..tools import InputRequest, InputResult, InputTool
@@ -118,9 +117,7 @@ class SefiaCLI:
             on_prompt_delta=self._input.notify_prompt_delta,
         )
 
-        scope_policies: list[Policy] = [
-            CustomPolicy(handlers=lambda: [CostCalculator()])
-        ]
+        scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
         if policies is not None:
             scope_policies.extend(policies)
         self._session_scope = SessionScope(

@@ -80,7 +80,7 @@ def policy(p: Policy) -> _PolicyDecorator:
     to ``@infer`` does not matter::
 
         @infer
-        @policy(CustomPolicy(middleware=lambda: [Retrier(max_retries=5)]))
+        @policy(Policy(middleware=lambda: [Retrier(max_retries=5)]))
         async def step(...): ...
 
     To apply more than one policy, merge them on the caller side (or stack
@@ -100,7 +100,7 @@ def policy(p: Policy) -> _PolicyDecorator:
     if not isinstance(p, Policy):
         raise TypeError(
             "@policy must be called with a Policy instance, "
-            "e.g. @policy(CustomPolicy(middleware=lambda: [Retrier(max_retries=5)]))."
+            "e.g. @policy(Policy(middleware=lambda: [Retrier(max_retries=5)]))."
         )
 
     def decorator(func: C) -> C:

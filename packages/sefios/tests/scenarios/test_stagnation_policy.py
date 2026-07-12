@@ -4,10 +4,9 @@ from dataclasses import dataclass
 import glyff
 from glyff import ArgsHasher, Serializer
 from glyff.store import MemoryBackend
-from sefia import Session, infer, policy
+from sefia import Policy, Session, infer, policy
 from sefia.llm import LLMResponse
 from sefios.middleware import StagnationDetector
-from sefios.policies import CustomPolicy
 
 
 @dataclass
@@ -39,7 +38,7 @@ class Researcher:
     def __init__(self, web: WebToolkit):
         self._web = web
 
-    @policy(CustomPolicy(middleware=lambda: [StagnationDetector(max_repeats=3)]))
+    @policy(Policy(middleware=lambda: [StagnationDetector(max_repeats=3)]))
     @infer
     async def generate_report(self, topic: str) -> Report:
         """
