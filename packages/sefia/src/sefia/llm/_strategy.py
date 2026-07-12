@@ -275,6 +275,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         )
 
         stream_callback = None
+        reasoning_callback = None
         tool_stream_handlers = _tool_stream_handlers(tools)
         tool_arg_streamer = None
         if self._stream and tool_stream_handlers:
@@ -286,7 +287,16 @@ class LLMInferenceStrategy(InferenceStrategy):
                     tool_arg_streamer.on_token(token)
                 await publisher.publish(events.LLMTokenReceived(token=token))
 
+            # Reasoning is step-scoped observation only: it is published as an
+            # event but never routed into the tool-argument streamer, since it is
+            # the step's thinking, not any tool call's decoded arguments.
+            async def on_reasoning_token(token: str):
+                await publisher.publish(
+                    events.LLMReasoningTokenReceived(token=token)
+                )
+
             stream_callback = on_token
+            reasoning_callback = on_reasoning_token
 
         try:
             response = await self.llm_client.complete(
@@ -294,6 +304,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 tools=None,
                 output_schema=output_schema,
                 stream_callback=stream_callback,
+                reasoning_callback=reasoning_callback,
             )
         finally:
             if tool_arg_streamer is not None:

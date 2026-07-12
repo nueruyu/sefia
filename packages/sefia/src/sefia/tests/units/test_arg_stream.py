@@ -229,6 +229,7 @@ class StreamingClient(LLMClient):
         tools=None,
         output_schema=None,
         stream_callback=None,
+        reasoning_callback=None,
     ) -> LLMResponse:
         if stream_callback is not None:
             for char in self.content:

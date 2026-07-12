@@ -47,6 +47,7 @@ class LLMResponse:
 
     model: str | None = None
     content: str | None = None
+    reasoning_content: str | None = None
     tool_calls: list[ToolCall] = field(default_factory=list)
     usage: dict[str, Any] | None = None
     stop_reason: str | None = None

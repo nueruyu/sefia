@@ -107,6 +107,19 @@ class TestLiteLLMClient:
         assert response.usage["prompt_tokens"] == 10
         assert len(response.tool_calls) == 1
 
+    async def test_complete_captures_reasoning_content(self, mock_acompletion):
+        message = LiteLLMMessage(role="assistant", content='{"decision":...}')
+        message.reasoning_content = "The user wants the weather."
+        mock_acompletion.return_value = ModelResponse(
+            model="gpt-4o",
+            choices=[Choices(finish_reason="stop", index=0, message=message)],
+        )
+        client = LiteLLMClient(model="gpt-4o")
+
+        response = await client.complete([])
+
+        assert response.reasoning_content == "The user wants the weather."
+
     async def test_cost_is_none_if_calculation_fails(
         self, mock_acompletion, mocker: MockerFixture
     ):
@@ -275,5 +288,88 @@ class TestLiteLLMClient:
         handle_stream.assert_awaited_once_with(
             stream,
             callback,
+            None,
             [{"role": "user", "content": "Hello"}],
         )
+
+    async def test_complete_streams_when_only_reasoning_callback_is_provided(
+        self, mock_acompletion, mocker
+    ):
+        class FakeStream:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise StopAsyncIteration
+
+        stream = FakeStream()
+        client = LiteLLMClient(model="gpt-4o")
+        stream_response = LLMResponse(content="streamed")
+        handle_stream = mocker.patch.object(
+            client,
+            "_handle_stream",
+            new_callable=AsyncMock,
+            return_value=stream_response,
+        )
+        reasoning_callback = AsyncMock()
+        messages = [Message(role="user", content="Hello")]
+        mock_acompletion.return_value = stream
+
+        await client.complete(messages, reasoning_callback=reasoning_callback)
+
+        assert mock_acompletion.call_args[1]["stream"] is True
+        handle_stream.assert_awaited_once_with(
+            stream,
+            None,
+            reasoning_callback,
+            [{"role": "user", "content": "Hello"}],
+        )
+
+    async def test_handle_stream_routes_reasoning_and_content_separately(
+        self, mocker
+    ):
+        from types import SimpleNamespace
+
+        def chunk(*, content=None, reasoning=None):
+            delta = SimpleNamespace(content=content, reasoning_content=reasoning)
+            return SimpleNamespace(choices=[SimpleNamespace(delta=delta)])
+
+        async def fake_stream():
+            yield chunk(reasoning="Let me ")
+            yield chunk(reasoning="think.")
+            yield chunk(content='{"decision"')
+            yield chunk(content=":...}")
+
+        client = LiteLLMClient(model="gpt-4o")
+        built = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant", content='{"decision":...}'
+                    ),
+                )
+            ]
+        )
+        mocker.patch(
+            "litellm.stream_chunk_builder",
+            return_value=built,
+        )
+
+        content_tokens: list[str] = []
+        reasoning_tokens: list[str] = []
+
+        async def on_content(token: str):
+            content_tokens.append(token)
+
+        async def on_reasoning(token: str):
+            reasoning_tokens.append(token)
+
+        response = await client._handle_stream(
+            fake_stream(), on_content, on_reasoning, []
+        )
+
+        assert reasoning_tokens == ["Let me ", "think."]
+        assert content_tokens == ['{"decision"', ":...}"]
+        assert response.reasoning_content == "Let me think."
