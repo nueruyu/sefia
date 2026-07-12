@@ -346,12 +346,6 @@ class LLMInferenceStrategy(InferenceStrategy):
             decision_data = json.loads(raw)
             return director.process_response_data(decision_data)
 
-        except InvalidInferenceResponseError as e:
-            if e.raw_content is None:
-                raise InvalidInferenceResponseError(
-                    e.detail, raw_content=response.content
-                ) from e
-            raise
         except UnknownToolDecisionError as e:
             raise InvalidInferenceResponseError(
                 f"LLM output requested an unknown tool: {e.tool_name!r}",
