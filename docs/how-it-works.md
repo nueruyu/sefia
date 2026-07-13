@@ -282,7 +282,7 @@ a single call swap the model/policies by key, resolved per-call in
 
 1. `POST /turn` → `scope.session(id)` installs the context → `service.run(task)`.
 2. `@infer` engraves the run; the executor loops: model step (engraved) → "search"
-   tool call (engraved) → model step → "ask for approval" input-tool call.
+   tool call (engraved) → model step → "ask human to approve" tool call.
 3. The input tool finds no input, records the prompt under its call-scoped state,
    and raises `NeedsInput`. The search step had already been recorded to the history
    snapshot; the ask-input step had not. glyff leaves the input call resumable, and

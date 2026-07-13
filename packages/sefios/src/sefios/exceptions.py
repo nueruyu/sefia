@@ -9,8 +9,8 @@ class NeedsInput(PauseException):
     ``interaction_id`` identifying the paused request so integration layers
     can report exactly which request is waiting without re-reading state.
     Catch it to surface the pause to your caller; once the input is recorded,
-    re-invoking the same session reloads the saved history and re-runs the
-    interrupted tool, which now returns the input.
+    re-invoking the same session replays the completed steps and re-runs the
+    tool, which now returns the input.
 
     It subclasses :class:`sefia.exceptions.PauseException`, so the sefia executor
     propagates it as a pause (never reporting it as a failure) without the core
