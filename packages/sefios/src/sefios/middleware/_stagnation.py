@@ -19,11 +19,12 @@ class StagnationDetector(StepMiddleware):
     the same call recurs ``max_repeats`` times in a row it raises
     ``StagnationError`` before the repeated tool runs again.
 
-    The rolling history is intentionally kept on the instance. Middleware is
-    instantiated per inference run (``Policy.create_middleware`` is called once
-    per ``@infer`` invocation in ``decorators._run``), so an instance is never
-    shared across concurrent runs; its state is scoped to a single run. The
-    history is reset at ``ctx.step == 0`` so a retried attempt starts clean.
+    The rolling window is kept on the instance. Middleware is instantiated per
+    inference run (``Policy.create_middleware`` is called once per ``@infer``
+    invocation in ``decorators._run``), so an instance is never shared across
+    concurrent runs. A resume or retry continues the durable run from its saved
+    step rather than replaying from the start, so the window keeps tracking the
+    real sequence of consecutive tool calls across that boundary.
     """
 
     def __init__(self, max_repeats: int = 3):
@@ -54,12 +55,6 @@ class StagnationDetector(StepMiddleware):
         ctx: StepContext,
         nxt: Callable[[], Awaitable[InferenceDecision]],
     ) -> InferenceDecision:
-        # A new attempt starts the step count over at 0. The same middleware
-        # instance is reused across retries, so reset the rolling history here to
-        # avoid carrying tool calls from a previous (failed) attempt forward,
-        # which would otherwise trip a false-positive StagnationError.
-        if ctx.step == 0:
-            self.history.clear()
         decision = await nxt()
         if isinstance(decision, ToolCallDecision):
             for call in decision.calls:

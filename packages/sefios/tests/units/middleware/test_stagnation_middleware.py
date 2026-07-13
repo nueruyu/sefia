@@ -65,12 +65,6 @@ class TestStagnationDetector:
         await _step(middleware, "test_tool", {"a": 1}, step=0)
         await _step(middleware, "test_tool", {"a": 1}, step=1)
 
-    async def test_history_clears_on_new_attempt(self):
-        middleware = StagnationDetector(max_repeats=2)
-
-        await _step(middleware, "test_tool", {"a": 1}, step=0)
-        await _step(middleware, "test_tool", {"a": 1}, step=0)
-
     async def test_ignores_result_decisions(self):
         middleware = StagnationDetector(max_repeats=2)
 
