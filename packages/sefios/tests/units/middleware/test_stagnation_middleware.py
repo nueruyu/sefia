@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 from sefia import HistorySnapshot, HistoryStorage, StepContext
-from sefia._history import _History
+from sefia._history import StepHistory
 from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
 from sefios.middleware import StagnationDetector, StagnationError
 
@@ -15,8 +15,8 @@ class _NoHistory(HistoryStorage):
         pass
 
 
-def _empty_history() -> _History:
-    return _History(_NoHistory())
+def _empty_history() -> StepHistory:
+    return StepHistory(_NoHistory())
 
 
 async def _step(middleware: StagnationDetector, name: str, args: dict, step: int = 0):

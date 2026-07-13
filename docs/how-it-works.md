@@ -64,7 +64,7 @@ loop:
   re-run on resume.
 - **History** is the accumulating list of `ToolCallDecision` / `ToolCallResult`
   (`inference.py`) that gets rendered back into messages each step. It is owned
-  by an internal history service (`_history.py`) over a swappable `HistoryStorage`
+  by the executor's `StepHistory` (`_history.py`) over a swappable `HistoryStorage`
   seam (`_interfaces/history_storage.py`): the executor loads a `HistorySnapshot`
   at the start of each attempt and saves one after every completed step, so a
   resumed run continues from the stored step count without re-entering the
@@ -209,7 +209,7 @@ base are both pauses.
 ## History storage and compaction
 
 The run's history is durable state, saved through a `HistoryStorage` after
-every completed step. The default `GlyffHistoryStorage` (`sefia/_history.py`)
+every completed step. The default `GlyffHistoryStorage` (`sefia/history_storages/`)
 writes each `HistorySnapshot` into the run execution's glyff metadata, inside
 its own transaction scope so it **commits immediately** — even though the
 surrounding `@infer` run has not finished (a `Never`-returning chat loop never
@@ -282,7 +282,7 @@ a single call swap the model/policies by key, resolved per-call in
 
 1. `POST /turn` → `scope.session(id)` installs the context → `service.run(task)`.
 2. `@infer` engraves the run; the executor loops: model step (engraved) → "search"
-   tool call (engraved) → model step → "ask human to approve" tool call.
+   tool call (engraved) → model step → "ask for approval" input-tool call.
 3. The input tool finds no input, records the prompt under its call-scoped state,
    and raises `NeedsInput`. The search step had already been recorded to the history
    snapshot; the ask-input step had not. glyff leaves the input call resumable, and

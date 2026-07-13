@@ -1,6 +1,7 @@
 import inspect
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 
 @dataclass
@@ -36,6 +37,18 @@ class ResultDecision:
 
 InferenceDecision = ToolCallDecision | ResultDecision
 HistoryItem = ToolCallDecision | ToolCallResult
+
+
+class History(Protocol):
+    """The run history as step middleware sees it: read plus rewrite."""
+
+    @property
+    def items(self) -> Sequence[HistoryItem]: ...
+
+    @property
+    def completed_steps(self) -> int: ...
+
+    async def rewrite(self, items: Sequence[HistoryItem]) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -85,5 +98,6 @@ __all__ = [
     "ResultDecision",
     "InferenceDecision",
     "HistoryItem",
+    "History",
     "FunctionInfo",
 ]

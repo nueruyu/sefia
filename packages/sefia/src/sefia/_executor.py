@@ -1,9 +1,10 @@
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from . import events
-from ._history import GlyffHistoryStorage, _History
+from ._history import StepHistory
 from ._interfaces import InferenceStrategy
 from ._interfaces.history_storage import HistoryStorage
+from .history_storages import GlyffHistoryStorage
 from ._interfaces.middleware import (
     InferenceContext,
     InferenceMiddleware,
@@ -78,7 +79,7 @@ class InferenceExecutor:
         self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy
         self.publisher = publisher
-        self._history = _History(history_storage or GlyffHistoryStorage())
+        self._history = StepHistory(history_storage or GlyffHistoryStorage())
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
 
@@ -92,17 +93,9 @@ class InferenceExecutor:
         self._call_tools_engraved = _wrap(self._call_tools, engrave)
 
     async def _next_step(self, step: int) -> InferenceDecision:
-        """Internal engraved method for a single inference strategy call.
-
-        Keyed on the step index, not the history contents. Because the history
-        is durable (loaded from the snapshot on resume), the step ordinal alone
-        identifies the call: re-invoking the same step returns its stored
-        decision. Keying on ``step`` keeps the engrave args O(1) rather than
-        hashing the whole (growing) history each step, and lets compaction
-        rewrite the history without changing any step's key. The history itself
-        is read live from ``_History`` and passed to the strategy below.
-        """
-        history = self._history._current()
+        """One engraved inference-strategy call, keyed on the step index (not
+        the history) so the durable key stays O(1) and survives compaction."""
+        history = self._history.items
         await self.publisher.publish(
             events.BeforeInferenceStep(
                 history=history,
@@ -118,17 +111,8 @@ class InferenceExecutor:
                 publisher=self.publisher,
             )
         except Exception as e:
-            # This method is engraved. The failure is published for observation
-            # (handlers cannot change the outcome — the publisher isolates their
-            # exceptions), then the original exception is re-raised. glyff leaves
-            # any interrupted execution in its STARTED state, so a re-invocation
-            # re-runs it regardless of the exception type. A recoverable
-            # InferenceError is also a PauseException, so the executor treats it
-            # as a pause (no InferenceFailed) — a transient hiccup or invalid LLM
-            # response pauses the run and a re-invocation re-runs the step. Any
-            # other exception is reported through InferenceFailed. (Resumable
-            # interrupts otherwise come from the control/execution layer, e.g. a
-            # tool raising PauseException, not from observation handlers.)
+            # Observation only, then re-raise: glyff leaves the step resumable,
+            # and run() classifies it as a pause or a failure upstream.
             await self.publisher.publish(events.InferenceStepFailed(error=e))
             raise
 
@@ -214,7 +198,7 @@ class InferenceExecutor:
 
     async def _attempt_inference(self) -> Any:
         """Executes a single attempt of the inference loop, owning the step loop."""
-        await self._history._load()
+        await self._history.load()
 
         while True:
             step = self._history.completed_steps
@@ -243,6 +227,6 @@ class InferenceExecutor:
                 else:
                     tool_results = []
                 # Do not persist a decision before its tool calls commit.
-                await self._history._record_step(decision, tool_results)
+                await self._history.record_step(decision, tool_results)
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")

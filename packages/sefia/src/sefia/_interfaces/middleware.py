@@ -1,22 +1,9 @@
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Awaitable, Callable
 
 from .._tool_system import ToolRegistry
-from ..inference import HistoryItem, InferenceDecision
-
-
-class History(Protocol):
-    """History operations available to step middleware."""
-
-    @property
-    def items(self) -> Sequence[HistoryItem]: ...
-
-    @property
-    def completed_steps(self) -> int: ...
-
-    async def rewrite(self, items: Sequence[HistoryItem]) -> None: ...
+from ..inference import History, InferenceDecision
 
 
 @dataclass

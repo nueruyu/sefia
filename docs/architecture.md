@@ -80,7 +80,8 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `inference.py` | Plain data: the decision/history types and the call descriptor. | `FunctionInfo`, `ToolCallDecision`, `FinalAnswerDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |
-| `_history.py` | Internal history state + the default glyff-metadata-backed storage. | `GlyffHistoryStorage` |
+| `_history.py` | The executor's mutable run-history state (backed by a `HistoryStorage`). | `StepHistory` |
+| `history_storages/` | `HistoryStorage` implementations (default: history in the run's glyff metadata). | `GlyffHistoryStorage` |
 | `_profiles.py` / `_metadata.py` | Per-call model/policy selection; the `__sefia_metadata__` store. | `Profile` |
 | `_tool_system.py` | The tool hierarchy, registry, and collector interfaces. | `Tool`, `SignatureTool`, `JsonSchemaTool`, `ToolDefinition`, `ToolRegistry`, `ToolCollector` |
 | `tool_collectors/` | Collector implementations: default discovery (a held field's public surface, by class-level annotation or runtime type), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
@@ -110,7 +111,7 @@ implementation noted in parentheses.
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |
-| `_history.py` | `SessionHistoryStorage` — an alternative that keeps run history in the session storage (keyed by the run's `ExecutionId`) instead of glyff metadata. |
+| `history_storages/` | `SessionHistoryStorage` — an alternative `HistoryStorage` that keeps run history in the session storage (keyed by the run's `ExecutionId`) instead of glyff metadata. |
 | `handlers/` | `_cost` — an observation-seam handler (cost accounting). |
 | `tools/` | `input.py` (external input, pause-by-raise), `web.py` (DuckDuckGo search). |
 | `storage/` | Session-scoped persistence: the `SessionStorage` interface + `MemorySessionStorage` / `FileSessionStorage`. |

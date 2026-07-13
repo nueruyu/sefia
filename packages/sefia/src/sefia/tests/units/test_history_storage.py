@@ -1,5 +1,5 @@
 from sefia import HistorySnapshot, HistoryStorage
-from sefia._history import _History
+from sefia._history import StepHistory
 from sefia.inference import (
     HistoryItem,
     ToolCallDecision,
@@ -31,34 +31,34 @@ def _result(i: int) -> ToolCallResult:
     return ToolCallResult(tool_call_id=str(i), result=f"r{i}")
 
 
-class TestHistoryStore:
+class TestStepHistory:
     async def test_loads_snapshot_into_items_and_step_count(self):
         storage = _InMemoryHistoryStorage(
             HistorySnapshot(items=(_decision(0), _result(0)), completed_steps=3)
         )
-        store = _History(storage)
+        store = StepHistory(storage)
 
-        await store._load()
+        await store.load()
 
         assert list(store.items) == [_decision(0), _result(0)]
         assert store.completed_steps == 3
 
     async def test_items_is_an_immutable_snapshot(self):
-        store = _History(_InMemoryHistoryStorage())
-        await store._record_step(_decision(0), [_result(0)])
+        store = StepHistory(_InMemoryHistoryStorage())
+        await store.record_step(_decision(0), [_result(0)])
 
         view = store.items
         assert isinstance(view, tuple)
         assert list(view) == [_decision(0), _result(0)]
-        await store._record_step(_decision(1), [_result(1)])
+        await store.record_step(_decision(1), [_result(1)])
         assert len(view) == 2  # the earlier snapshot is unaffected
 
     async def test_record_step_appends_and_persists_with_incremented_count(self):
         storage = _InMemoryHistoryStorage()
-        store = _History(storage)
+        store = StepHistory(storage)
 
-        await store._record_step(_decision(0), [_result(0)])
-        await store._record_step(_decision(1), [])
+        await store.record_step(_decision(0), [_result(0)])
+        await store.record_step(_decision(1), [])
 
         assert store.completed_steps == 2
         assert [(s.items, s.completed_steps) for s in storage.saves] == [
@@ -68,9 +68,9 @@ class TestHistoryStore:
 
     async def test_rewrite_persists_before_swapping_and_keeps_step_count(self):
         storage = _InMemoryHistoryStorage()
-        store = _History(storage)
-        await store._record_step(_decision(0), [_result(0)])
-        await store._record_step(_decision(1), [_result(1)])
+        store = StepHistory(storage)
+        await store.record_step(_decision(0), [_result(0)])
+        await store.record_step(_decision(1), [_result(1)])
 
         seen_in_memory: list[list[HistoryItem]] = []
 

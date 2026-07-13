@@ -1,7 +1,5 @@
 from ._decorators import infer, policy, preview, profile
-from ._history import GlyffHistoryStorage
 from ._interfaces import (
-    History,
     HistorySnapshot,
     HistoryStorage,
     InferenceContext,
@@ -12,6 +10,8 @@ from ._interfaces import (
     StepMiddleware,
 )
 from ._markers import AsRawText
+from .history_storages import GlyffHistoryStorage
+from .inference import History
 from ._profiles import Profile
 from ._session import Session
 from ._tool_system import (

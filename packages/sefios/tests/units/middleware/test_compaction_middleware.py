@@ -1,6 +1,6 @@
 import pytest
 from sefia import HistorySnapshot, HistoryStorage, StepContext
-from sefia._history import _History
+from sefia._history import StepHistory
 from sefia.inference import (
     HistoryItem,
     ResultDecision,
@@ -42,12 +42,12 @@ class _InMemoryHistoryStorage(HistoryStorage):
 
 async def _history_store(
     items: list[HistoryItem],
-) -> tuple[_History, _InMemoryHistoryStorage]:
+) -> tuple[StepHistory, _InMemoryHistoryStorage]:
     storage = _InMemoryHistoryStorage(
         HistorySnapshot(items=tuple(items), completed_steps=len(items) // 2)
     )
-    store = _History(storage)
-    await store._load()
+    store = StepHistory(storage)
+    await store.load()
     return store, storage
 
 

@@ -4,7 +4,7 @@ from glyff import get_context as get_glyff_context
 from glyff.exceptions import ContextNotSetError
 from sefia import HistorySnapshot, HistoryStorage
 
-from ._session_state import _execution_id_scope_key, get_session_storage
+from .._session_state import _execution_id_scope_key, get_session_storage
 
 
 class SessionHistoryStorage(HistoryStorage):

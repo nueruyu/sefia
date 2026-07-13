@@ -24,7 +24,7 @@ def storage(serializer) -> MemorySessionStorage:
 def glyff_ctx(mocker) -> MagicMock:
     ctx = MagicMock()
     ctx.current_execution_id = _execution_id()
-    mocker.patch("sefios._history.get_glyff_context", return_value=ctx)
+    mocker.patch("sefios.history_storages._session.get_glyff_context", return_value=ctx)
     return ctx
 
 

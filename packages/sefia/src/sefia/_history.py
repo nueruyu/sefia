@@ -1,34 +1,16 @@
 from collections.abc import Sequence
 
-import glyff
-
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from .inference import HistoryItem
 
-_METADATA_KEY = "sefia:history"
 
+class StepHistory:
+    """The executor's mutable run history, backed by a :class:`HistoryStorage`.
 
-class GlyffHistoryStorage(HistoryStorage):
-    """Stores history in the current run's glyff metadata."""
-
-    async def load(self) -> HistorySnapshot:
-        ctx = glyff.get_context()
-        snapshot = await ctx.metadata.get(
-            _METADATA_KEY,
-            HistorySnapshot,
-            execution_id=ctx.current_execution_id,
-        )
-        return snapshot if snapshot is not None else HistorySnapshot()
-
-    async def save(self, snapshot: HistorySnapshot) -> None:
-        ctx = glyff.get_context()
-        # Long-lived runs do not commit their surrounding transaction.
-        async with ctx.get_transaction_scope():
-            await ctx.metadata.set(_METADATA_KEY, snapshot, HistorySnapshot)
-
-
-class _History:
-    """Mutable run history owned by the executor."""
+    Middleware sees only the read-plus-``rewrite`` surface (via the
+    :class:`~sefia.History` protocol); the executor additionally drives
+    :meth:`load` and :meth:`record_step`.
+    """
 
     def __init__(self, storage: HistoryStorage):
         self._storage = storage
@@ -51,15 +33,12 @@ class _History:
         )
         self._items[:] = new_items
 
-    async def _load(self) -> None:
+    async def load(self) -> None:
         snapshot = await self._storage.load()
         self._items = list(snapshot.items)
         self._completed_steps = snapshot.completed_steps
 
-    def _current(self) -> list[HistoryItem]:
-        return self._items
-
-    async def _record_step(
+    async def record_step(
         self, decision: HistoryItem, results: Sequence[HistoryItem]
     ) -> None:
         self._items.append(decision)
