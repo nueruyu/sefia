@@ -18,9 +18,16 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/sefia_litellm"]
 
+# Mirrors the root pyproject's pytest options so `uv run pytest
+# packages/sefia_litellm` (which resolves this file as the config) behaves the
+# same: e2e tests stay opt-in via `-m e2e`.
 [tool.pytest.ini_options]
+addopts = ["-m", "not e2e"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "e2e: live LLM provider tests (need API keys; run with `pytest -m e2e`)",
+]
 
 [tool.uv.sources]
 sefia = { workspace = true }

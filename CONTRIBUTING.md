@@ -13,8 +13,9 @@ explained in [`docs/how-it-works.md`](./docs/how-it-works.md).
 
 ```bash
 uv sync                       # install the workspace
-uv run pytest                 # run all tests (asyncio auto-mode)
+uv run pytest                 # run all tests (asyncio auto-mode; skips e2e)
 uv run pytest packages/sefia  # run one package's tests
+uv run pytest -m e2e          # live-provider e2e tests (needs API keys, see below)
 uv run ruff check .           # lint
 uv run ruff format --check .  # formatting (CI enforces this; drop --check to fix)
 uv run pyright                # type-check
@@ -22,6 +23,22 @@ uv run pyright                # type-check
 
 Tests mirror the source under each package's `tests/units/` (per-module) and
 `tests/scenarios/` (behavioral). Add tests next to the layer you change.
+
+### End-to-end tests against real providers
+
+`packages/sefia_litellm/tests/e2e/` runs the full stack against live LLM APIs,
+once per provider. These tests are excluded from the default run (marker `e2e`)
+and each provider is skipped unless its API key is set — so `-m e2e` runs
+whichever subset your environment is configured for:
+
+| Provider | Key | Default model | Model override |
+| --- | --- | --- | --- |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` | `SEFIA_E2E_OPENAI_MODEL` |
+| Anthropic | `ANTHROPIC_API_KEY` | `anthropic/claude-opus-4-8` | `SEFIA_E2E_ANTHROPIC_MODEL` |
+| Gemini | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` | `SEFIA_E2E_GEMINI_MODEL` |
+
+They make real (paid) API calls; run them when touching the LiteLLM adapter,
+the prompt/decision schema, or before a release.
 
 ## Where to make a change
 
