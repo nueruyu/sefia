@@ -1,6 +1,5 @@
 from sefia import HistorySnapshot
 from sefia._history import StepHistory
-from sefia.history_storages import MemoryHistoryStorage
 from sefia.inference import ToolCallDecision, ToolCallRequest, ToolCallResult
 
 
@@ -45,14 +44,3 @@ class TestHistorySnapshot:
         snap = HistorySnapshot()
         assert snap.items == ()
         assert snap.completed_steps == 0
-
-
-class TestMemoryHistoryStorage:
-    async def test_round_trips_and_records_saves(self):
-        storage = MemoryHistoryStorage()
-        assert await storage.load() == HistorySnapshot()
-
-        first = HistorySnapshot((_decision(0), _result(0)), completed_steps=1)
-        await storage.save(first)
-        assert await storage.load() == first
-        assert storage.saves == [first]

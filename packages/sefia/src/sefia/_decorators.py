@@ -19,6 +19,7 @@ from . import _metadata
 from ._context import get_context
 from ._executor import InferenceExecutor
 from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
+from .history_storages import GlyffHistoryStorage
 from ._profiles import Profile
 from ._tool_system import set_stream_handler
 from .event_system import EventPublisher
@@ -219,7 +220,7 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
             publisher=publisher,
             inference_middlewares=inference_middlewares,
             step_middlewares=step_middlewares,
-            history_storage=context.history_storage,
+            history_storage=context.history_storage or GlyffHistoryStorage(),
         )
 
         # Only the inference itself is engraved, so glyff can replay it. The

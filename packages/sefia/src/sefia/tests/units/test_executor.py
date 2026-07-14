@@ -18,7 +18,6 @@ from sefia import (
 from sefia._executor import InferenceExecutor
 from sefia.event_system import EventHandler, EventPublisher
 from sefia.events import AttemptStart, StepStarted
-from sefia.history_storages import MemoryHistoryStorage
 from sefia.inference import (
     ResultDecision,
     InferenceDecision,
@@ -26,6 +25,15 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
+
+from ._support import MemoryHistoryStorage
+
+
+def _make_executor(*args, history_storage=None, **kwargs) -> InferenceExecutor:
+    """Build an executor, defaulting the required storage to an in-memory one."""
+    return InferenceExecutor(
+        *args, history_storage=history_storage or MemoryHistoryStorage(), **kwargs
+    )
 
 
 class _MaxStepsExceededError(Exception):
@@ -82,11 +90,6 @@ def executor_dependencies(mocker: MockerFixture):
 
     mock_collector.collect.return_value = ToolRegistry()
 
-    # The executor's default history storage is glyff-backed and needs a glyff
-    # context, which these unit tests don't set up. Swap it for an in-memory
-    # one so constructions that don't inject a storage still run.
-    mocker.patch("sefia._executor.GlyffHistoryStorage", MemoryHistoryStorage)
-
     def non_engrave(f):
         return f
 
@@ -120,7 +123,7 @@ class TestInferenceExecutor:
         tool_registry.add(mock_tool_func, name="my_tool")
         mock_collector.collect.return_value = tool_registry
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func_with_self,
             (object(), "value"),
             {},
@@ -153,7 +156,7 @@ class TestInferenceExecutor:
             ResultDecision(result="recovered"),
         ]
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func_with_self,
             (object(), "dummy_arg"),
             {},
@@ -188,7 +191,7 @@ class TestInferenceExecutor:
             ResultDecision(result="done"),
         ]
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -218,7 +221,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         mock_strategy.decide_next_step.return_value = ToolCallDecision(calls=[])
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -263,7 +266,7 @@ class TestInferenceExecutor:
                 calls.append(f"{self.label}:exit:{ctx.step}")
                 return decision
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -313,7 +316,7 @@ class TestInferenceExecutor:
         tool_registry.add(failing_tool, name="boom_tool")
         mock_collector.collect.return_value = tool_registry
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func_with_self,
             (object(), "value"),
             {},
@@ -351,7 +354,7 @@ class TestInferenceExecutor:
             ResultDecision(result="second attempt"),
         ]
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -378,7 +381,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = ValueError("always flaky")
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -410,7 +413,7 @@ class TestInferenceExecutor:
         error = ValueError("boom")
         mock_strategy.decide_next_step.side_effect = error
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -450,7 +453,7 @@ class TestInferenceExecutor:
         error = InvalidInferenceResponseError("malformed response")
         mock_strategy.decide_next_step.side_effect = error
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -488,7 +491,7 @@ class TestInferenceExecutor:
                 raise PauseException("interrupted for resume")
 
         publisher = EventPublisher([InterruptOnFailure()])
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -502,10 +505,8 @@ class TestInferenceExecutor:
             await executor.run()
 
     async def test_resumes_loop_from_stored_snapshot(self, executor_dependencies):
-        # A persistent history storage is the source of truth: the loop starts
-        # from the loaded snapshot, with the step index taken from the stored
-        # completed_steps (not re-derived from the item list) so compaction
-        # cannot skew it.
+        # The loop resumes from the snapshot's completed_steps, not the item
+        # count — so compaction can't skew it.
         (
             mock_strategy,
             mock_collector,
@@ -522,7 +523,7 @@ class TestInferenceExecutor:
         snapshot = HistorySnapshot(items=stored_items, completed_steps=4)
         mock_strategy.decide_next_step.return_value = ResultDecision(result="done")
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -548,10 +549,8 @@ class TestInferenceExecutor:
     async def test_saves_snapshot_after_each_completed_step(
         self, executor_dependencies
     ):
-        # A snapshot is saved once the step's decision and tool results are
-        # complete — including a decision with no calls — so a resume never
-        # loads a history ending in a half-finished step, and completed_steps
-        # advances by one each time.
+        # A snapshot is saved after each completed step (empty-calls included),
+        # advancing completed_steps by one.
         (
             mock_strategy,
             mock_collector,
@@ -573,7 +572,7 @@ class TestInferenceExecutor:
         mock_collector.collect.return_value = tool_registry
 
         storage = MemoryHistoryStorage()
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func_with_self,
             (object(), "value"),
             {},
@@ -618,7 +617,7 @@ class TestInferenceExecutor:
 
         mock_strategy.decide_next_step.return_value = ResultDecision(result="done")
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -660,7 +659,7 @@ class TestInferenceExecutor:
 
             return wrapper
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -689,7 +688,7 @@ class TestInferenceExecutor:
             ResultDecision(result="attempt 2 succeeds"),
         ]
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},

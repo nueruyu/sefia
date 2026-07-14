@@ -1,9 +1,10 @@
-from .._interfaces.history_storage import HistorySnapshot, HistoryStorage
+"""Shared test doubles for the sefia unit tests."""
+
+from sefia import HistorySnapshot, HistoryStorage
 
 
 class MemoryHistoryStorage(HistoryStorage):
-    """An in-memory :class:`HistoryStorage` for tests and embedding; keeps every
-    saved snapshot in :attr:`saves`."""
+    """In-memory `HistoryStorage`; records every saved snapshot in `saves`."""
 
     def __init__(self, initial: HistorySnapshot | None = None):
         self.snapshot = initial if initial is not None else HistorySnapshot()

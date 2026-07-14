@@ -4,7 +4,6 @@ from . import events
 from ._history import StepHistory
 from ._interfaces import InferenceStrategy
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
-from .history_storages import GlyffHistoryStorage
 from ._interfaces.middleware import (
     InferenceContext,
     InferenceMiddleware,
@@ -74,12 +73,13 @@ class InferenceExecutor:
         publisher: EventPublisher,
         inference_middlewares: list[InferenceMiddleware] | None = None,
         step_middlewares: list[StepMiddleware] | None = None,
-        history_storage: HistoryStorage | None = None,
+        *,
+        history_storage: HistoryStorage,
     ):
         self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy
         self.publisher = publisher
-        self._storage = history_storage or GlyffHistoryStorage()
+        self._storage = history_storage
         self._history = StepHistory()
         self._completed_steps = 0
         self._inference_middlewares = inference_middlewares or []
@@ -217,14 +217,14 @@ class InferenceExecutor:
             )
 
             async def core() -> InferenceDecision:
-                # Persist a mid-step compaction before the model call, so a
-                # resume loads it instead of re-running the compactor.
-                if self._history.dirty:
-                    await self._save()
+                # Persist a compaction before the model call, so a resume loads
+                # it instead of re-running the compactor.
+                await self._save_history()
                 return await self._next_step_engraved(step)
 
             step_chain = _compose(self._step_middlewares, step_ctx, core)
             decision = await step_chain()
+            await self._save_history()
 
             if isinstance(decision, ResultDecision):
                 return decision.result
@@ -234,15 +234,17 @@ class InferenceExecutor:
                     tool_results = await self._call_tools_engraved(decision.calls)
                 else:
                     tool_results = []
-                # Persist only after the step's engraved calls commit, so a
-                # crash resumes from the previous snapshot and replays the step.
+                # Persist only after the engraved calls commit, so a crash
+                # resumes from the previous snapshot and replays the step.
                 self._history.extend([decision, *tool_results])
                 self._completed_steps += 1
-                await self._save()
+                await self._save_history()
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")
 
-    async def _save(self) -> None:
+    async def _save_history(self) -> None:
+        if not self._history.dirty:
+            return
         await self._storage.save(
             HistorySnapshot(self._history.items, self._completed_steps)
         )
