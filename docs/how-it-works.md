@@ -161,25 +161,15 @@ its handler verbatim. A tool that
 history and fed back to the model so it can recover and continue, rather than failing
 the run.
 
-When one decision contains **several calls**, the batch is walked in request
-order and runs **serially by default**. Marking a tool method `@concurrent`
-(`sefia.concurrent`) declares it safe to overlap: consecutive calls to marked
-tools run concurrently (`asyncio`), while any unmarked call is a barrier — it
-starts only after everything before it finished, and everything after it waits.
-This is batch-internal concurrency, not fire-and-forget: every result is
-awaited, results are appended to history **in request order** regardless of
-completion order (so replay sees an identical history), and the next model step
-starts only after the whole batch completed. Within an overlapped group,
-identical calls (same tool, same arguments) still run one after another so
-glyff's per-content-key sequencing stays deterministic between a live run and
-its replay. If an overlapped call raises a pause, its siblings run to
-completion first (an engraved sibling's finished work is committed and replays
-on resume), then the pause of the earliest call in request order propagates.
-Like `@preview`, the marker is orthogonal to exposure — a public method is a
-tool either way; `@concurrent` only changes how its calls are scheduled within
-a batch. Mark only tools whose calls tolerate overlapping (pure reads,
-independent external calls); tools whose side-effect ordering matters, or that
-read-modify-write shared state without their own locking, should stay unmarked.
+When one decision contains several calls, the batch runs **serially by
+default**; consecutive calls to `@concurrent`-marked tools overlap, and an
+unmarked call is a barrier. This is not fire-and-forget: results are awaited
+and appended to history **in request order** regardless of completion order,
+identical calls never race (glyff sequences a content key by arrival), and a
+pause lets overlapped siblings finish — an engraved sibling's work commits and
+replays on resume — before the earliest pause in request order propagates.
+Mark only tools that tolerate overlapping; leave tools unmarked when their
+side-effect ordering matters or they mutate shared state without locking.
 
 ## Durability and replay (glyff)
 
