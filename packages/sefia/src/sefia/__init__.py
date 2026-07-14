@@ -1,5 +1,7 @@
 from ._decorators import infer, policy, preview, profile
 from ._interfaces import (
+    HistorySnapshot,
+    HistoryStorage,
     InferenceContext,
     InferenceMiddleware,
     InferenceStrategy,
@@ -28,6 +30,8 @@ __all__ = [
     "AsRawText",
     "Session",
     "Policy",
+    "HistorySnapshot",
+    "HistoryStorage",
     "InferenceStrategy",
     "InferenceMiddleware",
     "StepMiddleware",

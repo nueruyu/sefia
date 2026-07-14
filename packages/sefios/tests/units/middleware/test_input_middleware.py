@@ -1,9 +1,14 @@
 from sefia import StepContext, ToolRegistry
+from sefia._history import StepHistory
 from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
 from sefios.middleware import InputCallComposer
 from sefios.tools import InputTool
 
 HUMAN_INPUT_TOOL_NAME = "ask_human"
+
+
+def _empty_history() -> StepHistory:
+    return StepHistory()
 
 
 def _human_registry() -> ToolRegistry:
@@ -34,7 +39,7 @@ async def _run(middleware: InputCallComposer, decision, step: int = 0):
     return await middleware.wrap(
         StepContext(
             step=step,
-            history=[],
+            history=_empty_history(),
             tool_registry=_human_registry(),
         ),
         nxt,
@@ -182,7 +187,7 @@ class TestInputCallComposer:
 
         assert (
             await InputCallComposer().wrap(
-                StepContext(step=0, history=[]),
+                StepContext(step=0, history=_empty_history()),
                 nxt,
             )
             is decision

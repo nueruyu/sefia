@@ -1,7 +1,9 @@
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from . import events
+from ._history import StepHistory
 from ._interfaces import InferenceStrategy
+from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._interfaces.middleware import (
     InferenceContext,
     InferenceMiddleware,
@@ -14,7 +16,6 @@ from .exceptions import PauseException
 from .inference import (
     ResultDecision,
     FunctionInfo,
-    HistoryItem,
     InferenceDecision,
     ToolCallDecision,
     ToolCallRequest,
@@ -70,12 +71,16 @@ class InferenceExecutor:
         tool_collector: ToolCollector,
         engrave: Callable[[Any], Any],
         publisher: EventPublisher,
+        history_storage: HistoryStorage,
         inference_middlewares: list[InferenceMiddleware] | None = None,
         step_middlewares: list[StepMiddleware] | None = None,
     ):
         self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy
         self.publisher = publisher
+        self._storage = history_storage
+        self._history = StepHistory()
+        self._completed_steps = 0
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
 
@@ -88,8 +93,10 @@ class InferenceExecutor:
         self._next_step_engraved = _wrap(self._next_step, engrave)
         self._call_tools_engraved = _wrap(self._call_tools, engrave)
 
-    async def _next_step(self, history: list[HistoryItem]) -> InferenceDecision:
-        """Internal engraved method for a single inference strategy call."""
+    async def _next_step(self, step: int) -> InferenceDecision:
+        """One engraved inference-strategy call, keyed on the step index (not
+        the history) so the durable key stays O(1) and survives compaction."""
+        history = self._history.items
         await self.publisher.publish(
             events.BeforeInferenceStep(
                 history=history,
@@ -105,17 +112,8 @@ class InferenceExecutor:
                 publisher=self.publisher,
             )
         except Exception as e:
-            # This method is engraved. The failure is published for observation
-            # (handlers cannot change the outcome — the publisher isolates their
-            # exceptions), then the original exception is re-raised. glyff leaves
-            # any interrupted execution in its STARTED state, so a re-invocation
-            # re-runs it regardless of the exception type. A recoverable
-            # InferenceError is also a PauseException, so the executor treats it
-            # as a pause (no InferenceFailed) — a transient hiccup or invalid LLM
-            # response pauses the run and a re-invocation re-runs the step. Any
-            # other exception is reported through InferenceFailed. (Resumable
-            # interrupts otherwise come from the control/execution layer, e.g. a
-            # tool raising PauseException, not from observation handlers.)
+            # Observation only, then re-raise: glyff leaves the step resumable,
+            # and run() classifies it as a pause or a failure upstream.
             await self.publisher.publish(events.InferenceStepFailed(error=e))
             raise
 
@@ -201,34 +199,52 @@ class InferenceExecutor:
 
     async def _attempt_inference(self) -> Any:
         """Executes a single attempt of the inference loop, owning the step loop."""
-        history: list[HistoryItem] = []
-        step = 0
+        snapshot = await self._storage.load()
+        self._history = StepHistory(snapshot.items)
+        self._completed_steps = snapshot.completed_steps
 
         while True:
-            await self.publisher.publish(events.StepStarted(step=step, history=history))
+            step = self._completed_steps
+            await self.publisher.publish(
+                events.StepStarted(step=step, history=self._history.items)
+            )
 
             step_ctx = StepContext(
                 step=step,
-                history=history,
+                history=self._history,
                 tool_registry=self._tool_registry,
             )
 
             async def core() -> InferenceDecision:
-                return await self._next_step_engraved(history)
+                # Persist a compaction before the model call, so a resume loads
+                # it instead of re-running the compactor.
+                await self._save_history()
+                return await self._next_step_engraved(step)
 
             step_chain = _compose(self._step_middlewares, step_ctx, core)
             decision = await step_chain()
-            step += 1
+            await self._save_history()
 
             if isinstance(decision, ResultDecision):
                 return decision.result
 
             if isinstance(decision, ToolCallDecision):
-                history.append(decision)
-                if not decision.calls:
-                    continue
-
-                tool_results = await self._call_tools_engraved(decision.calls)
-                history.extend(tool_results)
+                if decision.calls:
+                    tool_results = await self._call_tools_engraved(decision.calls)
+                else:
+                    tool_results = []
+                # Persist only after the engraved calls commit, so a crash
+                # resumes from the previous snapshot and replays the step.
+                self._history.extend([decision, *tool_results])
+                self._completed_steps += 1
+                await self._save_history()
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")
+
+    async def _save_history(self) -> None:
+        if not self._history.dirty:
+            return
+        await self._storage.save(
+            HistorySnapshot(self._history.items, self._completed_steps)
+        )
+        self._history.mark_persisted()

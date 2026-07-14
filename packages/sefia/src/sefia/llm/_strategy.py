@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any, Callable, Never
 
 from .._interfaces import (
@@ -260,7 +261,7 @@ class LLMInferenceStrategy(InferenceStrategy):
     async def decide_next_step(
         self,
         function_info: FunctionInfo,
-        history: list[HistoryItem],
+        history: Sequence[HistoryItem],
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
@@ -382,7 +383,7 @@ class LLMInferenceStrategy(InferenceStrategy):
     def _build_messages(
         self,
         function_info: FunctionInfo,
-        history: list[HistoryItem],
+        history: Sequence[HistoryItem],
         output_schema: dict,
         director: _ExecutionDirector,
     ) -> list[Message]:

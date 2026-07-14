@@ -5,6 +5,7 @@ from sefia.exceptions import PauseException
 from pytest_mock import MockerFixture
 
 from sefia import (
+    HistorySnapshot,
     InferenceContext,
     InferenceMiddleware,
     InferenceStrategy,
@@ -24,6 +25,15 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
+
+from ._support import MemoryHistoryStorage
+
+
+def _make_executor(*args, history_storage=None, **kwargs) -> InferenceExecutor:
+    """Build an executor, defaulting the required storage to an in-memory one."""
+    return InferenceExecutor(
+        *args, history_storage=history_storage or MemoryHistoryStorage(), **kwargs
+    )
 
 
 class _MaxStepsExceededError(Exception):
@@ -113,7 +123,7 @@ class TestInferenceExecutor:
         tool_registry.add(mock_tool_func, name="my_tool")
         mock_collector.collect.return_value = tool_registry
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func_with_self,
             (object(), "value"),
             {},
@@ -146,7 +156,7 @@ class TestInferenceExecutor:
             ResultDecision(result="recovered"),
         ]
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func_with_self,
             (object(), "dummy_arg"),
             {},
@@ -181,7 +191,7 @@ class TestInferenceExecutor:
             ResultDecision(result="done"),
         ]
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -211,7 +221,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         mock_strategy.decide_next_step.return_value = ToolCallDecision(calls=[])
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -256,7 +266,7 @@ class TestInferenceExecutor:
                 calls.append(f"{self.label}:exit:{ctx.step}")
                 return decision
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -306,7 +316,7 @@ class TestInferenceExecutor:
         tool_registry.add(failing_tool, name="boom_tool")
         mock_collector.collect.return_value = tool_registry
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func_with_self,
             (object(), "value"),
             {},
@@ -344,7 +354,7 @@ class TestInferenceExecutor:
             ResultDecision(result="second attempt"),
         ]
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -371,7 +381,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = ValueError("always flaky")
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -403,7 +413,7 @@ class TestInferenceExecutor:
         error = ValueError("boom")
         mock_strategy.decide_next_step.side_effect = error
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -443,7 +453,7 @@ class TestInferenceExecutor:
         error = InvalidInferenceResponseError("malformed response")
         mock_strategy.decide_next_step.side_effect = error
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -481,7 +491,7 @@ class TestInferenceExecutor:
                 raise PauseException("interrupted for resume")
 
         publisher = EventPublisher([InterruptOnFailure()])
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},
@@ -493,6 +503,174 @@ class TestInferenceExecutor:
 
         with pytest.raises(ValueError, match="transient"):
             await executor.run()
+
+    async def test_resumes_loop_from_stored_snapshot(self, executor_dependencies):
+        # The loop resumes from the snapshot's completed_steps, not the item
+        # count — so compaction can't skew it.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        stored_items = (
+            ToolCallDecision(
+                calls=[ToolCallRequest(id="1", name="a_tool", arguments={})]
+            ),
+            ToolCallResult(tool_call_id="1", result="earlier"),
+        )
+        # completed_steps deliberately larger than the (compacted) item count.
+        snapshot = HistorySnapshot(items=stored_items, completed_steps=4)
+        mock_strategy.decide_next_step.return_value = ResultDecision(result="done")
+
+        executor = _make_executor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+            history_storage=MemoryHistoryStorage(snapshot),
+        )
+
+        result = await executor.run()
+
+        assert result == "done"
+        history = mock_strategy.decide_next_step.call_args.kwargs["history"]
+        assert list(history) == list(stored_items)
+        step_events = [
+            call.args[0]
+            for call in mock_publisher.publish.call_args_list
+            if isinstance(call.args[0], StepStarted)
+        ]
+        assert [event.step for event in step_events] == [4]
+
+    async def test_saves_snapshot_after_each_completed_step(
+        self, executor_dependencies
+    ):
+        # A snapshot is saved after each completed step (empty-calls included),
+        # advancing completed_steps by one.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        decision = ToolCallDecision(
+            calls=[ToolCallRequest(id="1", name="my_tool", arguments={"a": 1})]
+        )
+        empty_decision = ToolCallDecision(calls=[])
+        mock_strategy.decide_next_step.side_effect = [
+            decision,
+            empty_decision,
+            ResultDecision(result="final"),
+        ]
+
+        tool_registry = ToolRegistry()
+        tool_registry.add(AsyncMock(return_value="tool result"), name="my_tool")
+        mock_collector.collect.return_value = tool_registry
+
+        storage = MemoryHistoryStorage()
+        executor = _make_executor(
+            sample_func_with_self,
+            (object(), "value"),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+            history_storage=storage,
+        )
+
+        await executor.run()
+
+        first = (decision, ToolCallResult(tool_call_id="1", result="tool result"))
+        assert [(s.items, s.completed_steps) for s in storage.saves] == [
+            (first, 1),
+            ((*first, empty_decision), 2),
+        ]
+
+    async def test_compaction_is_persisted_before_the_model_call(
+        self, executor_dependencies
+    ):
+        # A mid-step rewrite is persisted before the model call. The run ends on
+        # the same step (Result, no post-step save), so that is the only save.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        seeded = (
+            ToolCallResult(tool_call_id="0", result="old"),
+            ToolCallResult(tool_call_id="1", result="recent"),
+        )
+        storage = MemoryHistoryStorage(HistorySnapshot(items=seeded, completed_steps=2))
+
+        class _KeepLast(StepMiddleware):
+            async def wrap(self, ctx: StepContext, nxt) -> InferenceDecision:
+                ctx.history.rewrite([ctx.history.items[-1]])
+                return await nxt()
+
+        mock_strategy.decide_next_step.return_value = ResultDecision(result="done")
+
+        executor = _make_executor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+            history_storage=storage,
+            step_middlewares=[_KeepLast()],
+        )
+
+        await executor.run()
+
+        # The compacted history was persisted (step count unchanged), and the
+        # model was called with it.
+        assert [(s.items, s.completed_steps) for s in storage.saves] == [
+            ((seeded[-1],), 2),
+        ]
+        history = mock_strategy.decide_next_step.call_args.kwargs["history"]
+        assert list(history) == [seeded[-1]]
+
+    async def test_step_is_engraved_on_the_step_index(self, executor_dependencies):
+        # The engraved step call is keyed on the step ordinal, not the history
+        # contents — so the durable key stays O(1) and is stable under
+        # compaction. The strategy still receives the full live history.
+        mock_strategy, mock_collector, mock_publisher, _ = executor_dependencies
+        mock_strategy.decide_next_step.side_effect = [
+            ToolCallDecision(calls=[]),
+            ResultDecision(result="done"),
+        ]
+
+        engraved_step_args: list[tuple] = []
+
+        def recording_engrave(f):
+            async def wrapper(*args, **kwargs):
+                if getattr(f, "__name__", "") == "_next_step":
+                    engraved_step_args.append(args)
+                return await f(*args, **kwargs)
+
+            return wrapper
+
+        executor = _make_executor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            recording_engrave,
+            mock_publisher,
+        )
+
+        await executor.run()
+
+        # Two steps, engraved on their indices (0, 1), not on a history list.
+        assert engraved_step_args == [(0,), (1,)]
 
     async def test_retry_middleware_publishes_attempt_start_per_attempt(
         self, executor_dependencies
@@ -508,7 +686,7 @@ class TestInferenceExecutor:
             ResultDecision(result="attempt 2 succeeds"),
         ]
 
-        executor = InferenceExecutor(
+        executor = _make_executor(
             sample_func,
             ("dummy_arg",),
             {},

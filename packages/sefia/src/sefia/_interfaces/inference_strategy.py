@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 
 from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
@@ -14,7 +15,7 @@ class InferenceStrategy(ABC):
     async def decide_next_step(
         self,
         function_info: FunctionInfo,
-        history: list[HistoryItem],
+        history: Sequence[HistoryItem],
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
