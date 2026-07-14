@@ -3,7 +3,7 @@ from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 from . import events
 from ._history import StepHistory
 from ._interfaces import InferenceStrategy
-from ._interfaces.history_storage import HistoryStorage
+from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from .history_storages import GlyffHistoryStorage
 from ._interfaces.middleware import (
     InferenceContext,
@@ -79,7 +79,9 @@ class InferenceExecutor:
         self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy
         self.publisher = publisher
-        self._history = StepHistory(history_storage or GlyffHistoryStorage())
+        self._storage = history_storage or GlyffHistoryStorage()
+        self._history = StepHistory()
+        self._completed_steps = 0
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
 
@@ -198,10 +200,12 @@ class InferenceExecutor:
 
     async def _attempt_inference(self) -> Any:
         """Executes a single attempt of the inference loop, owning the step loop."""
-        await self._history.load()
+        snapshot = await self._storage.load()
+        self._history = StepHistory(snapshot.items)
+        self._completed_steps = snapshot.completed_steps
 
         while True:
-            step = self._history.completed_steps
+            step = self._completed_steps
             await self.publisher.publish(
                 events.StepStarted(step=step, history=self._history.items)
             )
@@ -226,7 +230,16 @@ class InferenceExecutor:
                     tool_results = await self._call_tools_engraved(decision.calls)
                 else:
                     tool_results = []
-                # Do not persist a decision before its tool calls commit.
-                await self._history.record_step(decision, tool_results)
+                # Persist only after the step's engraved calls commit: a crash
+                # before this resumes from the previous snapshot and replays the
+                # step (any compaction done this step is re-derived by the
+                # middleware, which re-runs deterministically). Compaction before
+                # a pause is therefore never persisted on its own — it does not
+                # need to be.
+                self._history.extend([decision, *tool_results])
+                self._completed_steps += 1
+                await self._storage.save(
+                    HistorySnapshot(self._history.items, self._completed_steps)
+                )
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")

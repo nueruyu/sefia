@@ -63,12 +63,13 @@ loop:
 - **The tool batch is engraved** (`_call_tools_engraved`), so executed tools don't
   re-run on resume.
 - **History** is the accumulating list of `ToolCallDecision` / `ToolCallResult`
-  (`inference.py`) that gets rendered back into messages each step. It is owned
-  by the executor's `StepHistory` (`_history.py`) over a swappable `HistoryStorage`
-  seam (`_interfaces/history_storage.py`): the executor loads a `HistorySnapshot`
-  at the start of each attempt and saves one after every completed step, so a
-  resumed run continues from the stored step count without re-entering the
-  finished steps. See "History storage and compaction" below.
+  (`inference.py`), held as pure in-memory state in `StepHistory` (`_history.py`)
+  and rendered back into messages each step. The executor loads a
+  `HistorySnapshot` from a swappable `HistoryStorage` seam
+  (`_interfaces/history_storage.py`) at the start of each attempt and saves one
+  after every completed step, so a resumed run continues from the stored step
+  count without re-entering the finished steps. See "History storage and
+  compaction" below.
 - **Two seams, kept apart:** *middleware* wraps the loop and can retry or
   short-circuit (control); the *event publisher* emits `BeforeInferenceStep`,
   `AfterToolCall`, etc. for handlers that can only observe — the publisher isolates a
@@ -208,30 +209,36 @@ base are both pauses.
 
 ## History storage and compaction
 
-The run's history is durable state, saved through a `HistoryStorage` after
-every completed step. The default `GlyffHistoryStorage` (`sefia/history_storages/`)
-writes each `HistorySnapshot` into the run execution's glyff metadata, inside
-its own transaction scope so it **commits immediately** — even though the
-surrounding `@infer` run has not finished (a `Never`-returning chat loop never
-would). A resumed invocation re-enters the same run execution, loads the
-snapshot, and continues from `completed_steps`; the finished steps are never
-re-entered. Each engraved step is keyed on its **step ordinal**, not on the
-history contents (`_next_step` takes the index; the history is read live and
-passed to the strategy). So the interrupted step runs again under the same key
-and returns its stored decision, the durable key stays O(1) instead of hashing
-the whole growing history each step, and compaction can rewrite the history
-without changing any step's key. The executor records a step **after** its
-engraved calls committed, so a crash between the two is healed by re-running
-that step. `completed_steps` is tracked in the snapshot (not derived from
-`len(items)`), so compaction can shrink the item list without skewing the step
-ordinal or the step cap.
+The history is durable state. The **executor** owns it: `StepHistory`
+(`_history.py`) is a pure in-memory item list, while the executor loads a
+`HistorySnapshot` from a `HistoryStorage`, tracks the step count, and saves a
+snapshot after every completed step. The default `GlyffHistoryStorage`
+(`sefia/history_storages/`) writes each snapshot into the run execution's glyff
+metadata, inside its own transaction scope so it **commits immediately** — even
+though the surrounding `@infer` run has not finished (a `Never`-returning chat
+loop never would). A resumed invocation re-enters the same run execution, loads
+the snapshot, rebuilds `StepHistory` from its items, and continues from
+`completed_steps`; the finished steps are never re-entered.
 
-The snapshot lives outside glyff's execution log, so it can be rewritten
-freely. `HistoryCompactor` (a `StepMiddleware` in `sefios.middleware`) rewrites
-the history through `ctx.history.rewrite` before the model call once it grows
-past a threshold, truncating to the most recent items at a decision boundary.
-The rewrite is persisted before the in-memory list is swapped, and the next
-step is a fresh model call over the compacted history.
+Each engraved step is keyed on its **step ordinal**, not on the history
+contents (`_next_step` takes the index; the history is read live and passed to
+the strategy). So the interrupted step runs again under the same key and
+returns its stored decision, the durable key stays O(1) instead of hashing the
+whole growing history each step, and compaction can reshape the history without
+changing any step's key. The executor saves a step **after** its engraved calls
+committed, so a crash between the two is healed by re-running the step.
+`completed_steps` is tracked in the snapshot (not derived from `len(items)`), so
+compaction can shrink the item list without skewing the step ordinal or the
+step cap.
+
+`HistoryCompactor` (a `StepMiddleware` in `sefios.middleware`) reshapes the
+history through `ctx.history.rewrite` before the model call once it grows past a
+threshold, truncating to the most recent items at a decision boundary. The
+rewrite only mutates the in-memory list; it is persisted by the next post-step
+save, and if the step pauses first the executor simply re-derives it — the
+truncation is deterministic, so a resumed attempt re-runs the middleware and
+reproduces the same compaction. The next step is a fresh model call over the
+compacted history.
 
 The `HistoryStorage` seam is swappable: sefios' `SessionHistoryStorage` keeps
 the history in the session storage (keyed by the run's `ExecutionId`, the same

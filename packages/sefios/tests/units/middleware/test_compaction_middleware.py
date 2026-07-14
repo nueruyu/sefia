@@ -1,5 +1,5 @@
 import pytest
-from sefia import HistorySnapshot, HistoryStorage, StepContext
+from sefia import StepContext
 from sefia._history import StepHistory
 from sefia.inference import (
     HistoryItem,
@@ -27,30 +27,6 @@ def _history(steps: int) -> list[HistoryItem]:
     return [item for i in range(steps) for item in _step(i)]
 
 
-class _InMemoryHistoryStorage(HistoryStorage):
-    def __init__(self, initial: HistorySnapshot | None = None):
-        self.snapshot = initial if initial is not None else HistorySnapshot()
-        self.saves: list[HistorySnapshot] = []
-
-    async def load(self) -> HistorySnapshot:
-        return self.snapshot
-
-    async def save(self, snapshot: HistorySnapshot) -> None:
-        self.snapshot = snapshot
-        self.saves.append(snapshot)
-
-
-async def _history_store(
-    items: list[HistoryItem],
-) -> tuple[StepHistory, _InMemoryHistoryStorage]:
-    storage = _InMemoryHistoryStorage(
-        HistorySnapshot(items=tuple(items), completed_steps=len(items) // 2)
-    )
-    store = StepHistory(storage)
-    await store.load()
-    return store, storage
-
-
 async def _nxt() -> ResultDecision:
     return ResultDecision(result="done")
 
@@ -76,25 +52,21 @@ class TestTruncateHistory:
 
 class TestHistoryCompactor:
     async def test_does_not_compact_under_the_threshold(self):
-        store, storage = await _history_store(_history(2))
-        ctx = StepContext(step=2, history=store)
+        history = StepHistory(_history(2))
+        ctx = StepContext(step=2, history=history)
 
         decision = await HistoryCompactor(max_items=4).wrap(ctx, _nxt)
 
         assert decision == ResultDecision(result="done")
-        assert list(store.items) == _history(2)
-        assert storage.saves == []
+        assert list(history.items) == _history(2)
 
-    async def test_compacts_and_persists_before_the_step(self):
-        store, storage = await _history_store(_history(3))
-        ctx = StepContext(step=3, history=store)
+    async def test_compacts_the_history_before_the_step(self):
+        history = StepHistory(_history(3))
+        ctx = StepContext(step=3, history=history)
 
         await HistoryCompactor(max_items=5, keep_items=2).wrap(ctx, _nxt)
 
-        assert list(store.items) == _step(2)
-        # Persisted, and the step count is preserved (compaction is not a step).
-        assert len(storage.saves) == 1
-        assert storage.saves[0].completed_steps == 3
+        assert list(history.items) == _step(2)
 
     async def test_rejects_invalid_configuration(self):
         with pytest.raises(ValueError, match="max_items"):

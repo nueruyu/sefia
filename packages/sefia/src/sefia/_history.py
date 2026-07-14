@@ -1,58 +1,31 @@
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
-from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from .inference import HistoryItem
 
 
 class StepHistory:
-    """The executor's mutable run history, backed by a :class:`HistoryStorage`.
+    """A run's conversation history: the list of ``ToolCallDecision`` /
+    ``ToolCallResult`` items rendered back into the prompt each step.
 
-    Middleware sees only the read-plus-``rewrite`` surface (via the
-    :class:`~sefia.History` protocol); the executor additionally drives
-    :meth:`load` and :meth:`record_step`.
-
-    ``items`` returns the cached immutable tuple that was already built for the
-    last persisted snapshot, so repeated reads within a step are O(1) and add no
-    allocation.
+    Pure in-memory state — loading, persistence, and the step count live on the
+    executor. The executor appends completed steps via :meth:`extend`; step
+    middleware may reshape the history (compaction) via :meth:`rewrite`.
+    ``items`` returns a cached immutable tuple, so reads are O(1).
     """
 
-    def __init__(self, storage: HistoryStorage):
-        self._storage = storage
-        self._items: list[HistoryItem] = []
-        self._snapshot: tuple[HistoryItem, ...] = ()
-        self._completed_steps = 0
+    def __init__(self, items: Sequence[HistoryItem] = ()):
+        self._items = list(items)
+        self._snapshot = tuple(self._items)
 
     @property
-    def items(self) -> Sequence[HistoryItem]:
+    def items(self) -> tuple[HistoryItem, ...]:
         return self._snapshot
 
-    @property
-    def completed_steps(self) -> int:
-        return self._completed_steps
-
-    async def rewrite(self, items: Sequence[HistoryItem]) -> None:
-        """Persist and replace history without advancing the step count."""
-        new_items = list(items)
-        snapshot = tuple(new_items)
-        # Persist before swapping in memory, so a crash leaves the store ahead
-        # (harmless) rather than behind (a lost rewrite).
-        await self._storage.save(HistorySnapshot(snapshot, self._completed_steps))
-        self._items = new_items
-        self._snapshot = snapshot
-
-    async def load(self) -> None:
-        snapshot = await self._storage.load()
-        self._items = list(snapshot.items)
-        self._snapshot = snapshot.items
-        self._completed_steps = snapshot.completed_steps
-
-    async def record_step(
-        self, decision: HistoryItem, results: Sequence[HistoryItem]
-    ) -> None:
-        self._items.append(decision)
-        self._items.extend(results)
-        self._completed_steps += 1
+    def extend(self, items: Iterable[HistoryItem]) -> None:
+        self._items.extend(items)
         self._snapshot = tuple(self._items)
-        await self._storage.save(
-            HistorySnapshot(self._snapshot, self._completed_steps)
-        )
+
+    def rewrite(self, items: Sequence[HistoryItem]) -> None:
+        """Replace the history (e.g. compaction). Does not advance the run."""
+        self._items = list(items)
+        self._snapshot = tuple(self._items)

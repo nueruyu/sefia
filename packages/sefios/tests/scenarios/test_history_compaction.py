@@ -15,7 +15,8 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Policy, Session, infer
 from sefia.llm import LLMResponse
 
-from sefios import FileSessionStorage, NeedsInput, SessionHistoryStorage
+from sefios import FileSessionStorage, NeedsInput
+from sefios.history_storages import SessionHistoryStorage
 from sefios._session_state import bind_session_storage
 from sefios.middleware import HistoryCompactor
 from sefios.tools import InputRequest, InputTool

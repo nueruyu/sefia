@@ -43,5 +43,5 @@ class HistoryCompactor(StepMiddleware):
     ) -> InferenceDecision:
         if len(ctx.history.items) > self.max_items:
             compacted = _truncate_history(list(ctx.history.items), self._keep_items)
-            await ctx.history.rewrite(compacted)
+            ctx.history.rewrite(compacted)
         return await nxt()

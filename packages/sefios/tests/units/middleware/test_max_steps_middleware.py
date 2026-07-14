@@ -1,20 +1,12 @@
 import pytest
-from sefia import HistorySnapshot, HistoryStorage, StepContext
+from sefia import StepContext
 from sefia._history import StepHistory
 from sefia.inference import ResultDecision
 from sefios.middleware import MaxStepsExceededError, StepLimiter
 
 
-class _NoHistory(HistoryStorage):
-    async def load(self) -> HistorySnapshot:
-        return HistorySnapshot()
-
-    async def save(self, snapshot: HistorySnapshot) -> None:
-        pass
-
-
 def _ctx(step: int) -> StepContext:
-    return StepContext(step=step, history=StepHistory(_NoHistory()))
+    return StepContext(step=step, history=StepHistory())
 
 
 async def _decision():

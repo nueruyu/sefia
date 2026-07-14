@@ -6,7 +6,6 @@ from pytest_mock import MockerFixture
 
 from sefia import (
     HistorySnapshot,
-    HistoryStorage,
     InferenceContext,
     InferenceMiddleware,
     InferenceStrategy,
@@ -19,6 +18,7 @@ from sefia import (
 from sefia._executor import InferenceExecutor
 from sefia.event_system import EventHandler, EventPublisher
 from sefia.events import AttemptStart, StepStarted
+from sefia.history_storages import MemoryHistoryStorage
 from sefia.inference import (
     ResultDecision,
     InferenceDecision,
@@ -26,21 +26,6 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-
-
-class _InMemoryHistoryStorage(HistoryStorage):
-    """A non-glyff storage for unit tests, recording every saved snapshot."""
-
-    def __init__(self, initial: HistorySnapshot | None = None):
-        self.snapshot = initial if initial is not None else HistorySnapshot()
-        self.saves: list[HistorySnapshot] = []
-
-    async def load(self) -> HistorySnapshot:
-        return self.snapshot
-
-    async def save(self, snapshot: HistorySnapshot) -> None:
-        self.snapshot = snapshot
-        self.saves.append(snapshot)
 
 
 class _MaxStepsExceededError(Exception):
@@ -100,7 +85,7 @@ def executor_dependencies(mocker: MockerFixture):
     # The executor's default history storage is glyff-backed and needs a glyff
     # context, which these unit tests don't set up. Swap it for an in-memory
     # one so constructions that don't inject a storage still run.
-    mocker.patch("sefia._executor.GlyffHistoryStorage", _InMemoryHistoryStorage)
+    mocker.patch("sefia._executor.GlyffHistoryStorage", MemoryHistoryStorage)
 
     def non_engrave(f):
         return f
@@ -545,7 +530,7 @@ class TestInferenceExecutor:
             mock_collector,
             non_engrave,
             mock_publisher,
-            history_storage=_InMemoryHistoryStorage(snapshot),
+            history_storage=MemoryHistoryStorage(snapshot),
         )
 
         result = await executor.run()
@@ -587,7 +572,7 @@ class TestInferenceExecutor:
         tool_registry.add(AsyncMock(return_value="tool result"), name="my_tool")
         mock_collector.collect.return_value = tool_registry
 
-        storage = _InMemoryHistoryStorage()
+        storage = MemoryHistoryStorage()
         executor = InferenceExecutor(
             sample_func_with_self,
             (object(), "value"),

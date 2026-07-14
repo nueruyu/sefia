@@ -1,9 +1,4 @@
-from sefia import (
-    HistorySnapshot,
-    HistoryStorage,
-    StepContext,
-    ToolRegistry,
-)
+from sefia import StepContext, ToolRegistry
 from sefia._history import StepHistory
 from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
 from sefios.middleware import InputCallComposer
@@ -12,16 +7,8 @@ from sefios.tools import InputTool
 HUMAN_INPUT_TOOL_NAME = "ask_human"
 
 
-class _NoHistory(HistoryStorage):
-    async def load(self) -> HistorySnapshot:
-        return HistorySnapshot()
-
-    async def save(self, snapshot: HistorySnapshot) -> None:
-        pass
-
-
 def _empty_history() -> StepHistory:
-    return StepHistory(_NoHistory())
+    return StepHistory()
 
 
 def _human_registry() -> ToolRegistry:

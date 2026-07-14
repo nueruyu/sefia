@@ -5,7 +5,8 @@ from glyff import ExecutionId
 from sefia import HistorySnapshot
 from sefia.inference import ToolCallDecision, ToolCallRequest, ToolCallResult
 
-from sefios import MemorySessionStorage, SessionHistoryStorage
+from sefios import MemorySessionStorage
+from sefios.history_storages import SessionHistoryStorage
 from sefios._session_state import bind_session_storage
 
 

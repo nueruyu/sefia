@@ -1,24 +1,7 @@
-from sefia import HistorySnapshot, HistoryStorage
+from sefia import HistorySnapshot
 from sefia._history import StepHistory
-from sefia.inference import (
-    HistoryItem,
-    ToolCallDecision,
-    ToolCallRequest,
-    ToolCallResult,
-)
-
-
-class _InMemoryHistoryStorage(HistoryStorage):
-    def __init__(self, initial: HistorySnapshot | None = None):
-        self.snapshot = initial if initial is not None else HistorySnapshot()
-        self.saves: list[HistorySnapshot] = []
-
-    async def load(self) -> HistorySnapshot:
-        return self.snapshot
-
-    async def save(self, snapshot: HistorySnapshot) -> None:
-        self.snapshot = snapshot
-        self.saves.append(snapshot)
+from sefia.history_storages import MemoryHistoryStorage
+from sefia.inference import ToolCallDecision, ToolCallRequest, ToolCallResult
 
 
 def _decision(i: int) -> ToolCallDecision:
@@ -32,61 +15,29 @@ def _result(i: int) -> ToolCallResult:
 
 
 class TestStepHistory:
-    async def test_loads_snapshot_into_items_and_step_count(self):
-        storage = _InMemoryHistoryStorage(
-            HistorySnapshot(items=(_decision(0), _result(0)), completed_steps=3)
-        )
-        store = StepHistory(storage)
+    def test_starts_from_the_given_items(self):
+        history = StepHistory([_decision(0), _result(0)])
+        assert list(history.items) == [_decision(0), _result(0)]
 
-        await store.load()
+    def test_extend_appends(self):
+        history = StepHistory()
+        history.extend([_decision(0), _result(0)])
+        history.extend([_decision(1)])
+        assert list(history.items) == [_decision(0), _result(0), _decision(1)]
 
-        assert list(store.items) == [_decision(0), _result(0)]
-        assert store.completed_steps == 3
+    def test_rewrite_replaces(self):
+        history = StepHistory([_decision(0), _result(0), _decision(1)])
+        history.rewrite([_decision(1)])
+        assert list(history.items) == [_decision(1)]
 
-    async def test_items_is_an_immutable_snapshot(self):
-        store = StepHistory(_InMemoryHistoryStorage())
-        await store.record_step(_decision(0), [_result(0)])
+    def test_items_is_an_immutable_snapshot(self):
+        history = StepHistory()
+        history.extend([_decision(0)])
 
-        view = store.items
+        view = history.items
         assert isinstance(view, tuple)
-        assert list(view) == [_decision(0), _result(0)]
-        await store.record_step(_decision(1), [_result(1)])
-        assert len(view) == 2  # the earlier snapshot is unaffected
-
-    async def test_record_step_appends_and_persists_with_incremented_count(self):
-        storage = _InMemoryHistoryStorage()
-        store = StepHistory(storage)
-
-        await store.record_step(_decision(0), [_result(0)])
-        await store.record_step(_decision(1), [])
-
-        assert store.completed_steps == 2
-        assert [(s.items, s.completed_steps) for s in storage.saves] == [
-            ((_decision(0), _result(0)), 1),
-            ((_decision(0), _result(0), _decision(1)), 2),
-        ]
-
-    async def test_rewrite_persists_before_swapping_and_keeps_step_count(self):
-        storage = _InMemoryHistoryStorage()
-        store = StepHistory(storage)
-        await store.record_step(_decision(0), [_result(0)])
-        await store.record_step(_decision(1), [_result(1)])
-
-        seen_in_memory: list[list[HistoryItem]] = []
-
-        class OrderProbe(_InMemoryHistoryStorage):
-            async def save(self, snapshot: HistorySnapshot) -> None:
-                # In-memory items must still be the old content when save runs.
-                seen_in_memory.append(list(store.items))
-                await super().save(snapshot)
-
-        store._storage = OrderProbe()
-        await store.rewrite([_decision(1), _result(1)])
-
-        assert seen_in_memory == [[_decision(0), _result(0), _decision(1), _result(1)]]
-        assert list(store.items) == [_decision(1), _result(1)]
-        assert store.completed_steps == 2
-        assert store._storage.saves[-1].completed_steps == 2
+        history.extend([_result(0)])
+        assert len(view) == 1  # the earlier snapshot is unaffected
 
 
 class TestHistorySnapshot:
@@ -94,3 +45,14 @@ class TestHistorySnapshot:
         snap = HistorySnapshot()
         assert snap.items == ()
         assert snap.completed_steps == 0
+
+
+class TestMemoryHistoryStorage:
+    async def test_round_trips_and_records_saves(self):
+        storage = MemoryHistoryStorage()
+        assert await storage.load() == HistorySnapshot()
+
+        first = HistorySnapshot((_decision(0), _result(0)), completed_steps=1)
+        await storage.save(first)
+        assert await storage.load() == first
+        assert storage.saves == [first]
