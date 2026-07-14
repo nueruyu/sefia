@@ -2,11 +2,8 @@ from .._interfaces.history_storage import HistorySnapshot, HistoryStorage
 
 
 class MemoryHistoryStorage(HistoryStorage):
-    """An in-memory :class:`HistoryStorage`, for tests and embedding.
-
-    Holds the latest snapshot for :meth:`load`, and keeps every saved snapshot
-    in :attr:`saves` so callers can inspect the sequence of writes.
-    """
+    """An in-memory :class:`HistoryStorage` for tests and embedding; keeps every
+    saved snapshot in :attr:`saves`."""
 
     def __init__(self, initial: HistorySnapshot | None = None):
         self.snapshot = initial if initial is not None else HistorySnapshot()

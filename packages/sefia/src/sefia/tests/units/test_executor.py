@@ -595,10 +595,8 @@ class TestInferenceExecutor:
     async def test_compaction_is_persisted_before_the_model_call(
         self, executor_dependencies
     ):
-        # A step middleware that reshapes history (compaction) has its rewrite
-        # persisted just before the model call — so a resume loads the compacted
-        # snapshot rather than re-running the compactor. Here the run ends on the
-        # same step (Result, no post-step save), so the only save is that one.
+        # A mid-step rewrite is persisted before the model call. The run ends on
+        # the same step (Result, no post-step save), so that is the only save.
         (
             mock_strategy,
             mock_collector,
@@ -634,12 +632,11 @@ class TestInferenceExecutor:
 
         await executor.run()
 
-        # The compacted history was persisted (step count unchanged) before the
-        # model saw it, without any post-step save.
+        # The compacted history was persisted (step count unchanged), and the
+        # model was called with it.
         assert [(s.items, s.completed_steps) for s in storage.saves] == [
             ((seeded[-1],), 2),
         ]
-        # The strategy was called with the already-compacted history.
         history = mock_strategy.decide_next_step.call_args.kwargs["history"]
         assert list(history) == [seeded[-1]]
 

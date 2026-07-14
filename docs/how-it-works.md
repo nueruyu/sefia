@@ -63,13 +63,8 @@ loop:
 - **The tool batch is engraved** (`_call_tools_engraved`), so executed tools don't
   re-run on resume.
 - **History** is the accumulating list of `ToolCallDecision` / `ToolCallResult`
-  (`inference.py`), held as pure in-memory state in `StepHistory` (`_history.py`)
-  and rendered back into messages each step. The executor loads a
-  `HistorySnapshot` from a swappable `HistoryStorage` seam
-  (`_interfaces/history_storage.py`) at the start of each attempt and saves one
-  after every completed step, so a resumed run continues from the stored step
-  count without re-entering the finished steps. See "History storage and
-  compaction" below.
+  (`inference.py`), held in-memory by `StepHistory` and persisted by the executor
+  through a `HistoryStorage` seam — see "History storage and compaction" below.
 - **Two seams, kept apart:** *middleware* wraps the loop and can retry or
   short-circuit (control); the *event publisher* emits `BeforeInferenceStep`,
   `AfterToolCall`, etc. for handlers that can only observe — the publisher isolates a
@@ -185,13 +180,10 @@ to the durable execution identity. On a later invocation of the same session:
   time (correctness, not just cost); and
 - only the **unfinished** call actually executes.
 
-The nesting (run ⊃ step ⊃ tool batch) makes replay granular. On its own, glyff
-would rebuild a paused turn by replaying every completed step from its stored
-output. sefia's history store shortcuts that: the executor loads the saved
-`HistorySnapshot` and resumes at `completed_steps`, so steps that already
-finished are **not re-entered at all** — only the step interrupted mid-flight
-runs again, and glyff hands back the stored outputs of any engraved calls it had
-already completed (see "History storage and compaction").
+The nesting (run ⊃ step ⊃ tool batch) makes replay granular. On resume the
+executor loads the saved `HistorySnapshot` and continues at `completed_steps`,
+so finished steps are **not re-entered** — only the interrupted step runs again
+(see "History storage and compaction").
 
 **Exceptions never poison a run.** glyff **never engraves an exception as a permanent
 result**: any exception that escapes an engraved call leaves that call **resumable**
@@ -209,44 +201,22 @@ base are both pauses.
 
 ## History storage and compaction
 
-The history is durable state. The **executor** owns it: `StepHistory`
-(`_history.py`) is a pure in-memory item list, while the executor loads a
-`HistorySnapshot` from a `HistoryStorage`, tracks the step count, and saves a
-snapshot after every completed step. The default `GlyffHistoryStorage`
-(`sefia/history_storages/`) writes each snapshot into the run execution's glyff
-metadata, inside its own transaction scope so it **commits immediately** — even
-though the surrounding `@infer` run has not finished (a `Never`-returning chat
-loop never would). A resumed invocation re-enters the same run execution, loads
-the snapshot, rebuilds `StepHistory` from its items, and continues from
-`completed_steps`; the finished steps are never re-entered.
+History is durable state the executor owns. `StepHistory` (`_history.py`) is a
+pure in-memory item list; the executor loads a `HistorySnapshot` from a
+`HistoryStorage`, tracks `completed_steps`, and saves after each completed step.
+The default `GlyffHistoryStorage` writes the snapshot into the run execution's
+glyff metadata in its own transaction scope, so it **commits immediately** even
+though a `Never`-returning run never finishes. A resume reloads the snapshot and
+continues from `completed_steps`, never re-entering finished steps. (sefios'
+`SessionHistoryStorage` is an alternative that stores it in the session storage.)
 
-Each engraved step is keyed on its **step ordinal**, not on the history
-contents (`_next_step` takes the index; the history is read live and passed to
-the strategy). So the interrupted step runs again under the same key and
-returns its stored decision, the durable key stays O(1) instead of hashing the
-whole growing history each step, and compaction can reshape the history without
-changing any step's key. The executor saves a step **after** its engraved calls
-committed, so a crash between the two is healed by re-running the step.
-`completed_steps` is tracked in the snapshot (not derived from `len(items)`), so
-compaction can shrink the item list without skewing the step ordinal or the
-step cap.
-
-`HistoryCompactor` (a `StepMiddleware` in `sefios.middleware`) reshapes the
-history through `ctx.history.rewrite` before the model call once it grows past a
-threshold, truncating to the most recent items at a decision boundary. The
-rewrite mutates the in-memory list and marks it dirty; the executor then
-persists it **just before the model call** (innermost in the step-middleware
-onion), so a resume loads the compacted snapshot and never re-runs the
-compactor — this holds for an expensive or non-deterministic (e.g.
-LLM-summarizing) compactor too, not just the deterministic default. The next
-step is a fresh model call over the compacted history.
-
-The `HistoryStorage` seam is swappable: sefios' `SessionHistoryStorage` keeps
-the history in the session storage (keyed by the run's `ExecutionId`, the same
-scoping rule as `get_call_state_store`) instead of glyff metadata — useful to
-keep the glyff records lean or to inspect history alongside application state.
-Both are durable and compactable; they only differ in where the snapshot
-lives.
+Each step is engraved on its **ordinal**, not the history contents, so the
+durable key stays O(1) and compaction can reshape the history without changing
+any step's key. `HistoryCompactor` (`sefios.middleware`) truncates the history
+via `ctx.history.rewrite` once it grows past a threshold; the executor persists
+that rewrite just before the model call, so a resume loads the compacted
+snapshot and never re-runs the compactor (safe even for a non-deterministic
+one).
 
 ## Human-in-the-loop: pause = raise, resume = re-invoke
 

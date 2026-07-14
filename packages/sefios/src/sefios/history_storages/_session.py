@@ -8,16 +8,10 @@ from .._session_state import _execution_id_scope_key, get_session_storage
 
 
 class SessionHistoryStorage(HistoryStorage):
-    """
-    Persists each ``@infer`` run's history in the session's
-    :class:`~sefios.SessionStorage`, keyed by the run's glyff ``ExecutionId``
-    (the same scoping rule as :func:`~sefios.get_call_state_store`).
-
-    An alternative to the default :class:`~sefia.GlyffHistoryStorage`: use it to
-    keep history in the sefios session storage (alongside application state,
-    where it can be inspected on its own) rather than inside glyff's execution
-    records. Both are durable and support compaction; this one just redirects
-    where the snapshot lives.
+    """Persists each run's history in the sefios session storage, keyed by the
+    run's glyff ``ExecutionId`` — an alternative to the default
+    :class:`~sefia.history_storages.GlyffHistoryStorage` for keeping history out
+    of glyff's execution records.
     """
 
     _KEY_PREFIX = "inference_history"

@@ -131,7 +131,7 @@ implementation noted in parentheses.
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
 | Add a session-state persistence backend | implement `sefios` `SessionStorage` and pass a `session_storage_factory` to `SessionScope`; reference `sefios/storage/_file.py` |
-| Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); history is durable by default. To move where it lives, pass `history_storage=` (e.g. `SessionHistoryStorage()`) to `SessionScope`/`Session`; the seam is `HistoryStorage` in `sefia/_interfaces/history_storage.py` |
+| Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); to change where history lives, pass `history_storage=` to `SessionScope`/`Session` (seam: `HistoryStorage`) |
 | Change CLI rendering / the CLI input rules | `packages/sefia_typer` |
 | Change HTTP events / SSE / the HTTP input rules | `packages/sefia_fastapi` |
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |

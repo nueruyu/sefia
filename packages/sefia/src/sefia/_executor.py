@@ -217,10 +217,8 @@ class InferenceExecutor:
             )
 
             async def core() -> InferenceDecision:
-                # Innermost, just before the model call: if a step middleware
-                # reshaped the history (compaction), persist it now so a resume
-                # loads the compacted snapshot instead of re-running the
-                # (possibly expensive, possibly non-deterministic) compactor.
+                # Persist a mid-step compaction before the model call, so a
+                # resume loads it instead of re-running the compactor.
                 if self._history.dirty:
                     await self._save()
                 return await self._next_step_engraved(step)
@@ -236,9 +234,8 @@ class InferenceExecutor:
                     tool_results = await self._call_tools_engraved(decision.calls)
                 else:
                     tool_results = []
-                # Record and persist only after the step's engraved calls
-                # commit, so a crash before this resumes from the previous
-                # snapshot and replays the step.
+                # Persist only after the step's engraved calls commit, so a
+                # crash resumes from the previous snapshot and replays the step.
                 self._history.extend([decision, *tool_results])
                 self._completed_steps += 1
                 await self._save()
