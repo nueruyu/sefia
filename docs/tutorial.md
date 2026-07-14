@@ -107,6 +107,12 @@ model; the private `_web` *field* is just storage. The model decides when to cal
 tool. To expose a narrower surface than a class's full public API, hold it behind a
 `Protocol` — only the protocol's declared members are offered.
 
+When the model requests several tool calls in one step, they run one at a time. A
+tool that is safe to overlap with the other calls in its batch — a pure read like a
+search — can be marked with `@concurrent` (`from sefia import concurrent`) on the
+method; consecutive marked calls then run concurrently, and their results still come
+back in request order. Leave tools unmarked when their side-effect ordering matters.
+
 ### Tool scope is the service boundary
 
 A service class can have more than one `@infer` method. That is useful when the
@@ -120,24 +126,23 @@ another service.
 A good rule of thumb: if you want to tell one `@infer` method "do not use this tool",
 that tool probably belongs on a different service.
 
-## 3. Make it pause for a human — and survive a restart
+## 3. Make it pause for a human - and survive a restart
 
-This is the part that is painful to hand-roll. Add a human-input tool. When it has no
-answer it records the question and **raises**; the run pauses *durably*. Because the
-session is engraved, you can resume in a **completely new process** and the completed
-steps replay instead of re-running.
+This is the part that is painful to hand-roll. Add an input tool through the CLI
+facade. When it has no input it records the prompt and **raises**; `SefiaCLI`
+renders the prompt and exits cleanly. Because the session is engraved, you can resume
+in a **completely new process** and the completed steps replay instead of re-running.
 
 ```python
-# hitl.py
+# hitl_cli.py
 import asyncio
-import sys
 from pathlib import Path
 
+import typer
 from pydantic import BaseModel
 from sefia import infer
-from sefios import NeedsInput          # raised when the run pauses
-from sefios import SessionScope
-from sefios.tools import HumanInputTool, WebSearchTool
+from sefios.cli import SefiaCLI
+from sefios.tools import InputTool, WebSearchTool
 
 
 class Report(BaseModel):
@@ -146,9 +151,9 @@ class Report(BaseModel):
 
 
 class ResearchService:
-    def __init__(self, web: WebSearchTool, human: HumanInputTool):
+    def __init__(self, web: WebSearchTool, input_tool: InputTool):
         self._web = web
-        self._human = human
+        self._input = input_tool
 
     @infer
     async def run(self, task: str) -> Report:
@@ -156,49 +161,50 @@ class ResearchService:
         ...
 
 
-scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
+app = typer.Typer()
+cli = SefiaCLI(session_dir=Path(".sessions"), model="gpt-4o")
+service = ResearchService(web=WebSearchTool(), input_tool=cli.input_tool)
 
 
-async def main() -> None:
-    answer = sys.argv[1] if len(sys.argv) > 1 else None   # pass the answer on resume
-    service = ResearchService(web=WebSearchTool(), human=HumanInputTool())
-    async with scope.session(session_id="approval-demo") as s:
-        if answer is not None:
-            await s.accept_input(answer)                  # deliver the answer on resume
-        try:
+@app.command()
+def run(answer: str | None = None) -> None:
+    async def _run() -> None:
+        async with cli.session(session_id="approval-demo") as session:
+            await session.accept_input(answer)
             report = await service.run("the state of durable LLM applications")
             print("DONE:", report.summary)
-        except NeedsInput as e:
-            print("NEEDS INPUT:", e.question)
+
+    asyncio.run(_run())
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    app()
 ```
 
-Run it once with no answer — it researches, drafts, then pauses:
+Run it once with no answer; it researches, drafts, then pauses:
 
 ```bash
-python hitl.py
-# NEEDS INPUT: Here's the draft: "...". Approve it?
+python hitl_cli.py
+# [INPUT_REQUIRED:<interaction_id>] Here's the draft: "...". Approve it?
 ```
 
 Now run it **again** (a fresh process) with the answer. The clarify/search/draft
-steps are not re-run — they **replay their exact stored outputs**, so the model is
-approving the *same* draft — and only the finalize step executes:
+steps are not re-run; they **replay their exact stored outputs**, so the model is
+approving the *same* draft, and only the finalize step executes:
 
 ```bash
-python hitl.py "yes, approve"
+python hitl_cli.py "yes, approve"
 # DONE: ...
 ```
 
 That second invocation could be on another machine, after a deploy, or days later.
-There was no checkpoint code, no step keys, no idempotency bookkeeping — just a tool
+There was no checkpoint code, no step keys, no idempotency bookkeeping; just a tool
 that raised and a session that replays.
 
 ## 4. Serve it over HTTP
 
 The same service behind a stateless request/response handler. A pause returns
-"needs input"; the answer arrives in a later request to the same session id, and the
+"needs input"; the input arrives in a later request to the same session id, and the
 run resumes. Nothing runs in the background between the two requests.
 
 ```python
@@ -207,31 +213,35 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from pydantic import BaseModel
-from sefios import NeedsInput
-from sefios import SessionScope
-from sefios.tools import HumanInputTool, WebSearchTool
+from sefios.fastapi import InputRequired, SefiaHTTP
+from sefios.tools import WebSearchTool
 
-# (ResearchService, Report from hitl.py)
+# (ResearchService, Report from hitl_cli.py)
 
 app = FastAPI()
-scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
-research_service = ResearchService(web=WebSearchTool(), human=HumanInputTool())
+api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
+research_service = ResearchService(web=WebSearchTool(), input_tool=api.input_tool)
 
 
 class TurnBody(BaseModel):
     task: str
-    answer: str | None = None
+    input: str | None = None
+
+
+@app.post("/sessions")
+def create_session():
+    return {"session_id": api.create_session()}
 
 
 @app.post("/sessions/{session_id}/turn")
 async def turn(session_id: str, body: TurnBody):
-    async with scope.session(session_id=session_id) as s:
-        if body.answer is not None:
-            await s.accept_input(body.answer)     # deliver the human's answer
-        try:
-            return {"status": "done", "report": await research_service.run(body.task)}
-        except NeedsInput as e:
-            return {"status": "needs_input", "question": e.question}
+    try:
+        async with api.session(session_id=session_id) as session:
+            await session.accept_input(body.input)
+            report = await research_service.run(body.task)
+            return {"status": "done", "report": report}
+    except InputRequired as e:
+        return {"status": "needs_input", "prompt": e.prompt}
 ```
 
 ```bash
@@ -239,23 +249,26 @@ uvicorn server:app
 ```
 
 ```bash
-# first request — pauses for approval
-curl -X POST localhost:8000/sessions/abc/turn \
+# create a session
+SID=$(curl -s -X POST localhost:8000/sessions | python -c 'import sys,json;print(json.load(sys.stdin)["session_id"])')
+
+# first request: pauses for approval
+curl -X POST localhost:8000/sessions/$SID/turn \
   -H 'content-type: application/json' \
   -d '{"task": "the state of durable LLM applications"}'
-# {"status":"needs_input","question":"Here's the draft ... Approve it?"}
+# {"status":"needs_input","prompt":"Here's the draft ... Approve it?"}
 
-# restart the server here if you like — the paused run survives
+# restart the server here if you like; the paused run survives
 
-# second request — resumes and finalizes
-curl -X POST localhost:8000/sessions/abc/turn \
+# second request: resumes and finalizes
+curl -X POST localhost:8000/sessions/$SID/turn \
   -H 'content-type: application/json' \
-  -d '{"task": "the state of durable LLM applications", "answer": "yes, approve"}'
+  -d '{"task": "the state of durable LLM applications", "input": "yes, approve"}'
 # {"status":"done","report":{...}}
 ```
 
 The handler is an ordinary stateless endpoint. The durable run lives in the store
-under `.sessions/`, not in the process — so killing and restarting the server
+under `.sessions/`, not in the process, so killing and restarting the server
 between the two requests changes nothing.
 
 ## What just happened

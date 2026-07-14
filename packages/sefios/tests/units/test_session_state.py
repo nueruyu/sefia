@@ -27,9 +27,9 @@ class TestSessionState:
         # Arrange
         execution_id = ExecutionId(
             parent_id=None,
-            name="HumanInputTool.get_human_input",
+            name="InputTool.get_input",
             sequence=0,
-            args_hash="question-a",
+            args_hash="prompt-a",
         )
         mock_glyff_ctx = MagicMock()
         mock_glyff_ctx.current_execution_id = execution_id
@@ -51,15 +51,15 @@ class TestSessionState:
         # Arrange
         first_execution_id = ExecutionId(
             parent_id=None,
-            name="HumanInputTool.get_human_input",
+            name="InputTool.get_input",
             sequence=0,
-            args_hash="question-a",
+            args_hash="prompt-a",
         )
         second_execution_id = ExecutionId(
             parent_id=None,
-            name="HumanInputTool.get_human_input",
+            name="InputTool.get_input",
             sequence=0,
-            args_hash="question-b",
+            args_hash="prompt-b",
         )
         mock_glyff_ctx = MagicMock()
         mocker.patch(
@@ -91,15 +91,15 @@ class TestSessionState:
         )
         first_execution_id = ExecutionId(
             parent_id=first_parent,
-            name="HumanInputTool.get_human_input",
+            name="InputTool.get_input",
             sequence=0,
-            args_hash="same-question",
+            args_hash="same-prompt",
         )
         second_execution_id = ExecutionId(
             parent_id=second_parent,
-            name="HumanInputTool.get_human_input",
+            name="InputTool.get_input",
             sequence=0,
-            args_hash="same-question",
+            args_hash="same-prompt",
         )
         mock_glyff_ctx = MagicMock()
         mocker.patch(

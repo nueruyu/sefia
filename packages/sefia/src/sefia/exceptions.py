@@ -65,9 +65,20 @@ class InvalidInferenceResponseError(InferenceError):
     The LLM produced a response that could not be parsed or validated against
     the expected schema.
 
-    Treated as recoverable: LLM output is non-deterministic, so re-running the
-    step (on resume, or via an in-loop retry) may yield a conforming response.
+    Treated as recoverable: LLM output is non-deterministic, so another attempt
+    may yield a conforming response.
+
+    ``detail`` describes what was wrong (the parse/validation error);
+    ``raw_content`` carries the invalid response body when one was received.
+    Both are kept as structured fields so feedback prompts and error reporting
+    don't have to parse the exception message.
     """
+
+    def __init__(self, detail: str, raw_content: str | None = None):
+        message = detail if raw_content is None else f"{detail}, content: {raw_content}"
+        super().__init__(message)
+        self.detail = detail
+        self.raw_content = raw_content
 
 
 class UnknownToolDecisionError(ValueError):

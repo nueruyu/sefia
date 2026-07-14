@@ -20,7 +20,7 @@ from ._context import get_context
 from ._executor import InferenceExecutor
 from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from ._profiles import Profile
-from ._tool_system import set_stream_handler
+from ._tool_system import set_concurrent, set_stream_handler
 from .event_system import EventPublisher
 
 C = TypeVar("C", bound=Callable[..., object])
@@ -71,6 +71,26 @@ def preview(target: Callable[..., Any]) -> Callable[[_StreamH], _StreamH]:
     return decorator
 
 
+def concurrent(target: C) -> C:
+    """
+    Mark a tool method as safe to overlap with other ``@concurrent`` calls in
+    the same batch::
+
+        class WebToolkit:
+            @concurrent
+            async def search(self, query: str) -> list[SearchResult]: ...
+
+    Unmarked tools run strictly serially. Results are still awaited and
+    recorded in request order — this is not fire-and-forget — so keep a tool
+    unmarked when its side-effect ordering matters or it mutates shared state
+    without its own locking. Like :func:`preview`, the marker lives on the
+    implementation function; apply ``@concurrent`` outermost when stacking.
+    """
+    underlying = getattr(target, "__func__", target)
+    set_concurrent(underlying)
+    return target
+
+
 def policy(p: Policy) -> _PolicyDecorator:
     """
     Decorator that attaches an inference policy to an ``@infer`` function.
@@ -80,7 +100,7 @@ def policy(p: Policy) -> _PolicyDecorator:
     to ``@infer`` does not matter::
 
         @infer
-        @policy(CustomPolicy(middleware=lambda: [Retrier(max_retries=5)]))
+        @policy(Policy(middleware=lambda: [Retrier(max_retries=5)]))
         async def step(...): ...
 
     To apply more than one policy, merge them on the caller side (or stack
@@ -100,7 +120,7 @@ def policy(p: Policy) -> _PolicyDecorator:
     if not isinstance(p, Policy):
         raise TypeError(
             "@policy must be called with a Policy instance, "
-            "e.g. @policy(CustomPolicy(middleware=lambda: [Retrier(max_retries=5)]))."
+            "e.g. @policy(Policy(middleware=lambda: [Retrier(max_retries=5)]))."
         )
 
     def decorator(func: C) -> C:
@@ -219,6 +239,7 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
             publisher=publisher,
             inference_middlewares=inference_middlewares,
             step_middlewares=step_middlewares,
+            history_storage=context.history_storage,
         )
 
         # Only the inference itself is engraved, so glyff can replay it. The

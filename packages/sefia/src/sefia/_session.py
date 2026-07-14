@@ -5,8 +5,10 @@ import glyff
 
 from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import DecisionModelBuilder, Policy
+from ._interfaces.history_storage import HistoryStorage
 from ._profiles import Profile
 from ._tool_system import ToolCollector, ToolFunctionInspector
+from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
 from .llm._xml_prompt_formatter import XmlPromptFormatter
@@ -31,11 +33,14 @@ class Session:
         inspector: ToolFunctionInspector | None = None,
         decision_builder: DecisionModelBuilder | None = None,
         stream: bool = False,
+        history_storage: HistoryStorage | None = None,
+        max_repair_attempts: int = 2,
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
         self._context_token = None
         self._policies: list[Policy] = list(policies) if policies is not None else []
+        self._history_storage = history_storage or GlyffHistoryStorage()
 
         # ``PydanticModelBackend`` is both a ToolFunctionInspector (for the
         # collector) and a DecisionModelBuilder (for the strategy); one shared
@@ -58,6 +63,7 @@ class Session:
                 prompt_formatter=prompt_formatter,
                 json_default=pydantic_json_default,
                 stream=stream,
+                max_repair_attempts=max_repair_attempts,
             )
 
         self._inference_strategy = make_strategy(llm_client)
@@ -79,6 +85,7 @@ class Session:
             inference_strategy=self._inference_strategy,
             policies=tuple(self._policies),
             tool_collector=self._tool_collector,
+            history_storage=self._history_storage,
             _profiles=self._profiles,
         )
         self._context_token = context_var.set(self._context)

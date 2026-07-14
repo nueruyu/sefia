@@ -1,25 +1,30 @@
 from sefia import StepContext, ToolRegistry
+from sefia._history import StepHistory
 from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
-from sefios.middleware import HumanInputCallComposer
-from sefios.tools import HumanInputTool
+from sefios.middleware import InputCallComposer
+from sefios.tools import InputTool
 
 HUMAN_INPUT_TOOL_NAME = "ask_human"
+
+
+def _empty_history() -> StepHistory:
+    return StepHistory()
 
 
 def _human_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.add(
-        HumanInputTool().get_human_input,
+        InputTool().get_input,
         name=HUMAN_INPUT_TOOL_NAME,
     )
     return registry
 
 
-def _human_call(id_: str, question: str) -> ToolCallRequest:
+def _human_call(id_: str, prompt: str) -> ToolCallRequest:
     return ToolCallRequest(
         id=id_,
         name=HUMAN_INPUT_TOOL_NAME,
-        arguments={"question": question},
+        arguments={"prompt": prompt},
     )
 
 
@@ -27,40 +32,40 @@ def _tool_call(id_: str, name: str = "search") -> ToolCallRequest:
     return ToolCallRequest(id=id_, name=name, arguments={"query": "sefia"})
 
 
-async def _run(middleware: HumanInputCallComposer, decision, step: int = 0):
+async def _run(middleware: InputCallComposer, decision, step: int = 0):
     async def nxt():
         return decision
 
     return await middleware.wrap(
         StepContext(
             step=step,
-            history=[],
+            history=_empty_history(),
             tool_registry=_human_registry(),
         ),
         nxt,
     )
 
 
-class TestHumanInputCallComposer:
+class TestInputCallComposer:
     async def test_non_tool_decision_is_unchanged(self):
-        middleware = HumanInputCallComposer()
+        middleware = InputCallComposer()
         decision = ResultDecision(result="done")
 
         assert await _run(middleware, decision) is decision
 
-    async def test_tool_decision_without_human_input_calls_is_unchanged(self):
-        middleware = HumanInputCallComposer()
+    async def test_tool_decision_without_input_calls_is_unchanged(self):
+        middleware = InputCallComposer()
         decision = ToolCallDecision(calls=[_tool_call("t1")])
 
         assert await _run(middleware, decision) is decision
 
-    async def test_single_human_input_call_is_unchanged(self):
-        middleware = HumanInputCallComposer()
+    async def test_single_input_call_is_unchanged(self):
+        middleware = InputCallComposer()
         decision = ToolCallDecision(calls=[_human_call("h1", "What is the audience?")])
 
         assert await _run(middleware, decision) is decision
 
-    async def test_multiple_human_input_calls_are_composed(self):
+    async def test_multiple_input_calls_are_composed(self):
         decision = ToolCallDecision(
             calls=[
                 _human_call("h1", "What is the target audience?"),
@@ -68,7 +73,7 @@ class TestHumanInputCallComposer:
             ]
         )
 
-        composed = await _run(HumanInputCallComposer(), decision)
+        composed = await _run(InputCallComposer(), decision)
 
         assert isinstance(composed, ToolCallDecision)
         assert composed is not decision
@@ -77,7 +82,7 @@ class TestHumanInputCallComposer:
                 id="h1",
                 name=HUMAN_INPUT_TOOL_NAME,
                 arguments={
-                    "question": (
+                    "prompt": (
                         "What is the target audience?\nWhat is the goal of the article?"
                     )
                 },
@@ -91,14 +96,14 @@ class TestHumanInputCallComposer:
         decision = ToolCallDecision(
             calls=[
                 before,
-                _human_call("h1", "First question?"),
+                _human_call("h1", "First prompt?"),
                 between,
-                _human_call("h2", "Second question?"),
+                _human_call("h2", "Second prompt?"),
                 after,
             ]
         )
 
-        composed = await _run(HumanInputCallComposer(), decision)
+        composed = await _run(InputCallComposer(), decision)
 
         assert isinstance(composed, ToolCallDecision)
         assert composed.calls[0] is before
@@ -108,33 +113,33 @@ class TestHumanInputCallComposer:
             id="h1",
             name=HUMAN_INPUT_TOOL_NAME,
             arguments={
-                "question": "First question?\nSecond question?",
+                "prompt": "First prompt?\nSecond prompt?",
             },
         )
 
-    async def test_custom_question_composer_can_be_async(self):
-        async def compose_questions(questions: list[str]) -> str:
-            return " / ".join(questions)
+    async def test_custom_prompt_composer_can_be_async(self):
+        async def compose_prompts(prompts: list[str]) -> str:
+            return " / ".join(prompts)
 
         decision = ToolCallDecision(
             calls=[
-                _human_call("h1", "First question?"),
-                _human_call("h2", "Second question?"),
+                _human_call("h1", "First prompt?"),
+                _human_call("h2", "Second prompt?"),
             ]
         )
 
         composed = await _run(
-            HumanInputCallComposer(compose_questions=compose_questions),
+            InputCallComposer(compose_prompts=compose_prompts),
             decision,
         )
 
         assert isinstance(composed, ToolCallDecision)
-        assert composed.calls[0].arguments["question"] == (
-            "First question? / Second question?"
+        assert composed.calls[0].arguments["prompt"] == (
+            "First prompt? / Second prompt?"
         )
 
-    async def test_sequential_human_input_steps_are_not_collapsed(self):
-        middleware = HumanInputCallComposer()
+    async def test_sequential_input_steps_are_not_collapsed(self):
+        middleware = InputCallComposer()
         first = ToolCallDecision(calls=[_human_call("h1", "Who is the audience?")])
         second = ToolCallDecision(
             calls=[_human_call("h2", "Educational or promotional?")]
@@ -143,13 +148,13 @@ class TestHumanInputCallComposer:
         assert await _run(middleware, first, step=0) is first
         assert await _run(middleware, second, step=1) is second
 
-    async def test_invalid_human_input_arguments_are_left_unchanged(self):
+    async def test_invalid_input_arguments_are_left_unchanged(self):
         decision = ToolCallDecision(
             calls=[
                 ToolCallRequest(
                     id="h1",
                     name=HUMAN_INPUT_TOOL_NAME,
-                    arguments={"question": "First?"},
+                    arguments={"prompt": "First?"},
                 ),
                 ToolCallRequest(
                     id="h2",
@@ -159,20 +164,20 @@ class TestHumanInputCallComposer:
             ]
         )
 
-        assert await _run(HumanInputCallComposer(), decision) is decision
+        assert await _run(InputCallComposer(), decision) is decision
 
-    async def test_unregistered_human_input_name_is_left_unchanged(self):
+    async def test_unregistered_input_name_is_left_unchanged(self):
         decision = ToolCallDecision(
             calls=[
                 ToolCallRequest(
                     id="h1",
-                    name="HumanInputTool_get_human_input",
-                    arguments={"question": "First?"},
+                    name="InputTool_get_input",
+                    arguments={"prompt": "First?"},
                 ),
                 ToolCallRequest(
                     id="h2",
-                    name="HumanInputTool_get_human_input",
-                    arguments={"question": "Second?"},
+                    name="InputTool_get_input",
+                    arguments={"prompt": "Second?"},
                 ),
             ]
         )
@@ -181,8 +186,8 @@ class TestHumanInputCallComposer:
             return decision
 
         assert (
-            await HumanInputCallComposer().wrap(
-                StepContext(step=0, history=[]),
+            await InputCallComposer().wrap(
+                StepContext(step=0, history=_empty_history()),
                 nxt,
             )
             is decision

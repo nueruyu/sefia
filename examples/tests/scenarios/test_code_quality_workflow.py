@@ -3,7 +3,7 @@ from importlib import import_module
 from unittest.mock import AsyncMock
 
 import pytest
-from examples._common.sefia_cli import SefiaCLI
+from sefios.cli import SefiaCLI
 
 # Loaded with the full ``examples.`` prefix because main.py imports ``.._common``.
 main = import_module("examples.02_code_quality.main")

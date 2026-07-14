@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from examples._common.sefia_http import SefiaHTTP
+from sefios.fastapi import SefiaHTTP
 
 app_module = import_module("examples.03_fastapi_api.app")
 agents_module = import_module("examples.03_fastapi_api.agents")
@@ -48,11 +48,11 @@ def test_index_serves_hitl_browser_ui(api):
 class TestInterviewFlow:
     def test_pauses_then_resumes_to_completion(self, api, monkeypatch):
         question = "Who is the target audience?"
-        tool = api.service.human_input_tool
+        tool = api.service.input_tool
 
         async def fake_run(self):
-            topic = await tool.get_human_input("What should this be about?")
-            audience = await tool.get_human_input(question)
+            topic = await tool.get_input("What should this be about?")
+            audience = await tool.get_input(question)
             return Brief(topic=topic, goal="Inform", audience=audience)
 
         monkeypatch.setattr(agents_module.Interviewer, "run", fake_run)
@@ -65,7 +65,7 @@ class TestInterviewFlow:
         assert first.status_code == 200
         first_body = first.json()
         assert first_body["status"] == "input_required"
-        assert first_body["question"] == question
+        assert first_body["prompt"] == question
         interaction_id = first_body["interaction_id"]
 
         second = api.client.post(

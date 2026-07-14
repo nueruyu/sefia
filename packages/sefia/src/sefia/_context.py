@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from glyff import Session as GlyffSession
 
 from ._interfaces import InferenceStrategy, Policy
+from ._interfaces.history_storage import HistoryStorage
 from ._tool_system import ToolCollector
 
 
@@ -24,6 +25,7 @@ class SessionContext:
     inference_strategy: InferenceStrategy
     policies: tuple[Policy, ...]
     tool_collector: ToolCollector
+    history_storage: HistoryStorage
     _profiles: dict[Hashable, ProfileBinding] = field(default_factory=dict)
 
     def resolve_profile(

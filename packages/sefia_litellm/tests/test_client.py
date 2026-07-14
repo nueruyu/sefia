@@ -325,9 +325,7 @@ class TestLiteLLMClient:
             [{"role": "user", "content": "Hello"}],
         )
 
-    async def test_handle_stream_routes_reasoning_and_content_separately(
-        self, mocker
-    ):
+    async def test_handle_stream_routes_reasoning_and_content_separately(self, mocker):
         from types import SimpleNamespace
 
         def chunk(*, content=None, reasoning=None):

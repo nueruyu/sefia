@@ -2,8 +2,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
+from .._history import StepHistory
 from .._tool_system import ToolRegistry
-from ..inference import HistoryItem, InferenceDecision
+from ..inference import InferenceDecision
 
 
 @dataclass
@@ -24,11 +25,12 @@ class StepContext:
     Context handed to a :class:`StepMiddleware` wrapping a single inference step
     (one call to the inference strategy).
 
-    ``step`` is the 0-based index of the step about to run.
+    ``step`` is the 0-based index of the step about to run. ``history.items`` is
+    immutable; middleware may reshape the history via ``history.rewrite``.
     """
 
     step: int
-    history: list[HistoryItem]
+    history: StepHistory
     tool_registry: ToolRegistry = field(default_factory=ToolRegistry)
 
 

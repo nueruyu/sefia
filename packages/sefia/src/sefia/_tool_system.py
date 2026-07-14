@@ -22,6 +22,22 @@ def get_stream_handler(func: Callable[..., Any]) -> StreamHandler | None:
     return getattr(func, _STREAM_HANDLER_ATTR, None)
 
 
+# The attribute under which a tool method carries its ``@concurrent`` marker.
+# Same pattern as the stream handler above: the decorator and the collector go
+# through the accessors, the raw name stays private to this module.
+_CONCURRENT_ATTR = "__sefia_concurrent__"
+
+
+def set_concurrent(func: Callable[..., Any]) -> None:
+    """Mark ``func``'s tool as safe to overlap with other concurrent calls."""
+    setattr(func, _CONCURRENT_ATTR, True)
+
+
+def is_concurrent(func: Callable[..., Any]) -> bool:
+    """Whether ``func`` carries the ``@concurrent`` marker."""
+    return getattr(func, _CONCURRENT_ATTR, False)
+
+
 def _callable_identity(func: Callable[..., Any]) -> Callable[..., Any]:
     return inspect.unwrap(getattr(func, "__func__", func))
 
@@ -93,6 +109,8 @@ class Tool(ABC):
 
     name: str
     stream_handler: StreamHandler | None
+    # Whether calls may overlap with other concurrent-marked calls in a batch.
+    concurrent: bool = False
 
     @abstractmethod
     def definition(self) -> ToolDefinition:
@@ -132,9 +150,11 @@ class SignatureTool(Tool):
         schema_source: Callable[..., Any],
         inspector: ToolFunctionInspector,
         stream_handler: StreamHandler | None = None,
+        concurrent: bool = False,
     ):
         self.name = name
         self.stream_handler = stream_handler
+        self.concurrent = concurrent
         self._function = function
         self._schema_source = schema_source
         self._inspector = inspector
@@ -167,9 +187,11 @@ class JsonSchemaTool(Tool):
         parameters: dict[str, Any],
         description: str = "",
         stream_handler: StreamHandler | None = None,
+        concurrent: bool = False,
     ):
         self.name = name
         self.stream_handler = stream_handler
+        self.concurrent = concurrent
         self._handler = handler
         self._parameters = parameters
         self._description = description
@@ -218,6 +240,7 @@ class ToolRegistry:
         schema_source: Callable[..., Any] | None = None,
         inspector: ToolFunctionInspector | None = None,
         stream_handler: StreamHandler | None = None,
+        concurrent: bool = False,
     ) -> None:
         """Register a ``SignatureTool`` built from a typed callable."""
         if inspector is None:
@@ -231,6 +254,7 @@ class ToolRegistry:
                 schema_source=schema_source or func,
                 inspector=inspector,
                 stream_handler=stream_handler,
+                concurrent=concurrent,
             )
         )
 
@@ -242,6 +266,7 @@ class ToolRegistry:
         description: str,
         parameters: dict[str, Any],
         stream_handler: StreamHandler | None = None,
+        concurrent: bool = False,
     ) -> None:
         """Register a ``JsonSchemaTool`` from a raw JSON Schema and a handler."""
         self.register(
@@ -251,6 +276,7 @@ class ToolRegistry:
                 parameters=parameters,
                 description=description,
                 stream_handler=stream_handler,
+                concurrent=concurrent,
             )
         )
 

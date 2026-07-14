@@ -1,11 +1,12 @@
 import pytest
 from sefia import StepContext
+from sefia._history import StepHistory
 from sefia.inference import ResultDecision
 from sefios.middleware import MaxStepsExceededError, StepLimiter
 
 
 def _ctx(step: int) -> StepContext:
-    return StepContext(step=step, history=[])
+    return StepContext(step=step, history=StepHistory())
 
 
 async def _decision():

@@ -5,7 +5,10 @@ description = "LiteLLM adapter for Sefia."
 requires-python = ">=3.11"
 dependencies = [
     "sefia",
-    "litellm>=1.40.0",
+    # 1.63.0 is the first release exposing reasoning_content / thinking blocks,
+    # which the adapter reads and streams; older versions install fine but would
+    # silently drop reasoning.
+    "litellm>=1.63.0",
 ]
 
 [build-system]

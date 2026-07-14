@@ -64,9 +64,12 @@ pip install 'sefios[litellm]'
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
 - **`sefios`** — the official batteries: the `SessionScope` front door, ready-made
-  policies/middleware, and tools (human input, web search). The `[litellm]` extra
+  policies/middleware, and tools (external input, web search). The `[litellm]` extra
   pulls in **`sefia_litellm`** for provider support via
-  [LiteLLM](https://github.com/BerriAI/litellm).
+  [LiteLLM](https://github.com/BerriAI/litellm). The `[cli]` and `[fastapi]` extras
+  pull in **`sefia_typer`** / **`sefia_fastapi`** and unlock the `sefios.cli` /
+  `sefios.fastapi` integrations — Typer and FastAPI apps with persisted sessions
+  and human-in-the-loop pause/resume.
 
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
@@ -119,13 +122,15 @@ request/response handler: the pause is a tool that **raises**, and resume is cal
 the endpoint again.
 
 ```python
-from sefios.tools import HumanInputTool
+from pathlib import Path
+from sefios.fastapi import InputRequired, SefiaHTTP
+from sefios.tools import InputTool, WebSearchTool
 
 
 class ResearchService:
-    def __init__(self, web: WebSearchTool, human: HumanInputTool):
+    def __init__(self, web: WebSearchTool, input_tool: InputTool):
         self._web = web
-        self._human = human
+        self._input = input_tool
 
     @infer
     async def run(self, task: str) -> Report:
@@ -133,26 +138,34 @@ class ResearchService:
         ...
 
 
-research_service = ResearchService(web=WebSearchTool(), human=HumanInputTool())
+api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
+research_service = ResearchService(web=WebSearchTool(), input_tool=api.input_tool)
+
+
+@app.post("/sessions")
+def create_session():
+    return {"session_id": api.create_session()}
 
 
 @app.post("/sessions/{session_id}/turn")
 async def turn(session_id: str, body: TurnBody):
-    async with scope.session(session_id=session_id) as s:
-        if body.answer is not None:
-            await s.accept_input(body.answer)      # deliver the human's answer
-        try:
-            return {"status": "done", "report": await research_service.run(body.task)}
-        except NeedsInput as e:                     # the run paused; it will resume
-            return {"status": "needs_input", "question": e.question}
+    try:
+        async with api.session(session_id=session_id) as session:
+            if body.input is not None:
+                await session.accept_input(body.input)
+            report = await research_service.run(body.task)
+            return {"status": "done", "report": report}
+    except InputRequired as e:
+        return {"status": "needs_input", "prompt": e.prompt}
 ```
 
-When the human tool has no recorded answer it raises `NeedsInput`; the run pauses and
-the handler returns "needs input". The answer arrives in a later request and is
-delivered with `accept_input`; the same endpoint re-invokes, every completed LLM/tool
+When the input tool has no recorded input it raises `NeedsInput`; `SefiaHTTP`
+translates that pause into `InputRequired` after the session context exits, and the
+handler returns "needs input". The input arrives in a later request and is delivered
+with `session.accept_input`; the same endpoint re-invokes, every completed LLM/tool
 call **replays its exact output** (the approved draft is byte-for-byte the same), and
 only the pending step runs. You write no checkpoint code, step keys, idempotency
-plumbing, or 202 dance — see
+plumbing, or 202 dance; see
 [use case 01](./docs/usecases/01-human-in-the-loop.md) for the same turn hand-rolled,
 and what it removes.
 
@@ -161,7 +174,7 @@ and what it removes.
 | Concept | What it is |
 | --- | --- |
 | **`@infer`** | An abstract async method implemented by an LLM. Signature = contract, docstring = instruction, return type = validated output. |
-| **Tools** | The public methods of held dependency objects. Public = tool, private = internal. Scoped to the holder; narrow with a `Protocol`. |
+| **Tools** | The public methods of held dependency objects. Public = tool, private = internal. Scoped to the holder; narrow with a `Protocol`. Batched calls run serially unless a method is marked `@concurrent`. |
 | **Pause & resume** | Every call is engraved (content-addressed) via glyff and replays on re-invocation; exceptions are non-terminal, so pausing = raising. |
 | **Session** | The scope for a run. `SessionScope` (in `sefios`) is the configured front door; `sefia.Session` is the core primitive. |
 | **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). The `sefios` defaults give a step cap and ready-made behaviors. |
