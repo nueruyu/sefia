@@ -55,8 +55,7 @@ must have tools available, because it can never finish with a final answer.
 ## Tools and capability parameters
 
 A method becomes a tool only when it is reachable through a `Tools`-bearing declared
-type, starting from a **capability parameter**. There is no ambient authority:
-holding an object is not enough — its declared type must carry the role.
+type, starting from a **capability parameter** — holding an object is not enough.
 
 - **`self`/`cls`** are capability parameters by convention: the collector scans the
   instance's held fields and exposes those whose **class-level declared type** bears
@@ -80,20 +79,21 @@ Annotate `self` with a role-bearing `Protocol` to shape or restrict one method's
 tools:
 
 ```python
-class ResearchTools(Tools, Protocol):     # re-inherit Protocol, or it turns concrete
+class ResearchTools(Tools, Protocol):    # re-inherit Protocol, or it turns concrete
     @property
-    def _web(self) -> ReadOnlyWeb: ...     # re-narrow a held field (read-only property;
-                                           #   a plain attribute is invariant and won't
-                                           #   type-check against a different concrete type)
-    async def _score(self, url: str) -> float: ...   # opt the instance's own method in
+    def _web(self) -> ReadOnlyWeb: ...   # re-narrow a held field
+    async def _score(self, url: str) -> float: ...   # opt the own method in
 
 class ResearchService:
     _web: WebToolkit
-    _config: AppConfig                     # not in the protocol -> never exposed
+    _config: AppConfig                   # not in the protocol -> never exposed
     async def _score(self, url: str) -> float: ...
     @infer
     async def run(self: ResearchTools, topic: str) -> Report: ...
 ```
+
+Re-narrowed fields must be declared as read-only properties: a plain protocol
+attribute is invariant and will not type-check against a different concrete type.
 
 A service class is a capability boundary. Multiple `@infer` methods on the same
 service share the tool surface from its held dependencies unless a method narrows its

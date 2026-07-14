@@ -59,9 +59,9 @@ class ResearchService:
 - **Narrow by type.** A concrete class exposes its public methods; a `Protocol`
   exposes only its declared members. Annotate `self` with a role-bearing surface
   protocol to shape or restrict one method's tools (and to opt a private method in).
-- **Discovery is a pure function of static declarations** — fail-closed. A field
-  with no `Tools`-bearing declared type exposes nothing; runtime values never widen
-  the surface. A plain service class does not bear `Tools`, so its own methods
+- **Discovery is static and fail-closed.** The surface is a pure function of
+  declared types — an undeclared field exposes nothing, and runtime values never
+  widen it. A plain service class does not bear `Tools`, so its own methods
   (including its `@infer` methods) are never offered back to itself; it becomes
   another agent's tool only by declaring `Tools` and being held as a dependency.
 
@@ -121,9 +121,8 @@ tradeoffs behind the design are in [docs/tradeoffs.md](./docs/tradeoffs.md).
   Distributed single-workflow branches are out of scope.
 - **Replay assumes determinism** between engraved steps — every replay engine's
   caveat.
-- **Explicit capability gate.** Tools are gated by the `Tools` role marker rather
-  than "any public method of anything held" — no ambient authority. The cost is one
-  base class per toolkit (or an `Annotated[T, Tools]` at a field); the benefit is
-  that a held member cannot leak as a tool by accident, and the surface is
-  statically declared and type-checkable.
+- **Explicit capability gate.** Tools require the `Tools` role marker rather than
+  "any public method of anything held". The cost is one base class per toolkit (or
+  `Annotated[T, Tools]` at a field); the benefit: a held member cannot leak as a
+  tool by accident, and the surface is statically declared and type-checkable.
 - **Pre-1.0.** The API will change.

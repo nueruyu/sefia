@@ -82,14 +82,12 @@ across hand-rolled bookkeeping.
 
 Almost: a held dependency's **public methods are its tools when its declared type
 bears the `Tools` role** (`class WebToolkit(Tools)`, or `Annotated[T, Tools]` at the
-field for a type you can't edit); private (`_`-prefixed) methods stay internal. This
-is one marker base class on top of ordinary OOP visibility — no decorator, no
-registry — and it means there is **no ambient authority**: a held config or store
-never leaks as a tool. Discovery is declared-only (a field needs a class-level
-annotation; a dataclass field is ideal) and fail-closed. To expose a narrower surface
-than a class's full public API, declare the field as a `Tools`-bearing `Protocol`, or
-narrow a single method by annotating its `self`: only the protocol's declared members
-are offered.
+field for a type you can't edit); private (`_`-prefixed) methods stay internal. One
+marker base class on top of ordinary OOP visibility — no decorator, no registry, and
+no ambient authority: a held config or store never leaks as a tool. Fields need a
+class-level annotation (a dataclass field is ideal); discovery is fail-closed. To
+expose a narrower surface, declare the field as a `Tools`-bearing `Protocol`, or
+annotate a single method's `self` with one.
 
 ### mypy flags my `@infer` methods as `[empty-body]`
 

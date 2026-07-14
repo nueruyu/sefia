@@ -20,22 +20,18 @@ _log = logging.getLogger("sefia.tools")
 class DefaultToolCollector(ToolCollector):
     """The default implementation of ToolCollector.
 
-    Tools are gated by the ``Tools`` role marker — there is no ambient
-    authority. A member becomes a tool only when it is reachable through an
-    unbroken chain of ``Tools``-bearing **declared** types, starting at a
-    capability parameter:
+    A member becomes a tool only when reachable through ``Tools``-bearing
+    **declared** types from a capability parameter — no ambient authority:
 
-    * The instance's own methods are not tools unless a role-bearing surface
-      (a ``self: SomeTools`` annotation) declares them; a plain service class
-      does not bear ``Tools``, so a run never recurses into itself.
-    * Each held field is exposed only if its **class-level declared type** bears
-      ``Tools`` — a field with no class-level annotation, or one whose declared
-      type is not a toolkit, exposes nothing (fail-closed). Runtime values never
-      widen the surface: discovery is a pure function of static declarations.
-    * A field's exposed interface is its declared type (``role_interface``): a
-      concrete class exposes its public methods, a ``Protocol`` exposes exactly
-      its declared members (including ``_``-prefixed ones — an explicit
-      allowlist, e.g. opting a private method in as a tool).
+    * A held field is exposed only if its class-level declared type bears
+      ``Tools``; an undeclared field exposes nothing (fail-closed), so runtime
+      values never widen the surface.
+    * The exposed interface is the declared type: a concrete class contributes
+      its public methods, a ``Protocol`` exactly its declared members
+      (``_``-prefixed included — a protocol is an explicit allowlist).
+    * A plain service class does not bear ``Tools``, so its own methods are
+      never offered back to itself; a ``self: SomeTools`` surface annotation
+      opts them in explicitly.
 
     The collector records neutral tool metadata; strategy-specific schema
     generation happens later, from each tool's ``schema_source``.
@@ -58,12 +54,11 @@ class DefaultToolCollector(ToolCollector):
         if cap.value is None:
             return
 
-        # The container whose held fields are scanned. For the self/cls
-        # convention (no declared type) it is the value's own class; otherwise
-        # it is the role-bearing declared type (surface protocol or toolkit).
+        # self/cls convention: scan the value's own class for held fields, but
+        # never treat the bare service itself as a tool surface.
         if cap.declared is None:
             container = type(cap.value)
-            expose_own = False  # a bare service is a container, not a toolkit
+            expose_own = False
         else:
             container = role_interface(cap.declared)
             expose_own = bears_tools(cap.declared)
@@ -71,14 +66,13 @@ class DefaultToolCollector(ToolCollector):
         if not inspect.isclass(container):
             return
 
-        # Tier 0 — the capability's own type is itself a tool surface: its
-        # members bind to the value (a directly-passed toolkit, or a surface
-        # protocol opting the instance's own methods in).
+        # A role-bearing capability (a passed toolkit, or a surface protocol on
+        # self) contributes its own members, bound to the value.
         if expose_own:
             for method_name, schema_fn in _members(container).items():
                 self._add(registry, cap.value, method_name, schema_fn)
 
-        # Tier 1 — held fields whose declared type bears ``Tools``.
+        # Held fields whose declared type bears ``Tools``.
         for field_name, field_type in _fields(container).items():
             if not bears_tools(field_type):
                 continue
@@ -117,21 +111,16 @@ def _is_protocol(cls: type) -> bool:
 def _members(cls: type) -> dict[str, Callable[..., Any]]:
     """The tool methods a class or ``Protocol`` exposes, by name.
 
-    Scans ``__mro__`` and each class's own ``vars`` (never ``dir()`` +
-    ``getattr`` on an instance, so a ``@property`` getter's side effects are
-    never triggered). Properties and other non-function descriptors are excluded
-    — a tool is a callable method.
-
-    For a **concrete class** only public (non ``_``-prefixed) methods are
-    exposed. For a **Protocol** every declared member is exposed, including
-    ``_``-prefixed ones: the protocol is an explicit allowlist authored for this
-    surface, so a declared private method is a deliberate opt-in.
+    Scans ``__mro__`` via each class's own ``vars`` — never ``getattr`` on an
+    instance, so a ``@property`` getter's side effects are never triggered;
+    non-function descriptors are excluded. A concrete class exposes only public
+    methods; a ``Protocol`` also exposes its ``_``-prefixed declared members,
+    since a protocol is an explicit allowlist.
     """
     is_proto = _is_protocol(cls)
     methods: dict[str, Callable[..., Any]] = {}
     for base in cls.__mro__:
-        # Skips object, Generic, Protocol, the role markers, and typing
-        # machinery — leaving only user-authored classes/protocols.
+        # Skips object, Protocol, the role markers, and typing machinery.
         if base.__module__ in ("builtins", "typing"):
             continue
         for name, raw in vars(base).items():
@@ -149,12 +138,11 @@ def _members(cls: type) -> dict[str, Callable[..., Any]]:
 def _fields(cls: type) -> dict[str, Any]:
     """The declared held-field types of ``cls``, by attribute name.
 
-    Combines class-level annotations with read-only ``property`` declarations
-    (whose return type is the field's interface — the form that lets a surface
-    protocol re-narrow a field, since a plain protocol attribute is invariant).
-    Resolution is **per field and fail-closed**: an annotation that cannot be
-    resolved (a forward reference, a ``TYPE_CHECKING``-only name) is skipped with
-    a debug log rather than widening or crashing discovery.
+    Class-level annotations, plus read-only ``property`` declarations whose
+    return type is the field's interface (the form that lets a surface protocol
+    re-narrow a field — a plain protocol attribute is invariant). Resolution is
+    per field and fail-closed: an unresolvable annotation is skipped with a
+    debug log, never widened to the runtime type.
     """
     fields: dict[str, Any] = {}
     for base in cls.__mro__:

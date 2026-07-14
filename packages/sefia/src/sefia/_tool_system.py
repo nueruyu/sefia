@@ -10,52 +10,34 @@ from typing import (
     Union,
     get_args,
     get_origin,
-    runtime_checkable,
 )
 
 from .exceptions import ToolConflictError
 from .streaming import StreamHandler
 
 
-@runtime_checkable
 class Tools(Protocol):
-    """Role marker: a type whose members the model may **call**.
+    """Role marker: a type whose members the model may call.
 
-    A type carries the ``Tools`` role either by **inheritance** — the primary,
-    declaration-site form::
-
-        class WebToolkit(Tools):            # concrete toolkit, self-declared
-            async def search(self, q: str) -> list[str]: ...
-
-        class ReadOnlyWeb(Tools, Protocol): # a narrowing surface protocol
-            async def search(self, q: str) -> list[str]: ...
-
-    — or at a **use site** via ``Annotated``, for third-party types you cannot
-    edit::
-
-        _web: Annotated[VendorClient, Tools]
-
-    Discovery is gated on this marker: a held member becomes a tool only if the
-    *declared* type of the field (or capability parameter) that reaches it bears
-    ``Tools``. There is no ambient authority — holding an object is not enough.
-
-    (It is ``runtime_checkable`` only so the role can be detected at collection
-    time; membership is tested nominally via the MRO / ``Annotated`` metadata,
-    never by structural ``isinstance``.)
+    Declared by inheritance (``class WebToolkit(Tools)``; for a narrowing
+    protocol, re-inherit: ``class ReadOnlyWeb(Tools, Protocol)``), or at a use
+    site for types you cannot edit (``Annotated[VendorClient, Tools]``).
+    Discovery only exposes fields/parameters whose declared type bears this
+    role — holding an object is not enough. Membership is nominal (MRO or
+    ``Annotated`` metadata), not structural.
     """
 
 
-@runtime_checkable
 class Context(Protocol):
-    """Role marker: a type whose members are **readable** by the model.
+    """Role marker: a type whose members are readable by the model.
 
-    Reserved for rendering declared data members into the prompt. The marker is
-    defined and detected today; prompt rendering is a separate stage.
+    Reserved for rendering declared data members into the prompt; detected
+    today, rendered in a later stage.
     """
 
 
 def _strip_annotated(annotation: Any) -> tuple[Any, tuple[Any, ...]]:
-    """Split ``Annotated[T, *meta]`` into ``(T, meta)``; otherwise ``(annotation, ())``."""
+    """Split ``Annotated[T, *meta]`` into ``(T, meta)``; else ``(annotation, ())``."""
     if get_origin(annotation) is Annotated:
         args = get_args(annotation)
         return args[0], args[1:]
@@ -98,15 +80,14 @@ def bears_role(annotation: Any) -> bool:
 
 
 def role_interface(annotation: Any) -> Any:
-    """The class/``Protocol`` carrying the role, with ``Annotated``/``Optional`` stripped."""
+    """The class/``Protocol`` carrying the role (``Annotated``/``Optional`` stripped)."""
     inner, _ = _strip_annotated(annotation)
     inner = _strip_optional(inner)
     inner, _ = _strip_annotated(inner)
     return inner
 
 
-# Parameters named ``self``/``cls`` are capability parameters by convention —
-# they carry the held-dependency surface without an explicit role annotation.
+# ``self``/``cls`` are capability parameters by convention, without a role annotation.
 _RECEIVER_NAMES = ("self", "cls")
 
 
@@ -114,9 +95,8 @@ _RECEIVER_NAMES = ("self", "cls")
 class Capability:
     """A capability parameter's runtime value and its declared type.
 
-    ``declared`` is ``None`` for the ``self``/``cls`` convention (the collector
-    then treats the value's own class as the container to scan for held tools);
-    otherwise it is the parameter's annotation, whose role marker gated it in.
+    ``declared`` is ``None`` for the ``self``/``cls`` convention — the collector
+    then scans the value's own class for role-bearing held fields.
     """
 
     value: object
@@ -124,17 +104,15 @@ class Capability:
 
 
 def is_capability_parameter(name: str, declared: Any) -> bool:
-    """Whether a parameter carries tools rather than task data.
-
-    True for ``self``/``cls`` (by convention) or any parameter whose declared
-    type bears a role marker.
-    """
+    """Whether a parameter carries tools rather than task data."""
     if name in _RECEIVER_NAMES:
         return True
     return declared is not None and bears_role(declared)
 
 
-def capability_names(bound_arguments: dict[str, Any], type_hints: dict[str, Any]) -> set[str]:
+def capability_names(
+    bound_arguments: dict[str, Any], type_hints: dict[str, Any]
+) -> set[str]:
     """The names of the capability parameters among ``bound_arguments``."""
     return {
         name
@@ -145,7 +123,7 @@ def capability_names(bound_arguments: dict[str, Any], type_hints: dict[str, Any]
 
 def capabilities(
     bound_arguments: dict[str, Any], type_hints: dict[str, Any]
-) -> list["Capability"]:
+) -> list[Capability]:
     """Extract the capability parameters (value + declared type) from a call."""
     out: list[Capability] = []
     for name, value in bound_arguments.items():
