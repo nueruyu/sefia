@@ -2363,7 +2363,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "litellm", specifier = ">=1.40.0" },
+    { name = "litellm", specifier = ">=1.63.0" },
     { name = "sefia", editable = "packages/sefia" },
 ]
 

@@ -22,7 +22,11 @@ from sefia.llm._strategy import (
     _ToolEnabledDirector,
     _ToolOnlyDirector,
 )
-from sefia.llm.events import LLMResponseRepairAttempt, LLMTokenReceived
+from sefia.llm.events import (
+    LLMReasoningTokenReceived,
+    LLMResponseRepairAttempt,
+    LLMTokenReceived,
+)
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -298,6 +302,50 @@ class TestLLMInferenceStrategy:
             isinstance(event, LLMTokenReceived) and event.token == "tok"
             for event in publisher.events
         )
+
+    async def test_decide_next_step_publishes_reasoning_tokens(self, mock_llm_client):
+        mock_llm_client.complete.return_value = LLMResponse(
+            content='{"decision": "result", "result": "done"}'
+        )
+        strategy = self._strategy(mock_llm_client, stream=True)
+        publisher = MockEventPublisher()
+
+        await strategy.decide_next_step(
+            _function_info(instructions="do it"),
+            [],
+            _tool_registry(),
+            publisher,
+        )
+
+        reasoning_callback_obj = mock_llm_client.complete.await_args.kwargs[
+            "reasoning_callback"
+        ]
+        assert callable(reasoning_callback_obj)
+        reasoning_callback = cast(
+            Callable[[str], Awaitable[None]], reasoning_callback_obj
+        )
+        await reasoning_callback("thinking")
+        assert any(
+            isinstance(event, LLMReasoningTokenReceived) and event.token == "thinking"
+            for event in publisher.events
+        )
+
+    async def test_decide_next_step_does_not_set_reasoning_callback_by_default(
+        self, mock_llm_client
+    ):
+        mock_llm_client.complete.return_value = LLMResponse(
+            content='{"decision": "result", "result": "done"}'
+        )
+        strategy = self._strategy(mock_llm_client)
+
+        await strategy.decide_next_step(
+            _function_info(instructions="do it"),
+            [],
+            _tool_registry(),
+            MockEventPublisher(),
+        )
+
+        assert mock_llm_client.complete.await_args.kwargs["reasoning_callback"] is None
 
     async def test_decide_next_step_does_not_set_stream_callback_by_default(
         self, mock_llm_client
