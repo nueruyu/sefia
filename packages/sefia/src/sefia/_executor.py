@@ -71,10 +71,9 @@ class InferenceExecutor:
         tool_collector: ToolCollector,
         engrave: Callable[[Any], Any],
         publisher: EventPublisher,
+        history_storage: HistoryStorage,
         inference_middlewares: list[InferenceMiddleware] | None = None,
         step_middlewares: list[StepMiddleware] | None = None,
-        *,
-        history_storage: HistoryStorage,
     ):
         self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy

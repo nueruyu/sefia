@@ -25,7 +25,7 @@ class SessionContext:
     inference_strategy: InferenceStrategy
     policies: tuple[Policy, ...]
     tool_collector: ToolCollector
-    history_storage: HistoryStorage | None = None
+    history_storage: HistoryStorage
     _profiles: dict[Hashable, ProfileBinding] = field(default_factory=dict)
 
     def resolve_profile(

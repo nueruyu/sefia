@@ -606,9 +606,7 @@ class TestInferenceExecutor:
             ToolCallResult(tool_call_id="0", result="old"),
             ToolCallResult(tool_call_id="1", result="recent"),
         )
-        storage = MemoryHistoryStorage(
-            HistorySnapshot(items=seeded, completed_steps=2)
-        )
+        storage = MemoryHistoryStorage(HistorySnapshot(items=seeded, completed_steps=2))
 
         class _KeepLast(StepMiddleware):
             async def wrap(self, ctx: StepContext, nxt) -> InferenceDecision:

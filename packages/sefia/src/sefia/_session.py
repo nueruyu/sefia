@@ -8,6 +8,7 @@ from ._interfaces import DecisionModelBuilder, Policy
 from ._interfaces.history_storage import HistoryStorage
 from ._profiles import Profile
 from ._tool_system import ToolCollector, ToolFunctionInspector
+from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
 from .llm._xml_prompt_formatter import XmlPromptFormatter
@@ -39,7 +40,7 @@ class Session:
         self._glyff_session = glyff_session
         self._context_token = None
         self._policies: list[Policy] = list(policies) if policies is not None else []
-        self._history_storage = history_storage
+        self._history_storage = history_storage or GlyffHistoryStorage()
 
         # ``PydanticModelBackend`` is both a ToolFunctionInspector (for the
         # collector) and a DecisionModelBuilder (for the strategy); one shared
