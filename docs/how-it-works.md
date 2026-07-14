@@ -234,11 +234,12 @@ step cap.
 `HistoryCompactor` (a `StepMiddleware` in `sefios.middleware`) reshapes the
 history through `ctx.history.rewrite` before the model call once it grows past a
 threshold, truncating to the most recent items at a decision boundary. The
-rewrite only mutates the in-memory list; it is persisted by the next post-step
-save, and if the step pauses first the executor simply re-derives it — the
-truncation is deterministic, so a resumed attempt re-runs the middleware and
-reproduces the same compaction. The next step is a fresh model call over the
-compacted history.
+rewrite mutates the in-memory list and marks it dirty; the executor then
+persists it **just before the model call** (innermost in the step-middleware
+onion), so a resume loads the compacted snapshot and never re-runs the
+compactor — this holds for an expensive or non-deterministic (e.g.
+LLM-summarizing) compactor too, not just the deterministic default. The next
+step is a fresh model call over the compacted history.
 
 The `HistoryStorage` seam is swappable: sefios' `SessionHistoryStorage` keeps
 the history in the session storage (keyed by the run's `ExecutionId`, the same

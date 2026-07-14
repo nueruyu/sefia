@@ -592,6 +592,57 @@ class TestInferenceExecutor:
             ((*first, empty_decision), 2),
         ]
 
+    async def test_compaction_is_persisted_before_the_model_call(
+        self, executor_dependencies
+    ):
+        # A step middleware that reshapes history (compaction) has its rewrite
+        # persisted just before the model call — so a resume loads the compacted
+        # snapshot rather than re-running the compactor. Here the run ends on the
+        # same step (Result, no post-step save), so the only save is that one.
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        seeded = (
+            ToolCallResult(tool_call_id="0", result="old"),
+            ToolCallResult(tool_call_id="1", result="recent"),
+        )
+        storage = MemoryHistoryStorage(
+            HistorySnapshot(items=seeded, completed_steps=2)
+        )
+
+        class _KeepLast(StepMiddleware):
+            async def wrap(self, ctx: StepContext, nxt) -> InferenceDecision:
+                ctx.history.rewrite([ctx.history.items[-1]])
+                return await nxt()
+
+        mock_strategy.decide_next_step.return_value = ResultDecision(result="done")
+
+        executor = InferenceExecutor(
+            sample_func,
+            ("dummy_arg",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+            history_storage=storage,
+            step_middlewares=[_KeepLast()],
+        )
+
+        await executor.run()
+
+        # The compacted history was persisted (step count unchanged) before the
+        # model saw it, without any post-step save.
+        assert [(s.items, s.completed_steps) for s in storage.saves] == [
+            ((seeded[-1],), 2),
+        ]
+        # The strategy was called with the already-compacted history.
+        history = mock_strategy.decide_next_step.call_args.kwargs["history"]
+        assert list(history) == [seeded[-1]]
+
     async def test_step_is_engraved_on_the_step_index(self, executor_dependencies):
         # The engraved step call is keyed on the step ordinal, not the history
         # contents — so the durable key stays O(1) and is stable under

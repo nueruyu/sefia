@@ -217,6 +217,12 @@ class InferenceExecutor:
             )
 
             async def core() -> InferenceDecision:
+                # Innermost, just before the model call: if a step middleware
+                # reshaped the history (compaction), persist it now so a resume
+                # loads the compacted snapshot instead of re-running the
+                # (possibly expensive, possibly non-deterministic) compactor.
+                if self._history.dirty:
+                    await self._save()
                 return await self._next_step_engraved(step)
 
             step_chain = _compose(self._step_middlewares, step_ctx, core)
@@ -230,16 +236,17 @@ class InferenceExecutor:
                     tool_results = await self._call_tools_engraved(decision.calls)
                 else:
                     tool_results = []
-                # Persist only after the step's engraved calls commit: a crash
-                # before this resumes from the previous snapshot and replays the
-                # step (any compaction done this step is re-derived by the
-                # middleware, which re-runs deterministically). Compaction before
-                # a pause is therefore never persisted on its own — it does not
-                # need to be.
+                # Record and persist only after the step's engraved calls
+                # commit, so a crash before this resumes from the previous
+                # snapshot and replays the step.
                 self._history.extend([decision, *tool_results])
                 self._completed_steps += 1
-                await self._storage.save(
-                    HistorySnapshot(self._history.items, self._completed_steps)
-                )
+                await self._save()
             else:
                 raise TypeError(f"Unknown decision type: {type(decision)}")
+
+    async def _save(self) -> None:
+        await self._storage.save(
+            HistorySnapshot(self._history.items, self._completed_steps)
+        )
+        self._history.mark_persisted()
