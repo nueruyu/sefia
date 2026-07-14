@@ -109,9 +109,7 @@ class Tool(ABC):
 
     name: str
     stream_handler: StreamHandler | None
-    # If True, the executor may overlap this call with other concurrent-marked
-    # calls in the same batch. Results are still awaited and appended to history
-    # in request order — this is batch-internal concurrency, not fire-and-forget.
+    # Whether calls may overlap with other concurrent-marked calls in a batch.
     concurrent: bool = False
 
     @abstractmethod

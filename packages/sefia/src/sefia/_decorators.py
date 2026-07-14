@@ -73,30 +73,18 @@ def preview(target: Callable[..., Any]) -> Callable[[_StreamH], _StreamH]:
 
 def concurrent(target: C) -> C:
     """
-    Mark a tool method as safe to run concurrently with other tool calls.
-
-    When a single inference decision contains several tool calls, the executor
-    overlaps consecutive calls to ``@concurrent``-marked tools (``asyncio``
-    concurrency); unmarked tools keep today's strictly serial execution, so the
-    default is the safe one. This is *not* fire-and-forget: every result is
-    still awaited and appended to history in request order, and the next
-    inference step starts only after the whole batch completes. ::
+    Mark a tool method as safe to overlap with other ``@concurrent`` calls in
+    the same batch::
 
         class WebToolkit:
             @concurrent
             async def search(self, query: str) -> list[SearchResult]: ...
 
-    Declare a tool concurrent only when overlapping it with its batch siblings
-    is safe — e.g. pure reads, or independent external calls. Tools whose
-    side-effect ordering matters, or that read-modify-write shared state
-    without their own locking, should stay unmarked. For cross-tool resource
-    exclusion (two different tools touching the same file), hold a shared
-    ``asyncio.Lock`` inside the tools instead.
-
-    Like :func:`preview`, the marker is attached to the implementation function
-    (the collector reads it back off the bound method), so it composes with
-    ``classmethod``/``staticmethod`` and with wrappers that use
-    ``functools.wraps`` — apply ``@concurrent`` outermost when stacking.
+    Unmarked tools run strictly serially. Results are still awaited and
+    recorded in request order — this is not fire-and-forget — so keep a tool
+    unmarked when its side-effect ordering matters or it mutates shared state
+    without its own locking. Like :func:`preview`, the marker lives on the
+    implementation function; apply ``@concurrent`` outermost when stacking.
     """
     underlying = getattr(target, "__func__", target)
     set_concurrent(underlying)

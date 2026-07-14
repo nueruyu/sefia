@@ -150,7 +150,8 @@ surfaces as a tool-execution error on the first call rather than at discovery ti
 A `JsonSchemaTool` instead carries its parameters as a raw JSON Schema (no
 signature to introspect) and passes that schema through verbatim.
 
-**Execution** (`InferenceExecutor._call_tools`): each requested call is matched
+**Execution** (`_tool_execution.py`, engraved through
+`InferenceExecutor._call_tools`): each requested call is matched
 in the registry and dispatched through `tool.invoke(arguments)`; sync or async
 returns are normalized. For a `SignatureTool` the decoded arguments are coerced to
 the callable's declared types before the call; a `JsonSchemaTool` forwards them to

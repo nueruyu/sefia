@@ -60,7 +60,8 @@ Modules with a leading underscore are internal; the public surface is whatever
 | Module | Responsibility | Key symbols |
 | --- | --- | --- |
 | `_decorators.py` | The entry points. Calling `@infer` builds the executor and engraves the run. | `infer`, `concurrent`, `preview`, `policy`, `profile` |
-| `_executor.py` | The step loop, tool execution, middleware composition. | `InferenceExecutor` |
+| `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
+| `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
 | `inference.py` | Plain data: the decision/history types and the call descriptor. | `FunctionInfo`, `ToolCallDecision`, `FinalAnswerDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |

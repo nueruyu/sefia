@@ -150,12 +150,10 @@ def _public_methods(cls: type) -> dict[str, Callable[..., Any]]:
 
 
 def _resolve_concurrent(bound: Callable[..., Any]) -> bool:
-    """Whether the tool's *implementation* method carries ``@concurrent``.
+    """Whether the tool's implementation method carries ``@concurrent``.
 
-    Like the ``@preview`` handler, the marker describes a runtime property of
-    the concrete implementation, so it is read off ``bound``'s own underlying
-    function — never off the declared interface's method, which can be a
-    different object under ``Protocol`` narrowing.
+    Read off ``bound``'s own function, like the ``@preview`` handler — the
+    marker describes the concrete implementation, not the declared interface.
     """
     return is_concurrent(getattr(bound, "__func__", bound))
 

@@ -669,8 +669,7 @@ class TestInferenceExecutor:
 
     async def test_pause_lets_concurrent_siblings_finish(self, executor_dependencies):
         # A PauseException interrupts the batch, but overlapped siblings run
-        # to completion first (an engraved sibling's finished work must be
-        # committed before the run pauses).
+        # to completion first.
         (
             mock_strategy,
             mock_collector,
@@ -717,8 +716,7 @@ class TestInferenceExecutor:
 
     async def test_earliest_pause_in_request_order_wins(self, executor_dependencies):
         # When several overlapped calls pause, the one earliest in request
-        # order propagates — even if it was raised last in wall-clock time —
-        # so the escaping exception is deterministic.
+        # order propagates, even if it was raised last in wall-clock time.
         (
             mock_strategy,
             mock_collector,
@@ -813,10 +811,9 @@ class TestInferenceExecutor:
     async def test_identical_concurrent_calls_run_serially(
         self, executor_dependencies
     ):
-        # Two calls with the same tool and arguments never overlap (glyff's
-        # sequencer numbers repeated executions of one content key by arrival,
-        # so racing duplicates would make replay assignment nondeterministic).
-        # A third call with different arguments still overlaps with them.
+        # Identical calls (same tool and arguments) never overlap — glyff
+        # sequences one content key by arrival order — while a call with
+        # different arguments still does.
         (
             mock_strategy,
             mock_collector,
