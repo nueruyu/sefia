@@ -107,6 +107,12 @@ model; the private `_web` *field* is just storage. The model decides when to cal
 tool. To expose a narrower surface than a class's full public API, hold it behind a
 `Protocol` — only the protocol's declared members are offered.
 
+When the model requests several tool calls in one step, they run one at a time. A
+tool that is safe to overlap with the other calls in its batch — a pure read like a
+search — can be marked with `@concurrent` (`from sefia import concurrent`) on the
+method; consecutive marked calls then run concurrently, and their results still come
+back in request order. Leave tools unmarked when their side-effect ordering matters.
+
 ### Tool scope is the service boundary
 
 A service class can have more than one `@infer` method. That is useful when the

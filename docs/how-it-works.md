@@ -61,7 +61,9 @@ loop:
 - **`decide_next_step` is engraved** (`_next_step_engraved`), so each model call is a
   separately replayable step.
 - **The tool batch is engraved** (`_call_tools_engraved`), so executed tools don't
-  re-run on resume.
+  re-run on resume. Within a batch, calls run serially unless their tools are
+  marked `@concurrent`; results always land in history in request order (see
+  [Tools](#tools-discovery-schema-execution)).
 - **History** is the accumulating list of `ToolCallDecision` / `ToolCallResult`
   (`inference.py`), held in-memory by `StepHistory` and persisted by the executor
   through a `HistoryStorage` seam — see "History storage and compaction" below.
@@ -158,15 +160,26 @@ surfaces as a tool-execution error on the first call rather than at discovery ti
 A `JsonSchemaTool` instead carries its parameters as a raw JSON Schema (no
 signature to introspect) and passes that schema through verbatim.
 
-**Execution** (`InferenceExecutor._call_tools`): the model's requested call is matched
+**Execution** (`_tool_execution.py`, engraved through
+`InferenceExecutor._call_tools`): each requested call is matched
 in the registry and dispatched through `tool.invoke(arguments)`; sync or async
 returns are normalized. For a `SignatureTool` the decoded arguments are coerced to
 the callable's declared types before the call; a `JsonSchemaTool` forwards them to
 its handler verbatim. A tool that
-**raises `NeedsInput` propagates immediately** — that is the durable pause (see below)
+**raises `NeedsInput` propagates** — that is the durable pause (see below)
 — so it reaches your handler; any *other* tool exception is stringified into the
 history and fed back to the model so it can recover and continue, rather than failing
 the run.
+
+When one decision contains several calls, the batch runs **serially by
+default**; consecutive calls to `@concurrent`-marked tools overlap, and an
+unmarked call is a barrier. This is not fire-and-forget: results are awaited
+and appended to history **in request order** regardless of completion order,
+identical calls never race (glyff sequences a content key by arrival), and a
+pause lets overlapped siblings finish — an engraved sibling's work commits and
+replays on resume — before the earliest pause in request order propagates.
+Mark only tools that tolerate overlapping; leave tools unmarked when their
+side-effect ordering matters or they mutate shared state without locking.
 
 ## Durability and replay (glyff)
 

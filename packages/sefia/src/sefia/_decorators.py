@@ -20,7 +20,7 @@ from ._context import get_context
 from ._executor import InferenceExecutor
 from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from ._profiles import Profile
-from ._tool_system import set_stream_handler
+from ._tool_system import set_concurrent, set_stream_handler
 from .event_system import EventPublisher
 
 C = TypeVar("C", bound=Callable[..., object])
@@ -69,6 +69,26 @@ def preview(target: Callable[..., Any]) -> Callable[[_StreamH], _StreamH]:
         return handler
 
     return decorator
+
+
+def concurrent(target: C) -> C:
+    """
+    Mark a tool method as safe to overlap with other ``@concurrent`` calls in
+    the same batch::
+
+        class WebToolkit:
+            @concurrent
+            async def search(self, query: str) -> list[SearchResult]: ...
+
+    Unmarked tools run strictly serially. Results are still awaited and
+    recorded in request order — this is not fire-and-forget — so keep a tool
+    unmarked when its side-effect ordering matters or it mutates shared state
+    without its own locking. Like :func:`preview`, the marker lives on the
+    implementation function; apply ``@concurrent`` outermost when stacking.
+    """
+    underlying = getattr(target, "__func__", target)
+    set_concurrent(underlying)
+    return target
 
 
 def policy(p: Policy) -> _PolicyDecorator:

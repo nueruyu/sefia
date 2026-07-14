@@ -10,6 +10,7 @@ from ._interfaces.middleware import (
     StepContext,
     StepMiddleware,
 )
+from ._tool_execution import call_tools
 from ._tool_system import ToolCollector, ToolRegistry
 from .event_system import EventPublisher
 from .exceptions import PauseException
@@ -124,40 +125,7 @@ class InferenceExecutor:
         self, tool_calls: list[ToolCallRequest]
     ) -> list[ToolCallResult]:
         """Internal engraved method for executing a batch of tool calls."""
-        tool_results: list[ToolCallResult] = []
-        for call in tool_calls:
-            await self.publisher.publish(events.BeforeToolCall(tool_call=call))
-            tool_name = call.name
-            tool = self._tool_registry.get(tool_name)
-
-            if not tool:
-                result = f"Error: Tool '{tool_name}' not found."
-                await self.publisher.publish(
-                    events.ToolExecutionFailed(
-                        tool_call=call,
-                        error=RuntimeError(f"Tool '{tool_name}' not found."),
-                    )
-                )
-            else:
-                try:
-                    result = await tool.invoke(call.arguments)
-                    await self.publisher.publish(
-                        events.AfterToolCall(tool_call=call, result=result)
-                    )
-                except PauseException:
-                    raise
-                except Exception as e:
-                    # A tool failure is never a retryable inference failure: we
-                    # stringify it into the history and feed it back to the model
-                    # so it can recover, then keep going.
-                    await self.publisher.publish(
-                        events.ToolExecutionFailed(tool_call=call, error=e)
-                    )
-                    result = (
-                        f"Error executing tool '{tool_name}': {type(e).__name__}({e})"
-                    )
-            tool_results.append(ToolCallResult(tool_call_id=call.id, result=result))
-        return tool_results
+        return await call_tools(tool_calls, self._tool_registry, self.publisher)
 
     async def run(self) -> Any:
         """
