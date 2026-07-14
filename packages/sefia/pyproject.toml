@@ -19,7 +19,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/sefia"]
 
+# importlib mode allows duplicate test basenames (units/ vs scenarios/) in this
+# non-package test tree; the root pyproject sets the same mode for full-repo runs.
 [tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 

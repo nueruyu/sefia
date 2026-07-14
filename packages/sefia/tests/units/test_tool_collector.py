@@ -7,7 +7,17 @@ from sefia.exceptions import ToolConflictError
 from sefia.pydantic import PydanticModelBackend
 from sefia.tool_collectors import DefaultToolCollector
 
-from ..conftest import WebToolkit
+
+class WebToolkit:
+    """A two-method toolkit; discovery only reads its names and docstrings."""
+
+    async def search(self, query: str) -> str:
+        """Search the web for a query."""
+        raise NotImplementedError
+
+    async def fetch_content(self, url: str) -> str:
+        """Fetch content from a URL."""
+        raise NotImplementedError
 
 
 def example_func(a: int, b: str = "default") -> bool:

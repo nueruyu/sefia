@@ -17,11 +17,8 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
-import glyff
 import pytest
-from glyff.store import MemoryBackend
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import Session
+from sefia.testing import memory_session
 
 from sefia_litellm import LiteLLMClient
 
@@ -98,15 +95,9 @@ def live_session():
     @asynccontextmanager
     async def factory(provider: Provider, **session_kwargs):
         client = LiteLLMClient(model=provider.model)
-        async with glyff.Session(
-            id=f"e2e-{provider.id}-{uuid.uuid4()}",
-            backend=MemoryBackend(),
-            serializer=PydanticSerializer(),
-            hasher=PydanticArgsHasher(),
-        ) as glyff_session:
-            async with Session(
-                llm_client=client, glyff_session=glyff_session, **session_kwargs
-            ):
-                yield client
+        async with memory_session(
+            client, session_id=f"e2e-{provider.id}-{uuid.uuid4()}", **session_kwargs
+        ):
+            yield client
 
     return factory

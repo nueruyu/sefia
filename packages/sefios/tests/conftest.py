@@ -1,46 +1,17 @@
 """Shared fixtures for the sefios test tree.
 
 This tree is not a package (no ``__init__.py``), so shared helpers are exposed
-as fixtures rather than importable symbols.
+as fixtures rather than importable symbols; the test doubles themselves live in
+the public ``sefia.testing`` module.
 """
 
-from typing import Any, Callable, Coroutine
+from typing import Callable
 
 import pytest
 from glyff import ArgsHasher, Serializer
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia.llm import LLMClient, LLMResponse, Message
-
-
-class MockLLMClient(LLMClient):
-    """A mock LLM client that returns pre-defined responses."""
-
-    def __init__(self, responses: list[LLMResponse]):
-        self.responses = responses
-        self.requests: list[dict[str, Any]] = []
-
-    async def complete(
-        self,
-        messages: list[Message],
-        tools: list[dict] | None = None,
-        output_schema: dict | None = None,
-        stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
-        reasoning_callback: (
-            Callable[[str], Coroutine[None, None, None]] | None
-        ) = None,
-    ) -> LLMResponse:
-        self.requests.append(
-            {
-                "messages": [m.to_dict(exclude_none=True) for m in messages],
-                "tools": tools,
-                "output_schema": output_schema,
-                "stream_callback": stream_callback,
-                "reasoning_callback": reasoning_callback,
-            }
-        )
-        if not self.responses:
-            raise AssertionError("MockLLMClient has no more responses.")
-        return self.responses.pop(0)
+from sefia.llm import LLMResponse
+from sefia.testing import MockLLMClient
 
 
 @pytest.fixture

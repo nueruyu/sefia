@@ -26,7 +26,7 @@ from sefia.inference import (
     ToolCallResult,
 )
 
-from ._support import MemoryHistoryStorage
+from sefia.testing import MemoryHistoryStorage
 
 
 def _make_executor(*args, history_storage=None, **kwargs) -> InferenceExecutor:
