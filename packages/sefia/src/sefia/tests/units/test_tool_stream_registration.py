@@ -1,7 +1,8 @@
 from typing import Protocol
 
 from sefia import Tools, preview
-from sefia._tool_system import Capability, ToolRegistry
+from sefia._tool_system import ToolRegistry
+from sefia.inference import Capability
 from sefia.llm._arg_stream import _ArgStreamChannel
 from sefia.streaming import ArgStream, StringDelta
 from sefia.tool_collectors import DefaultToolCollector

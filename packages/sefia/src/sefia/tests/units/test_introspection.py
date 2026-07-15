@@ -3,14 +3,12 @@ from typing import Annotated, Optional, Protocol
 from typing_extensions import TypeAliasType
 
 from sefia._introspection import (
-    Tools,
-    bears_tools,
     declared_fields,
-    exposed_methods,
+    declared_methods,
     is_protocol,
-    role_interface,
-    unwrap_role,
+    unwrap_annotation,
 )
+from sefia._tool_system import Tools, bears_tools, role_interface
 
 
 class WebToolkit:
@@ -66,13 +64,13 @@ def test_a_user_alias_wrapping_the_role_alias_resolves():
 def test_a_bare_unsubscripted_alias_yields_no_class_interface():
     # ``_web: Tools`` (no argument) unwraps to the alias body's TypeVar —
     # not a class, so the collector's isclass guard rejects it (fail-closed).
-    markers, interface = unwrap_role(Tools)
-    assert markers  # the role is present...
+    metadata, interface = unwrap_annotation(Tools)
+    assert metadata  # the role marker is present...
     assert not isinstance(interface, type)  # ...but there is nothing to expose
 
 
 def test_an_ambiguous_union_stops_resolution():
-    markers, interface = unwrap_role(Tools[WebToolkit] | str)
+    _, interface = unwrap_annotation(Tools[WebToolkit] | str)
     assert not isinstance(interface, type)
 
 
@@ -106,16 +104,16 @@ class Proto(Protocol):
     async def _also_visible(self) -> str: ...
 
 
-def test_a_concrete_class_exposes_only_public_methods():
-    names = set(exposed_methods(Concrete))
+def test_a_concrete_class_declares_only_public_methods():
+    names = set(declared_methods(Concrete))
     assert names == {"visible", "static_tool", "class_tool"}
 
 
-def test_a_protocol_exposes_its_private_declared_members_too():
-    assert set(exposed_methods(Proto)) == {"visible", "_also_visible"}
+def test_a_protocol_declares_its_private_members_too():
+    assert set(declared_methods(Proto)) == {"visible", "_also_visible"}
 
 
-def test_inherited_methods_are_exposed_and_overrides_win():
+def test_inherited_methods_are_included_and_overrides_win():
     class Base:
         async def base_method(self) -> str:
             return "base"
@@ -127,7 +125,7 @@ def test_inherited_methods_are_exposed_and_overrides_win():
         async def shared(self) -> str:
             return "child"
 
-    methods = exposed_methods(Child)
+    methods = declared_methods(Child)
     assert set(methods) == {"base_method", "shared"}
     assert methods["shared"] is Child.__dict__["shared"]
 

@@ -10,7 +10,6 @@ from ._interfaces import (
 from ._markers import AsRawText
 from ._profiles import Profile
 from ._session import Session
-from ._introspection import Tools
 from ._tool_system import (
     JsonSchemaTool,
     SignatureTool,
@@ -18,6 +17,7 @@ from ._tool_system import (
     ToolCollector,
     ToolDefinition,
     ToolRegistry,
+    Tools,
 )
 
 __all__ = [

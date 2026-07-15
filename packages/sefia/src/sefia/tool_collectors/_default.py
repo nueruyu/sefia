@@ -1,20 +1,16 @@
 import inspect
 from typing import Any, Callable
 
-from .._introspection import (
-    bears_tools,
-    declared_fields,
-    exposed_methods,
-    is_protocol,
-    role_interface,
-)
+from .._introspection import declared_fields, declared_methods, is_protocol
 from .._tool_system import (
-    Capability,
     ToolCollector,
     ToolFunctionInspector,
     ToolRegistry,
+    bears_tools,
     get_stream_handler,
+    role_interface,
 )
+from ..inference import Capability
 from ..streaming import StreamHandler
 
 
@@ -69,7 +65,7 @@ class DefaultToolCollector(ToolCollector):
 
         if declared is not None and is_protocol(declared):
             # Surface path: the protocol's declarations are the whole grant.
-            for method_name, schema_fn in exposed_methods(declared).items():
+            for method_name, schema_fn in declared_methods(declared).items():
                 self._add(registry, cap.value, method_name, schema_fn)
             self._collect_fields(registry, cap.value, declared, gated=False)
         else:
@@ -89,7 +85,7 @@ class DefaultToolCollector(ToolCollector):
             field_value = getattr(holder, field_name, None)
             if field_value is None or field_value is holder:
                 continue
-            for method_name, schema_fn in exposed_methods(interface).items():
+            for method_name, schema_fn in declared_methods(interface).items():
                 self._add(registry, field_value, method_name, schema_fn)
 
     def _add(

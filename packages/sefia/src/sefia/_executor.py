@@ -8,7 +8,7 @@ from ._interfaces.middleware import (
     StepContext,
     StepMiddleware,
 )
-from ._tool_system import ToolCollector, capabilities
+from ._tool_system import ToolCollector
 from .event_system import EventPublisher
 from .exceptions import PauseException
 from .inference import (
@@ -79,10 +79,7 @@ class InferenceExecutor:
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
 
-        caps = capabilities(
-            self.func_info.bound_arguments, self.func_info.type_hints
-        )
-        self._tool_registry = tool_collector.collect(caps)
+        self._tool_registry = tool_collector.collect(self.func_info.capabilities)
 
         self._next_step_engraved = _wrap(self._next_step, engrave)
         self._call_tools_engraved = _wrap(self._call_tools, engrave)

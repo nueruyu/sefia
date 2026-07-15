@@ -1,5 +1,5 @@
 from sefia import Tools
-from sefia._tool_system import Capability
+from sefia.inference import Capability
 from sefia.llm._arg_stream import _ArgStreamChannel
 from sefia.streaming import StringDelta
 from sefia.tool_collectors import DefaultToolCollector

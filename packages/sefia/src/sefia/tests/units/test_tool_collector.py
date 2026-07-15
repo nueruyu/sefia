@@ -3,8 +3,8 @@ from typing import Annotated, Optional, Protocol
 import pytest
 
 from sefia import Tools, infer
-from sefia._tool_system import Capability, capabilities, capability_names
 from sefia.exceptions import ToolConflictError
+from sefia.inference import Capability, FunctionInfo
 from sefia.pydantic import PydanticModelBackend
 from sefia.tool_collectors import DefaultToolCollector
 
@@ -67,29 +67,45 @@ def test_schema_builder_caches_results():
 
 
 # --------------------------------------------------------------------------- #
-# Capability classification: receivers only
+# Capability classification: the receiver, on the call descriptor
 # --------------------------------------------------------------------------- #
 
 
-def test_self_is_the_capability_parameter():
-    svc = object()
-    caps = capabilities({"self": svc, "topic": "x"}, {"topic": str})
-    assert caps == [Capability(value=svc, declared=None)]
-    assert capability_names({"self": svc, "topic": "x"}) == {"self"}
+class SurfaceForInfo(Protocol): ...
 
 
-def test_plain_function_parameters_are_never_capabilities():
-    kit = WebToolkit()
-    caps = capabilities({"kit": kit, "topic": "x"}, {"kit": Tools[WebToolkit]})
-    assert caps == []
+class InfoService:
+    async def plain(self, topic: str) -> str:
+        """No self annotation."""
+        ...
+
+    async def surfaced(self: SurfaceForInfo, topic: str) -> str:
+        """Self annotated with a surface protocol."""
+        ...
+
+
+def test_the_receiver_is_the_capability_and_the_rest_is_prompt_data():
+    svc = InfoService()
+    info = FunctionInfo.create(InfoService.plain, (svc, "x"), {})
+    assert info.capabilities == [Capability(value=svc, declared=None)]
+    assert info.prompt_arguments == {"topic": "x"}
 
 
 def test_an_annotated_self_carries_its_surface():
-    class Surface(Protocol): ...
+    svc = InfoService()
+    info = FunctionInfo.create(InfoService.surfaced, (svc, "x"), {})
+    assert info.capabilities == [Capability(value=svc, declared=SurfaceForInfo)]
 
-    svc = object()
-    caps = capabilities({"self": svc}, {"self": Surface})
-    assert caps == [Capability(value=svc, declared=Surface)]
+
+def test_plain_function_parameters_are_never_capabilities():
+    async def run(kit: Tools[WebToolkit], topic: str) -> str:
+        """A plain function: every parameter is task data."""
+        ...
+
+    kit = WebToolkit()
+    info = FunctionInfo.create(run, (kit, "x"), {})
+    assert info.capabilities == []
+    assert info.prompt_arguments == {"kit": kit, "topic": "x"}
 
 
 # --------------------------------------------------------------------------- #
