@@ -81,7 +81,8 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |
 | `_profiles.py` / `_metadata.py` | Per-call model/policy selection; the `__sefia_metadata__` store. | `Profile` |
-| `_tool_system.py` | The tool hierarchy, registry, collector interface, the `Tools[...]`/`Context[...]` role aliases, and the receiver classifier. | `Tool`, `SignatureTool`, `JsonSchemaTool`, `ToolDefinition`, `ToolRegistry`, `ToolCollector`, `Tools`, `Context`, `capabilities` |
+| `_tool_system.py` | The tool hierarchy, registry, collector interface, and the receiver classifier. | `Tool`, `SignatureTool`, `JsonSchemaTool`, `ToolDefinition`, `ToolRegistry`, `ToolCollector`, `capabilities` |
+| `_introspection.py` | Annotation/class-shape introspection: the `Tools[...]` role alias and resolver, method/field scanning for classes and `Protocol`s. | `Tools`, `unwrap_role`, `exposed_methods`, `declared_fields` |
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
@@ -130,7 +131,7 @@ implementation noted in parentheses.
 | Change CLI rendering / the CLI input rules | `packages/sefia_typer` |
 | Change HTTP events / SSE / the HTTP input rules | `packages/sefia_fastapi` |
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |
-| Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role aliases + classifier in `_tool_system.py` |
+| Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role alias + scanners in `_introspection.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
 | Support a new output type system | `ToolFunctionInspector` / `DecisionModelBuilder` in `pydantic/_model_backend.py` |
 | Register a tool from a raw JSON Schema (no signature) | `JsonSchemaTool` / `ToolRegistry.add_json_tool` in `_tool_system.py` |

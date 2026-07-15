@@ -1,20 +1,21 @@
 import inspect
-import logging
-import sys
 from typing import Any, Callable
 
+from .._introspection import (
+    bears_tools,
+    declared_fields,
+    exposed_methods,
+    is_protocol,
+    role_interface,
+)
 from .._tool_system import (
     Capability,
     ToolCollector,
     ToolFunctionInspector,
     ToolRegistry,
-    bears_tools,
     get_stream_handler,
-    role_interface,
 )
 from ..streaming import StreamHandler
-
-_log = logging.getLogger("sefia.tools")
 
 
 class DefaultToolCollector(ToolCollector):
@@ -36,7 +37,8 @@ class DefaultToolCollector(ToolCollector):
       the protocol needs no marker and stays a plain interface.
 
     Either way discovery is a pure function of static declarations — runtime
-    values never widen the surface — and the exposed interface is the declared
+    values never widen the surface (the introspection itself lives in
+    ``sefia._introspection``) — and the exposed interface is the declared
     type: a concrete class contributes its public methods, a ``Protocol``
     exactly its declared members.
 
@@ -65,9 +67,9 @@ class DefaultToolCollector(ToolCollector):
         if declared is not None and not inspect.isclass(declared):
             return
 
-        if declared is not None and _is_protocol(declared):
+        if declared is not None and is_protocol(declared):
             # Surface path: the protocol's declarations are the whole grant.
-            for method_name, schema_fn in _members(declared).items():
+            for method_name, schema_fn in exposed_methods(declared).items():
                 self._add(registry, cap.value, method_name, schema_fn)
             self._collect_fields(registry, cap.value, declared, gated=False)
         else:
@@ -78,7 +80,7 @@ class DefaultToolCollector(ToolCollector):
     def _collect_fields(
         self, registry: ToolRegistry, holder: object, container: type, *, gated: bool
     ) -> None:
-        for field_name, annotation in _fields(container).items():
+        for field_name, annotation in declared_fields(container).items():
             if gated and not bears_tools(annotation):
                 continue
             interface = role_interface(annotation)
@@ -87,7 +89,7 @@ class DefaultToolCollector(ToolCollector):
             field_value = getattr(holder, field_name, None)
             if field_value is None or field_value is holder:
                 continue
-            for method_name, schema_fn in _members(interface).items():
+            for method_name, schema_fn in exposed_methods(interface).items():
                 self._add(registry, field_value, method_name, schema_fn)
 
     def _add(
@@ -107,81 +109,6 @@ class DefaultToolCollector(ToolCollector):
             inspector=self._inspector,
             stream_handler=_resolve_stream_handler(bound),
         )
-
-
-def _is_protocol(cls: type) -> bool:
-    return bool(getattr(cls, "_is_protocol", False))
-
-
-def _members(cls: type) -> dict[str, Callable[..., Any]]:
-    """The tool methods a class or ``Protocol`` exposes, by name.
-
-    Scans ``__mro__`` via each class's own ``vars`` — never ``getattr`` on an
-    instance, so a ``@property`` getter's side effects are never triggered;
-    non-function descriptors are excluded. A concrete class exposes only public
-    methods; a ``Protocol`` also exposes its ``_``-prefixed declared members,
-    since a protocol is an explicit allowlist.
-    """
-    is_proto = _is_protocol(cls)
-    methods: dict[str, Callable[..., Any]] = {}
-    for base in cls.__mro__:
-        # Skips object, Protocol, and typing machinery.
-        if base.__module__ in ("builtins", "typing"):
-            continue
-        for name, raw in vars(base).items():
-            if name in methods or name.startswith("__"):
-                continue
-            if name.startswith("_") and not is_proto:
-                continue
-            if isinstance(raw, (staticmethod, classmethod)):
-                methods[name] = raw.__func__
-            elif inspect.isfunction(raw):
-                methods[name] = raw
-    return methods
-
-
-def _fields(cls: type) -> dict[str, Any]:
-    """The declared held-field types of ``cls``, by attribute name.
-
-    Class-level annotations, plus read-only ``property`` declarations whose
-    return type is the field's interface (the form that lets a surface protocol
-    re-narrow a field — a plain protocol attribute is invariant). Resolution is
-    per field and fail-closed: an unresolvable annotation is skipped with a
-    debug log, never widened to the runtime type.
-    """
-    fields: dict[str, Any] = {}
-    for base in cls.__mro__:
-        if base.__module__ in ("builtins", "typing"):
-            continue
-        globalns = getattr(sys.modules.get(base.__module__, None), "__dict__", {})
-        localns = dict(vars(base))
-        raw = base.__dict__.get("__annotations__", {})
-        for name, annotation in raw.items():
-            if name in fields:
-                continue
-            resolved = _resolve(annotation, globalns, localns)
-            if resolved is not None:
-                fields[name] = resolved
-        for name, member in vars(base).items():
-            if name in fields or not isinstance(member, property) or member.fget is None:
-                continue
-            try:
-                ret = inspect.get_annotations(member.fget, eval_str=True).get("return")
-            except Exception:  # noqa: BLE001 — fail-closed on any resolution error
-                ret = None
-            if ret is not None:
-                fields[name] = ret
-    return fields
-
-
-def _resolve(annotation: Any, globalns: dict, localns: dict) -> Any:
-    if not isinstance(annotation, str):
-        return annotation
-    try:
-        return eval(annotation, globalns, localns)  # noqa: S307 — resolving a type hint
-    except Exception:  # noqa: BLE001 — fail-closed: an unresolved field is not discovered
-        _log.debug("skipping unresolvable field annotation %r", annotation)
-        return None
 
 
 def _resolve_stream_handler(bound: Callable[..., Any]) -> StreamHandler | None:

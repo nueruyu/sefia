@@ -1,108 +1,10 @@
 import inspect
-import types
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import (
-    Annotated,
-    Any,
-    Callable,
-    TypeVar,
-    Union,
-    get_args,
-    get_origin,
-)
-
-from typing_extensions import TypeAliasType
+from typing import Any, Callable
 
 from .exceptions import ToolConflictError
 from .streaming import StreamHandler
-
-
-class _RoleMarker:
-    """Sentinel a role alias plants in ``Annotated`` metadata."""
-
-    def __init__(self, name: str):
-        self._name = name
-
-    def __repr__(self) -> str:
-        return f"sefia.{self._name}"
-
-
-_TOOLS = _RoleMarker("Tools")
-_CONTEXT = _RoleMarker("Context")
-
-T = TypeVar("T")
-
-Tools = TypeAliasType("Tools", Annotated[T, _TOOLS], type_params=(T,))
-"""Role alias: a field whose members the model may call.
-
-Written in a class-level field annotation — ``_web: Tools[WebToolkit]``,
-narrowed with ``Tools[ReadOnlyWeb]`` — it grants that one field. The wrapped
-type stays a plain class/``Protocol`` (checkers treat ``Tools[T]`` as ``T``),
-and discovery exposes only fields so annotated: holding an object is not
-enough.
-"""
-
-Context = TypeAliasType("Context", Annotated[T, _CONTEXT], type_params=(T,))
-"""Role alias: a field whose value the model may read.
-
-Reserved for rendering declared data members into the prompt; detected today,
-rendered in a later stage.
-"""
-
-
-def unwrap_role(annotation: Any) -> tuple[frozenset, Any]:
-    """Resolve ``annotation`` to ``(role markers, interface)``.
-
-    Peels ``Annotated`` layers, role aliases (bare or subscripted), and
-    ``Optional`` — in any nesting order — collecting markers along the way.
-    The remainder is the declared interface.
-    """
-    markers: set[_RoleMarker] = set()
-    hint = annotation
-    for _ in range(16):  # annotations are shallow; bound guards against cycles
-        origin = get_origin(hint)
-        if origin is Annotated:
-            args = get_args(hint)
-            markers.update(a for a in args[1:] if isinstance(a, _RoleMarker))
-            hint = args[0]
-        elif getattr(origin, "__value__", None) is not None:
-            # A subscripted alias: markers live in its body; the type argument
-            # is the interface (our aliases are ``Annotated[T, marker]``).
-            value = origin.__value__
-            if get_origin(value) is Annotated:
-                markers.update(
-                    a for a in get_args(value)[1:] if isinstance(a, _RoleMarker)
-                )
-                hint = get_args(hint)[0]
-            else:
-                hint = value
-        elif getattr(hint, "__value__", None) is not None:
-            hint = hint.__value__  # a bare (unsubscripted) alias
-        elif origin in (Union, types.UnionType):
-            non_none = [a for a in get_args(hint) if a is not type(None)]
-            if len(non_none) != 1:
-                break
-            hint = non_none[0]
-        else:
-            break
-    return frozenset(markers), hint
-
-
-def bears_tools(annotation: Any) -> bool:
-    """Whether ``annotation`` carries the ``Tools`` role."""
-    return _TOOLS in unwrap_role(annotation)[0]
-
-
-def bears_context(annotation: Any) -> bool:
-    """Whether ``annotation`` carries the ``Context`` role."""
-    return _CONTEXT in unwrap_role(annotation)[0]
-
-
-def role_interface(annotation: Any) -> Any:
-    """The declared interface under ``annotation``'s role/``Optional`` wrappers."""
-    return unwrap_role(annotation)[1]
-
 
 # Only ``self``/``cls`` carry tools — by convention, with no marker. Tool
 # dependencies are expressed through classes; plain-function parameters are
@@ -387,10 +289,6 @@ class ToolRegistry:
 
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
-
-    def remove(self, name: str) -> None:
-        """Drop a tool by name; a missing name is a no-op."""
-        self._tools.pop(name, None)
 
     def get_by_function(self, func: Callable[..., Any]) -> list[Tool]:
         """Return tools whose executable callable matches ``func``."""

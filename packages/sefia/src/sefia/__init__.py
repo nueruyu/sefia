@@ -10,15 +10,14 @@ from ._interfaces import (
 from ._markers import AsRawText
 from ._profiles import Profile
 from ._session import Session
+from ._introspection import Tools
 from ._tool_system import (
-    Context,
     JsonSchemaTool,
     SignatureTool,
     Tool,
     ToolCollector,
     ToolDefinition,
     ToolRegistry,
-    Tools,
 )
 
 __all__ = [
@@ -37,7 +36,6 @@ __all__ = [
     "StepContext",
     "Tool",
     "Tools",
-    "Context",
     "SignatureTool",
     "JsonSchemaTool",
     "ToolDefinition",

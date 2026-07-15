@@ -14,7 +14,7 @@ class _StubStrategy(InferenceStrategy):
 
 
 class BothSurface(Protocol):
-    """A surface that (incorrectly) declares the running method itself."""
+    """A surface shared by two @infer methods, declaring both."""
 
     async def run(self, topic: str) -> str: ...
 
@@ -45,10 +45,13 @@ def _executor_for(bound_wrapper, *args) -> InferenceExecutor:
     )
 
 
-def test_the_running_infer_method_is_excluded_from_its_own_tools():
-    service = Service()
-    executor = _executor_for(Service.run, service, "topic")
+def test_a_surface_grants_exactly_what_it_declares_including_the_running_method():
+    # A surface is an explicit allowlist with no hidden exceptions: declaring
+    # the running @infer method exposes it to itself. Recursion is therefore a
+    # declared choice; bounding it is runtime policy, not discovery.
+    executor = _executor_for(Service.run, Service(), "topic")
 
-    names = executor._tool_registry.get_names()
-    # The sibling declared by the surface is a tool; the method itself is not.
-    assert names == ["BothSurface_analyze"]
+    assert sorted(executor._tool_registry.get_names()) == [
+        "BothSurface_analyze",
+        "BothSurface_run",
+    ]

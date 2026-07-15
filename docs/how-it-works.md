@@ -123,8 +123,10 @@ is read in one of two modes:
   class-body scan with that protocol's declarations, granted wholesale: its methods
   (`_`-prefixed included) become tools bound to the instance, and its field/property
   declarations expose their declared type's members. Annotating `self` is itself the
-  opt-in, so the surface needs no marker and stays a plain interface. (The running
-  `@infer` method is always excluded from its own surface.)
+  opt-in, so the surface needs no marker and stays a plain interface. The allowlist
+  has no hidden exceptions: a surface that declares the running `@infer` method
+  exposes it to itself — recursion is a declared choice, and bounding it is runtime
+  policy (a planned depth-cap middleware), not discovery's job.
 
 Either way, the **exposed interface is the declared type** (`Tools[...]` /
 `Optional` stripped): a concrete class contributes its public methods; a `Protocol`

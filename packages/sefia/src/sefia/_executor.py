@@ -83,10 +83,6 @@ class InferenceExecutor:
             self.func_info.bound_arguments, self.func_info.type_hints
         )
         self._tool_registry = tool_collector.collect(caps)
-        # A surface protocol may declare the running @infer method itself;
-        # an inference never sees itself as a tool.
-        for own in self._tool_registry.get_by_function(func):
-            self._tool_registry.remove(own.name)
 
         self._next_step_engraved = _wrap(self._next_step, engrave)
         self._call_tools_engraved = _wrap(self._call_tools, engrave)

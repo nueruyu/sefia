@@ -95,7 +95,8 @@ class ResearchService:
 
 Re-narrowed fields must be declared as read-only properties: a plain protocol
 attribute is invariant and will not type-check against a different concrete type.
-The running `@infer` method is always excluded from its own surface.
+The surface is granted exactly as declared — including the running `@infer` method
+itself, if you declare it. Only declare it when self-recursion is intended.
 
 A service class is a capability boundary. Multiple `@infer` methods on the same
 service share the granted fields unless a method selects its own surface. Split
