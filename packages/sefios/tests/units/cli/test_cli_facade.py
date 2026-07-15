@@ -5,7 +5,7 @@ from sefia_typer import UnknownSessionError as CLIUnknownSessionError
 from sefios.cli import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
 from sefios.cli._app import _USE_DEFAULT_REPORTER
 from sefios.storage import MemorySessionStorage
-from sefios.tools import InputTool
+from sefios.tools import InputTool, OutputTool
 
 
 @pytest.fixture
@@ -54,6 +54,9 @@ class TestSefiaCLISessionManagement:
 
     def test_input_tool_is_exposed(self, cli: SefiaCLI):
         assert isinstance(cli.input_tool, InputTool)
+
+    def test_output_tool_is_exposed(self, cli: SefiaCLI):
+        assert isinstance(cli.output_tool, OutputTool)
 
     def test_create_session_becomes_active(self, cli: SefiaCLI):
         session_id = cli.create_session()

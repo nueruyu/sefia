@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from fastapi.responses import StreamingResponse
@@ -14,7 +15,7 @@ from .._session_state import get_session_storage
 from ..exceptions import NeedsInput
 from ..handlers import CostCalculator
 from ..sessions import SessionManager
-from ..tools import InputRequest, InputResult, InputTool
+from ..tools import InputRequest, InputResult, InputTool, OutputMessage, OutputTool
 
 
 class SefiaHTTPSession:
@@ -54,11 +55,15 @@ class SefiaHTTP:
         self._events = SessionEvents()
         self._session_manager = SessionManager(session_dir)
         self._input = InputChannel(namespace="http/input_channel")
+        self._active_session_id: ContextVar[str | None] = ContextVar(
+            "http_active_session_id", default=None
+        )
         self._input_tool = InputTool(
             get_input=self._provide_input,
             on_request=self._record_request,
             on_complete=self._complete_request,
         )
+        self._output_tool = OutputTool(on_output=self._emit_output)
 
         scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
         if policies is not None:
@@ -75,6 +80,10 @@ class SefiaHTTP:
     @property
     def input_tool(self) -> InputTool:
         return self._input_tool
+
+    @property
+    def output_tool(self) -> OutputTool:
+        return self._output_tool
 
     def create_session(self) -> str:
         return self._session_manager.create_new_active_session()
@@ -105,6 +114,7 @@ class SefiaHTTP:
                 Policy(handlers=lambda: [self._events.token_handler(session_id)])
             )
 
+        token = self._active_session_id.set(session_id)
         try:
             async with self._session_scope.session(
                 session_id=session_id,
@@ -150,6 +160,8 @@ class SefiaHTTP:
             await self._events.publish(
                 session_id, "completed", {"session_id": session_id}
             )
+        finally:
+            self._active_session_id.reset(token)
 
     def events(self, session_id: str) -> StreamingResponse:
         self.ensure_session(session_id)
@@ -163,3 +175,16 @@ class SefiaHTTP:
 
     async def _complete_request(self, result: InputResult) -> None:
         await self._input.complete_request(result.interaction_id)
+
+    async def _emit_output(self, message: OutputMessage) -> None:
+        session_id = self._active_session_id.get()
+        if session_id is None:
+            return
+        await self._events.publish(
+            session_id,
+            "output",
+            {
+                "interaction_id": message.interaction_id,
+                "message": message.message,
+            },
+        )

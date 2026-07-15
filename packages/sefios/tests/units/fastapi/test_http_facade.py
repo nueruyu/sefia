@@ -1,7 +1,7 @@
 import pytest
 from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
 from sefios.fastapi import SefiaHTTP
-from sefios.tools import InputTool
+from sefios.tools import InputTool, OutputTool
 
 
 @pytest.fixture
@@ -12,6 +12,9 @@ def http(tmp_path) -> SefiaHTTP:
 class TestSefiaHTTPSessionManagement:
     def test_input_tool_is_exposed(self, http: SefiaHTTP):
         assert isinstance(http.input_tool, InputTool)
+
+    def test_output_tool_is_exposed(self, http: SefiaHTTP):
+        assert isinstance(http.output_tool, OutputTool)
 
     def test_created_session_is_known(self, http: SefiaHTTP):
         session_id = http.create_session()
