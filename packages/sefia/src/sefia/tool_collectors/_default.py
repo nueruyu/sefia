@@ -20,18 +20,25 @@ _log = logging.getLogger("sefia.tools")
 class DefaultToolCollector(ToolCollector):
     """The default implementation of ToolCollector.
 
-    A member becomes a tool only when reachable through ``Tools``-bearing
-    **declared** types from a capability parameter — no ambient authority:
+    Tools come from the receiver (``self``/``cls``) of the ``@infer`` call, in
+    one of two modes:
 
-    * A held field is exposed only if its class-level declared type bears
-      ``Tools``; an undeclared field exposes nothing (fail-closed), so runtime
-      values never widen the surface.
-    * The exposed interface is the declared type: a concrete class contributes
-      its public methods, a ``Protocol`` exactly its declared members
-      (``_``-prefixed included — a protocol is an explicit allowlist).
-    * A plain service class does not bear ``Tools``, so its own methods are
-      never offered back to itself; a ``self: SomeTools`` surface annotation
-      opts them in explicitly.
+    * **Unannotated receiver** — the instance's class-level field declarations
+      are scanned, and a field is exposed only if annotated with the ``Tools``
+      role alias (``_web: Tools[WebToolkit]``). An unmarked or undeclared field
+      exposes nothing (fail-closed); the instance's own methods are never
+      exposed.
+    * **Surface-annotated receiver** — a ``self`` annotated with a ``Protocol``
+      replaces the class-body scan with that protocol's declarations, which are
+      granted wholesale: its methods (``_``-prefixed included) become tools
+      bound to the instance, and its field/property declarations expose their
+      declared type's members. Annotating ``self`` is itself the opt-in, so
+      the protocol needs no marker and stays a plain interface.
+
+    Either way discovery is a pure function of static declarations — runtime
+    values never widen the surface — and the exposed interface is the declared
+    type: a concrete class contributes its public methods, a ``Protocol``
+    exactly its declared members.
 
     The collector records neutral tool metadata; strategy-specific schema
     generation happens later, from each tool's ``schema_source``.
@@ -54,33 +61,31 @@ class DefaultToolCollector(ToolCollector):
         if cap.value is None:
             return
 
-        # self/cls convention: scan the value's own class for held fields, but
-        # never treat the bare service itself as a tool surface.
-        if cap.declared is None:
-            container = type(cap.value)
-            expose_own = False
-        else:
-            container = role_interface(cap.declared)
-            expose_own = bears_tools(cap.declared)
-
-        if not inspect.isclass(container):
+        declared = role_interface(cap.declared) if cap.declared is not None else None
+        if declared is not None and not inspect.isclass(declared):
             return
 
-        # A role-bearing capability (a passed toolkit, or a surface protocol on
-        # self) contributes its own members, bound to the value.
-        if expose_own:
-            for method_name, schema_fn in _members(container).items():
+        if declared is not None and _is_protocol(declared):
+            # Surface path: the protocol's declarations are the whole grant.
+            for method_name, schema_fn in _members(declared).items():
                 self._add(registry, cap.value, method_name, schema_fn)
+            self._collect_fields(registry, cap.value, declared, gated=False)
+        else:
+            # Class-body path: only Tools-marked field declarations expose.
+            container = declared if declared is not None else type(cap.value)
+            self._collect_fields(registry, cap.value, container, gated=True)
 
-        # Held fields whose declared type bears ``Tools``.
-        for field_name, field_type in _fields(container).items():
-            if not bears_tools(field_type):
+    def _collect_fields(
+        self, registry: ToolRegistry, holder: object, container: type, *, gated: bool
+    ) -> None:
+        for field_name, annotation in _fields(container).items():
+            if gated and not bears_tools(annotation):
                 continue
-            field_value = getattr(cap.value, field_name, None)
-            if field_value is None or field_value is cap.value:
+            interface = role_interface(annotation)
+            if not inspect.isclass(interface) or interface.__module__ == "builtins":
                 continue
-            interface = role_interface(field_type)
-            if not inspect.isclass(interface):
+            field_value = getattr(holder, field_name, None)
+            if field_value is None or field_value is holder:
                 continue
             for method_name, schema_fn in _members(interface).items():
                 self._add(registry, field_value, method_name, schema_fn)
@@ -120,7 +125,7 @@ def _members(cls: type) -> dict[str, Callable[..., Any]]:
     is_proto = _is_protocol(cls)
     methods: dict[str, Callable[..., Any]] = {}
     for base in cls.__mro__:
-        # Skips object, Protocol, the role markers, and typing machinery.
+        # Skips object, Protocol, and typing machinery.
         if base.__module__ in ("builtins", "typing"):
             continue
         for name, raw in vars(base).items():

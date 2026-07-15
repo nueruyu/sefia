@@ -44,7 +44,7 @@ class SearchResult:
 
 
 @dataclass
-class WebToolkit(Tools):
+class WebToolkit:
     """A simple toolkit for web operations."""
 
     async def search(self, query: str) -> list[SearchResult]:
@@ -72,7 +72,7 @@ class Report:
 class Researcher:
     """An agent that uses WebToolkit to research topics."""
 
-    _web: WebToolkit
+    _web: Tools[WebToolkit]
 
     def __init__(self, web: WebToolkit):
         self._web = web
@@ -87,7 +87,7 @@ class Researcher:
 
 
 @dataclass
-class BrokenToolkit(Tools):
+class BrokenToolkit:
     """A toolkit where tools can fail."""
 
     async def always_fail(self, reason: str) -> None:

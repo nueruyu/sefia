@@ -392,9 +392,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         system_content = function_info.instructions + system_prompt_addition
         messages.append(Message(role="system", content=system_content))
 
-        excluded = capability_names(
-            function_info.bound_arguments, function_info.type_hints
-        )
+        excluded = capability_names(function_info.bound_arguments)
         prompt_arguments = {
             name: value
             for name, value in function_info.bound_arguments.items()

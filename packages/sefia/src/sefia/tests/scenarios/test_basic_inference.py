@@ -6,7 +6,7 @@ import pytest
 from glyff import ArgsHasher, Serializer
 from glyff.store import MemoryBackend
 
-from sefia import Policy, Session, infer, policy
+from sefia import Policy, Session, Tools, infer, policy
 from sefia._metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.llm import LLMResponse
@@ -172,7 +172,7 @@ async def test_inference_with_tool_exception(
     glyff_store = _make_stores(serializer)
 
     class AgentWithBrokenTool:
-        _kit: BrokenToolkit
+        _kit: Tools[BrokenToolkit]
 
         def __init__(self, kit: BrokenToolkit):
             self._kit = kit

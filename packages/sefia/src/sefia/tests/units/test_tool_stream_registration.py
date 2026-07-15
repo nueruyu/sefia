@@ -15,7 +15,7 @@ def _collect(instance: object) -> ToolRegistry:
 async def test_stream_handler_is_collected_and_bound_to_instance():
     seen_self = []
 
-    class Toolkit(Tools):
+    class Toolkit:
         async def ask_human(self, question: str) -> str:
             return question
 
@@ -26,7 +26,7 @@ async def test_stream_handler_is_collected_and_bound_to_instance():
                 pass
 
     class Agent:
-        _toolkit: Toolkit
+        _toolkit: Tools[Toolkit]
 
         def __init__(self):
             self._toolkit = Toolkit()
@@ -46,7 +46,7 @@ async def test_stream_handler_is_collected_and_bound_to_instance():
 async def test_bound_stream_handler_consumes_events():
     received = []
 
-    class Toolkit(Tools):
+    class Toolkit:
         async def ask_human(self, question: str) -> str:
             return question
 
@@ -56,7 +56,7 @@ async def test_bound_stream_handler_consumes_events():
                 received.append(event)
 
     class Agent:
-        _toolkit: Toolkit
+        _toolkit: Tools[Toolkit]
 
         def __init__(self):
             self._toolkit = Toolkit()
@@ -74,12 +74,12 @@ async def test_bound_stream_handler_consumes_events():
 
 
 def test_tool_without_stream_handler_has_none():
-    class Toolkit(Tools):
+    class Toolkit:
         async def plain(self, x: str) -> str:
             return x
 
     class Agent:
-        _toolkit: Toolkit
+        _toolkit: Tools[Toolkit]
 
         def __init__(self):
             self._toolkit = Toolkit()
@@ -93,7 +93,7 @@ def test_tool_without_stream_handler_has_none():
 async def test_static_tool_stream_handler_is_collected():
     received = []
 
-    class Toolkit(Tools):
+    class Toolkit:
         @staticmethod
         async def ask_human(question: str) -> str:
             return question
@@ -104,7 +104,7 @@ async def test_static_tool_stream_handler_is_collected():
                 received.append(event)
 
     class Agent:
-        _toolkit: Toolkit
+        _toolkit: Tools[Toolkit]
 
         def __init__(self):
             self._toolkit = Toolkit()
@@ -124,7 +124,7 @@ async def test_static_tool_stream_handler_is_collected():
 async def test_class_tool_stream_handler_is_bound_to_class():
     seen_cls = []
 
-    class Toolkit(Tools):
+    class Toolkit:
         @classmethod
         async def ask_human(cls, question: str) -> str:
             return question
@@ -136,7 +136,7 @@ async def test_class_tool_stream_handler_is_bound_to_class():
                 pass
 
     class Agent:
-        _toolkit: Toolkit
+        _toolkit: Tools[Toolkit]
 
         def __init__(self):
             self._toolkit = Toolkit()
@@ -158,7 +158,7 @@ async def test_stream_handler_is_found_when_the_field_is_protocol_narrowed():
     # handler lookup must not be tied to whichever one supplied the schema.
     received = []
 
-    class AskHuman(Tools, Protocol):
+    class AskHuman(Protocol):
         async def ask_human(self, question: str) -> str: ...
 
     class Toolkit:
@@ -171,7 +171,7 @@ async def test_stream_handler_is_found_when_the_field_is_protocol_narrowed():
                 received.append(event)
 
     class Agent:
-        _toolkit: AskHuman
+        _toolkit: Tools[AskHuman]
 
         def __init__(self):
             self._toolkit = Toolkit()

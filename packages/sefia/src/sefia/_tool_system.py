@@ -6,131 +6,136 @@ from typing import (
     Annotated,
     Any,
     Callable,
-    Protocol,
+    TypeVar,
     Union,
     get_args,
     get_origin,
 )
 
+from typing_extensions import TypeAliasType
+
 from .exceptions import ToolConflictError
 from .streaming import StreamHandler
 
 
-class Tools(Protocol):
-    """Role marker: a type whose members the model may call.
+class _RoleMarker:
+    """Sentinel a role alias plants in ``Annotated`` metadata."""
 
-    Declared by inheritance (``class WebToolkit(Tools)``; for a narrowing
-    protocol, re-inherit: ``class ReadOnlyWeb(Tools, Protocol)``), or at a use
-    site for types you cannot edit (``Annotated[VendorClient, Tools]``).
-    Discovery only exposes fields/parameters whose declared type bears this
-    role — holding an object is not enough. Membership is nominal (MRO or
-    ``Annotated`` metadata), not structural.
+    def __init__(self, name: str):
+        self._name = name
+
+    def __repr__(self) -> str:
+        return f"sefia.{self._name}"
+
+
+_TOOLS = _RoleMarker("Tools")
+_CONTEXT = _RoleMarker("Context")
+
+T = TypeVar("T")
+
+Tools = TypeAliasType("Tools", Annotated[T, _TOOLS], type_params=(T,))
+"""Role alias: a field whose members the model may call.
+
+Written in a class-level field annotation — ``_web: Tools[WebToolkit]``,
+narrowed with ``Tools[ReadOnlyWeb]`` — it grants that one field. The wrapped
+type stays a plain class/``Protocol`` (checkers treat ``Tools[T]`` as ``T``),
+and discovery exposes only fields so annotated: holding an object is not
+enough.
+"""
+
+Context = TypeAliasType("Context", Annotated[T, _CONTEXT], type_params=(T,))
+"""Role alias: a field whose value the model may read.
+
+Reserved for rendering declared data members into the prompt; detected today,
+rendered in a later stage.
+"""
+
+
+def unwrap_role(annotation: Any) -> tuple[frozenset, Any]:
+    """Resolve ``annotation`` to ``(role markers, interface)``.
+
+    Peels ``Annotated`` layers, role aliases (bare or subscripted), and
+    ``Optional`` — in any nesting order — collecting markers along the way.
+    The remainder is the declared interface.
     """
-
-
-class Context(Protocol):
-    """Role marker: a type whose members are readable by the model.
-
-    Reserved for rendering declared data members into the prompt; detected
-    today, rendered in a later stage.
-    """
-
-
-def _strip_annotated(annotation: Any) -> tuple[Any, tuple[Any, ...]]:
-    """Split ``Annotated[T, *meta]`` into ``(T, meta)``; else ``(annotation, ())``."""
-    if get_origin(annotation) is Annotated:
-        args = get_args(annotation)
-        return args[0], args[1:]
-    return annotation, ()
-
-
-def _strip_optional(annotation: Any) -> Any:
-    """Unwrap ``T | None`` (and ``Optional[T]``) to ``T``; leave others unchanged."""
-    if get_origin(annotation) in (Union, types.UnionType):
-        non_none = [a for a in get_args(annotation) if a is not type(None)]
-        if len(non_none) == 1:
-            return non_none[0]
-    return annotation
-
-
-def _bears_marker(annotation: Any, marker: type) -> bool:
-    inner, meta = _strip_annotated(annotation)
-    if marker in meta:
-        return True
-    inner = _strip_optional(inner)
-    inner, meta = _strip_annotated(inner)
-    if marker in meta:
-        return True
-    return isinstance(inner, type) and marker in getattr(inner, "__mro__", ())
+    markers: set[_RoleMarker] = set()
+    hint = annotation
+    for _ in range(16):  # annotations are shallow; bound guards against cycles
+        origin = get_origin(hint)
+        if origin is Annotated:
+            args = get_args(hint)
+            markers.update(a for a in args[1:] if isinstance(a, _RoleMarker))
+            hint = args[0]
+        elif getattr(origin, "__value__", None) is not None:
+            # A subscripted alias: markers live in its body; the type argument
+            # is the interface (our aliases are ``Annotated[T, marker]``).
+            value = origin.__value__
+            if get_origin(value) is Annotated:
+                markers.update(
+                    a for a in get_args(value)[1:] if isinstance(a, _RoleMarker)
+                )
+                hint = get_args(hint)[0]
+            else:
+                hint = value
+        elif getattr(hint, "__value__", None) is not None:
+            hint = hint.__value__  # a bare (unsubscripted) alias
+        elif origin in (Union, types.UnionType):
+            non_none = [a for a in get_args(hint) if a is not type(None)]
+            if len(non_none) != 1:
+                break
+            hint = non_none[0]
+        else:
+            break
+    return frozenset(markers), hint
 
 
 def bears_tools(annotation: Any) -> bool:
-    """Whether ``annotation``'s declared type carries the ``Tools`` role."""
-    return _bears_marker(annotation, Tools)
+    """Whether ``annotation`` carries the ``Tools`` role."""
+    return _TOOLS in unwrap_role(annotation)[0]
 
 
 def bears_context(annotation: Any) -> bool:
-    """Whether ``annotation``'s declared type carries the ``Context`` role."""
-    return _bears_marker(annotation, Context)
-
-
-def bears_role(annotation: Any) -> bool:
-    """Whether ``annotation`` carries either role marker."""
-    return bears_tools(annotation) or bears_context(annotation)
+    """Whether ``annotation`` carries the ``Context`` role."""
+    return _CONTEXT in unwrap_role(annotation)[0]
 
 
 def role_interface(annotation: Any) -> Any:
-    """The class/``Protocol`` carrying the role (``Annotated``/``Optional`` stripped)."""
-    inner, _ = _strip_annotated(annotation)
-    inner = _strip_optional(inner)
-    inner, _ = _strip_annotated(inner)
-    return inner
+    """The declared interface under ``annotation``'s role/``Optional`` wrappers."""
+    return unwrap_role(annotation)[1]
 
 
-# ``self``/``cls`` are capability parameters by convention, without a role annotation.
+# Only ``self``/``cls`` carry tools — by convention, with no marker. Tool
+# dependencies are expressed through classes; plain-function parameters are
+# always task data.
 _RECEIVER_NAMES = ("self", "cls")
 
 
 @dataclass(frozen=True)
 class Capability:
-    """A capability parameter's runtime value and its declared type.
+    """An ``@infer`` call's receiver and its declared type.
 
-    ``declared`` is ``None`` for the ``self``/``cls`` convention — the collector
-    then scans the value's own class for role-bearing held fields.
+    ``declared`` is the receiver's annotation when present (a surface
+    ``Protocol`` selecting this method's tools), else ``None``.
     """
 
     value: object
     declared: Any
 
 
-def is_capability_parameter(name: str, declared: Any) -> bool:
-    """Whether a parameter carries tools rather than task data."""
-    if name in _RECEIVER_NAMES:
-        return True
-    return declared is not None and bears_role(declared)
-
-
-def capability_names(
-    bound_arguments: dict[str, Any], type_hints: dict[str, Any]
-) -> set[str]:
-    """The names of the capability parameters among ``bound_arguments``."""
-    return {
-        name
-        for name in bound_arguments
-        if is_capability_parameter(name, type_hints.get(name))
-    }
+def capability_names(bound_arguments: dict[str, Any]) -> set[str]:
+    """The receiver names among ``bound_arguments``."""
+    return {name for name in bound_arguments if name in _RECEIVER_NAMES}
 
 
 def capabilities(
     bound_arguments: dict[str, Any], type_hints: dict[str, Any]
 ) -> list[Capability]:
-    """Extract the capability parameters (value + declared type) from a call."""
-    out: list[Capability] = []
-    for name, value in bound_arguments.items():
-        declared = type_hints.get(name)
-        if is_capability_parameter(name, declared):
-            out.append(Capability(value=value, declared=declared))
-    return out
+    """Extract the capability parameters (receiver + surface type) from a call."""
+    return [
+        Capability(value=value, declared=type_hints.get(name))
+        for name, value in bound_arguments.items()
+        if name in _RECEIVER_NAMES
+    ]
 
 # The attribute under which a tool method carries its ``@preview`` stream
 # handler. Kept private to this module; ``preview`` and the collector go
@@ -382,6 +387,10 @@ class ToolRegistry:
 
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
+
+    def remove(self, name: str) -> None:
+        """Drop a tool by name; a missing name is a no-op."""
+        self._tools.pop(name, None)
 
     def get_by_function(self, func: Callable[..., Any]) -> list[Tool]:
         """Return tools whose executable callable matches ``func``."""
