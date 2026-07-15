@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Annotated
 
-from sefia import AsRawText, infer
+from sefia import AsRawText, Tools, infer
 from sefios.tools import InputTool
 
 from .models import (
@@ -16,7 +16,7 @@ RawCode = Annotated[str, AsRawText]
 
 
 class ScopingAgent:
-    _input: InputTool
+    _input: Tools[InputTool]
 
     def __init__(self, input_tool: InputTool):
         self._input = input_tool
@@ -35,7 +35,7 @@ class ScopingAgent:
 
 
 class UnderstandingAgent:
-    _file_tool: FileTool
+    _file_tool: Tools[FileTool]
 
     def __init__(self, file_tool: FileTool):
         self._file_tool = file_tool
@@ -106,7 +106,7 @@ class UnderstandingAgent:
 
 
 class ReviewScopingAgent:
-    _input: InputTool
+    _input: Tools[InputTool]
 
     def __init__(self, input_tool: InputTool):
         self._input = input_tool

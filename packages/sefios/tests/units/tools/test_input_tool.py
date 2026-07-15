@@ -1,3 +1,4 @@
+from sefia import Tools
 from sefia._tool_system import Capability
 from sefia.llm._arg_stream import _ArgStreamChannel
 from sefia.streaming import StringDelta
@@ -8,7 +9,7 @@ from sefios.tools import InputTool
 class Agent:
     """A tool's own methods are never self-exposed; hold it as a dependency."""
 
-    _input: InputTool
+    _input: Tools[InputTool]
 
     def __init__(self, input_tool: InputTool):
         self._input = input_tool

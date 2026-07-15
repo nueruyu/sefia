@@ -40,7 +40,7 @@ class InteractionState:
 
 # --- Test tool with internal state management ---
 @dataclass
-class InputTool(Tools):
+class InputTool:
     def __init__(self, on_interrupt: Callable[[str, str], None] | None = None):
         self._on_interrupt = on_interrupt
 
@@ -113,7 +113,7 @@ class TestStatefulTool:
 
         @dataclass
         class Agent:
-            _tool: InputTool
+            _tool: Tools[InputTool]
 
             def __init__(self, tool: InputTool):
                 self._tool = tool
@@ -213,7 +213,7 @@ class TestStatefulTool:
 
         @dataclass
         class Agent:
-            _tool: InputTool
+            _tool: Tools[InputTool]
 
             def __init__(self, tool: InputTool):
                 self._tool = tool

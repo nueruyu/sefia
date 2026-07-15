@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Annotated, Never
 
 import typer
-from sefia import infer
+from sefia import Tools, infer
 from sefios.cli import SefiaCLI
 from sefios.tools import InputTool
 
@@ -17,7 +17,7 @@ from .._common.typer_utils import add_session_commands, async_command
 
 
 class ChatAgent:
-    _input: InputTool
+    _input: Tools[InputTool]
 
     def __init__(self, input_tool: InputTool):
         self._input = input_tool

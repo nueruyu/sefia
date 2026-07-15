@@ -14,7 +14,7 @@ import glyff
 import pytest
 from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import Session, infer
+from sefia import Session, Tools, infer
 from sefia.llm import LLMResponse
 
 from sefios import FileSessionStorage, NeedsInput
@@ -42,7 +42,7 @@ _RESULT_RESPONSE = LLMResponse(
 
 
 class _Agent:
-    _tool: InputTool
+    _tool: Tools[InputTool]
 
     def __init__(self, tool: InputTool):
         self._tool = tool

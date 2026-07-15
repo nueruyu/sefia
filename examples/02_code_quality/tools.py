@@ -2,7 +2,7 @@ import asyncio
 import subprocess
 from pathlib import Path
 
-from sefia import Tools, exceptions
+from sefia import exceptions
 
 
 class FileOperationToolError(exceptions.ToolError):
@@ -21,7 +21,7 @@ class PermissionDeniedToolError(FileOperationToolError):
     """Raised when a file cannot be accessed."""
 
 
-class GitTool(Tools):
+class GitTool:
     """A tool for interacting with a Git repository."""
 
     async def list_tracked_files(self, path: str) -> list[str]:
@@ -51,7 +51,7 @@ class GitTool(Tools):
         return [path for path in output.split("\0") if path]
 
 
-class FileTool(Tools):
+class FileTool:
     """A tool for file system operations."""
 
     async def read_files(self, full_paths: list[str]) -> dict[str, str]:

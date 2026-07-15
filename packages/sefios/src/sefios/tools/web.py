@@ -1,7 +1,6 @@
 import asyncio
 
 from pydantic import BaseModel, Field
-from sefia import Tools
 
 
 class WebSearchResult(BaseModel):
@@ -14,7 +13,7 @@ class WebSearchResult(BaseModel):
     )
 
 
-class WebSearchTool(Tools):
+class WebSearchTool:
     """A toolkit for performing web searches using DuckDuckGo."""
 
     async def search(self, query: str, max_results: int = 5) -> list[WebSearchResult]:
