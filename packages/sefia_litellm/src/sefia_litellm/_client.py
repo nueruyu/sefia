@@ -135,6 +135,9 @@ class LiteLLMClient(LLMClient):
         tools: list[dict] | None = None,
         output_schema: dict | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
+        reasoning_callback: (
+            Callable[[str], Coroutine[None, None, None]] | None
+        ) = None,
     ) -> LLMResponse:
         """Sends a completion request using LiteLLM."""
         from litellm import ModelResponse, acompletion
@@ -156,7 +159,7 @@ class LiteLLMClient(LLMClient):
                 },
             }
 
-        if stream_callback:
+        if stream_callback or reasoning_callback:
             kwargs["stream"] = True
 
         try:
@@ -170,7 +173,9 @@ class LiteLLMClient(LLMClient):
                 response, ModelResponse
             ):
                 stream = cast(AsyncIterator[Any], response)
-                return await self._handle_stream(stream, stream_callback, raw_messages)
+                return await self._handle_stream(
+                    stream, stream_callback, reasoning_callback, raw_messages
+                )
         except Exception as e:
             inference_error = _to_inference_error(e)
             if inference_error is not None:
@@ -185,26 +190,40 @@ class LiteLLMClient(LLMClient):
         self,
         stream: AsyncIterator[Any],
         callback: Callable[[str], Coroutine[None, None, None]] | None,
+        reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
         raw_messages: list[dict[str, Any]],
     ) -> LLMResponse:
         """Processes a streaming response."""
         from litellm import ModelResponse, stream_chunk_builder
 
         chunks = []
+        # ``stream_chunk_builder`` does not reliably reassemble reasoning content,
+        # so we accumulate reasoning deltas ourselves and attach them to the final
+        # response below.
+        reasoning_parts: list[str] = []
         async for chunk in stream:
             chunks.append(chunk)
             choices = getattr(chunk, "choices", None)
-            if callback and choices:
-                delta = getattr(choices[0], "delta", None)
-                content = getattr(delta, "content", None)
-                if content:
-                    await callback(content)
+            if not choices:
+                continue
+            delta = getattr(choices[0], "delta", None)
+            reasoning = getattr(delta, "reasoning_content", None)
+            if reasoning:
+                reasoning_parts.append(reasoning)
+                if reasoning_callback:
+                    await reasoning_callback(reasoning)
+            content = getattr(delta, "content", None)
+            if content and callback:
+                await callback(content)
 
         response = stream_chunk_builder(chunks=chunks, messages=raw_messages)
         if not isinstance(response, ModelResponse):
             raise RuntimeError("Invalid model response")
 
-        return self._handle_response(response)
+        result = self._handle_response(response)
+        if reasoning_parts and result.reasoning_content is None:
+            result.reasoning_content = "".join(reasoning_parts)
+        return result
 
     def _calculate_cost(self, response: ModelResponse) -> float | None:
         """Calculates the cost of a response, if usage data is available."""
@@ -257,6 +276,7 @@ class LiteLLMClient(LLMClient):
         return LLMResponse(
             model=response.model,
             content=message.content,
+            reasoning_content=getattr(message, "reasoning_content", None),
             tool_calls=tool_calls,
             usage=usage.model_dump() if usage else None,
             stop_reason=choice.finish_reason,

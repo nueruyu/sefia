@@ -75,11 +75,14 @@ Modules with a leading underscore are internal; the public surface is whatever
 
 | Module | Responsibility | Key symbols |
 | --- | --- | --- |
-| `_decorators.py` | The entry points. Calling `@infer` builds the executor and engraves the run. | `infer`, `preview`, `policy`, `profile` |
-| `_executor.py` | The step loop, tool execution, middleware composition. | `InferenceExecutor` |
+| `_decorators.py` | The entry points. Calling `@infer` builds the executor and engraves the run. | `infer`, `concurrent`, `preview`, `policy`, `profile` |
+| `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
+| `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
 | `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallDecision`, `FinalAnswerDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |
+| `_history.py` | The run's conversation history as pure in-memory state (loading/persistence/step-count live on the executor). | `StepHistory` |
+| `history_storages/` | `HistoryStorage` implementations (default: history in the run's glyff metadata). | `GlyffHistoryStorage` |
 | `_profiles.py` / `_metadata.py` | Per-call model/policy selection; the `__sefia_metadata__` store. | `Profile` |
 | `_tool_system.py` | The tool hierarchy, registry, collector interface, and the `Tools[...]` role alias. | `Tool`, `SignatureTool`, `JsonSchemaTool`, `ToolDefinition`, `ToolRegistry`, `ToolCollector`, `Tools` |
 | `_introspection.py` | Sefia-agnostic reflection: annotation unwrapping, method/field scanning for classes and `Protocol`s. | `unwrap_annotation`, `declared_methods`, `declared_fields`, `is_protocol` |
@@ -100,7 +103,8 @@ implementation noted in parentheses.
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
 | `ToolFunctionInspector` / `DecisionModelBuilder` | non-Pydantic schema gen & validation | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
-| `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards ? build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
+| `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
+| `HistoryStorage` | where a run's history is persisted (enables compaction) | `GlyffHistoryStorage` (glyff metadata) |
 
 ## Inside `sefios` (the batteries)
 
@@ -108,7 +112,8 @@ implementation noted in parentheses.
 | --- | --- |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
-| `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input` — control-seam behaviors. |
+| `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |
+| `history_storages/` | `SessionHistoryStorage` — an alternative `HistoryStorage` that keeps run history in the session storage (keyed by the run's `ExecutionId`) instead of glyff metadata. |
 | `handlers/` | `_cost` — an observation-seam handler (cost accounting). |
 | `tools/` | `input.py` (external input, pause-by-raise), `web.py` (DuckDuckGo search). |
 | `storage/` | Session-scoped persistence: the `SessionStorage` interface + `MemorySessionStorage` / `FileSessionStorage`. |
@@ -128,6 +133,7 @@ implementation noted in parentheses.
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
 | Add a session-state persistence backend | implement `sefios` `SessionStorage` and pass a `session_storage_factory` to `SessionScope`; reference `sefios/storage/_file.py` |
+| Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); to change where history lives, pass `history_storage=` to `SessionScope`/`Session` (seam: `HistoryStorage`) |
 | Change CLI rendering / the CLI input rules | `packages/sefia_typer` |
 | Change HTTP events / SSE / the HTTP input rules | `packages/sefia_fastapi` |
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |

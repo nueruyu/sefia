@@ -25,6 +25,9 @@ class MockLLMClient(LLMClient):
         tools: list[dict] | None = None,
         output_schema: dict | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
+        reasoning_callback: (
+            Callable[[str], Coroutine[None, None, None]] | None
+        ) = None,
     ) -> LLMResponse:
         self.requests.append(
             {
@@ -32,6 +35,7 @@ class MockLLMClient(LLMClient):
                 "tools": tools,
                 "output_schema": output_schema,
                 "stream_callback": stream_callback,
+                "reasoning_callback": reasoning_callback,
             }
         )
         if not self.responses:

@@ -7,9 +7,11 @@ from sefia._interfaces import InferenceStrategy
 from sefia.event_system import EventPublisher
 from sefia.tool_collectors import DefaultToolCollector
 
+from ._support import MemoryHistoryStorage
+
 
 class _StubStrategy(InferenceStrategy):
-    async def decide_next_step(self, function_info, history, tools):
+    async def decide_next_step(self, function_info, history, tools, publisher):
         raise AssertionError("not driven in this test")
 
 
@@ -42,6 +44,7 @@ def _executor_for(bound_wrapper, *args) -> InferenceExecutor:
         tool_collector=DefaultToolCollector(),
         engrave=lambda f: f,
         publisher=EventPublisher([]),
+        history_storage=MemoryHistoryStorage(),
     )
 
 

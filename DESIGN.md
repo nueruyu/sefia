@@ -62,9 +62,13 @@ class ResearchService:
   itself is the opt-in, including for the instance's own private methods.
 - **Discovery is static and fail-closed.** The surface is a pure function of
   declared types — an undeclared or unmarked field exposes nothing, and runtime
-  values never widen it. A service's own methods (including its `@infer` methods)
-  are never offered back to itself; it becomes another agent's tool by being held
-  in a granted field.
+  values never widen it. A service's own methods are never tools unless a surface
+  declares them; it becomes another agent's tool by being held in a granted field.
+- **Batched calls run serially; overlap is opt-in.** When one model decision
+  contains several tool calls they execute one after another, unless a tool
+  method is marked `@concurrent` — the author's declaration that overlapping its
+  calls with batch siblings is safe. Results are always awaited and recorded in
+  request order; the marker never changes exposure, only scheduling.
 
 ## Principles
 

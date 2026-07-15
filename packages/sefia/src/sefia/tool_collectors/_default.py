@@ -8,6 +8,7 @@ from .._tool_system import (
     ToolRegistry,
     bears_tools,
     get_stream_handler,
+    is_concurrent,
     role_interface,
 )
 from ..inference import Capability
@@ -104,7 +105,17 @@ class DefaultToolCollector(ToolCollector):
             schema_source=schema_fn,
             inspector=self._inspector,
             stream_handler=_resolve_stream_handler(bound),
+            concurrent=_resolve_concurrent(bound),
         )
+
+
+def _resolve_concurrent(bound: Callable[..., Any]) -> bool:
+    """Whether the tool's implementation method carries ``@concurrent``.
+
+    Read off ``bound``'s own function, like the ``@preview`` handler — the
+    marker describes the concrete implementation, not the declared interface.
+    """
+    return is_concurrent(getattr(bound, "__func__", bound))
 
 
 def _resolve_stream_handler(bound: Callable[..., Any]) -> StreamHandler | None:

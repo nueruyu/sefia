@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,7 +21,7 @@ class InferenceStart(Event):
 class BeforeInferenceStep(Event):
     """Event fired just before a call to the inference strategy."""
 
-    history: list[HistoryItem]
+    history: Sequence[HistoryItem]
     tool_names: list[str]
 
 
@@ -60,7 +61,7 @@ class StepStarted(Event):
     """
 
     step: int
-    history: list[HistoryItem]
+    history: Sequence[HistoryItem]
 
 
 @dataclass(frozen=True)

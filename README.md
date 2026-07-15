@@ -180,7 +180,7 @@ and what it removes.
 | Concept | What it is |
 | --- | --- |
 | **`@infer`** | An abstract async method implemented by an LLM. Signature = contract, docstring = instruction, return type = validated output. |
-| **Tools** | Public methods of a field granted with the `Tools[...]` annotation (`_web: Tools[WebToolkit]`). The wrapped type stays a plain class; narrow by granting through a `Protocol`. No ambient authority; the grant is local to the holder. |
+| **Tools** | Public methods of a field granted with the `Tools[...]` annotation (`_web: Tools[WebToolkit]`). The wrapped type stays a plain class; narrow by granting through a `Protocol`. No ambient authority; the grant is local to the holder. Batched calls run serially unless a method is marked `@concurrent`. |
 | **Pause & resume** | Every call is engraved (content-addressed) via glyff and replays on re-invocation; exceptions are non-terminal, so pausing = raising. |
 | **Session** | The scope for a run. `SessionScope` (in `sefios`) is the configured front door; `sefia.Session` is the core primitive. |
 | **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). The `sefios` defaults give a step cap and ready-made behaviors. |
