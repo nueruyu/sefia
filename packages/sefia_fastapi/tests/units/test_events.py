@@ -2,7 +2,20 @@ import asyncio
 from dataclasses import dataclass
 
 from sefia.llm.events import LLMTokenReceived
-from sefia_fastapi import SessionEvents
+from sefia_fastapi import SessionEvents, SSEEvent
+
+
+class TestSSEEvent:
+    def test_names_are_the_wire_contract(self):
+        assert SSEEvent.TOKEN == "token"
+        assert SSEEvent.INPUT_REQUIRED == "input_required"
+        assert SSEEvent.COMPLETED == "completed"
+
+    def test_run_error_does_not_collide_with_eventsource_builtin(self):
+        # EventSource fires a built-in "error" event on transport drops, so the
+        # application-level error event must not be named "error".
+        assert SSEEvent.RUN_ERROR == "run_error"
+        assert SSEEvent.RUN_ERROR != "error"
 
 
 class TestPublish:
@@ -50,7 +63,7 @@ class TestTokenHandler:
 
             event = queue.get_nowait()
 
-        assert event.name == "token"
+        assert event.name == SSEEvent.TOKEN
         assert event.data == "hi"
 
 

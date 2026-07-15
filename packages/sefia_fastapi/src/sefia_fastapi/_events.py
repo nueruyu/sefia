@@ -14,6 +14,26 @@ from sefia.event_system import EventHandler
 from sefia.llm.events import LLMTokenReceived
 
 
+class SSEEvent:
+    """The wire names of the server-sent events an application publishes.
+
+    ``sefia_fastapi`` owns the SSE surface, so these names are the single
+    source of truth: the ``sefios.fastapi`` facade and browser clients take
+    their event names from here, and the architecture map points "Change HTTP
+    events / SSE" at this package. A rename lands in one place instead of
+    silently desyncing the adapter, the docs, and clients.
+
+    ``RUN_ERROR`` is deliberately not ``"error"``: ``EventSource`` fires a
+    built-in ``error`` event on transport drops, so an application-level
+    ``error`` event name would be indistinguishable from a dropped connection.
+    """
+
+    TOKEN = "token"
+    INPUT_REQUIRED = "input_required"
+    COMPLETED = "completed"
+    RUN_ERROR = "run_error"
+
+
 @dataclass(frozen=True)
 class _SessionEvent:
     name: str
@@ -79,7 +99,7 @@ class _TokenRelay(EventHandler[LLMTokenReceived]):
         self._session_id = session_id
 
     async def handle(self, event: LLMTokenReceived) -> None:
-        await self._events.publish(self._session_id, "token", event.token)
+        await self._events.publish(self._session_id, SSEEvent.TOKEN, event.token)
 
 
 def _format_sse_event(event: str, data: Any) -> str:

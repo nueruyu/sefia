@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi.responses import StreamingResponse
 from sefia import Policy
-from sefia_fastapi import InputChannel, InputRequired, SessionEvents
+from sefia_fastapi import InputChannel, InputRequired, SessionEvents, SSEEvent
 from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
 
 from .._scope import SessionScope
@@ -126,7 +126,7 @@ class SefiaHTTP:
                 raise
             await self._events.publish(
                 session_id,
-                "input_required",
+                SSEEvent.INPUT_REQUIRED,
                 {
                     "interaction_id": pause.interaction_id,
                     "prompt": pause.prompt,
@@ -139,7 +139,7 @@ class SefiaHTTP:
         except Exception as exc:
             await self._events.publish(
                 session_id,
-                "error",
+                SSEEvent.RUN_ERROR,
                 {
                     "type": type(exc).__name__,
                     "message": str(exc),
@@ -148,7 +148,7 @@ class SefiaHTTP:
             raise
         else:
             await self._events.publish(
-                session_id, "completed", {"session_id": session_id}
+                session_id, SSEEvent.COMPLETED, {"session_id": session_id}
             )
 
     def events(self, session_id: str) -> StreamingResponse:
