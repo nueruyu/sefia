@@ -71,13 +71,12 @@ full rules on arguments, service members, tools, and return types, see
 
 ## 2. Give it a tool
 
-Tools are the **public methods of held dependencies whose declared type bears the
-`Tools` role** — no decorator, no registry, just one base class. Mark the toolkit
-with `Tools`, hold it in a class-level-annotated field, and its public methods become
-callable by the inferred step. (`WebSearchTool` and the other `sefios.tools` already
-bear `Tools`.)
+Tools are the **public methods of fields granted with the `Tools[...]` annotation**
+— no decorator, no registry, no base class. Hold a dependency in a class-level field
+annotated `Tools[...]`, and its public methods become callable by the inferred step.
 
 ```python
+from sefia import Tools
 from sefios.tools import WebSearchTool
 
 
@@ -88,7 +87,7 @@ class Report(BaseModel):
 
 
 class ResearchService:
-    _web: WebSearchTool             # class-level annotation → gated in by the Tools role
+    _web: Tools[WebSearchTool]      # the field annotation is the grant
 
     def __init__(self, web: WebSearchTool):
         self._web = web
@@ -106,12 +105,13 @@ async def main() -> None:
         print(report.summary)
 ```
 
-`_web` is declared at class level as `WebSearchTool`, which bears `Tools`, so its
-public `search` method is offered to the model. The model decides when to call it. A
-held member whose type does *not* bear `Tools` — a config, a store — is never
-exposed, so there is no ambient authority. To expose a narrower surface than a
-class's full public API, declare the field as a `Protocol` (itself bearing `Tools`):
-only the protocol's declared members are offered.
+`_web` is granted, so `WebSearchTool`'s public `search` method is offered to the
+model, which decides when to call it. Checkers treat `Tools[WebSearchTool]` as plain
+`WebSearchTool`, and `WebSearchTool` itself is an ordinary class. A held member
+without the grant — a config, a store — is never exposed, so there is no ambient
+authority. To expose a narrower surface than a class's full public API, grant
+through a `Protocol` (`_web: Tools[ReadOnlyWeb]`): only the protocol's declared
+members are offered.
 
 ### Tool scope is the service boundary
 
@@ -121,8 +121,8 @@ methods share the same domain and the same narrow tool surface.
 But tools are collected from the bound instance and the dependency objects it holds,
 so every `@infer` method on the service should be allowed to see that tool surface.
 If one operation needs broader, write-capable, or unrelated tools, split it into
-another service — or annotate that one method's `self` with a role-bearing surface
-`Protocol` to restrict (or extend) just its tools.
+another service — or annotate that one method's `self` with a plain surface
+`Protocol` to select just its tools.
 
 A good rule of thumb: if you want to tell one `@infer` method "do not use this tool",
 narrow its `self`, or move that tool to a different service.
@@ -141,7 +141,7 @@ from pathlib import Path
 
 import typer
 from pydantic import BaseModel
-from sefia import infer
+from sefia import Tools, infer
 from sefios.cli import SefiaCLI
 from sefios.tools import InputTool, WebSearchTool
 
@@ -152,8 +152,8 @@ class Report(BaseModel):
 
 
 class ResearchService:
-    _web: WebSearchTool
-    _input: InputTool
+    _web: Tools[WebSearchTool]
+    _input: Tools[InputTool]
 
     def __init__(self, web: WebSearchTool, input_tool: InputTool):
         self._web = web
@@ -279,8 +279,8 @@ between the two requests changes nothing.
 
 - An **`@infer`** function is an LLM-implemented abstract method; you compose them
   with plain `await`.
-- **Tools** are the public methods of held `Tools`-bearing types — ordinary OOP plus
-  one marker base class, scoped to the holder, no ambient authority.
+- **Tools** are the public methods of `Tools[...]`-granted fields — ordinary OOP
+  plus one annotation, scoped to the holder, no ambient authority.
 - **Durability** is native: every call is engraved and replays on re-invocation, so
   pausing is a tool raising and resuming is calling again.
 - It runs on a **stateless handler with a store**: no engine, worker, or graph.

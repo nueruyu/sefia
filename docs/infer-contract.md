@@ -28,17 +28,15 @@ Arguments should be task data: text, identifiers, numbers, booleans, structured
 data, Pydantic models, dataclasses, collections, or other values your configured
 serializer can normalize.
 
-Avoid passing live application objects as **data** arguments: clients, database
-sessions, open files, sockets, caches, or service objects. When the model needs to
-*use* one, pass it as a **capability parameter** instead — a parameter whose declared
-type bears the `Tools` role (see *Tools and capability parameters* below) — or hold
-it as a dependency on a service. A capability parameter's methods become tools; it is
-not rendered into the prompt as data.
+Avoid passing live application objects as arguments: clients, database sessions,
+open files, sockets, caches, or service objects. When the model needs to *use* one,
+hold it on the service in a `Tools[...]`-granted field instead (see *Tools and
+granted fields* below) — tool dependencies are expressed through classes, and a
+plain `@infer` function has no tools.
 
-Treat data arguments as replay inputs. Prefer stable values — IDs, paths, URLs, text,
+Treat arguments as replay inputs. Prefer stable values — IDs, paths, URLs, text,
 or structured data — over mutable objects whose meaning can change between
-invocations. (Capability parameters, like `self`, still participate in the engraved
-call identity; see below.)
+invocations.
 
 ## Return types
 
@@ -52,65 +50,69 @@ return type before returning it to Python.
 Use `Never` only for tool-only inferred functions. A `Never`-returning function
 must have tools available, because it can never finish with a final answer.
 
-## Tools and capability parameters
+## Tools and granted fields
 
-A method becomes a tool only when it is reachable through a `Tools`-bearing declared
-type, starting from a **capability parameter** — holding an object is not enough.
-
-- **`self`/`cls`** are capability parameters by convention: the collector scans the
-  instance's held fields and exposes those whose **class-level declared type** bears
-  `Tools`. Give held dependencies a class-level annotation (a dataclass field, or an
-  explicit `_web: WebToolkit` in the class body) — an `__init__`-only assignment is
-  not a declaration and exposes nothing.
-- **Any other parameter** is a capability parameter only if its declared type bears
-  the role — so a plain function gets tools too:
-  `async def run(kit: WebToolkit, topic: str)`.
-- **Mark a type with `Tools`** to make its public methods callable:
-  `class WebToolkit(Tools): ...`. For a type you cannot edit, mark the field:
-  `_web: Annotated[VendorClient, Tools]`.
-
-`self` is not sent to the model as data. Instance attributes are for application
-dependencies — tools, stores, clients, configuration — and a non-tool dependency
-(a config, a store) simply doesn't bear `Tools`, so it never leaks.
-
-### Narrowing a method's surface
-
-Annotate `self` with a role-bearing `Protocol` to shape or restrict one method's
-tools:
+A method becomes a tool only when its holder is **granted** with the `Tools` alias
+in a class-level field annotation — holding an object is not enough:
 
 ```python
-class ResearchTools(Tools, Protocol):    # re-inherit Protocol, or it turns concrete
+@dataclass
+class ResearchService:
+    _web: Tools[WebToolkit]     # granted: WebToolkit's public methods are tools
+    _config: AppConfig          # plain dependency: never exposed
+    @infer
+    async def run(self, topic: str) -> Report: ...
+```
+
+- `Tools[T]` is an `Annotated` alias: checkers treat it as `T`, `T` stays a plain
+  class or `Protocol`, and it composes with `Optional`, other `Annotated` metadata,
+  dataclass `field(...)`, and defaults.
+- The grant must be a **class-level annotation** (a dataclass field is ideal) — an
+  `__init__`-only assignment is not a declaration and exposes nothing.
+- Narrow a broad object by granting through a protocol: `_web: Tools[ReadOnlyWeb]`
+  exposes only the protocol's declared members.
+- Tools ride on the `@infer` method's receiver (`self`); every other parameter is
+  task data, and a plain `@infer` function has no tools.
+
+### Selecting a method's surface
+
+Annotate `self` with a plain `Protocol` to select one method's tools; the annotation
+itself is the opt-in, and it replaces the class-body grants for that method:
+
+```python
+class ResearchSurface(Protocol):
     @property
     def _web(self) -> ReadOnlyWeb: ...   # re-narrow a held field
     async def _score(self, url: str) -> float: ...   # opt the own method in
 
 class ResearchService:
-    _web: WebToolkit
+    _web: Tools[WebToolkit]
     _config: AppConfig                   # not in the protocol -> never exposed
     async def _score(self, url: str) -> float: ...
     @infer
-    async def run(self: ResearchTools, topic: str) -> Report: ...
+    async def run(self: ResearchSurface, topic: str) -> Report: ...
 ```
 
 Re-narrowed fields must be declared as read-only properties: a plain protocol
 attribute is invariant and will not type-check against a different concrete type.
+The running `@infer` method is always excluded from its own surface.
 
 A service class is a capability boundary. Multiple `@infer` methods on the same
-service share the tool surface from its held dependencies unless a method narrows its
-own `self`. Split services (or annotate `self`) when operations need different tools
-or different write permissions.
+service share the granted fields unless a method selects its own surface. Split
+services (or annotate `self`) when operations need different tools or different
+write permissions.
 
-### Capability parameters and replay identity
+### `self` and replay identity
 
-Like `self`, a capability parameter participates in the engraved call identity even
-though it is not prompt data. With the default Glyff/Pydantic hasher a dataclass or
-Pydantic value is hashed by value, while an opaque object falls back to a qualified
-name. If an instance must be replay-distinct by tenant/user/store, include that
-identity in a stable field or argument rather than relying on object identity.
+`self` participates in the engraved call identity even though it is not prompt
+data. With the default Glyff/Pydantic hasher a dataclass or Pydantic value is
+hashed by value, while an opaque object falls back to a qualified name. If an
+instance must be replay-distinct by tenant/user/store, include that identity in a
+stable field or argument rather than relying on object identity.
 
 ## Tool methods
 
-A tool method is discovered on a `Tools`-bearing type as a plain function,
+A tool method is discovered on a granted field's declared type as a plain function,
 `staticmethod`, or `classmethod`. Tool parameters must have type annotations. Prefer
 explicit parameters over `*args`/`**kwargs`; only explicit positional or keyword
 parameters become part of the tool schema. Defaults are allowed. `self` and `cls`
@@ -127,13 +129,11 @@ one that returns a non-function callable — a class-based wrapper or a bare
 
 ## Practical rules
 
-- Put task input in function arguments; put capabilities behind `Tools`-bearing types.
-- Mark toolkits with `Tools` (`class WebToolkit(Tools)`), or a field with
-  `Annotated[T, Tools]` for a type you can't edit.
-- Give held dependencies a class-level annotation (a dataclass field is ideal) — an
-  `__init__`-only assignment declares nothing and exposes nothing.
+- Put task input in function arguments; grant capabilities with `Tools[...]` field
+  annotations on the service.
+- The grant must be class-level (a dataclass field is ideal) — an `__init__`-only
+  assignment declares nothing and exposes nothing.
 - Keep return types explicit and structured; keep tool parameters explicit and typed.
-- Remember that capability parameters (including `self`) affect replay identity even
-  though they are not prompt input.
-- Narrow `self` with a surface `Protocol`, or split services, when a tool should not
-  be visible to every inferred method on that service.
+- Remember that `self` affects replay identity even though it is not prompt input.
+- Select a method's surface with a `self:` `Protocol` annotation, or split services,
+  when a tool should not be visible to every inferred method on that service.

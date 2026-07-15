@@ -10,7 +10,7 @@ stated as one.
 There is no `Agent` object, chain, graph, or global tool registry. The unit of work
 is a **typed async function** (`@infer`), composed with ordinary `await` and ordinary
 Python control flow. Service classes can hold dependencies, and the public methods of
-a dependency whose type bears the `Tools` role become tools. If your logic is
+a field granted with the `Tools[...]` annotation become tools. If your logic is
 naturally a Python call graph, there is no framework shape to adopt; you write
 functions and classes.
 
@@ -80,14 +80,16 @@ across hand-rolled bookkeeping.
 
 ### How do tools work — really just public methods?
 
-Almost: a held dependency's **public methods are its tools when its declared type
-bears the `Tools` role** (`class WebToolkit(Tools)`, or `Annotated[T, Tools]` at the
-field for a type you can't edit); private (`_`-prefixed) methods stay internal. One
-marker base class on top of ordinary OOP visibility — no decorator, no registry, and
-no ambient authority: a held config or store never leaks as a tool. Fields need a
+Almost: a held dependency's **public methods are its tools when the field is granted
+with the `Tools[...]` annotation** (`_web: Tools[WebToolkit]`); private
+(`_`-prefixed) methods stay internal. `Tools[T]` is an `Annotated` alias — checkers
+see plain `T`, the type stays an ordinary class — so this is one annotation on top of
+ordinary OOP visibility: no decorator, no registry, no base class, and no ambient
+authority (a held config or store never leaks as a tool). The grant must be a
 class-level annotation (a dataclass field is ideal); discovery is fail-closed. To
-expose a narrower surface, declare the field as a `Tools`-bearing `Protocol`, or
-annotate a single method's `self` with one.
+expose a narrower surface, grant through a `Protocol` (`Tools[ReadOnlyWeb]`), or
+select a single method's tools by annotating its `self` with a plain surface
+`Protocol`.
 
 ### mypy flags my `@infer` methods as `[empty-body]`
 

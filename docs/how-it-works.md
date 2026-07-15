@@ -107,50 +107,47 @@ invalid decision is never persisted. Only when the budget is spent does the
 
 ## Tools: discovery, schema, execution
 
-**Discovery** (`DefaultToolCollector.collect`) is gated by the `Tools` role marker
-— there is **no ambient authority**. A member becomes a tool only when it is
-reachable through an unbroken chain of `Tools`-bearing **declared** types, starting
-at a *capability parameter* of the `@infer` call:
+**Discovery** (`DefaultToolCollector.collect`) is gated by the `Tools` role alias —
+there is **no ambient authority**. Tools come from the **receiver** (`self`/`cls`)
+of the `@infer` call; every other parameter is task data (tool dependencies are
+expressed through classes, so a plain `@infer` function has no tools). The receiver
+is read in one of two modes:
 
-- **Capability parameters** carry tools; everything else is task data. `self`/`cls`
-  are capability parameters by convention; any *other* parameter is one only if its
-  declared type bears a role marker — so a plain function can take tools:
-  `async def run(kit: WebToolkit, topic: str)`. The classifier (`capabilities` in
-  `_tool_system.py`) is shared by the executor, which collects from these
-  parameters, and the strategy, which excludes them from the prompt.
-- **The gate.** For each capability, the collector scans the **class-level declared
-  types** of the fields the value holds (`__annotations__` across the MRO plus
-  read-only `property` declarations — never `getattr` on the instance, so a
-  third-party object's lazy getters are never triggered). A field is exposed **only
-  if its declared type bears `Tools`**; anything else, including an undeclared
-  field, exposes nothing.
-- **The interface** exposed for a field is its declared type (`Optional`/`Annotated`
-  stripped): a concrete class exposes its public methods; a `Protocol` exposes
-  exactly its declared members — including `_`-prefixed ones, since a protocol is an
-  explicit allowlist (that is how a surface opts a private method in as a tool).
-- **A role-bearing capability root** — a `self` annotated with a surface protocol,
-  or a directly-passed toolkit — also exposes its own declared members bound to the
-  value.
+- **Unannotated receiver** — the instance's **class-level field declarations** are
+  scanned (`__annotations__` across the MRO plus read-only `property` declarations —
+  never `getattr` on the instance, so a third-party object's lazy getters are never
+  triggered). A field is exposed **only if annotated with the `Tools` alias**:
+  `_web: Tools[WebToolkit]`. An unmarked or undeclared field exposes nothing, and
+  the instance's own methods are never exposed.
+- **Surface-annotated receiver** — a `self` annotated with a `Protocol` replaces the
+  class-body scan with that protocol's declarations, granted wholesale: its methods
+  (`_`-prefixed included) become tools bound to the instance, and its field/property
+  declarations expose their declared type's members. Annotating `self` is itself the
+  opt-in, so the surface needs no marker and stays a plain interface. (The running
+  `@infer` method is always excluded from its own surface.)
+
+Either way, the **exposed interface is the declared type** (`Tools[...]` /
+`Optional` stripped): a concrete class contributes its public methods; a `Protocol`
+exactly its declared members — including `_`-prefixed ones, since a protocol is an
+explicit allowlist. `Tools[T]` is an `Annotated` alias, so checkers treat it as `T`,
+the wrapped type stays a plain class or protocol, and it stacks with other
+`Annotated` metadata.
 
 Discovery is a **pure function of static declarations**: runtime values never widen
 the surface, and resolution is per field and fail-closed — an unresolvable annotation
 (a forward reference, a `TYPE_CHECKING`-only or locally-scoped name) is skipped with
 a debug log. If the model doesn't see a held field's methods, the usual cause is a
-missing `Tools` marker or a missing class-level annotation.
+missing `Tools[...]` on the field's class-level annotation.
 
-Marking a type is one word: `class WebToolkit(Tools):` — for a narrowing surface,
-`class ReadOnlyWeb(Tools, Protocol):` (re-inherit `Protocol`, or the class silently
-becomes concrete). Properties and other non-function descriptors are never tools. A
-plain service class does not bear `Tools`, so its own methods — including its
-`@infer` methods — are never offered back to itself; that dissolves self-recursion.
-A service becomes another agent's tool by declaring `Tools` and being *held* as that
-agent's dependency, which makes a sub-agent's `@infer` method an ordinary tool.
+Properties and other non-function descriptors are never tools. A service becomes
+another agent's tool by being held in a `Tools[...]`-annotated field, which makes a
+sub-agent's `@infer` method an ordinary tool.
 
 This also means the bound object is a capability boundary. If a class has multiple
-`@infer` methods, they share the tool surface collected from that instance's held
-dependencies — unless a method narrows its own surface with a `self:` annotation.
-Split services (or annotate `self`) when different operations need different tools or
-different write permissions.
+`@infer` methods, they share the tool surface collected from its granted fields —
+unless a method selects its own surface with a `self:` annotation. Split services
+(or annotate `self`) when different operations need different tools or different
+write permissions.
 
 **Schema** (`_strategy.py`): each tool produces a `ToolDefinition` (`tool.definition()`),
 embedded as JSON in the system prompt — not sent as a native tool spec. A

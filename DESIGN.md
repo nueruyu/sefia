@@ -33,37 +33,38 @@ workflows, handlers, or plain functions. Sefia only changes what happens when an
 return type, and docstring become the contract for an LLM-backed, replayable call.
 
 ```python
-class WebToolkit(Tools):                           # `Tools` = callable by the model
+class WebToolkit:                                  # a plain class — no base, no decorator
     def __init__(self, http): self._http = http   # private = internal
-    async def search(self, q: str) -> list[str]:   # public + Tools = a tool
+    async def search(self, q: str) -> list[str]:   # public = tool, once granted
         """Search the web and return URLs."""
         ...
 
 @dataclass
 class ResearchService:
-    _web: WebToolkit                               # held dependency, gated by Tools
+    _web: Tools[WebToolkit]                        # the field annotation is the grant
     @infer
     async def run(self, topic: str) -> Report: ...
 ```
 
-- **A tool is a member of a `Tools`-bearing type, reached from a capability
-  parameter.** No ambient authority: holding an object is not enough — its declared
-  type must carry the `Tools` role (by inheriting `Tools`, or `Annotated[T, Tools]`
-  at the field for a type you can't edit). No decorators, no registry, no strings —
-  one base class. Within a gated type, public = tool, private = internal (ordinary
-  encapsulation).
-- **Capability parameters carry tools; arguments are task input.** `self`/`cls`
-  carry the held-dependency surface by convention; any other parameter carries tools
-  only if its declared type bears the role — so a plain function gets tools too:
-  `async def run(kit: WebToolkit, topic: str)`.
+- **A tool is a member of a field granted with the `Tools` alias.** No ambient
+  authority: holding an object is not enough — the class-level field annotation
+  must say `Tools[WebToolkit]`. No decorators, no registry, no strings, no base
+  classes: `Tools[T]` is an `Annotated` alias, so checkers see plain `T` and every
+  type stays an ordinary class or `Protocol`. Within a granted field, public =
+  tool, private = internal (ordinary encapsulation).
+- **Tool dependencies are expressed through classes.** Tools ride on the `@infer`
+  method's receiver (`self`); every other parameter is task input. A grant is
+  local to the holding site — the same class can be a toolkit in one service and
+  inert data in another.
 - **Narrow by type.** A concrete class exposes its public methods; a `Protocol`
-  exposes only its declared members. Annotate `self` with a role-bearing surface
-  protocol to shape or restrict one method's tools (and to opt a private method in).
+  exposes only its declared members (`_web: Tools[ReadOnlyWeb]`). Annotate `self`
+  with a plain surface `Protocol` to select one method's tools — the annotation
+  itself is the opt-in, including for the instance's own private methods.
 - **Discovery is static and fail-closed.** The surface is a pure function of
-  declared types — an undeclared field exposes nothing, and runtime values never
-  widen it. A plain service class does not bear `Tools`, so its own methods
-  (including its `@infer` methods) are never offered back to itself; it becomes
-  another agent's tool only by declaring `Tools` and being held as a dependency.
+  declared types — an undeclared or unmarked field exposes nothing, and runtime
+  values never widen it. A service's own methods (including its `@infer` methods)
+  are never offered back to itself; it becomes another agent's tool by being held
+  in a granted field.
 
 ## Principles
 
@@ -121,8 +122,8 @@ tradeoffs behind the design are in [docs/tradeoffs.md](./docs/tradeoffs.md).
   Distributed single-workflow branches are out of scope.
 - **Replay assumes determinism** between engraved steps — every replay engine's
   caveat.
-- **Explicit capability gate.** Tools require the `Tools` role marker rather than
-  "any public method of anything held". The cost is one base class per toolkit (or
-  `Annotated[T, Tools]` at a field); the benefit: a held member cannot leak as a
-  tool by accident, and the surface is statically declared and type-checkable.
+- **Explicit capability gate.** Tools require the `Tools[...]` field annotation
+  rather than "any public method of anything held". The cost is one alias per
+  granted field; the benefit: a held member cannot leak as a tool by accident, and
+  the surface is statically declared and type-checkable.
 - **Pre-1.0.** The API will change.

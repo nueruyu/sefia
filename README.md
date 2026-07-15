@@ -42,7 +42,7 @@ replayable model/tool execution underneath.
 | What you get | What you don't run or learn |
 | --- | --- |
 | LLM steps as plain typed functions (`@infer`) | an `Agent` object or a graph DSL |
-| Tools = public methods of held `Tools`-bearing types | a tool registry or decorators |
+| Tools = public methods of `Tools[...]`-granted fields | a tool registry or decorators |
 | Runs that pause and resume across a restart (by replay) | a workflow engine, cluster, or worker |
 | Human-in-the-loop over plain stateless HTTP | websockets or background daemons |
 | One provider-portable output schema | per-provider native tool-calling quirks |
@@ -82,7 +82,7 @@ run.
 ```python
 from pathlib import Path
 from pydantic import BaseModel
-from sefia import infer
+from sefia import Tools, infer
 from sefios import SessionScope
 from sefios.tools import WebSearchTool
 
@@ -94,7 +94,7 @@ class Report(BaseModel):
 
 
 class ResearchService:
-    _web: WebSearchTool                       # a Tools-bearing dependency → its methods are tools
+    _web: Tools[WebSearchTool]                # the field annotation grants the tools
 
     def __init__(self, web: WebSearchTool):
         self._web = web
@@ -125,13 +125,14 @@ the endpoint again.
 
 ```python
 from pathlib import Path
+from sefia import Tools, infer
 from sefios.fastapi import InputRequired, SefiaHTTP
 from sefios.tools import InputTool, WebSearchTool
 
 
 class ResearchService:
-    _web: WebSearchTool
-    _input: InputTool
+    _web: Tools[WebSearchTool]
+    _input: Tools[InputTool]
 
     def __init__(self, web: WebSearchTool, input_tool: InputTool):
         self._web = web
@@ -179,7 +180,7 @@ and what it removes.
 | Concept | What it is |
 | --- | --- |
 | **`@infer`** | An abstract async method implemented by an LLM. Signature = contract, docstring = instruction, return type = validated output. |
-| **Tools** | Public methods of a held dependency whose declared type bears the `Tools` role (`class WebToolkit(Tools)`). Public + `Tools` = tool, private = internal. No ambient authority; scoped to the holder; narrow with a `Protocol`. |
+| **Tools** | Public methods of a field granted with the `Tools[...]` annotation (`_web: Tools[WebToolkit]`). The wrapped type stays a plain class; narrow by granting through a `Protocol`. No ambient authority; the grant is local to the holder. |
 | **Pause & resume** | Every call is engraved (content-addressed) via glyff and replays on re-invocation; exceptions are non-terminal, so pausing = raising. |
 | **Session** | The scope for a run. `SessionScope` (in `sefios`) is the configured front door; `sefia.Session` is the core primitive. |
 | **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). The `sefios` defaults give a step cap and ready-made behaviors. |
