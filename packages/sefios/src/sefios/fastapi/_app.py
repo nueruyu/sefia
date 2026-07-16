@@ -139,7 +139,7 @@ class SefiaHTTP:
         except Exception as exc:
             await self._events.publish(
                 session_id,
-                SSEEvent.RUN_ERROR,
+                SSEEvent.EXECUTION_FAILED,
                 {
                     "type": type(exc).__name__,
                     "message": str(exc),

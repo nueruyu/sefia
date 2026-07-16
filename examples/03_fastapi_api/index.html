@@ -361,10 +361,9 @@
         eventSource.addEventListener("completed", () => {
           setStatus("Completed");
         });
-        // "run_error" is the application-level error event. It is deliberately
-        // not named "error" so it does not collide with the built-in "error"
-        // event EventSource fires on transport drops (handled by onerror below).
-        eventSource.addEventListener("run_error", (event) => {
+        // Application-level failure; not "error", which would collide with the
+        // built-in event EventSource fires on transport drops (onerror below).
+        eventSource.addEventListener("execution_failed", (event) => {
           const data = parseEventData(event.data);
           if (activeAssistantBubble) {
             activeAssistantBubble.classList.remove("typing");

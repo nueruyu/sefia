@@ -17,21 +17,15 @@ from sefia.llm.events import LLMTokenReceived
 class SSEEvent:
     """The wire names of the server-sent events an application publishes.
 
-    ``sefia_fastapi`` owns the SSE surface, so these names are the single
-    source of truth: the ``sefios.fastapi`` facade and browser clients take
-    their event names from here, and the architecture map points "Change HTTP
-    events / SSE" at this package. A rename lands in one place instead of
-    silently desyncing the adapter, the docs, and clients.
-
-    ``RUN_ERROR`` is deliberately not ``"error"``: ``EventSource`` fires a
-    built-in ``error`` event on transport drops, so an application-level
-    ``error`` event name would be indistinguishable from a dropped connection.
+    Single source of truth: the facade and browser clients import these rather
+    than repeating literals. ``EXECUTION_FAILED`` avoids ``"error"``, which
+    would collide with the built-in event ``EventSource`` fires on drops.
     """
 
     TOKEN = "token"
     INPUT_REQUIRED = "input_required"
     COMPLETED = "completed"
-    RUN_ERROR = "run_error"
+    EXECUTION_FAILED = "execution_failed"
 
 
 @dataclass(frozen=True)
