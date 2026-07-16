@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime
 
 from sefia.llm.events import LLMTokenReceived
 from sefia_fastapi import SessionEvents
@@ -74,6 +75,7 @@ class TestResponse:
         @dataclass(frozen=True)
         class Payload:
             interaction_id: str
+            created_at: datetime
 
         events = SessionEvents()
         response = events.response("s1")
@@ -82,8 +84,9 @@ class TestResponse:
         first_chunk = asyncio.ensure_future(stream.__anext__())
         await asyncio.sleep(0)
 
-        await events.publish("s1", "input_required", {"request": Payload("x")})
+        payload = Payload("x", datetime(2026, 7, 12, 6, 35, 48))
+        await events.publish("s1", "input_required", {"request": payload})
 
         chunk = await asyncio.wait_for(first_chunk, timeout=1)
-        assert isinstance(chunk, str)
         assert '"interaction_id": "x"' in chunk
+        assert '"created_at": "2026-07-12T06:35:48"' in chunk

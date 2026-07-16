@@ -6,9 +6,10 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import dataclass
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from sefia.event_system import EventHandler
 from sefia.llm.events import LLMTokenReceived
@@ -83,17 +84,5 @@ class _TokenRelay(EventHandler[LLMTokenReceived]):
 
 
 def _format_sse_event(event: str, data: Any) -> str:
-    payload = json.dumps(_jsonable(data), ensure_ascii=False)
+    payload = json.dumps(jsonable_encoder(data), ensure_ascii=False)
     return f"event: {event}\ndata: {payload}\n\n"
-
-
-def _jsonable(value: Any) -> Any:
-    if hasattr(value, "model_dump"):
-        return value.model_dump()
-    if is_dataclass(value) and not isinstance(value, type):
-        return asdict(value)
-    if isinstance(value, dict):
-        return {key: _jsonable(item) for key, item in value.items()}
-    if isinstance(value, list | tuple):
-        return [_jsonable(item) for item in value]
-    return value
