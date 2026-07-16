@@ -16,3 +16,7 @@ something the code cannot.
 - Do comment non-obvious constraints, invariants, trade-offs, or behavior that naming
   and structure can't convey.
 - The same rule applies to test comments and docstrings.
+
+## Language
+
+Write commit messages and pull request titles and descriptions in English.
