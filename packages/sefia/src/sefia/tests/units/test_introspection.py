@@ -1,4 +1,4 @@
-from typing import Annotated, Optional, Protocol
+from typing import Annotated, Optional, Protocol, TypeVar
 
 from typing_extensions import TypeAliasType
 
@@ -55,10 +55,25 @@ def test_non_role_annotated_metadata_bears_no_role():
 
 MyKit = TypeAliasType("MyKit", Tools[WebToolkit])  # a user alias over the role alias
 
+_T = TypeVar("_T")
+GenericKit = TypeAliasType("GenericKit", Tools[_T], type_params=(_T,))
+
 
 def test_a_user_alias_wrapping_the_role_alias_resolves():
     assert bears_tools(MyKit)
     assert role_interface(MyKit) is WebToolkit
+
+
+def test_a_generic_user_alias_substitutes_its_type_argument():
+    assert bears_tools(GenericKit[WebToolkit])
+    assert role_interface(GenericKit[WebToolkit]) is WebToolkit
+
+
+def test_an_unsubscripted_generic_user_alias_still_bears_the_role():
+    # No argument to substitute: the body's TypeVar remains — the marker is
+    # found, but there is no class interface to expose (fail-closed).
+    assert bears_tools(GenericKit)
+    assert not isinstance(role_interface(GenericKit), type)
 
 
 def test_a_bare_unsubscripted_alias_yields_no_class_interface():

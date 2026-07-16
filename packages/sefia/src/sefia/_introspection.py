@@ -34,12 +34,16 @@ def unwrap_annotation(annotation: Any) -> tuple[tuple[Any, ...], Any]:
             metadata.extend(args[1:])
             hint = args[0]
         elif getattr(origin, "__value__", None) is not None:
-            # A subscripted alias: metadata lives in its body; the type
-            # argument substitutes the body's type parameter.
+            # A subscripted alias: substitute the type arguments into its
+            # body — ``Alias[X]`` with a generic body (``Annotated[T, ...]``,
+            # ``Tools[T]``, ...) becomes the body with ``X`` in ``T``'s place —
+            # then keep unwrapping the result.
             value = origin.__value__
-            if get_origin(value) is Annotated:
-                metadata.extend(get_args(value)[1:])
-                hint = get_args(hint)[0]
+            if getattr(value, "__parameters__", ()):
+                try:
+                    hint = value[get_args(hint)]
+                except TypeError:
+                    break  # an arity mismatch stops resolution (fail-closed)
             else:
                 hint = value
         elif getattr(hint, "__value__", None) is not None:
@@ -109,7 +113,11 @@ def declared_fields(cls: type) -> dict[str, Any]:
             if resolved is not None:
                 fields[name] = resolved
         for name, member in vars(base).items():
-            if name in fields or not isinstance(member, property) or member.fget is None:
+            if (
+                name in fields
+                or not isinstance(member, property)
+                or member.fget is None
+            ):
                 continue
             try:
                 ret = inspect.get_annotations(member.fget, eval_str=True).get("return")

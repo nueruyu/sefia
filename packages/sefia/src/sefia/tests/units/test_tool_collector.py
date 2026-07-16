@@ -176,7 +176,10 @@ class OptionalAgent:
 
 def test_collect_unwraps_optional_around_the_alias():
     registry = _collect_self(OptionalAgent(WebToolkit()))
-    assert set(registry.get_names()) == {"WebToolkit_search", "WebToolkit_fetch_content"}
+    assert set(registry.get_names()) == {
+        "WebToolkit_search",
+        "WebToolkit_fetch_content",
+    }
 
 
 class StackedMetadataAgent:
@@ -188,7 +191,10 @@ class StackedMetadataAgent:
 
 def test_collect_finds_the_marker_under_stacked_annotated_metadata():
     registry = _collect_self(StackedMetadataAgent(WebToolkit()))
-    assert set(registry.get_names()) == {"WebToolkit_search", "WebToolkit_fetch_content"}
+    assert set(registry.get_names()) == {
+        "WebToolkit_search",
+        "WebToolkit_fetch_content",
+    }
 
 
 class ReadOnlyWeb(Protocol):
