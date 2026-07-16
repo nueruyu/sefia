@@ -50,7 +50,6 @@ class TestOutputTool:
         glyff_store = MemoryBackend()
         sefia_store = MemorySessionStorage(serializer=serializer)
 
-        # First run: the agent emits the message and finishes.
         mock_llm = make_mock_llm(_responses())
         async with glyff.Session(
             id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
@@ -61,10 +60,9 @@ class TestOutputTool:
 
         assert result == "sent"
         assert [m.message for m in emitted] == ["Hello there!"]
-        assert emitted[0].interaction_id  # a non-empty id is assigned
+        assert emitted[0].interaction_id
 
-        # Re-invoking the same session replays the engraved run from its
-        # recorded result: no further LLM calls and, crucially, no re-emit.
+        # Re-invoking the same session must replay without re-emitting.
         replay_llm = make_mock_llm([])
         async with glyff.Session(
             id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher

@@ -179,7 +179,10 @@ class SefiaHTTP:
     async def _emit_output(self, message: OutputMessage) -> None:
         session_id = self._active_session_id.get()
         if session_id is None:
-            return
+            raise RuntimeError(
+                "OutputTool is not bound to a session; send_output must run "
+                "inside SefiaHTTP.session()."
+            )
         await self._events.publish(
             session_id,
             "output",

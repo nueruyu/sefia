@@ -34,15 +34,10 @@ async def _maybe_await(value: MaybeAwaitable[T]) -> T:
 class OutputTool:
     """Emits agent-authored messages to the human without blocking on a reply.
 
-    The sibling of :class:`InputTool`: where ``get_input`` asks and waits,
-    ``send_output`` narrates and returns. The single engraved method emits
-    exactly once -- glyff replays a completed engraved call from its recorded
-    result without re-running the body, so a resumed run does not re-emit
-    (the same durability that keeps ``get_input``'s request from re-firing).
-
-    ``on_output`` is the emit hook (e.g. a CLI reporter or an SSE stream);
-    ``on_message_delta`` receives the message token-by-token as the model
-    streams the call, mirroring ``InputTool``'s prompt deltas.
+    The sibling of :class:`InputTool`: ``get_input`` asks and waits,
+    ``send_output`` narrates and returns. ``on_output`` is the emit hook (a CLI
+    reporter or an SSE stream); ``on_message_delta`` receives the message
+    token-by-token as the model streams the call.
     """
 
     def __init__(
@@ -69,10 +64,9 @@ class OutputTool:
         """
         Emit ``message`` to the human and return immediately.
 
-        Use this to narrate progress or to send an assistant message that is
-        not a question. Unlike ``get_input`` it does not wait for a response,
-        so the run keeps going. The message is emitted to the configured
-        output callbacks exactly once, even across a resume.
+        Use this to narrate progress or send an assistant message that is not a
+        question; unlike ``get_input`` it does not wait for a response. Being
+        engraved, the emit fires exactly once even across a resume.
         """
         output = OutputMessage(
             interaction_id=str(uuid.uuid4()),
