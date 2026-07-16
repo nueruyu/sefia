@@ -27,7 +27,7 @@ class TestSessionState:
         # Arrange
         execution_id = ExecutionId(
             parent_id=None,
-            name="InputTool.get_input",
+            name="Input.get_input",
             sequence=0,
             args_hash="prompt-a",
         )
@@ -51,13 +51,13 @@ class TestSessionState:
         # Arrange
         first_execution_id = ExecutionId(
             parent_id=None,
-            name="InputTool.get_input",
+            name="Input.get_input",
             sequence=0,
             args_hash="prompt-a",
         )
         second_execution_id = ExecutionId(
             parent_id=None,
-            name="InputTool.get_input",
+            name="Input.get_input",
             sequence=0,
             args_hash="prompt-b",
         )
@@ -91,13 +91,13 @@ class TestSessionState:
         )
         first_execution_id = ExecutionId(
             parent_id=first_parent,
-            name="InputTool.get_input",
+            name="Input.get_input",
             sequence=0,
             args_hash="same-prompt",
         )
         second_execution_id = ExecutionId(
             parent_id=second_parent,
-            name="InputTool.get_input",
+            name="Input.get_input",
             sequence=0,
             args_hash="same-prompt",
         )

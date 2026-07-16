@@ -21,7 +21,7 @@ from .._session_state import get_session_storage
 from ..handlers import CostCalculator, CostState
 from ..sessions import ResolvedSession, SessionManager, UnknownSessionError
 from ..state import get_state
-from ..tools import InputRequest, InputResult, InputTool
+from ..tools import Input, InputRequest, InputResult
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -87,7 +87,7 @@ class SefiaCLI:
     """Creates Sefia session contexts for Typer commands.
 
     The integration facade over the ``sefia_typer`` building blocks: it wires
-    the CLI input core to :class:`InputTool` and the bound session
+    the CLI input core to :class:`Input` and the bound session
     storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), and maps pauses and inference errors to CLI exit
     codes.
@@ -110,7 +110,7 @@ class SefiaCLI:
             on_prompt_delta=self._report_input_prompt_delta,
             namespace="cli/input_channel",
         )
-        self._input_tool = InputTool(
+        self._input_tool = Input(
             get_input=self._provide_input,
             on_request=self._record_request,
             on_complete=self._complete_request,
@@ -129,7 +129,7 @@ class SefiaCLI:
         )
 
     @property
-    def input_tool(self) -> InputTool:
+    def input_tool(self) -> Input:
         return self._input_tool
 
     def create_session(self) -> str:

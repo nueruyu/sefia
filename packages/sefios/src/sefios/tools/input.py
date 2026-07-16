@@ -56,7 +56,7 @@ async def _no_input(_: InputRequest) -> str | None:
     return None
 
 
-class InputTool:
+class Input:
     def __init__(
         self,
         get_input: InputProvider = _no_input,

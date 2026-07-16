@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from sefia import Tool, ToolRegistry, Tools, concurrent
+from sefia import ToolEntry, ToolRegistry, Tools, concurrent
 from sefia.inference import Capability
 from sefia.tool_collectors import DefaultToolCollector
 
@@ -9,7 +9,7 @@ def _collect_self(instance: object) -> ToolRegistry:
     return DefaultToolCollector().collect([Capability(value=instance, declared=None)])
 
 
-def _tool_named(registry: ToolRegistry, suffix: str) -> Tool:
+def _tool_named(registry: ToolRegistry, suffix: str) -> ToolEntry:
     # Locally-defined toolkit classes get their qualname sanitized into the
     # tool name; match on the method-name suffix instead of the full name.
     (tool,) = [t for t in registry.get_all() if t.name.endswith(suffix)]
