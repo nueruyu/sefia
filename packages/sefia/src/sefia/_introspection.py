@@ -13,7 +13,7 @@ import sys
 import types
 from typing import Annotated, Any, Callable, Union, get_args, get_origin
 
-_log = logging.getLogger("sefia.tools")
+_log = logging.getLogger(__name__)
 
 
 def unwrap_annotation(annotation: Any) -> tuple[tuple[Any, ...], Any]:
