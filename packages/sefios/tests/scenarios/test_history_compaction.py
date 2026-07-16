@@ -12,7 +12,7 @@ import glyff
 import pytest
 from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import Policy, Session, infer
+from sefia import Policy, Session, Tools, infer
 from sefia.llm import LLMResponse
 
 from sefios import FileSessionStorage, NeedsInput
@@ -59,6 +59,9 @@ class Notes:
 
 
 class _Agent:
+    _notes: Tools[Notes]
+    _input: Tools[InputTool]
+
     def __init__(self, notes: Notes, input_tool: InputTool):
         self._notes = notes
         self._input = input_tool

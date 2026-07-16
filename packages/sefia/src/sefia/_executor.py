@@ -85,11 +85,9 @@ class InferenceExecutor:
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
 
-        instance = self.func_info.instance
-        if instance is not None:
-            self._tool_registry: ToolRegistry = tool_collector.collect(instance)
-        else:
-            self._tool_registry = ToolRegistry()
+        self._tool_registry: ToolRegistry = tool_collector.collect(
+            self.func_info.capabilities
+        )
 
         self._next_step_engraved = _wrap(self._next_step, engrave)
         self._call_tools_engraved = _wrap(self._call_tools, engrave)

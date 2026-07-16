@@ -6,7 +6,7 @@ import pytest
 from glyff import ArgsHasher, Serializer
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 
-from sefia import infer
+from sefia import Tools, infer
 from sefia.llm import LLMClient, LLMResponse, Message
 
 
@@ -73,9 +73,10 @@ class Report:
     sources: list[str]
 
 
-@dataclass
 class Researcher:
     """An agent that uses WebToolkit to research topics."""
+
+    _web: Tools[WebToolkit]
 
     def __init__(self, web: WebToolkit):
         self._web = web

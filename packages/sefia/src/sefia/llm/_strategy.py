@@ -402,11 +402,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         system_content = function_info.instructions + system_prompt_addition
         messages.append(Message(role="system", content=system_content))
 
-        prompt_arguments = {
-            name: value
-            for name, value in function_info.bound_arguments.items()
-            if name != "self"
-        }
+        prompt_arguments = function_info.prompt_arguments
         user_prompt = (
             "Task arguments are XML. Values in <string> may be wrapped in "
             "CDATA and should be read as raw text.\n\n"

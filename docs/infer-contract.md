@@ -29,9 +29,10 @@ data, Pydantic models, dataclasses, collections, or other values your configured
 serializer can normalize.
 
 Avoid passing live application objects as arguments: clients, database sessions,
-open files, sockets, caches, or service objects. Put those on a service as
-dependencies instead, and expose narrow tool methods when the model needs to use
-them.
+open files, sockets, caches, or service objects. When the model needs to *use* one,
+hold it on the service in a `Tools[...]`-granted field instead (see *Tools and
+granted fields* below) — tool dependencies are expressed through classes, and a
+plain `@infer` function has no tools.
 
 Treat arguments as replay inputs. Prefer stable values — IDs, paths, URLs, text,
 or structured data — over mutable objects whose meaning can change between
@@ -49,56 +50,91 @@ return type before returning it to Python.
 Use `Never` only for tool-only inferred functions. A `Never`-returning function
 must have tools available, because it can never finish with a final answer.
 
-## Service members
+## Tools and granted fields
 
-`self` is not sent to the model as an argument. Instance attributes are for
-application dependencies: tools, stores, clients, configuration, or other service
-objects.
+A method becomes a tool only when its holder is **granted** with the `Tools` alias
+in a class-level field annotation — holding an object is not enough:
 
-If the model needs to see data, pass it as an argument. If the model needs to do
-something, expose a tool through a held dependency.
+```python
+@dataclass
+class ResearchService:
+    _web: Tools[WebToolkit]     # granted: WebToolkit's public methods are tools
+    _config: AppConfig          # plain dependency: never exposed
+    @infer
+    async def run(self, topic: str) -> Report: ...
+```
 
-A service class is also a capability boundary. Multiple `@infer` methods on the
-same service share the tool surface collected from that service and its held
-dependencies. Split services when different operations need different tools,
-different write permissions, or unrelated capabilities.
+- `Tools[T]` is an `Annotated` alias: checkers treat it as `T`, `T` stays a plain
+  class or `Protocol`, and it composes with `Optional`, other `Annotated` metadata,
+  dataclass `field(...)`, and defaults.
+- The grant must be a **class-level annotation** (a dataclass field is ideal) — an
+  `__init__`-only assignment is not a declaration and exposes nothing.
+- Narrow a broad object by granting through a protocol: `_web: Tools[ReadOnlyWeb]`
+  exposes only the protocol's declared members.
+- Tools ride on the `@infer` method's receiver (`self`); every other parameter is
+  task data, and a plain `@infer` function has no tools.
+
+### Selecting a method's surface
+
+Annotate `self` with a plain `Protocol` to select one method's tools; the annotation
+itself is the opt-in, and it replaces the class-body grants for that method:
+
+```python
+class ResearchSurface(Protocol):
+    @property
+    def _web(self) -> ReadOnlyWeb: ...   # re-narrow a held field
+    async def _score(self, url: str) -> float: ...   # opt the own method in
+
+class ResearchService:
+    _web: Tools[WebToolkit]
+    _config: AppConfig                   # not in the protocol -> never exposed
+    async def _score(self, url: str) -> float: ...
+    @infer
+    async def run(self: ResearchSurface, topic: str) -> Report: ...
+```
+
+Re-narrowed fields must be declared as read-only properties: a plain protocol
+attribute is invariant and will not type-check against a different concrete type.
+The surface is granted exactly as declared — including the running `@infer` method
+itself, if you declare it. Only declare it when self-recursion is intended.
+
+A service class is a capability boundary. Multiple `@infer` methods on the same
+service share the granted fields unless a method selects its own surface. Split
+services (or annotate `self`) when operations need different tools or different
+write permissions.
 
 ### `self` and replay identity
 
-Although `self` is not shown to the model, it still participates in the engraved
-call identity. For a method call, the durable execution key is based on the method
-identity and the bound arguments, including `self`.
-
-That means two service instances can be distinct for replay even when the visible
-task arguments are the same. With the default Glyff/Pydantic hasher, structured
-values such as Pydantic models and dataclasses are hashed by value, while opaque
-objects fall back to a qualified name representation. If an instance must be
-replay-distinct by tenant, user, store, or other runtime identity, include that
-identity in a stable field or argument rather than relying on object identity.
+`self` participates in the engraved call identity even though it is not prompt
+data. With the default Glyff/Pydantic hasher a dataclass or Pydantic value is
+hashed by value, while an opaque object falls back to a qualified name. If an
+instance must be replay-distinct by tenant/user/store, include that identity in a
+stable field or argument rather than relying on object identity.
 
 ## Tool methods
 
-Tool parameters must have type annotations. Prefer explicit parameters over
-`*args` or `**kwargs`; only explicit positional or keyword parameters become part
-of the tool schema. Defaults are allowed. `self` and `cls` are not tool
-parameters.
+A tool method is discovered on a granted field's declared type as a plain function,
+`staticmethod`, or `classmethod`. Tool parameters must have type annotations. Prefer
+explicit parameters over `*args`/`**kwargs`; only explicit positional or keyword
+parameters become part of the tool schema. Defaults are allowed. `self` and `cls`
+are not tool parameters.
 
 Tool return values should also be structured values the model can read: strings,
 numbers, booleans, lists, dictionaries, Pydantic models, dataclasses, or other
 serializable data.
 
-A tool method is discovered as a plain function, `staticmethod`, or `classmethod`
-on the held object's class. A decorator applied to it must return a function
-(use `functools.wraps`); one that returns a non-function callable — a class-based
-wrapper or a bare `functools.partial` — makes the method invisible to discovery,
-with no error. `@engrave` and similar `functools.wraps`-based decorators are fine.
+A decorator applied to a tool method must return a function (use `functools.wraps`);
+one that returns a non-function callable — a class-based wrapper or a bare
+`functools.partial` — makes the method invisible to discovery, with no error.
+`@engrave` and similar `functools.wraps`-based decorators are fine.
 
 ## Practical rules
 
-- Put task input in function arguments.
-- Put application capabilities on service dependencies.
-- Keep return types explicit and structured.
-- Keep tool parameters explicit and typed.
+- Put task input in function arguments; grant capabilities with `Tools[...]` field
+  annotations on the service.
+- The grant must be class-level (a dataclass field is ideal) — an `__init__`-only
+  assignment declares nothing and exposes nothing.
+- Keep return types explicit and structured; keep tool parameters explicit and typed.
 - Remember that `self` affects replay identity even though it is not prompt input.
-- Split services when a tool should not be visible to every inferred method on
-  that service.
+- Select a method's surface with a `self:` `Protocol` annotation, or split services,
+  when a tool should not be visible to every inferred method on that service.

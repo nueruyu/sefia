@@ -1,10 +1,51 @@
 import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Annotated, Any, Callable, TypeVar
 
+from typing_extensions import TypeAliasType
+
+from ._introspection import unwrap_annotation
 from .exceptions import ToolConflictError
+from .inference import Capability
 from .streaming import StreamHandler
+
+
+class _RoleMarker:
+    """Sentinel a role alias plants in ``Annotated`` metadata."""
+
+    def __init__(self, name: str):
+        self._name = name
+
+    def __repr__(self) -> str:
+        return f"sefia.{self._name}"
+
+
+_TOOLS = _RoleMarker("Tools")
+
+T = TypeVar("T")
+
+Tools = TypeAliasType("Tools", Annotated[T, _TOOLS], type_params=(T,))
+"""Role alias: a field whose members the model may call.
+
+Written in a class-level field annotation — ``_web: Tools[WebToolkit]``,
+narrowed with ``Tools[ReadOnlyWeb]`` — it grants that one field. The wrapped
+type stays a plain class/``Protocol`` (checkers treat ``Tools[T]`` as ``T``),
+and discovery exposes only fields so annotated: holding an object is not
+enough.
+"""
+
+
+def bears_tools(annotation: Any) -> bool:
+    """Whether ``annotation`` carries the ``Tools`` role."""
+    metadata, _ = unwrap_annotation(annotation)
+    return any(item is _TOOLS for item in metadata)
+
+
+def role_interface(annotation: Any) -> Any:
+    """The declared interface under ``annotation``'s role/``Optional`` wrappers."""
+    return unwrap_annotation(annotation)[1]
+
 
 # The attribute under which a tool method carries its ``@preview`` stream
 # handler. Kept private to this module; ``preview`` and the collector go
@@ -300,7 +341,7 @@ class ToolRegistry:
 
 
 class ToolCollector(ABC):
-    """Builds a registry of tools for an object."""
+    """Builds a registry of tools from a call's capability parameters."""
 
     @abstractmethod
-    def collect(self, instance: object) -> ToolRegistry: ...
+    def collect(self, capabilities: list[Capability]) -> ToolRegistry: ...
