@@ -56,7 +56,7 @@ async def _no_input(_: InputRequest) -> str | None:
     return None
 
 
-class InputTool:
+class Input:
     def __init__(
         self,
         get_input: InputProvider = _no_input,
@@ -91,7 +91,7 @@ class InputTool:
 
         ``prompt`` is an optional question to elicit the input; when given it
         is emitted to the configured input callbacks. Omit it for a bare
-        ask-and-wait (use ``OutputTool.send_output`` for non-blocking
+        ask-and-wait (use ``Output.send_output`` for non-blocking
         narration). If no input is immediately available, the current session
         is interrupted until it is provided.
         """

@@ -3,21 +3,21 @@ from sefia.inference import Capability
 from sefia.llm._arg_stream import _ArgStreamChannel
 from sefia.streaming import StringDelta
 from sefia.tool_collectors import DefaultToolCollector
-from sefios.tools import OutputTool
+from sefios.tools import Output
 
 
 class Agent:
     """A tool's own methods are never self-exposed; hold it as a dependency."""
 
-    _output: Tools[OutputTool]
+    _output: Tools[Output]
 
-    def __init__(self, output_tool: OutputTool):
+    def __init__(self, output_tool: Output):
         self._output = output_tool
 
 
 async def test_output_tool_streams_message_deltas():
     seen: list[str] = []
-    agent = Agent(OutputTool(on_message_delta=seen.append))
+    agent = Agent(Output(on_message_delta=seen.append))
     registry = DefaultToolCollector().collect([Capability(value=agent, declared=None)])
     registered = next(tool for tool in registry.get_all() if "send_output" in tool.name)
     assert registered.stream_handler is not None

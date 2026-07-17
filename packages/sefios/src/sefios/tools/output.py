@@ -31,10 +31,10 @@ async def _maybe_await(value: MaybeAwaitable[T]) -> T:
     return value
 
 
-class OutputTool:
+class Output:
     """Emits agent-authored messages to the human without blocking on a reply.
 
-    The sibling of :class:`InputTool`: ``get_input`` asks and waits,
+    The sibling of :class:`Input`: ``get_input`` asks and waits,
     ``send_output`` narrates and returns. ``on_output`` is the emit hook (a CLI
     reporter or an SSE stream); ``on_message_delta`` receives the message
     token-by-token as the model streams the call.

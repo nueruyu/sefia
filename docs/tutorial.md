@@ -77,7 +77,7 @@ annotated `Tools[...]`, and its public methods become callable by the inferred s
 
 ```python
 from sefia import Tools
-from sefios.tools import WebSearchTool
+from sefios.tools import WebSearch
 
 
 class Report(BaseModel):
@@ -87,9 +87,9 @@ class Report(BaseModel):
 
 
 class ResearchService:
-    _web: Tools[WebSearchTool]      # the field annotation is the grant
+    _web: Tools[WebSearch]      # the field annotation is the grant
 
-    def __init__(self, web: WebSearchTool):
+    def __init__(self, web: WebSearch):
         self._web = web
 
     @infer
@@ -99,15 +99,15 @@ class ResearchService:
 
 
 async def main() -> None:
-    service = ResearchService(web=WebSearchTool())
+    service = ResearchService(web=WebSearch())
     async with scope.session(session_id="quickstart"):
         report = await service.run("durable execution for LLM applications")
         print(report.summary)
 ```
 
-`_web` is granted, so `WebSearchTool`'s public `search` method is offered to the
-model, which decides when to call it. Checkers treat `Tools[WebSearchTool]` as plain
-`WebSearchTool`, and `WebSearchTool` itself is an ordinary class. A held member
+`_web` is granted, so `WebSearch`'s public `search` method is offered to the
+model, which decides when to call it. Checkers treat `Tools[WebSearch]` as plain
+`WebSearch`, and `WebSearch` itself is an ordinary class. A held member
 without the grant — a config, a store — is never exposed, so there is no ambient
 authority. To expose a narrower surface than a class's full public API, grant
 through a `Protocol` (`_web: Tools[ReadOnlyWeb]`): only the protocol's declared
@@ -149,7 +149,7 @@ import typer
 from pydantic import BaseModel
 from sefia import Tools, infer
 from sefios.cli import SefiaCLI
-from sefios.tools import InputTool, WebSearchTool
+from sefios.tools import Input, WebSearch
 
 
 class Report(BaseModel):
@@ -158,10 +158,10 @@ class Report(BaseModel):
 
 
 class ResearchService:
-    _web: Tools[WebSearchTool]
-    _input: Tools[InputTool]
+    _web: Tools[WebSearch]
+    _input: Tools[Input]
 
-    def __init__(self, web: WebSearchTool, input_tool: InputTool):
+    def __init__(self, web: WebSearch, input_tool: Input):
         self._web = web
         self._input = input_tool
 
@@ -173,7 +173,7 @@ class ResearchService:
 
 app = typer.Typer()
 cli = SefiaCLI(session_dir=Path(".sessions"), model="gpt-4o")
-service = ResearchService(web=WebSearchTool(), input_tool=cli.input_tool)
+service = ResearchService(web=WebSearch(), input_tool=cli.input_tool)
 
 
 @app.command()
@@ -224,13 +224,13 @@ from pathlib import Path
 from fastapi import FastAPI
 from pydantic import BaseModel
 from sefios.fastapi import InputRequired, SefiaHTTP
-from sefios.tools import WebSearchTool
+from sefios.tools import WebSearch
 
 # (ResearchService, Report from hitl_cli.py)
 
 app = FastAPI()
 api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
-research_service = ResearchService(web=WebSearchTool(), input_tool=api.input_tool)
+research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
 
 
 class TurnBody(BaseModel):

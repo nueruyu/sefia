@@ -8,13 +8,13 @@ from sefia import Session, Tools, infer
 from sefia.llm import LLMResponse
 from sefios import MemorySessionStorage
 from sefios._session_state import bind_session_storage
-from sefios.tools import OutputMessage, OutputTool
+from sefios.tools import Output, OutputMessage
 
 
 class Agent:
-    _output: Tools[OutputTool]
+    _output: Tools[Output]
 
-    def __init__(self, output_tool: OutputTool):
+    def __init__(self, output_tool: Output):
         self._output = output_tool
 
     @infer
@@ -31,7 +31,7 @@ def _responses() -> list[LLMResponse]:
                     "decision": "tool_calls",
                     "tool_calls": [
                         {
-                            "name": "OutputTool_send_output",
+                            "name": "Output_send_output",
                             "arguments": {"message": "Hello there!"},
                         }
                     ],
@@ -42,12 +42,12 @@ def _responses() -> list[LLMResponse]:
     ]
 
 
-class TestOutputTool:
+class TestOutput:
     async def test_send_output_emits_once_and_replays_without_re_emitting(
         self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
     ):
         emitted: list[OutputMessage] = []
-        agent = Agent(OutputTool(on_output=emitted.append))
+        agent = Agent(Output(on_output=emitted.append))
         session_id = "output-tool-test-1"
         glyff_store = MemoryBackend()
         sefia_store = MemorySessionStorage(serializer=serializer)

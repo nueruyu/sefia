@@ -2,7 +2,7 @@ import jsonschema
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from sefia import JsonSchemaTool, ToolRegistry
+from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import ToolConflictError
 from sefia.pydantic._function_models import json_schema_argument_type
 
@@ -17,8 +17,8 @@ _SEARCH_SCHEMA = {
 }
 
 
-def _search_tool(handler) -> JsonSchemaTool:
-    return JsonSchemaTool(
+def _search_tool(handler) -> JsonSchemaToolEntry:
+    return JsonSchemaToolEntry(
         handler,
         name="search",
         parameters=_SEARCH_SCHEMA,

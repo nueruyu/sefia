@@ -6,7 +6,7 @@ import pytest
 from pydantic import Field, TypeAdapter, ValidationError
 
 from sefia._interfaces import DecisionModelSpec
-from sefia._tool_system import SignatureTool, Tool, ToolRegistry
+from sefia._tool_system import SignatureToolEntry, ToolEntry, ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.inference import FunctionInfo, ToolCallDecision
@@ -29,10 +29,10 @@ class _MockPublisher(EventPublisher):
         pass
 
 
-def _tool() -> Tool:
+def _tool() -> ToolEntry:
     backend = PydanticModelBackend()
     name = backend.tool_name(ask_user)
-    return SignatureTool(
+    return SignatureToolEntry(
         ask_user,
         name=name,
         schema_source=ask_user,

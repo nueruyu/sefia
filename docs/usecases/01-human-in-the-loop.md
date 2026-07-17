@@ -96,11 +96,11 @@ The turn is an ordinary typed function; the pause is a tool that raises:
 ```python
 from pathlib import Path
 from sefios.fastapi import InputRequired, SefiaHTTP
-from sefios.tools import InputTool
+from sefios.tools import Input
 
 
 class Research:
-    def __init__(self, web: WebToolkit, input_tool: InputTool):
+    def __init__(self, web: WebToolkit, input_tool: Input):
         self._web = web
         self._input = input_tool
 

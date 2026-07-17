@@ -14,7 +14,7 @@ from .._interfaces.decision_model import (
     ResultLLMDecision,
     ToolCallsLLMDecision,
 )
-from .._tool_system import Tool
+from .._tool_system import ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ._function_models import json_schema_argument_type
 
@@ -89,7 +89,7 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
             model=self._model(spec),
         )
 
-    def _tool_calls_type(self, tools: list[Tool]) -> Any:
+    def _tool_calls_type(self, tools: list[ToolEntry]) -> Any:
         call_models = [
             create_model(
                 f"{tool.name}ToolCall",

@@ -15,7 +15,7 @@ from .._session_state import get_session_storage
 from ..exceptions import NeedsInput
 from ..handlers import CostCalculator
 from ..sessions import SessionManager
-from ..tools import InputRequest, InputResult, InputTool, OutputMessage, OutputTool
+from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
 
 
 class SefiaHTTPSession:
@@ -38,7 +38,7 @@ class SefiaHTTP:
     """Creates Sefia session contexts for HTTP endpoints, with event streams.
 
     The integration facade over the ``sefia_fastapi`` building blocks: it
-    wires the HTTP input core to :class:`InputTool` and the bound
+    wires the HTTP input core to :class:`Input` and the bound
     session storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), relays LLM tokens to per-session SSE streams, and
     surfaces pauses as :class:`sefia_fastapi.InputRequired`.
@@ -58,12 +58,12 @@ class SefiaHTTP:
         self._active_session_id: ContextVar[str | None] = ContextVar(
             "http_active_session_id", default=None
         )
-        self._input_tool = InputTool(
+        self._input_tool = Input(
             get_input=self._provide_input,
             on_request=self._record_request,
             on_complete=self._complete_request,
         )
-        self._output_tool = OutputTool(on_output=self._emit_output)
+        self._output_tool = Output(on_output=self._emit_output)
 
         scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
         if policies is not None:
@@ -78,11 +78,11 @@ class SefiaHTTP:
         )
 
     @property
-    def input_tool(self) -> InputTool:
+    def input_tool(self) -> Input:
         return self._input_tool
 
     @property
-    def output_tool(self) -> OutputTool:
+    def output_tool(self) -> Output:
         return self._output_tool
 
     def create_session(self) -> str:
@@ -180,7 +180,7 @@ class SefiaHTTP:
         session_id = self._active_session_id.get()
         if session_id is None:
             raise RuntimeError(
-                "OutputTool is not bound to a session; send_output must run "
+                "Output tool is not bound to a session; send_output must run "
                 "inside SefiaHTTP.session()."
             )
         await self._events.publish(

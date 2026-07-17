@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
 from sefios.fastapi import SefiaHTTP
-from sefios.tools import InputTool, OutputMessage, OutputTool
+from sefios.tools import Input, Output, OutputMessage
 
 
 @pytest.fixture
@@ -20,10 +20,10 @@ def _drain(queue: asyncio.Queue) -> list:
 
 class TestSefiaHTTPSessionManagement:
     def test_input_tool_is_exposed(self, http: SefiaHTTP):
-        assert isinstance(http.input_tool, InputTool)
+        assert isinstance(http.input_tool, Input)
 
     def test_output_tool_is_exposed(self, http: SefiaHTTP):
-        assert isinstance(http.output_tool, OutputTool)
+        assert isinstance(http.output_tool, Output)
 
     def test_created_session_is_known(self, http: SefiaHTTP):
         session_id = http.create_session()

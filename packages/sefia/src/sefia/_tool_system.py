@@ -107,8 +107,8 @@ class ToolDefinition:
 class ToolFunctionInspector(ABC):
     """Inspects a tool's Python function.
 
-    A ``SignatureTool`` delegates to this to turn its callable into a neutral
-    ``ToolDefinition`` and to bind decoded arguments to the callable's
+    A ``SignatureToolEntry`` delegates to this to turn its callable into a
+    neutral ``ToolDefinition`` and to bind decoded arguments to the callable's
     parameters. The return values are neutral (a ``ToolDefinition`` and a plain
     ``dict``) — the pydantic implementation never leaks its types across this
     boundary.
@@ -137,13 +137,15 @@ class ToolFunctionInspector(ABC):
         ...
 
 
-class Tool(ABC):
-    """A tool the LLM may call.
+class ToolEntry(ABC):
+    """A runtime registration record binding a tool's name, schema, and call.
 
-    Concrete tools differ along two independent axes — where their parameter
-    schema comes from (an introspected callable vs. a raw JSON Schema) and how a
-    call is executed (a local coroutine, an HTTP round-trip, ...). Both axes are
-    expressed as behavior on the tool: ``definition`` produces the LLM-facing
+    This is the entry a ``ToolRegistry`` holds — what other frameworks call a
+    "Tool object"; in sefia the tool itself is the granted method. Concrete
+    entries differ along two independent axes — where their parameter schema
+    comes from (an introspected callable vs. a raw JSON Schema) and how a call is
+    executed (a local coroutine, an HTTP round-trip, ...). Both axes are
+    expressed as behavior on the entry: ``definition`` produces the LLM-facing
     schema and ``invoke`` runs the call. Nothing implementation-specific (a
     Pydantic type, a validator) is exposed on this surface.
     """
@@ -165,22 +167,22 @@ class Tool(ABC):
 
     @property
     def function(self) -> Callable[..., Any] | None:
-        """The local Python callable this tool executes, if any.
+        """The local Python callable this entry executes, if any.
 
         Used by function-based lookups (``ToolRegistry.get_by_function``).
-        ``None`` for tools executed over a transport with no local callable.
+        ``None`` for entries executed over a transport with no local callable.
         """
         return None
 
 
-class SignatureTool(Tool):
-    """A tool whose schema is introspected from a typed Python callable.
+class SignatureToolEntry(ToolEntry):
+    """An entry whose schema is introspected from a typed Python callable.
 
     ``function`` is what runs. ``schema_source`` is the callable the schema is
-    derived from — normally the same callable, but for a tool discovered through
-    a ``Protocol``-narrowed field it is the Protocol's own method (its declared
-    signature and docstring), while ``function`` stays the concrete, bound
-    implementation.
+    derived from — normally the same callable, but for an entry discovered
+    through a ``Protocol``-narrowed field it is the Protocol's own method (its
+    declared signature and docstring), while ``function`` stays the concrete,
+    bound implementation.
     """
 
     def __init__(
@@ -212,8 +214,8 @@ class SignatureTool(Tool):
         return self._function
 
 
-class JsonSchemaTool(Tool):
-    """A tool whose schema is supplied directly as a raw JSON Schema.
+class JsonSchemaToolEntry(ToolEntry):
+    """An entry whose schema is supplied directly as a raw JSON Schema.
 
     ``handler`` receives the decoded arguments verbatim (``handler(**arguments)``)
     — the JSON stays JSON, which is what a transport-backed handler (e.g. an MCP
@@ -260,13 +262,13 @@ async def _maybe_await(value: Any) -> Any:
 
 
 class ToolRegistry:
-    """Stores and provides access to registered tools."""
+    """Stores and provides access to registered entries."""
 
     def __init__(self):
-        self._tools: dict[str, Tool] = {}
+        self._tools: dict[str, ToolEntry] = {}
 
-    def register(self, tool: Tool) -> None:
-        """Register a pre-built tool. Raises on a name collision."""
+    def register(self, tool: ToolEntry) -> None:
+        """Register a pre-built entry. Raises on a name collision."""
         if tool.name in self._tools:
             raise ToolConflictError(
                 f"A tool with the name '{tool.name}' already exists."
@@ -283,13 +285,13 @@ class ToolRegistry:
         stream_handler: StreamHandler | None = None,
         concurrent: bool = False,
     ) -> None:
-        """Register a ``SignatureTool`` built from a typed callable."""
+        """Register a ``SignatureToolEntry`` built from a typed callable."""
         if inspector is None:
             from .pydantic._model_backend import PydanticModelBackend
 
             inspector = PydanticModelBackend()
         self.register(
-            SignatureTool(
+            SignatureToolEntry(
                 func,
                 name=name,
                 schema_source=schema_source or func,
@@ -309,9 +311,9 @@ class ToolRegistry:
         stream_handler: StreamHandler | None = None,
         concurrent: bool = False,
     ) -> None:
-        """Register a ``JsonSchemaTool`` from a raw JSON Schema and a handler."""
+        """Register a ``JsonSchemaToolEntry`` from a raw JSON Schema and a handler."""
         self.register(
-            JsonSchemaTool(
+            JsonSchemaToolEntry(
                 handler,
                 name=name,
                 parameters=parameters,
@@ -321,11 +323,11 @@ class ToolRegistry:
             )
         )
 
-    def get(self, name: str) -> Tool | None:
+    def get(self, name: str) -> ToolEntry | None:
         return self._tools.get(name)
 
-    def get_by_function(self, func: Callable[..., Any]) -> list[Tool]:
-        """Return tools whose executable callable matches ``func``."""
+    def get_by_function(self, func: Callable[..., Any]) -> list[ToolEntry]:
+        """Return entries whose executable callable matches ``func``."""
         target = _callable_identity(func)
         return [
             tool
@@ -333,7 +335,7 @@ class ToolRegistry:
             if tool.function is not None and _callable_identity(tool.function) is target
         ]
 
-    def get_all(self) -> list[Tool]:
+    def get_all(self) -> list[ToolEntry]:
         return list(self._tools.values())
 
     def get_names(self) -> list[str]:

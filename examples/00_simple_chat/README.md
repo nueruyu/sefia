@@ -34,5 +34,5 @@ python -m examples.00_simple_chat.main session switch <session-id>
 
 - Defining an agent with `@infer`
 - Running a persisted CLI session with `SefiaCLI`
-- Feeding terminal input through `InputTool` and emitting replies through `OutputTool`
+- Feeding terminal input through the `Input` tool and emitting replies through `Output`
 - A minimal single-agent loop without external domain tools or multi-agent orchestration
