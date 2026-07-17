@@ -18,8 +18,7 @@ class SSEEvent:
     """The wire names of the server-sent events an application publishes.
 
     Single source of truth: the facade and browser clients import these rather
-    than repeating literals. ``EXECUTION_FAILED`` avoids ``"error"``, which
-    would collide with the built-in event ``EventSource`` fires on drops.
+    than repeating literals.
     """
 
     TOKEN = "token"

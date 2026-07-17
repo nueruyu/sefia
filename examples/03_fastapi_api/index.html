@@ -361,8 +361,6 @@
         eventSource.addEventListener("completed", () => {
           setStatus("Completed");
         });
-        // Application-level failure; not "error", which would collide with the
-        // built-in event EventSource fires on transport drops (onerror below).
         eventSource.addEventListener("execution_failed", (event) => {
           const data = parseEventData(event.data);
           if (activeAssistantBubble) {

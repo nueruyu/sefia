@@ -10,10 +10,7 @@ class TestSSEEvent:
         assert SSEEvent.TOKEN == "token"
         assert SSEEvent.INPUT_REQUIRED == "input_required"
         assert SSEEvent.COMPLETED == "completed"
-
-    def test_failure_event_does_not_collide_with_eventsource_builtin(self):
         assert SSEEvent.EXECUTION_FAILED == "execution_failed"
-        assert SSEEvent.EXECUTION_FAILED != "error"
 
 
 class TestPublish:
