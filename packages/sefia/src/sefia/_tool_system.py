@@ -167,22 +167,22 @@ class ToolEntry(ABC):
 
     @property
     def function(self) -> Callable[..., Any] | None:
-        """The local Python callable this tool executes, if any.
+        """The local Python callable this entry executes, if any.
 
         Used by function-based lookups (``ToolRegistry.get_by_function``).
-        ``None`` for tools executed over a transport with no local callable.
+        ``None`` for entries executed over a transport with no local callable.
         """
         return None
 
 
 class SignatureToolEntry(ToolEntry):
-    """A tool whose schema is introspected from a typed Python callable.
+    """An entry whose schema is introspected from a typed Python callable.
 
     ``function`` is what runs. ``schema_source`` is the callable the schema is
-    derived from — normally the same callable, but for a tool discovered through
-    a ``Protocol``-narrowed field it is the Protocol's own method (its declared
-    signature and docstring), while ``function`` stays the concrete, bound
-    implementation.
+    derived from — normally the same callable, but for an entry discovered
+    through a ``Protocol``-narrowed field it is the Protocol's own method (its
+    declared signature and docstring), while ``function`` stays the concrete,
+    bound implementation.
     """
 
     def __init__(
@@ -215,7 +215,7 @@ class SignatureToolEntry(ToolEntry):
 
 
 class JsonSchemaToolEntry(ToolEntry):
-    """A tool whose schema is supplied directly as a raw JSON Schema.
+    """An entry whose schema is supplied directly as a raw JSON Schema.
 
     ``handler`` receives the decoded arguments verbatim (``handler(**arguments)``)
     — the JSON stays JSON, which is what a transport-backed handler (e.g. an MCP
@@ -262,13 +262,13 @@ async def _maybe_await(value: Any) -> Any:
 
 
 class ToolRegistry:
-    """Stores and provides access to registered tools."""
+    """Stores and provides access to registered entries."""
 
     def __init__(self):
         self._tools: dict[str, ToolEntry] = {}
 
     def register(self, tool: ToolEntry) -> None:
-        """Register a pre-built tool. Raises on a name collision."""
+        """Register a pre-built entry. Raises on a name collision."""
         if tool.name in self._tools:
             raise ToolConflictError(
                 f"A tool with the name '{tool.name}' already exists."
@@ -327,7 +327,7 @@ class ToolRegistry:
         return self._tools.get(name)
 
     def get_by_function(self, func: Callable[..., Any]) -> list[ToolEntry]:
-        """Return tools whose executable callable matches ``func``."""
+        """Return entries whose executable callable matches ``func``."""
         target = _callable_identity(func)
         return [
             tool
