@@ -36,7 +36,7 @@ model can express about an image in a decision is *which* image: a reference.
 
 This split resolves every design question below:
 
-- References (`Media{uri, media_type}`) are ordinary data. They may appear in
+- References (`Media{uri, mime_type}`) are ordinary data. They may appear in
   arguments, tool results, and return types with zero special machinery — the
   model reads and writes URIs as strings inside JSON, exactly like any other
   field.
@@ -51,8 +51,9 @@ A small dependency-free value type in `sefia` core:
 ```python
 @dataclass(frozen=True)
 class Media:
-    uri: str                      # RFC 3986; data: URIs (RFC 2397) allowed for inline bytes
-    media_type: str | None = None # MIME type, e.g. "image/png"; sniffed when omitted
+    uri: str                     # RFC 3986; data: URIs (RFC 2397) allowed for inline bytes
+    mime_type: str | None = None # IANA MIME string, e.g. "image/png"; sniffed when omitted
+    name: str | None = field(default=None, compare=False)  # descriptive, not identity
 ```
 
 Every field is a stable, standards-backed format — URIs and MIME types are the
@@ -72,15 +73,28 @@ maps mechanically onto Anthropic/OpenAI content parts and MCP resource types.
   string either way; RFC 3986 itself is the stable standard, a wrapper type is
   a library opinion. Validation happens at the edges — the adapter or media
   store fails on a URI it cannot resolve; construction does at most a cheap
-  has-a-scheme sanity check and never normalizes. `media_type` is likewise a
+  has-a-scheme sanity check and never normalizes. `mime_type` is likewise a
   plain IANA MIME string: an open set with optional parameters, not an enum.
+- The field is named `mime_type`, not `media_type`, even though IANA's own
+  term is "media type" (RFC 6838): on a class named `Media`, `media_type`
+  stutters and invites the misreading "the kind of this `Media`" (image vs
+  audio), while `mime_type` unambiguously means the `"image/png"` string and
+  matches the implementation-side vocabulary (MCP's `mimeType`, Python's
+  `mimetypes`). The value itself is the IANA string either way.
+- `name` is optional, descriptive metadata — a human/model-readable handle
+  ("login-page-screenshot"), needed because the design's mainstream URIs
+  (`data:`, store-backed `media://<hash>`) have no basename, and future
+  document support needs a filename/title for provider file blocks anyway. It
+  is excluded from equality (`compare=False`): two `Media` referencing the
+  same bytes are the same media regardless of what someone called them, so
+  naming can never confuse content-addressed deduplication.
 - Explicitly a *value*, not an annotation: whether something is an image is a
   property of the value, so it survives being nested in lists and returned
   from tools, and expansion into context (which costs real tokens) is always
   an explicit opt-in — a bare string that happens to end in `.png` is never
   auto-expanded. Extension/scheme sniffing as the *trigger* was rejected for
   exactly that implicitness; sniffing only ever fills in a missing
-  `media_type` for a value that is already a `Media`.
+  `mime_type` for a value that is already a `Media`.
 
 ## Recognition: `Media` is a message-content primitive
 
