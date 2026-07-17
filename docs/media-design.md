@@ -228,20 +228,108 @@ Two follow-ons ride on the same structure:
 | **`LLMResponse.images` / images as first-class model output** in the loop. | Same conflict with the unified JSON decision, without even the schema to anchor it. |
 | **Interleaved generate-inspect-refine in the core loop.** | Real (research systems and current provider APIs support interleaved output), but the step loop already provides it coarsely, and the fine-grained version is available *inside* a wrapped tool. Not worth a core mechanism. |
 
-## Phasing
+## Implementation plan
 
-1. **Generation first (no core changes):** `ImageGenClient` seam +
-   LiteLLM-backed implementation + `sefios[images]` generation toolkit + the
-   media store. Usable immediately; the model handles `Media` as opaque
-   reference data.
-2. **Recognition (the core change):** `Media` type in `sefia`,
-   `_build_messages` rendering, adapter-side URI resolution, the tool-role
-   workaround.
-3. **Hygiene:** image-aware compaction rule; image cost accounting.
+Six steps, each landable as an independent PR in order. Layering per
+[architecture.md](./architecture.md): seams and vocabulary in `sefia` core
+(which never imports providers — the `LLMClient` pattern), provider calls in
+`sefia_litellm`, batteries and wiring in `sefios`.
 
-Images are the scope of this proposal. PDF and `text/*` rendering are named
-follow-ups (see the rendering matrix above); audio and further formats extend
-the same shape without a new concept.
+### 1. The `Media` type (core)
+
+- `packages/sefia/src/sefia/_media.py` (new): the frozen dataclass
+  `Media{uri, mime_type, name}` as specified above; `__post_init__` does the
+  cheap has-a-scheme check and nothing else. Also the tiny **`MediaResolver`**
+  protocol (`resolve(uri) -> bytes + mime_type`) — defined in core so
+  adapters can depend on it without seeing `sefios`.
+- Export `Media` from `sefia/__init__.py`.
+- Tests: construction/equality (`name` excluded), and a round-trip of a
+  `ToolCallResult` carrying `Media` through `HistorySnapshot` persistence
+  (`history_storages/_glyff.py` path), since history is where references live
+  longest.
+
+### 2. The media store (sefios)
+
+- `sefios/media/` (new): `MediaStore` ABC — `put(data, mime_type, name) ->
+  Media` (content-hash-keyed `media://<sha256>` URI, deduplicating by
+  construction) and `get(uri) -> bytes`; it implements core's
+  `MediaResolver`. `FileMediaStore` (session-scoped directory, durable so
+  engraved steps replay) and `MemoryMediaStore` (tests), mirroring
+  `sefios/storage/`.
+- `SessionScope` gains a `media_store` factory knob and passes the resolver
+  down to the client and tools it constructs.
+
+### 3. Generation seam + toolkit
+
+- `sefia/llm/_image_gen.py` (new): `ImageGenClient` ABC — `generate(prompt,
+  *, input_media, ...) -> bytes + mime_type`. Provider-agnostic vocabulary in
+  core, same placement logic as `LLMClient`; the core loop never calls it.
+- `sefia_litellm/_image_client.py` (new): implementation over LiteLLM's
+  `aimage_generation`, mirroring `_client.py` (lazy import, error mapping).
+  A native image-output model wrapped this way is just another implementation.
+- `sefios/tools/image.py` (new): suffix-free toolkit class (naming per the
+  `WebSearch` convention) holding an `ImageGenClient` + `MediaStore`;
+  `generate_image(prompt, ...) -> Media` calls the client, `put`s the bytes,
+  returns the reference. Gated on the existing `sefios[litellm]` extra.
+- At this point generation ships end to end: the model sees `Media` as opaque
+  reference data it can copy into answers; nothing renders yet.
+
+### 4. Recognition — the rendering path (core)
+
+- `llm/_messages.py`: add `ContentPart = str | Media`; tighten
+  `Message.content` to `str | list[ContentPart]`. `Message.to_dict` is no
+  longer a valid wire serialization for content holding `Media` — adapters
+  walk parts instead (step 5).
+- `llm/_strategy.py` (`_build_messages`):
+  - *Arguments*: collect `Media` values from `prompt_arguments` (including
+    nested in lists/dicts); the user message becomes
+    `[xml_text, *media_parts]`. The XML formatter
+    (`_xml_prompt_formatter.py`) gains a `Media` branch that renders a short
+    reference element (`<media uri=… name=…/>`) — never the payload; a
+    `data:` URI is elided in the XML, the part carries it.
+  - *Tool results*: serialize `Media` inside `json.dumps` via the
+    `_json_default` as a reference object, and attach the `Media` parts to
+    the tool message's content. The tool-role workaround stays out of the
+    strategy (adapter concern, step 5).
+- `pydantic/`: `Media` is a plain dataclass, so schema generation and
+  argument coercion (`SignatureToolEntry`'s decoded-arg coercion) should work
+  natively — add tests for a tool taking and returning `Media`, and for
+  `Media` inside a `final_answer` type.
+
+### 5. Adapter translation (`sefia_litellm`)
+
+- Replace blind `msg.to_dict()` for content with a part walk: `str` → text
+  part; `Media` with `image/*` → `image_url` part (`https:` passed through,
+  `data:` forwarded, `file://`/`media://` resolved via the injected
+  `MediaResolver` and inlined as base64). Any other mime family: raise (the
+  fail-loud contract) until its rendering lands per the matrix.
+- Tool-role workaround here: a tool message whose content holds `Media`
+  becomes the textual tool message plus an immediately following `user`
+  message carrying the image parts.
+- `LLMClient` docstring gains the contract line: implementations that cannot
+  render a `Media` part must raise, never silently serialize.
+
+### 6. Hygiene and follow-ups
+
+- `HistoryCompactor` rule demoting old rendered images back to their
+  reference; image token / generation cost in `sefios/handlers/_cost.py` and
+  the adapters.
+- Known-media validation for `final_answer` (a `Media` in an answer must
+  reference media that appeared in the run), fed into the existing repair
+  loop — anti-hallucination hardening, not needed for the first cut.
+- Doc sync per CONTRIBUTING: architecture map rows, how-it-works, and
+  infer-contract entries for `Media` arguments/returns.
+
+Steps 1–3 ship generation without touching the inference loop; 4–5 light up
+recognition; 6 hardens. Images are the scope of this proposal. PDF and
+`text/*` rendering are named follow-ups (see the rendering matrix above);
+audio and further formats extend the same shape without a new concept.
+
+Open points to settle during implementation: the store URI scheme and hash
+(`media://<sha256-hex>` assumed), the exact `SessionScope` wiring names,
+whether `generate_image` is marked `@concurrent` (generation tolerates
+overlap; likely yes), and convenience constructors
+(`Media.from_bytes`/`from_file`) as sugar.
 
 ## See also
 
