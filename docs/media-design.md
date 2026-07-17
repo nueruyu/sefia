@@ -61,6 +61,19 @@ maps mechanically onto Anthropic/OpenAI content parts and MCP resource types.
 
 - `uri` covers remote (`https://`), local (`file://`), inline (`data:`), and
   store-backed (scheme TBD, e.g. `media://<hash>`) images in one field.
+- Both fields are deliberately **plain `str`**, not wrapper types. Python has
+  no standard-library URI type, so "a URI type" means adopting some parser's
+  opinions — and the candidates (WHATWG-based, e.g. pydantic's `Url` types)
+  *normalize*: schemes and authority are case-folded, which would silently
+  mangle a case-sensitive content hash sitting in the authority position of a
+  `media://` URI, and `data:` (huge inline payloads, no authority),
+  `file://` (empty authority), and custom schemes all live at the poorly
+  specified edge of WHATWG URL semantics. The persisted and wire form is the
+  string either way; RFC 3986 itself is the stable standard, a wrapper type is
+  a library opinion. Validation happens at the edges — the adapter or media
+  store fails on a URI it cannot resolve; construction does at most a cheap
+  has-a-scheme sanity check and never normalizes. `media_type` is likewise a
+  plain IANA MIME string: an open set with optional parameters, not an enum.
 - Explicitly a *value*, not an annotation: whether something is an image is a
   property of the value, so it survives being nested in lists and returned
   from tools, and expansion into context (which costs real tokens) is always
