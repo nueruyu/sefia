@@ -8,7 +8,7 @@ wiring — session management, persistence, and the pausing tool — is provided
 by an integration layer such as ``sefios.fastapi``.
 """
 
-from ._events import SessionEvents
+from ._events import SessionEvents, SSEEvent
 from ._input import InputChannel, InputRequest
 from ._kv import KeyValueStore
 from .exceptions import (
@@ -23,6 +23,7 @@ __all__ = [
     "InputRequest",
     "KeyValueStore",
     "SessionEvents",
+    "SSEEvent",
     "InputRequired",
     "UnknownSessionError",
     "UnknownInputError",
