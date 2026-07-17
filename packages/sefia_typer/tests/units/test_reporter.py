@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sefia.exceptions import InvalidInferenceResponseError
-from sefia_typer import DefaultCLIReporter, InputRequest
+from sefia_typer import DefaultCLIReporter, InputRequest, OutputMessage
 
 
 @dataclass(frozen=True)
@@ -56,6 +56,23 @@ class TestDefaultCLIReporter:
         reporter.on_input_prompt_delta("topic?")
 
         assert capsys.readouterr().out == "What topic?"
+
+    def test_output_includes_marker_and_message(self, capsys):
+        reporter = DefaultCLIReporter()
+
+        reporter.on_output(OutputMessage(interaction_id="xyz", message="Hello there!"))
+
+        output = capsys.readouterr().out
+        assert "OUTPUT:xyz" in output
+        assert "Hello there!" in output
+
+    def test_output_message_delta_is_printed_without_newline(self, capsys):
+        reporter = DefaultCLIReporter()
+
+        reporter.on_output_message_delta("Hello ")
+        reporter.on_output_message_delta("there!")
+
+        assert capsys.readouterr().out == "Hello there!"
 
     def test_interrupted_announces_waiting_state(self, capsys):
         reporter = DefaultCLIReporter()

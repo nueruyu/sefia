@@ -64,7 +64,7 @@ Rules that keep the layering clean — worth preserving in any change:
 - **`sefios` is the composition layer for the adapters.** The extra-gated
   `sefios/cli` and `sefios/fastapi` facades are the only modules that import
   `sefia_typer` / `sefia_fastapi`; they wire the adapters to `SessionScope`,
-  `Input`, session storage, and cost accounting.
+  `Input`, `Output`, session storage, and cost accounting.
 - **`examples` depend on the batteries.** They are consumers of the stack, not a layer
   that other packages should import.
 
@@ -115,11 +115,11 @@ implementation noted in parentheses.
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |
 | `history_storages/` | `SessionHistoryStorage` — an alternative `HistoryStorage` that keeps run history in the session storage (keyed by the run's `ExecutionId`) instead of glyff metadata. |
 | `handlers/` | `_cost` — an observation-seam handler (cost accounting). |
-| `tools/` | `input.py` (external input, pause-by-raise), `web.py` (DuckDuckGo search). |
+| `tools/` | `input.py` (external input, pause-by-raise), `output.py` (agent-authored, non-blocking output), `web.py` (DuckDuckGo search). |
 | `storage/` | Session-scoped persistence: the `SessionStorage` interface + `MemorySessionStorage` / `FileSessionStorage`. |
 | `sessions/` | `SessionManager` — the file-backed registry of known sessions and the active one. |
-| `cli/` | Gated on `sefios[cli]`: the `SefiaCLI` facade composing `sefia_typer` with `SessionScope`, `Input`, and cost reporting; re-exports the `sefia_typer` surface. |
-| `fastapi/` | Gated on `sefios[fastapi]`: the `SefiaHTTP` facade composing `sefia_fastapi` with `SessionScope`, `Input`, and SSE token streaming; re-exports the `sefia_fastapi` exceptions. |
+| `cli/` | Gated on `sefios[cli]`: the `SefiaCLI` facade composing `sefia_typer` with `SessionScope`, `Input`, `Output`, and cost reporting; re-exports the `sefia_typer` surface. |
+| `fastapi/` | Gated on `sefios[fastapi]`: the `SefiaHTTP` facade composing `sefia_fastapi` with `SessionScope`, `Input`, `Output`, and SSE token/output streaming; re-exports the `sefia_fastapi` exceptions. |
 | `_state_store.py` / `_session_state.py` | Typed `StateStore`; the session-state binding and its accessors (`get_state`'s type-keyed tier sits on top; `get_call_state_store` / `get_session_storage` are the tool-facing tier). |
 | `state.py` | App-level state helpers: `StateRegistry`, `StateContainer`, `state`, `get_state`. |
 

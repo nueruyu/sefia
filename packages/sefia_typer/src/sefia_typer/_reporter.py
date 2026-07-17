@@ -1,9 +1,18 @@
+from dataclasses import dataclass
 from typing import Protocol
 
 import typer
 from sefia.exceptions import InferenceError
 
 from ._input import InputRequest, MaybeAwaitable
+
+
+@dataclass(frozen=True)
+class OutputMessage:
+    """A message the agent emitted to the human without waiting for a reply."""
+
+    interaction_id: str
+    message: str
 
 
 class ResolvedSession(Protocol):
@@ -34,6 +43,10 @@ class CLIReporter(Protocol):
     ) -> MaybeAwaitable[None]: ...
 
     def on_input_prompt_delta(self, text: str) -> MaybeAwaitable[None]: ...
+
+    def on_output(self, message: OutputMessage) -> MaybeAwaitable[None]: ...
+
+    def on_output_message_delta(self, text: str) -> MaybeAwaitable[None]: ...
 
     def on_interrupted(
         self,
@@ -69,6 +82,20 @@ class DefaultCLIReporter(CLIReporter):
         typer.echo()
 
     def on_input_prompt_delta(self, text: str) -> None:
+        typer.echo(text, nl=False)
+
+    def on_output(self, message: OutputMessage) -> None:
+        typer.echo()
+        typer.secho(
+            f"[OUTPUT:{message.interaction_id}]",
+            fg=typer.colors.CYAN,
+            bold=True,
+            nl=False,
+        )
+        typer.echo(f" {message.message}")
+        typer.echo()
+
+    def on_output_message_delta(self, text: str) -> None:
         typer.echo(text, nl=False)
 
     def on_interrupted(self, session: ResolvedSession) -> None:

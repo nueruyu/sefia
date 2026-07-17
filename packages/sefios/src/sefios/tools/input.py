@@ -84,15 +84,18 @@ class Input:
     @engrave
     async def get_input(
         self,
-        prompt: Annotated[str, Field(min_length=1)],
+        prompt: Annotated[str, Field(min_length=1)] | None = None,
     ) -> str:
         """
-        Request external input for ``prompt`` and return the provided value.
+        Request external input and return the provided value.
 
-        The prompt is emitted to the configured input callbacks. If no input
-        is immediately available, the current session is interrupted until
-        it is provided.
+        ``prompt`` is an optional question to elicit the input; when given it
+        is emitted to the configured input callbacks. Omit it for a bare
+        ask-and-wait (use ``Output.send_output`` for non-blocking
+        narration). If no input is immediately available, the current session
+        is interrupted until it is provided.
         """
+        prompt_text = prompt or ""
         call_store = get_call_state_store("internal_state", _InputCallState)
         call_state = await call_store.ensure()
 
@@ -102,21 +105,21 @@ class Input:
 
         request = InputRequest(
             interaction_id=call_state.interaction_id,
-            prompt=prompt,
+            prompt=prompt_text,
         )
         value = await _maybe_await(self._get_input(request))
         if value is not None:
             await self._notify_complete(
                 InputResult(
                     interaction_id=request.interaction_id,
-                    prompt=prompt,
+                    prompt=prompt_text,
                     value=value,
                 )
             )
             return value
 
         await self._notify_request(request)
-        raise NeedsInput(prompt, interaction_id=request.interaction_id)
+        raise NeedsInput(prompt_text, interaction_id=request.interaction_id)
 
     @preview(get_input)
     async def _stream_get_input(self, events: ArgStream) -> None:
