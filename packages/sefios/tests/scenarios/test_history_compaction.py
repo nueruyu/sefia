@@ -12,7 +12,7 @@ import glyff
 import pytest
 from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import Policy, Session, infer
+from sefia import Policy, Session, Tools, infer
 from sefia.llm import LLMResponse
 from sefia.testing import result_response, tool_calls_response
 
@@ -20,7 +20,7 @@ from sefios import FileSessionStorage, NeedsInput
 from sefios.history_storages import SessionHistoryStorage
 from sefios._session_state import bind_session_storage
 from sefios.middleware import HistoryCompactor
-from sefios.tools import InputRequest, InputTool
+from sefios.tools import Input, InputRequest
 
 _SESSION_ID = "history-compaction-test"
 
@@ -29,9 +29,7 @@ def _note_response(text: str) -> LLMResponse:
     return tool_calls_response(("Notes_add_note", {"text": text}))
 
 
-_ASK_RESPONSE = tool_calls_response(
-    ("InputTool_get_input", {"prompt": "Anything else?"})
-)
+_ASK_RESPONSE = tool_calls_response(("Input_get_input", {"prompt": "Anything else?"}))
 _RESULT_RESPONSE = result_response("All done.")
 
 
@@ -41,7 +39,10 @@ class Notes:
 
 
 class _Agent:
-    def __init__(self, notes: Notes, input_tool: InputTool):
+    _notes: Tools[Notes]
+    _input: Tools[Input]
+
+    def __init__(self, notes: Notes, input_tool: Input):
         self._notes = notes
         self._input = input_tool
 
@@ -105,7 +106,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                     policies=[compaction_policy],
                     history_storage=history_storage,
                 ):
-                    await _Agent(Notes(), InputTool(get_input=get_input)).chat()
+                    await _Agent(Notes(), Input(get_input=get_input)).chat()
 
     assert len(mock_llm.requests) == 4
     assert len(mock_llm.requests[3]["messages"]) < len(mock_llm.requests[2]["messages"])
@@ -121,7 +122,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                 policies=[compaction_policy],
                 history_storage=history_storage,
             ):
-                result = await _Agent(Notes(), InputTool(get_input=get_input)).chat()
+                result = await _Agent(Notes(), Input(get_input=get_input)).chat()
 
     assert result == "All done."
     assert len(resumed_llm.requests) == 1

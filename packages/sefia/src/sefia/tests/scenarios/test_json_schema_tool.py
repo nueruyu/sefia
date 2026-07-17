@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sefia import JsonSchemaTool, infer
+from sefia import JsonSchemaToolEntry, infer
 from sefia.testing import (
     MockLLMClient,
     memory_session,
@@ -44,7 +44,7 @@ async def test_json_schema_tool_reaches_the_llm_and_is_dispatched():
         calls.append({"query": query})
         return "Sefia is a framework for building LLM agents."
 
-    search_tool = JsonSchemaTool(
+    search_tool = JsonSchemaToolEntry(
         search_handler,
         name="search",
         parameters=_SEARCH_SCHEMA,

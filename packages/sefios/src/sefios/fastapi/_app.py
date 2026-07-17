@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from fastapi.responses import StreamingResponse
 from sefia import Policy
-from sefia_fastapi import InputChannel, InputRequired, SessionEvents
+from sefia_fastapi import InputChannel, InputRequired, SessionEvents, SSEEvent
 from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
 
 from .._scope import SessionScope
@@ -14,7 +15,7 @@ from .._session_state import get_session_storage
 from ..exceptions import NeedsInput
 from ..handlers import CostCalculator
 from ..sessions import SessionManager
-from ..tools import InputRequest, InputResult, InputTool
+from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
 
 
 class SefiaHTTPSession:
@@ -37,7 +38,7 @@ class SefiaHTTP:
     """Creates Sefia session contexts for HTTP endpoints, with event streams.
 
     The integration facade over the ``sefia_fastapi`` building blocks: it
-    wires the HTTP input core to :class:`InputTool` and the bound
+    wires the HTTP input core to :class:`Input` and the bound
     session storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), relays LLM tokens to per-session SSE streams, and
     surfaces pauses as :class:`sefia_fastapi.InputRequired`.
@@ -54,11 +55,15 @@ class SefiaHTTP:
         self._events = SessionEvents()
         self._session_manager = SessionManager(session_dir)
         self._input = InputChannel(namespace="http/input_channel")
-        self._input_tool = InputTool(
+        self._active_session_id: ContextVar[str | None] = ContextVar(
+            "http_active_session_id", default=None
+        )
+        self._input_tool = Input(
             get_input=self._provide_input,
             on_request=self._record_request,
             on_complete=self._complete_request,
         )
+        self._output_tool = Output(on_output=self._emit_output)
 
         scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
         if policies is not None:
@@ -73,8 +78,12 @@ class SefiaHTTP:
         )
 
     @property
-    def input_tool(self) -> InputTool:
+    def input_tool(self) -> Input:
         return self._input_tool
+
+    @property
+    def output_tool(self) -> Output:
+        return self._output_tool
 
     def create_session(self) -> str:
         return self._session_manager.create_new_active_session()
@@ -105,6 +114,7 @@ class SefiaHTTP:
                 Policy(handlers=lambda: [self._events.token_handler(session_id)])
             )
 
+        token = self._active_session_id.set(session_id)
         try:
             async with self._session_scope.session(
                 session_id=session_id,
@@ -126,7 +136,7 @@ class SefiaHTTP:
                 raise
             await self._events.publish(
                 session_id,
-                "input_required",
+                SSEEvent.INPUT_REQUIRED,
                 {
                     "interaction_id": pause.interaction_id,
                     "prompt": pause.prompt,
@@ -139,7 +149,7 @@ class SefiaHTTP:
         except Exception as exc:
             await self._events.publish(
                 session_id,
-                "error",
+                SSEEvent.EXECUTION_FAILED,
                 {
                     "type": type(exc).__name__,
                     "message": str(exc),
@@ -148,8 +158,10 @@ class SefiaHTTP:
             raise
         else:
             await self._events.publish(
-                session_id, "completed", {"session_id": session_id}
+                session_id, SSEEvent.COMPLETED, {"session_id": session_id}
             )
+        finally:
+            self._active_session_id.reset(token)
 
     def events(self, session_id: str) -> StreamingResponse:
         self.ensure_session(session_id)
@@ -163,3 +175,19 @@ class SefiaHTTP:
 
     async def _complete_request(self, result: InputResult) -> None:
         await self._input.complete_request(result.interaction_id)
+
+    async def _emit_output(self, message: OutputMessage) -> None:
+        session_id = self._active_session_id.get()
+        if session_id is None:
+            raise RuntimeError(
+                "Output tool is not bound to a session; send_output must run "
+                "inside SefiaHTTP.session()."
+            )
+        await self._events.publish(
+            session_id,
+            SSEEvent.OUTPUT,
+            {
+                "interaction_id": message.interaction_id,
+                "message": message.message,
+            },
+        )

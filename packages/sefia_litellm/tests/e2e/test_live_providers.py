@@ -12,7 +12,7 @@ See ``conftest.py`` for how providers are selected and skipped.
 from dataclasses import dataclass
 
 import pytest
-from sefia import infer
+from sefia import Tools, infer
 
 pytestmark = pytest.mark.e2e
 
@@ -53,6 +53,8 @@ class VaultToolkit:
 
 
 class VaultAgent:
+    _vault: Tools[VaultToolkit]
+
     def __init__(self, vault: VaultToolkit) -> None:
         self._vault = vault
 

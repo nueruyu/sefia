@@ -33,29 +33,37 @@ workflows, handlers, or plain functions. Sefia only changes what happens when an
 return type, and docstring become the contract for an LLM-backed, replayable call.
 
 ```python
-class WebToolkit:
+class WebToolkit:                                  # a plain class — no base, no decorator
     def __init__(self, http): self._http = http   # private = internal
-    async def search(self, q: str) -> list[str]:   # public = tool
+    async def search(self, q: str) -> list[str]:   # public = tool, once granted
         """Search the web and return URLs."""
         ...
 
+@dataclass
 class ResearchService:
-    def __init__(self, web: WebToolkit):
-        self._web = web                            # held dependency = tool
+    _web: Tools[WebToolkit]                        # the field annotation is the grant
     @infer
     async def run(self, topic: str) -> Report: ...
 ```
 
-- **Tools = the public surface of held dependency objects.** Public = tool,
-  private = internal (ordinary encapsulation). No decorators, no registry. Tools
-  are scoped to the object that holds them.
+- **A tool is a member of a field granted with the `Tools` alias.** No ambient
+  authority: holding an object is not enough — the class-level field annotation
+  must say `Tools[WebToolkit]`. No decorators, no registry, no strings, no base
+  classes: `Tools[T]` is an `Annotated` alias, so checkers see plain `T` and every
+  type stays an ordinary class or `Protocol`. Within a granted field, public =
+  tool, private = internal (ordinary encapsulation).
+- **Tool dependencies are expressed through classes.** Tools ride on the `@infer`
+  method's receiver (`self`); every other parameter is task input. A grant is
+  local to the holding site — the same class can be a toolkit in one service and
+  inert data in another.
 - **Narrow by type.** A concrete class exposes its public methods; a `Protocol`
-  exposes only its declared members.
-- **A class's own methods aren't its own tools.** Its `@infer` methods are not
-  offered back to itself, so a run can't recurse into itself. (A service object can
-  still be held by another service and act as a dependency.)
-- **A held field is a tool; an `@infer` argument is task input.** So held fields
-  should be dependency objects, not unrelated state.
+  exposes only its declared members (`_web: Tools[ReadOnlyWeb]`). Annotate `self`
+  with a plain surface `Protocol` to select one method's tools — the annotation
+  itself is the opt-in, including for the instance's own private methods.
+- **Discovery is static and fail-closed.** The surface is a pure function of
+  declared types — an undeclared or unmarked field exposes nothing, and runtime
+  values never widen it. A service's own methods are never tools unless a surface
+  declares them; it becomes another agent's tool by being held in a granted field.
 - **Batched calls run serially; overlap is opt-in.** When one model decision
   contains several tool calls they execute one after another, unless a tool
   method is marked `@concurrent` — the author's declaration that overlapping its
@@ -118,7 +126,8 @@ tradeoffs behind the design are in [docs/tradeoffs.md](./docs/tradeoffs.md).
   Distributed single-workflow branches are out of scope.
 - **Replay assumes determinism** between engraved steps — every replay engine's
   caveat.
-- **Minimal core by convention** — the rule that held objects are dependencies whose
-  public methods are tools (nothing unrelated) is not enforced today (may gain a
-  static check).
+- **Explicit capability gate.** Tools require the `Tools[...]` field annotation
+  rather than "any public method of anything held". The cost is one alias per
+  granted field; the benefit: a held member cannot leak as a tool by accident, and
+  the surface is statically declared and type-checkable.
 - **Pre-1.0.** The API will change.

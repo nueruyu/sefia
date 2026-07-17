@@ -21,7 +21,7 @@ class PermissionDeniedToolError(FileOperationToolError):
     """Raised when a file cannot be accessed."""
 
 
-class GitTool:
+class Git:
     """A tool for interacting with a Git repository."""
 
     async def list_tracked_files(self, path: str) -> list[str]:
@@ -51,7 +51,7 @@ class GitTool:
         return [path for path in output.split("\0") if path]
 
 
-class FileTool:
+class Files:
     """A tool for file system operations."""
 
     async def read_files(self, full_paths: list[str]) -> dict[str, str]:

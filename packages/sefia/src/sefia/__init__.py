@@ -13,12 +13,13 @@ from ._markers import AsRawText
 from ._profiles import Profile
 from ._session import Session
 from ._tool_system import (
-    JsonSchemaTool,
-    SignatureTool,
-    Tool,
+    JsonSchemaToolEntry,
+    SignatureToolEntry,
+    ToolEntry,
     ToolCollector,
     ToolDefinition,
     ToolRegistry,
+    Tools,
 )
 
 __all__ = [
@@ -38,9 +39,10 @@ __all__ = [
     "StepMiddleware",
     "InferenceContext",
     "StepContext",
-    "Tool",
-    "SignatureTool",
-    "JsonSchemaTool",
+    "ToolEntry",
+    "Tools",
+    "SignatureToolEntry",
+    "JsonSchemaToolEntry",
     "ToolDefinition",
     "ToolCollector",
     "ToolRegistry",

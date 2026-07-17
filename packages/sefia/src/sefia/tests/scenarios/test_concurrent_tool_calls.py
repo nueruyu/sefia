@@ -6,7 +6,7 @@ import pytest
 from glyff import engrave
 from glyff.store import MemoryBackend
 
-from sefia import concurrent, infer
+from sefia import Tools, concurrent, infer
 from sefia.exceptions import PauseException
 from sefia.testing import (
     MockLLMClient,
@@ -43,6 +43,8 @@ class HandshakeToolkit:
 
 
 class Researcher:
+    _kit: Tools[HandshakeToolkit]
+
     def __init__(self, kit: HandshakeToolkit):
         self._kit = kit
 
@@ -97,6 +99,8 @@ class PausingToolkit:
 
 
 class Assistant:
+    _kit: Tools[PausingToolkit]
+
     def __init__(self, kit: PausingToolkit):
         self._kit = kit
 

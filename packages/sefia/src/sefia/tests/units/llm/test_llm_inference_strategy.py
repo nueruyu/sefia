@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from sefia._tool_system import SignatureTool, Tool, ToolRegistry
+from sefia._tool_system import SignatureToolEntry, ToolEntry, ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
@@ -69,9 +69,9 @@ def chat_tool() -> str:
 _BACKEND = PydanticModelBackend()
 
 
-def _tool(func: Callable[..., Any]) -> Tool:
+def _tool(func: Callable[..., Any]) -> ToolEntry:
     name = _BACKEND.tool_name(func)
-    return SignatureTool(
+    return SignatureToolEntry(
         func,
         name=name,
         schema_source=func,

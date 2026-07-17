@@ -10,7 +10,12 @@ and the pausing tool — is provided by an integration layer such as
 
 from ._input import InputChannel, InputRequest
 from ._kv import KeyValueStore
-from ._reporter import CLIReporter, DefaultCLIReporter, ResolvedSession
+from ._reporter import (
+    CLIReporter,
+    DefaultCLIReporter,
+    OutputMessage,
+    ResolvedSession,
+)
 from .exceptions import (
     AmbiguousInputError,
     UnknownInputError,
@@ -23,6 +28,7 @@ __all__ = [
     "KeyValueStore",
     "CLIReporter",
     "DefaultCLIReporter",
+    "OutputMessage",
     "ResolvedSession",
     "UnknownSessionError",
     "UnknownInputError",

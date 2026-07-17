@@ -13,6 +13,7 @@ from sefia_typer import (
     InputChannel,
 )
 from sefia_typer import InputRequest as CLIInputRequest
+from sefia_typer import OutputMessage as CLIOutputMessage
 from sefia_typer import ResolvedSession as CLIResolvedSession
 from sefia_typer import UnknownSessionError as CLIUnknownSessionError
 
@@ -21,7 +22,7 @@ from .._session_state import get_session_storage
 from ..handlers import CostCalculator, CostState
 from ..sessions import ResolvedSession, SessionManager, UnknownSessionError
 from ..state import get_state
-from ..tools import InputRequest, InputResult, InputTool
+from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -47,6 +48,12 @@ class CostReportingCLIReporter(CLIReporter):
 
     def on_input_prompt_delta(self, text: str) -> MaybeAwaitable[None]:
         return self._inner.on_input_prompt_delta(text)
+
+    def on_output(self, message: CLIOutputMessage) -> MaybeAwaitable[None]:
+        return self._inner.on_output(message)
+
+    def on_output_message_delta(self, text: str) -> MaybeAwaitable[None]:
+        return self._inner.on_output_message_delta(text)
 
     async def on_interrupted(self, session: CLIResolvedSession) -> None:
         await _maybe_await(self._inner.on_interrupted(session))
@@ -87,7 +94,7 @@ class SefiaCLI:
     """Creates Sefia session contexts for Typer commands.
 
     The integration facade over the ``sefia_typer`` building blocks: it wires
-    the CLI input core to :class:`InputTool` and the bound session
+    the CLI input core to :class:`Input` and the bound session
     storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), and maps pauses and inference errors to CLI exit
     codes.
@@ -110,11 +117,15 @@ class SefiaCLI:
             on_prompt_delta=self._report_input_prompt_delta,
             namespace="cli/input_channel",
         )
-        self._input_tool = InputTool(
+        self._input_tool = Input(
             get_input=self._provide_input,
             on_request=self._record_request,
             on_complete=self._complete_request,
             on_prompt_delta=self._input.notify_prompt_delta,
+        )
+        self._output_tool = Output(
+            on_output=self._report_output,
+            on_message_delta=self._report_output_message_delta,
         )
 
         scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
@@ -129,8 +140,12 @@ class SefiaCLI:
         )
 
     @property
-    def input_tool(self) -> InputTool:
+    def input_tool(self) -> Input:
         return self._input_tool
+
+    @property
+    def output_tool(self) -> Output:
+        return self._output_tool
 
     def create_session(self) -> str:
         """Create a new active CLI session and return its ID."""
@@ -210,6 +225,21 @@ class SefiaCLI:
     async def _report_input_prompt_delta(self, text: str) -> None:
         if self._reporter is not None:
             await _maybe_await(self._reporter.on_input_prompt_delta(text))
+
+    async def _report_output(self, message: OutputMessage) -> None:
+        if self._reporter is not None:
+            await _maybe_await(
+                self._reporter.on_output(
+                    CLIOutputMessage(
+                        interaction_id=message.interaction_id,
+                        message=message.message,
+                    )
+                )
+            )
+
+    async def _report_output_message_delta(self, text: str) -> None:
+        if self._reporter is not None:
+            await _maybe_await(self._reporter.on_output_message_delta(text))
 
     async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:

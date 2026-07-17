@@ -1,8 +1,18 @@
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime
 
 from sefia.llm.events import LLMTokenReceived
-from sefia_fastapi import SessionEvents
+from sefia_fastapi import SessionEvents, SSEEvent
+
+
+class TestSSEEvent:
+    def test_names_are_the_wire_contract(self):
+        assert SSEEvent.TOKEN == "token"
+        assert SSEEvent.INPUT_REQUIRED == "input_required"
+        assert SSEEvent.OUTPUT == "output"
+        assert SSEEvent.COMPLETED == "completed"
+        assert SSEEvent.EXECUTION_FAILED == "execution_failed"
 
 
 class TestPublish:
@@ -50,7 +60,7 @@ class TestTokenHandler:
 
             event = queue.get_nowait()
 
-        assert event.name == "token"
+        assert event.name == SSEEvent.TOKEN
         assert event.data == "hi"
 
 
@@ -74,6 +84,7 @@ class TestResponse:
         @dataclass(frozen=True)
         class Payload:
             interaction_id: str
+            created_at: datetime
 
         events = SessionEvents()
         response = events.response("s1")
@@ -82,8 +93,10 @@ class TestResponse:
         first_chunk = asyncio.ensure_future(stream.__anext__())
         await asyncio.sleep(0)
 
-        await events.publish("s1", "input_required", {"request": Payload("x")})
+        payload = Payload("x", datetime(2026, 7, 12, 6, 35, 48))
+        await events.publish("s1", "input_required", {"request": payload})
 
         chunk = await asyncio.wait_for(first_chunk, timeout=1)
-        assert isinstance(chunk, str)
+        assert isinstance(chunk, str)  # narrow str | bytes for the `in` checks
         assert '"interaction_id": "x"' in chunk
+        assert '"created_at": "2026-07-12T06:35:48"' in chunk

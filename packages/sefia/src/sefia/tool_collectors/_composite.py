@@ -1,6 +1,6 @@
 from typing import Sequence
 
-from .._tool_system import ToolCollector, ToolRegistry
+from .._tool_system import Capability, ToolCollector, ToolRegistry
 
 
 class CompositeToolCollector(ToolCollector):
@@ -14,9 +14,9 @@ class CompositeToolCollector(ToolCollector):
     def __init__(self, collectors: Sequence[ToolCollector]):
         self._collectors = list(collectors)
 
-    def collect(self, instance: object) -> ToolRegistry:
+    def collect(self, capabilities: list[Capability]) -> ToolRegistry:
         registry = ToolRegistry()
         for collector in self._collectors:
-            for tool in collector.collect(instance).get_all():
+            for tool in collector.collect(capabilities).get_all():
                 registry.register(tool)
         return registry

@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import Annotated
 
-from sefia import AsRawText, infer
-from sefios.tools import InputTool
+from sefia import AsRawText, Tools, infer
+from sefios.tools import Input
 
 from .models import (
     CodeIssue,
@@ -10,13 +10,15 @@ from .models import (
     ProjectUnderstanding,
     QualityReport,
 )
-from .tools import FileTool
+from .tools import Files
 
 RawCode = Annotated[str, AsRawText]
 
 
 class ScopingAgent:
-    def __init__(self, input_tool: InputTool):
+    _input: Tools[Input]
+
+    def __init__(self, input_tool: Input):
         self._input = input_tool
 
     @infer
@@ -27,13 +29,15 @@ class ScopingAgent:
         The resulting ProjectScope contains the target Git repository path,
         review focus areas, and excluded files or patterns. Explicit paths
         provided by the user are preserved exactly. Critical missing details may
-        be resolved through a focused InputTool question.
+        be resolved through a focused Input tool question.
         """
         ...
 
 
 class UnderstandingAgent:
-    def __init__(self, file_tool: FileTool):
+    _file_tool: Tools[Files]
+
+    def __init__(self, file_tool: Files):
         self._file_tool = file_tool
 
     @infer
@@ -102,7 +106,9 @@ class UnderstandingAgent:
 
 
 class ReviewScopingAgent:
-    def __init__(self, input_tool: InputTool):
+    _input: Tools[Input]
+
+    def __init__(self, input_tool: Input):
         self._input = input_tool
 
     @infer
@@ -119,7 +125,7 @@ class ReviewScopingAgent:
         focus areas, exclusions, public interfaces, central implementation
         files, configuration files relevant to the requested focus, and
         representative tests. The final list reflects the user's confirmation
-        or adjustment through InputTool. Returned paths are unique members
+        or adjustment through the Input tool. Returned paths are unique members
         of all_file_paths.
         """
         ...

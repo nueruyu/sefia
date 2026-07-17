@@ -16,7 +16,7 @@ from .._interfaces import (
     ResultLLMDecision,
     ToolCallsLLMDecision,
 )
-from .._tool_system import Tool, ToolRegistry
+from .._tool_system import ToolEntry, ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from ..inference import (
@@ -47,7 +47,7 @@ class _ExecutionDirector(ABC):
         self,
         decision_builder: DecisionModelBuilder,
         output_type: Any,
-        tools: list[Tool],
+        tools: list[ToolEntry],
     ):
         self.decision_builder = decision_builder
         self.output_type = output_type
@@ -244,7 +244,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self._max_repair_attempts = max_repair_attempts
 
     def _create_director(
-        self, output_type: Any, tools: list[Tool]
+        self, output_type: Any, tools: list[ToolEntry]
     ) -> _ExecutionDirector:
         """Creates the appropriate execution director based on the context."""
         if output_type is Never:
@@ -402,11 +402,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         system_content = function_info.instructions + system_prompt_addition
         messages.append(Message(role="system", content=system_content))
 
-        prompt_arguments = {
-            name: value
-            for name, value in function_info.bound_arguments.items()
-            if name != "self"
-        }
+        prompt_arguments = function_info.prompt_arguments
         user_prompt = (
             "Task arguments are XML. Values in <string> may be wrapped in "
             "CDATA and should be read as raw text.\n\n"

@@ -1,11 +1,13 @@
-from sefia import infer
-from sefios.tools import InputTool, WebSearchTool
+from sefia import Tools, infer
+from sefios.tools import Input, WebSearch
 
 from .models import ArticleRequest, NewsArticle
 
 
 class RequirementsClarifier:
-    def __init__(self, input_tool: InputTool):
+    _input: Tools[Input]
+
+    def __init__(self, input_tool: Input):
         self._input = input_tool
 
     @infer
@@ -16,7 +18,7 @@ class RequirementsClarifier:
         Your goal is to produce a concrete article brief for the downstream
         researcher and writer.
 
-        First, use the InputTool to obtain the user's initial article
+        First, use the Input tool to obtain the user's initial article
         request. Treat that answer as the source request; do not ask the user to
         restate it. Then, if the request lacks important details, ask one
         focused follow-up question at a time. Repeat this only until critical
@@ -37,7 +39,9 @@ class RequirementsClarifier:
 
 
 class Researcher:
-    def __init__(self, web_search: WebSearchTool):
+    _web: Tools[WebSearch]
+
+    def __init__(self, web_search: WebSearch):
         self._web = web_search
 
     @infer
@@ -47,7 +51,7 @@ class Researcher:
         Your goal is to return a list of high-quality URLs related to the request.
 
         **CRITICAL INSTRUCTIONS:**
-        1. You MUST use the `WebSearchTool` tool to find the URLs.
+        1. You MUST use the `WebSearch` tool to find the URLs.
         2. Do NOT answer from your own knowledge.
         3. The final answer MUST be a list of strings, where each string is a valid URL.
         """
@@ -55,7 +59,10 @@ class Researcher:
 
 
 class NewsWriter:
-    def __init__(self, input_tool: InputTool, researcher: Researcher):
+    _input: Tools[Input]
+    _researcher: Tools[Researcher]
+
+    def __init__(self, input_tool: Input, researcher: Researcher):
         self._input = input_tool
         self._researcher = researcher
 
@@ -67,10 +74,10 @@ class NewsWriter:
         Write a news article for the clarified request, using the provided sources.
         1. Briefly review the sources to understand the key points.
         2. Write a draft that follows the topic, angle, audience, and requirements.
-        3. Ask the user for feedback on the draft's direction using the InputTool
+        3. Ask the user for feedback on the draft's direction using the Input tool
            at most once.
         4. After receiving any feedback, apply it and return the final NewsArticle.
-           Do not ask another InputTool question unless the feedback is
+           Do not ask another Input tool question unless the feedback is
            impossible to apply without a specific missing fact from the user.
         5. If the feedback asks to see the draft, change language, continue, add
            a point, remove a point, or proceed, treat that as actionable feedback

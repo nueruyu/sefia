@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sefia import Policy, infer, policy
+from sefia import Policy, Tools, infer, policy
 from sefia.testing import memory_session, result_response, tool_calls_response
 from sefios.middleware import StagnationDetector
 
@@ -30,6 +30,8 @@ class Report:
 
 
 class Researcher:
+    _web: Tools[WebToolkit]
+
     def __init__(self, web: WebToolkit):
         self._web = web
 

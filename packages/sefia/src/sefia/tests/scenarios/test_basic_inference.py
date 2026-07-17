@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from sefia import Policy, infer, policy
+from sefia import Policy, Tools, infer, policy
 from sefia._metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.llm import LLMResponse
@@ -48,6 +48,8 @@ class Report:
 
 class Researcher:
     """An agent that uses WebToolkit to research topics."""
+
+    _web: Tools[WebToolkit]
 
     def __init__(self, web: WebToolkit):
         self._web = web
@@ -163,6 +165,8 @@ async def test_inference_with_tool_exception():
     )
 
     class AgentWithBrokenTool:
+        _kit: Tools[BrokenToolkit]
+
         def __init__(self, kit: BrokenToolkit):
             self._kit = kit
 

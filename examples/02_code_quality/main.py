@@ -30,15 +30,15 @@ from .models import (
     ReviewPerspective,
 )
 from .rendering import render_quality_report
-from .tools import FileTool, GitTool
+from .tools import Files, Git
 
 console = Console()
 SESSION_DIR = Path(__file__).parent / ".local"
 sefia_cli = SefiaCLI(session_dir=SESSION_DIR, stream=True)
 input_tool = sefia_cli.input_tool
 
-git_tool = GitTool()
-file_tool = FileTool()
+git_tool = Git()
+file_tool = Files()
 
 scoping_agent = ScopingAgent(input_tool)
 understanding_agent = UnderstandingAgent(file_tool)

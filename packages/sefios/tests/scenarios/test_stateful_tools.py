@@ -8,7 +8,7 @@ import pytest
 from glyff import ArgsHasher, Serializer, engrave
 from glyff.store import MemoryBackend
 
-from sefia import Session, infer
+from sefia import Session, Tools, infer
 from sefia.exceptions import PauseException
 from sefia.testing import result_response, tool_calls_response
 from sefios import MemorySessionStorage, get_call_state_store
@@ -40,7 +40,7 @@ class InteractionState:
 
 # --- Test tool with internal state management ---
 @dataclass
-class InputTool:
+class Input:
     def __init__(self, on_interrupt: Callable[[str, str], None] | None = None):
         self._on_interrupt = on_interrupt
 
@@ -78,9 +78,7 @@ class TestStatefulTool:
         self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
     ):
         mock_responses = [
-            tool_calls_response(
-                ("InputTool_ask_user", {"prompt": "What is your name?"})
-            ),
+            tool_calls_response(("Input_ask_user", {"prompt": "What is your name?"})),
             result_response(
                 Report(
                     topic="User Info",
@@ -98,7 +96,9 @@ class TestStatefulTool:
 
         @dataclass
         class Agent:
-            def __init__(self, tool: InputTool):
+            _tool: Tools[Input]
+
+            def __init__(self, tool: Input):
                 self._tool = tool
 
             @infer
@@ -106,7 +106,7 @@ class TestStatefulTool:
                 """Ask the user for their name and create a report."""
                 ...
 
-        agent = Agent(InputTool(on_interrupt=on_interrupt))
+        agent = Agent(Input(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-1"
         glyff_store = MemoryBackend()
         sefia_store = MemorySessionStorage(serializer=serializer)
@@ -149,8 +149,8 @@ class TestStatefulTool:
         self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
     ):
         mock_responses = [
-            tool_calls_response(("InputTool_ask_user", {"prompt": "Name?"})),
-            tool_calls_response(("InputTool_ask_user", {"prompt": "Age?"})),
+            tool_calls_response(("Input_ask_user", {"prompt": "Name?"})),
+            tool_calls_response(("Input_ask_user", {"prompt": "Age?"})),
             result_response(
                 Report(topic="Profile", summary="Alice is 99.", sources=[])
             ),
@@ -163,7 +163,9 @@ class TestStatefulTool:
 
         @dataclass
         class Agent:
-            def __init__(self, tool: InputTool):
+            _tool: Tools[Input]
+
+            def __init__(self, tool: Input):
                 self._tool = tool
 
             @infer
@@ -171,7 +173,7 @@ class TestStatefulTool:
                 """Ask for name, then age, then report."""
                 ...
 
-        agent = Agent(InputTool(on_interrupt=on_interrupt))
+        agent = Agent(Input(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-2"
         glyff_store = MemoryBackend()
         sefia_store = MemorySessionStorage(serializer=serializer)
