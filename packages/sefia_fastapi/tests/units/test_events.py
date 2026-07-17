@@ -88,5 +88,6 @@ class TestResponse:
         await events.publish("s1", "input_required", {"request": payload})
 
         chunk = await asyncio.wait_for(first_chunk, timeout=1)
+        assert isinstance(chunk, str)  # narrow str | bytes for the `in` checks
         assert '"interaction_id": "x"' in chunk
         assert '"created_at": "2026-07-12T06:35:48"' in chunk
