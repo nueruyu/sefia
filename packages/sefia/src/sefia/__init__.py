@@ -19,6 +19,7 @@ from ._tool_system import (
     ToolCollector,
     ToolDefinition,
     ToolRegistry,
+    Tools,
 )
 
 __all__ = [
@@ -39,6 +40,7 @@ __all__ = [
     "InferenceContext",
     "StepContext",
     "Tool",
+    "Tools",
     "SignatureTool",
     "JsonSchemaTool",
     "ToolDefinition",

@@ -8,7 +8,7 @@ import pytest
 from glyff import ArgsHasher, Serializer, engrave
 from glyff.store import MemoryBackend
 
-from sefia import Session, infer
+from sefia import Session, Tools, infer
 from sefia.exceptions import PauseException
 from sefia.llm import LLMResponse
 from sefios import MemorySessionStorage, get_call_state_store
@@ -113,6 +113,8 @@ class TestStatefulTool:
 
         @dataclass
         class Agent:
+            _tool: Tools[InputTool]
+
             def __init__(self, tool: InputTool):
                 self._tool = tool
 
@@ -211,6 +213,8 @@ class TestStatefulTool:
 
         @dataclass
         class Agent:
+            _tool: Tools[InputTool]
+
             def __init__(self, tool: InputTool):
                 self._tool = tool
 

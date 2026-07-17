@@ -361,7 +361,7 @@
         eventSource.addEventListener("completed", () => {
           setStatus("Completed");
         });
-        eventSource.addEventListener("error", (event) => {
+        eventSource.addEventListener("execution_failed", (event) => {
           const data = parseEventData(event.data);
           if (activeAssistantBubble) {
             activeAssistantBubble.classList.remove("typing");

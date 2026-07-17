@@ -1,10 +1,12 @@
-from sefia import infer
+from sefia import Tools, infer
 from sefios.tools import InputTool, WebSearchTool
 
 from .models import ArticleRequest, NewsArticle
 
 
 class RequirementsClarifier:
+    _input: Tools[InputTool]
+
     def __init__(self, input_tool: InputTool):
         self._input = input_tool
 
@@ -37,6 +39,8 @@ class RequirementsClarifier:
 
 
 class Researcher:
+    _web: Tools[WebSearchTool]
+
     def __init__(self, web_search: WebSearchTool):
         self._web = web_search
 
@@ -55,6 +59,9 @@ class Researcher:
 
 
 class NewsWriter:
+    _input: Tools[InputTool]
+    _researcher: Tools[Researcher]
+
     def __init__(self, input_tool: InputTool, researcher: Researcher):
         self._input = input_tool
         self._researcher = researcher

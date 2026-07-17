@@ -1,7 +1,12 @@
 from typing import Protocol
 
-from sefia import Tool, ToolRegistry, concurrent
+from sefia import Tool, ToolRegistry, Tools, concurrent
+from sefia.inference import Capability
 from sefia.tool_collectors import DefaultToolCollector
+
+
+def _collect_self(instance: object) -> ToolRegistry:
+    return DefaultToolCollector().collect([Capability(value=instance, declared=None)])
 
 
 def _tool_named(registry: ToolRegistry, suffix: str) -> Tool:
@@ -22,10 +27,12 @@ def test_concurrent_marker_is_collected():
             """Write."""
 
     class Agent:
+        _kit: Tools[Toolkit]
+
         def __init__(self):
             self._kit = Toolkit()
 
-    registry = DefaultToolCollector().collect(Agent())
+    registry = _collect_self(Agent())
 
     assert _tool_named(registry, "_search").concurrent is True
     assert _tool_named(registry, "_write").concurrent is False
@@ -46,10 +53,12 @@ def test_concurrent_marker_on_static_and_class_tools():
             return "c"
 
     class Agent:
+        _kit: Tools[Toolkit]
+
         def __init__(self):
             self._kit = Toolkit()
 
-    registry = DefaultToolCollector().collect(Agent())
+    registry = _collect_self(Agent())
 
     assert _tool_named(registry, "_static_tool").concurrent is True
     assert _tool_named(registry, "_class_tool").concurrent is True
@@ -70,12 +79,12 @@ def test_concurrent_marker_is_read_from_the_implementation_under_protocol_narrow
             return [q]
 
     class Agent:
-        _web: ReadOnlyWeb
+        _web: Tools[ReadOnlyWeb]
 
         def __init__(self, web: ReadOnlyWeb):
             self._web = web
 
-    registry = DefaultToolCollector().collect(Agent(BroadWebClient()))
+    registry = _collect_self(Agent(BroadWebClient()))
 
     assert _tool_named(registry, "_search").concurrent is True
 

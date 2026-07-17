@@ -71,11 +71,12 @@ full rules on arguments, service members, tools, and return types, see
 
 ## 2. Give it a tool
 
-Tools are the **public methods of held dependency objects** — no decorator, no
-registry. Make the work a method on a service, hold a dependency, and its public
-methods become callable by the inferred step.
+Tools are the **public methods of fields granted with the `Tools[...]` annotation**
+— no decorator, no registry, no base class. Hold a dependency in a class-level field
+annotated `Tools[...]`, and its public methods become callable by the inferred step.
 
 ```python
+from sefia import Tools
 from sefios.tools import WebSearchTool
 
 
@@ -86,8 +87,10 @@ class Report(BaseModel):
 
 
 class ResearchService:
+    _web: Tools[WebSearchTool]      # the field annotation is the grant
+
     def __init__(self, web: WebSearchTool):
-        self._web = web                 # held dependency → its public methods are tools
+        self._web = web
 
     @infer
     async def run(self, topic: str) -> Report:
@@ -102,10 +105,13 @@ async def main() -> None:
         print(report.summary)
 ```
 
-`self._web` is held, so `WebSearchTool`'s public `search` method is offered to the
-model; the private `_web` *field* is just storage. The model decides when to call the
-tool. To expose a narrower surface than a class's full public API, hold it behind a
-`Protocol` — only the protocol's declared members are offered.
+`_web` is granted, so `WebSearchTool`'s public `search` method is offered to the
+model, which decides when to call it. Checkers treat `Tools[WebSearchTool]` as plain
+`WebSearchTool`, and `WebSearchTool` itself is an ordinary class. A held member
+without the grant — a config, a store — is never exposed, so there is no ambient
+authority. To expose a narrower surface than a class's full public API, grant
+through a `Protocol` (`_web: Tools[ReadOnlyWeb]`): only the protocol's declared
+members are offered.
 
 When the model requests several tool calls in one step, they run one at a time. A
 tool that is safe to overlap with the other calls in its batch — a pure read like a
@@ -121,10 +127,11 @@ methods share the same domain and the same narrow tool surface.
 But tools are collected from the bound instance and the dependency objects it holds,
 so every `@infer` method on the service should be allowed to see that tool surface.
 If one operation needs broader, write-capable, or unrelated tools, split it into
-another service.
+another service — or annotate that one method's `self` with a plain surface
+`Protocol` to select just its tools.
 
 A good rule of thumb: if you want to tell one `@infer` method "do not use this tool",
-that tool probably belongs on a different service.
+narrow its `self`, or move that tool to a different service.
 
 ## 3. Make it pause for a human - and survive a restart
 
@@ -140,7 +147,7 @@ from pathlib import Path
 
 import typer
 from pydantic import BaseModel
-from sefia import infer
+from sefia import Tools, infer
 from sefios.cli import SefiaCLI
 from sefios.tools import InputTool, WebSearchTool
 
@@ -151,6 +158,9 @@ class Report(BaseModel):
 
 
 class ResearchService:
+    _web: Tools[WebSearchTool]
+    _input: Tools[InputTool]
+
     def __init__(self, web: WebSearchTool, input_tool: InputTool):
         self._web = web
         self._input = input_tool
@@ -275,8 +285,8 @@ between the two requests changes nothing.
 
 - An **`@infer`** function is an LLM-implemented abstract method; you compose them
   with plain `await`.
-- **Tools** are the public methods of held objects — ordinary OOP, scoped to the
-  holder.
+- **Tools** are the public methods of `Tools[...]`-granted fields — ordinary OOP
+  plus one annotation, scoped to the holder, no ambient authority.
 - **Durability** is native: every call is engraved and replays on re-invocation, so
   pausing is a tool raising and resuming is calling again.
 - It runs on a **stateless handler with a store**: no engine, worker, or graph.

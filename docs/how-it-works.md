@@ -110,41 +110,49 @@ invalid decision is never persisted. Only when the budget is spent does the
 
 ## Tools: discovery, schema, execution
 
-**Discovery** (`DefaultToolCollector.collect`): tools are the **public surface of
-what the bound instance (`self` of the `@infer` method) holds** — plain Python
-visibility, no marker or registry. For **each dependency held in an attribute**
-(public or private; found via `__mro__`/`__slots__`, not `dir()`+`getattr` on every
-name, so a third-party object's lazy properties are never triggered), the collector
-resolves an *interface* for that field and exposes its public (non `_`-prefixed)
-methods:
+**Discovery** (`DefaultToolCollector.collect`) is gated by the `Tools` role alias —
+there is **no ambient authority**. Tools come from the **receiver** (`self`/`cls`)
+of the `@infer` call; every other parameter is task data (tool dependencies are
+expressed through classes, so a plain `@infer` function has no tools). The receiver
+is read in one of two modes:
 
-- If the field has a **class-level annotation** (`_web: WebToolkit`, `_web:
-  ReadOnlyWeb`, assigned in the class body — not just an `__init__` parameter, whose
-  mapping to the attribute is unrecoverable), that declared type is the interface: a
-  concrete class exposes its public methods, a `Protocol` exposes only its declared
-  members. `Any`/`object` declare no interface and behave as if unannotated.
-- Otherwise the interface falls back to the **runtime value's concrete type**.
+- **Unannotated receiver** — the instance's **class-level field declarations** are
+  scanned (`__annotations__` across the MRO plus read-only `property` declarations —
+  never `getattr` on the instance, so a third-party object's lazy getters are never
+  triggered). A field is exposed **only if annotated with the `Tools` alias**:
+  `_web: Tools[WebToolkit]`. An unmarked or undeclared field exposes nothing, and
+  the instance's own methods are never exposed.
+- **Surface-annotated receiver** — a `self` annotated with a `Protocol` replaces the
+  class-body scan with that protocol's declarations, granted wholesale: its methods
+  (`_`-prefixed included) become tools bound to the instance, and its field/property
+  declarations expose their declared type's members. Annotating `self` is itself the
+  opt-in, so the surface needs no marker and stays a plain interface. The allowlist
+  has no hidden exceptions: a surface that declares the running `@infer` method
+  exposes it to itself — recursion is a declared choice, and bounding it is runtime
+  policy (a planned depth-cap middleware), not discovery's job.
 
-Narrowing is **best-effort and fails open**: the annotation is resolved with
-`typing.get_type_hints`, so a type it cannot resolve — most commonly a `Protocol`
-or class defined in a local scope (inside a function, e.g. a test), which
-`get_type_hints` cannot see — silently falls back to the runtime type and exposes
-the **full** public surface. If you use a `Protocol` to *restrict* a broad object's
-surface (hiding a destructive method), declare that `Protocol` at module level, not
-locally, or the restriction is silently lost.
+Either way, the **exposed interface is the declared type** (`Tools[...]` /
+`Optional` stripped): a concrete class contributes its public methods; a `Protocol`
+exactly its declared members — including `_`-prefixed ones, since a protocol is an
+explicit allowlist. `Tools[T]` is an `Annotated` alias, so checkers treat it as `T`,
+the wrapped type stays a plain class or protocol, and it stacks with other
+`Annotated` metadata.
 
-Properties and other non-function descriptors are never treated as tools (accessing
-them could execute a getter's side effects). The instance's **own** methods —
-including its `@infer` methods — are never offered back to itself as tools; that
-dissolves self-recursion entirely. A service becomes usable as a tool by being
-*held* as another service's dependency, not by marking its own methods — so a
-sub-agent's `@infer` method is a normal, callable tool once something else holds it.
+Discovery is a **pure function of static declarations**: runtime values never widen
+the surface, and resolution is per field and fail-closed — an unresolvable annotation
+(a forward reference, a `TYPE_CHECKING`-only or locally-scoped name) is skipped with
+a debug log. If the model doesn't see a held field's methods, the usual cause is a
+missing `Tools[...]` on the field's class-level annotation.
+
+Properties and other non-function descriptors are never tools. A service becomes
+another agent's tool by being held in a `Tools[...]`-annotated field, which makes a
+sub-agent's `@infer` method an ordinary tool.
 
 This also means the bound object is a capability boundary. If a class has multiple
-`@infer` methods, they share the tool surface collected from that instance and its
-held dependencies. Keep multiple inferred methods together only when that shared
-surface is intentional; split services when different operations need different
-tools or different write permissions.
+`@infer` methods, they share the tool surface collected from its granted fields —
+unless a method selects its own surface with a `self:` annotation. Split services
+(or annotate `self`) when different operations need different tools or different
+write permissions.
 
 **Schema** (`_strategy.py`): each tool produces a `ToolDefinition` (`tool.definition()`),
 embedded as JSON in the system prompt — not sent as a native tool spec. A

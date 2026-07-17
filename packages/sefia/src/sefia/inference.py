@@ -2,6 +2,23 @@ import inspect
 from dataclasses import dataclass
 from typing import Any, Callable
 
+# Only ``self``/``cls`` carry tools — by convention, with no marker. Tool
+# dependencies are expressed through classes; plain-function parameters are
+# always task data.
+_RECEIVER_NAMES = ("self", "cls")
+
+
+@dataclass(frozen=True)
+class Capability:
+    """An ``@infer`` call's receiver and its declared type.
+
+    ``declared`` is the receiver's annotation when present (a surface
+    ``Protocol`` selecting this method's tools), else ``None``.
+    """
+
+    value: object
+    declared: Any
+
 
 @dataclass
 class ToolCallRequest:
@@ -73,12 +90,26 @@ class FunctionInfo:
         )
 
     @property
-    def instance(self) -> Any | None:
-        """Return the instance ('self') if the function is a method."""
-        return self.bound_arguments.get("self")
+    def capabilities(self) -> list[Capability]:
+        """The call's capability parameters: its receiver plus surface type."""
+        return [
+            Capability(value=value, declared=self.type_hints.get(name))
+            for name, value in self.bound_arguments.items()
+            if name in _RECEIVER_NAMES
+        ]
+
+    @property
+    def prompt_arguments(self) -> dict[str, Any]:
+        """The task-data arguments — everything except the receiver."""
+        return {
+            name: value
+            for name, value in self.bound_arguments.items()
+            if name not in _RECEIVER_NAMES
+        }
 
 
 __all__ = [
+    "Capability",
     "ToolCallRequest",
     "ToolCallResult",
     "ToolCallDecision",

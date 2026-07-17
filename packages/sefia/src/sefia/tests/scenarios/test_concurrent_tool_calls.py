@@ -6,7 +6,7 @@ import pytest
 from glyff import ArgsHasher, Serializer, engrave
 from glyff.store import MemoryBackend
 
-from sefia import Session, concurrent, infer
+from sefia import Session, Tools, concurrent, infer
 from sefia.exceptions import PauseException
 from sefia.llm import LLMResponse
 
@@ -33,6 +33,8 @@ class HandshakeToolkit:
 
 
 class Researcher:
+    _kit: Tools[HandshakeToolkit]
+
     def __init__(self, kit: HandshakeToolkit):
         self._kit = kit
 
@@ -108,6 +110,8 @@ class PausingToolkit:
 
 
 class Assistant:
+    _kit: Tools[PausingToolkit]
+
     def __init__(self, kit: PausingToolkit):
         self._kit = kit
 

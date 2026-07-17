@@ -5,7 +5,7 @@ at most one clarifying question, which lets the API demonstrate pause/resume ove
 normal HTTP requests while lifecycle events stream over SSE.
 """
 
-from sefia import infer
+from sefia import Tools, infer
 from sefios.tools import InputTool
 
 from .models import Brief
@@ -13,6 +13,8 @@ from .models import Brief
 
 class Interviewer:
     """Clarifies a vague request into a structured brief via input."""
+
+    _input: Tools[InputTool]
 
     def __init__(self, input_tool: InputTool):
         self._input = input_tool
