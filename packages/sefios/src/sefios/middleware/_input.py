@@ -3,7 +3,7 @@ from typing import Awaitable, Callable, TypeVar
 
 from sefia._interfaces.middleware import StepContext, StepMiddleware
 from sefia.inference import InferenceDecision, ToolCallDecision, ToolCallRequest
-from sefios.tools.input import InputTool
+from sefios.tools.input import Input
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -82,7 +82,7 @@ class InputCallComposer(StepMiddleware):
             return decision
 
         input_tool_names = {
-            tool.name for tool in ctx.tool_registry.get_by_function(InputTool.get_input)
+            tool.name for tool in ctx.tool_registry.get_by_function(Input.get_input)
         }
         if not input_tool_names:
             return decision

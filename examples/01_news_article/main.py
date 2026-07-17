@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from sefios.cli import SefiaCLI
-from sefios.tools import WebSearchTool
+from sefios.tools import WebSearch
 
 from .._common.policies import VerbosePolicy
 from .._common.typer_utils import add_session_commands, async_command
@@ -21,7 +21,7 @@ sefia_cli = SefiaCLI(session_dir=SESSION_DIR, stream=True)
 input_tool = sefia_cli.input_tool
 
 clarifier = RequirementsClarifier(input_tool)
-researcher = Researcher(WebSearchTool())
+researcher = Researcher(WebSearch())
 writer = NewsWriter(input_tool, researcher)
 
 app = typer.Typer(

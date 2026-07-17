@@ -13,7 +13,7 @@ class WebSearchResult(BaseModel):
     )
 
 
-class WebSearchTool:
+class WebSearch:
     """A toolkit for performing web searches using DuckDuckGo."""
 
     async def search(self, query: str, max_results: int = 5) -> list[WebSearchResult]:
@@ -27,7 +27,7 @@ class WebSearchTool:
                 from ddgs import DDGS
             except ImportError as e:
                 raise ImportError(
-                    "The 'web' extra is required to use the WebSearchTool. "
+                    "The 'web' extra is required to use WebSearch. "
                     "Please install it with: pip install 'sefios[web]'"
                 ) from e
 

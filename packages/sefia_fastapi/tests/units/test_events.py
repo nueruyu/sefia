@@ -3,7 +3,15 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sefia.llm.events import LLMTokenReceived
-from sefia_fastapi import SessionEvents
+from sefia_fastapi import SessionEvents, SSEEvent
+
+
+class TestSSEEvent:
+    def test_names_are_the_wire_contract(self):
+        assert SSEEvent.TOKEN == "token"
+        assert SSEEvent.INPUT_REQUIRED == "input_required"
+        assert SSEEvent.COMPLETED == "completed"
+        assert SSEEvent.EXECUTION_FAILED == "execution_failed"
 
 
 class TestPublish:
@@ -51,7 +59,7 @@ class TestTokenHandler:
 
             event = queue.get_nowait()
 
-        assert event.name == "token"
+        assert event.name == SSEEvent.TOKEN
         assert event.data == "hi"
 
 

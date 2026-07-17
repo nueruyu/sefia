@@ -19,7 +19,7 @@ from sefios import FileSessionStorage, NeedsInput
 from sefios.history_storages import SessionHistoryStorage
 from sefios._session_state import bind_session_storage
 from sefios.middleware import HistoryCompactor
-from sefios.tools import InputRequest, InputTool
+from sefios.tools import Input, InputRequest
 
 _SESSION_ID = "history-compaction-test"
 
@@ -41,7 +41,7 @@ _ASK_RESPONSE = LLMResponse(
             "decision": "tool_calls",
             "tool_calls": [
                 {
-                    "name": "InputTool_get_input",
+                    "name": "Input_get_input",
                     "arguments": {"prompt": "Anything else?"},
                 }
             ],
@@ -60,9 +60,9 @@ class Notes:
 
 class _Agent:
     _notes: Tools[Notes]
-    _input: Tools[InputTool]
+    _input: Tools[Input]
 
-    def __init__(self, notes: Notes, input_tool: InputTool):
+    def __init__(self, notes: Notes, input_tool: Input):
         self._notes = notes
         self._input = input_tool
 
@@ -126,7 +126,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                     policies=[compaction_policy],
                     history_storage=history_storage,
                 ):
-                    await _Agent(Notes(), InputTool(get_input=get_input)).chat()
+                    await _Agent(Notes(), Input(get_input=get_input)).chat()
 
     assert len(mock_llm.requests) == 4
     assert len(mock_llm.requests[3]["messages"]) < len(mock_llm.requests[2]["messages"])
@@ -142,7 +142,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                 policies=[compaction_policy],
                 history_storage=history_storage,
             ):
-                result = await _Agent(Notes(), InputTool(get_input=get_input)).chat()
+                result = await _Agent(Notes(), Input(get_input=get_input)).chat()
 
     assert result == "All done."
     assert len(resumed_llm.requests) == 1

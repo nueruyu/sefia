@@ -15,6 +15,19 @@ from sefia.event_system import EventHandler
 from sefia.llm.events import LLMTokenReceived
 
 
+class SSEEvent:
+    """The wire names of the server-sent events an application publishes.
+
+    Single source of truth: the facade and browser clients import these rather
+    than repeating literals.
+    """
+
+    TOKEN = "token"
+    INPUT_REQUIRED = "input_required"
+    COMPLETED = "completed"
+    EXECUTION_FAILED = "execution_failed"
+
+
 @dataclass(frozen=True)
 class _SessionEvent:
     name: str
@@ -80,7 +93,7 @@ class _TokenRelay(EventHandler[LLMTokenReceived]):
         self._session_id = session_id
 
     async def handle(self, event: LLMTokenReceived) -> None:
-        await self._events.publish(self._session_id, "token", event.token)
+        await self._events.publish(self._session_id, SSEEvent.TOKEN, event.token)
 
 
 def _format_sse_event(event: str, data: Any) -> str:

@@ -84,7 +84,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from sefia import Tools, infer
 from sefios import SessionScope
-from sefios.tools import WebSearchTool
+from sefios.tools import WebSearch
 
 
 class Report(BaseModel):
@@ -94,9 +94,9 @@ class Report(BaseModel):
 
 
 class ResearchService:
-    _web: Tools[WebSearchTool]                # the field annotation grants the tools
+    _web: Tools[WebSearch]                # the field annotation grants the tools
 
-    def __init__(self, web: WebSearchTool):
+    def __init__(self, web: WebSearch):
         self._web = web
 
     @infer
@@ -108,7 +108,7 @@ class ResearchService:
 scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
 
 async def main(topic: str) -> Report:
-    service = ResearchService(web=WebSearchTool())
+    service = ResearchService(web=WebSearch())
     async with scope.session(session_id="demo") as _:
         return await service.run(topic)       # the engraved run can pause and resume
 ```
@@ -127,14 +127,14 @@ the endpoint again.
 from pathlib import Path
 from sefia import Tools, infer
 from sefios.fastapi import InputRequired, SefiaHTTP
-from sefios.tools import InputTool, WebSearchTool
+from sefios.tools import Input, WebSearch
 
 
 class ResearchService:
-    _web: Tools[WebSearchTool]
-    _input: Tools[InputTool]
+    _web: Tools[WebSearch]
+    _input: Tools[Input]
 
-    def __init__(self, web: WebSearchTool, input_tool: InputTool):
+    def __init__(self, web: WebSearch, input_tool: Input):
         self._web = web
         self._input = input_tool
 
@@ -145,7 +145,7 @@ class ResearchService:
 
 
 api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
-research_service = ResearchService(web=WebSearchTool(), input_tool=api.input_tool)
+research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
 
 
 @app.post("/sessions")

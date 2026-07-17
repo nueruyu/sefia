@@ -40,7 +40,7 @@ class InteractionState:
 
 # --- Test tool with internal state management ---
 @dataclass
-class InputTool:
+class Input:
     def __init__(self, on_interrupt: Callable[[str, str], None] | None = None):
         self._on_interrupt = on_interrupt
 
@@ -84,7 +84,7 @@ class TestStatefulTool:
                         "decision": "tool_calls",
                         "tool_calls": [
                             {
-                                "name": "InputTool_ask_user",
+                                "name": "Input_ask_user",
                                 "arguments": {"prompt": "What is your name?"},
                             }
                         ],
@@ -113,9 +113,9 @@ class TestStatefulTool:
 
         @dataclass
         class Agent:
-            _tool: Tools[InputTool]
+            _tool: Tools[Input]
 
-            def __init__(self, tool: InputTool):
+            def __init__(self, tool: Input):
                 self._tool = tool
 
             @infer
@@ -123,7 +123,7 @@ class TestStatefulTool:
                 """Ask the user for their name and create a report."""
                 ...
 
-        agent = Agent(InputTool(on_interrupt=on_interrupt))
+        agent = Agent(Input(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-1"
         glyff_store = MemoryBackend()
         sefia_store = MemorySessionStorage(serializer=serializer)
@@ -172,7 +172,7 @@ class TestStatefulTool:
                         "decision": "tool_calls",
                         "tool_calls": [
                             {
-                                "name": "InputTool_ask_user",
+                                "name": "Input_ask_user",
                                 "arguments": {"prompt": "Name?"},
                             }
                         ],
@@ -185,7 +185,7 @@ class TestStatefulTool:
                         "decision": "tool_calls",
                         "tool_calls": [
                             {
-                                "name": "InputTool_ask_user",
+                                "name": "Input_ask_user",
                                 "arguments": {"prompt": "Age?"},
                             }
                         ],
@@ -213,9 +213,9 @@ class TestStatefulTool:
 
         @dataclass
         class Agent:
-            _tool: Tools[InputTool]
+            _tool: Tools[Input]
 
-            def __init__(self, tool: InputTool):
+            def __init__(self, tool: Input):
                 self._tool = tool
 
             @infer
@@ -223,7 +223,7 @@ class TestStatefulTool:
                 """Ask for name, then age, then report."""
                 ...
 
-        agent = Agent(InputTool(on_interrupt=on_interrupt))
+        agent = Agent(Input(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-2"
         glyff_store = MemoryBackend()
         sefia_store = MemorySessionStorage(serializer=serializer)

@@ -2,7 +2,7 @@ from sefia import StepContext, ToolRegistry
 from sefia._history import StepHistory
 from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
 from sefios.middleware import InputCallComposer
-from sefios.tools import InputTool
+from sefios.tools import Input
 
 HUMAN_INPUT_TOOL_NAME = "ask_human"
 
@@ -14,7 +14,7 @@ def _empty_history() -> StepHistory:
 def _human_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.add(
-        InputTool().get_input,
+        Input().get_input,
         name=HUMAN_INPUT_TOOL_NAME,
     )
     return registry
@@ -171,12 +171,12 @@ class TestInputCallComposer:
             calls=[
                 ToolCallRequest(
                     id="h1",
-                    name="InputTool_get_input",
+                    name="Input_get_input",
                     arguments={"prompt": "First?"},
                 ),
                 ToolCallRequest(
                     id="h2",
-                    name="InputTool_get_input",
+                    name="Input_get_input",
                     arguments={"prompt": "Second?"},
                 ),
             ]
