@@ -16,37 +16,37 @@ def _init_repo(path):
     subprocess.run(["git", "config", "user.name", "Test"], cwd=path, check=True)
 
 
-class TestGitTool:
+class TestGit:
     async def test_lists_tracked_files(self, tmp_path):
         _init_repo(tmp_path)
         (tmp_path / "tracked.py").write_text("print('hi')", encoding="utf-8")
         (tmp_path / "untracked.py").write_text("ignored", encoding="utf-8")
         subprocess.run(["git", "add", "tracked.py"], cwd=tmp_path, check=True)
 
-        files = await tools.GitTool().list_tracked_files(str(tmp_path))
+        files = await tools.Git().list_tracked_files(str(tmp_path))
 
         assert files == ["tracked.py"]
 
     async def test_empty_repo_returns_no_files(self, tmp_path):
         _init_repo(tmp_path)
 
-        files = await tools.GitTool().list_tracked_files(str(tmp_path))
+        files = await tools.Git().list_tracked_files(str(tmp_path))
 
         assert files == []
 
     async def test_non_git_directory_raises_tool_error(self, tmp_path):
         with pytest.raises(exceptions.ToolError):
-            await tools.GitTool().list_tracked_files(str(tmp_path))
+            await tools.Git().list_tracked_files(str(tmp_path))
 
 
-class TestFileTool:
+class TestFiles:
     async def test_reads_multiple_files(self, tmp_path):
         first = tmp_path / "a.txt"
         second = tmp_path / "b.txt"
         first.write_text("alpha", encoding="utf-8")
         second.write_text("beta", encoding="utf-8")
 
-        contents = await tools.FileTool().read_files([str(first), str(second)])
+        contents = await tools.Files().read_files([str(first), str(second)])
 
         assert contents == {str(first): "alpha", str(second): "beta"}
 
@@ -54,9 +54,9 @@ class TestFileTool:
         missing = tmp_path / "missing.txt"
 
         with pytest.raises(tools.FileNotFoundToolError) as exc_info:
-            await tools.FileTool().read_files([str(missing)])
+            await tools.Files().read_files([str(missing)])
 
         assert exc_info.value.path == str(missing)
 
     async def test_reads_empty_list(self):
-        assert await tools.FileTool().read_files([]) == {}
+        assert await tools.Files().read_files([]) == {}

@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from .._tool_system import Tool
+from .._tool_system import ToolEntry
 
 
 class DecisionMode(Enum):
@@ -20,7 +20,7 @@ class DecisionModelSpec:
 
     name: str
     output_type: Any
-    tools: list[Tool]
+    tools: list[ToolEntry]
     mode: DecisionMode
 
     def __post_init__(self) -> None:
@@ -41,7 +41,7 @@ class DecisionModelSpec:
         *,
         name: str,
         output_type: Any,
-        tools: list[Tool],
+        tools: list[ToolEntry],
     ) -> "DecisionModelSpec":
         return cls(
             name=name,
@@ -56,7 +56,7 @@ class DecisionModelSpec:
         *,
         name: str,
         output_type: Any,
-        tools: list[Tool],
+        tools: list[ToolEntry],
     ) -> "DecisionModelSpec":
         return cls(
             name=name,

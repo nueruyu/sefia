@@ -14,7 +14,7 @@ from .._session_state import get_session_storage
 from ..exceptions import NeedsInput
 from ..handlers import CostCalculator
 from ..sessions import SessionManager
-from ..tools import InputRequest, InputResult, InputTool
+from ..tools import Input, InputRequest, InputResult
 
 
 class SefiaHTTPSession:
@@ -37,7 +37,7 @@ class SefiaHTTP:
     """Creates Sefia session contexts for HTTP endpoints, with event streams.
 
     The integration facade over the ``sefia_fastapi`` building blocks: it
-    wires the HTTP input core to :class:`InputTool` and the bound
+    wires the HTTP input core to :class:`Input` and the bound
     session storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), relays LLM tokens to per-session SSE streams, and
     surfaces pauses as :class:`sefia_fastapi.InputRequired`.
@@ -54,7 +54,7 @@ class SefiaHTTP:
         self._events = SessionEvents()
         self._session_manager = SessionManager(session_dir)
         self._input = InputChannel(namespace="http/input_channel")
-        self._input_tool = InputTool(
+        self._input_tool = Input(
             get_input=self._provide_input,
             on_request=self._record_request,
             on_complete=self._complete_request,
@@ -73,7 +73,7 @@ class SefiaHTTP:
         )
 
     @property
-    def input_tool(self) -> InputTool:
+    def input_tool(self) -> Input:
         return self._input_tool
 
     def create_session(self) -> str:
