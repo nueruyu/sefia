@@ -120,6 +120,30 @@ Changes:
 | `llm/_messages.py` | Tighten `Message.content` to `str \| list[str \| Media]`. |
 | `sefia_litellm` | Walk content parts and translate each `Media` into the provider's format: pass URLs through where the provider accepts them; read and base64 `file://` / store-backed URIs; forward `data:` URIs. A blind `msg.to_dict()` no longer suffices — a serialized `Media` dataclass is not a valid content part on any wire. |
 
+### Which MIME types render
+
+The `Media` type never restricts `mime_type` (an open set, by decision above).
+What is bounded is the *rendering path*: wrapping a value in `Media` is the
+opt-in to expand it into context, and the MIME family selects how —
+
+| MIME family | Rendering |
+| --- | --- |
+| `image/*` | image content parts (this proposal) |
+| `application/pdf` | provider document blocks — native support exists, same boundary-translation shape as images (follow-up) |
+| `text/*` (csv, markdown, plain, …) | inlined as text parts — well-defined and provider-independent (follow-up) |
+| anything else (docx, xlsx, …) | none — fail loudly |
+
+The criterion is not the file-format category but whether **boundary
+translation alone** turns the reference into something the model perceives.
+Office formats deliberately have no rendering: making a model perceive a
+`.docx` requires a conversion with real choices in it (extract text and lose
+layout, or convert to PDF), which is processing, not translation — a tool's
+job (`convert_document(media) -> Media`, returning a renderable PDF or
+`text/plain`). The opt-in principle also settles the text case: a `file://`
+reference you do *not* want read stays a plain `str` argument; wrapping it in
+`Media` *is* the request to read it, so `text/*` inlining does not reintroduce
+implicit expansion.
+
 Two contract points follow:
 
 - **A client that cannot render media must fail loudly.** The `LLMClient`
@@ -204,8 +228,9 @@ Two follow-ons ride on the same structure:
    workaround.
 3. **Hygiene:** image-aware compaction rule; image cost accounting.
 
-Audio and documents (PDF) are out of scope but the `Media` shape was chosen so
-they extend it without a new concept.
+Images are the scope of this proposal. PDF and `text/*` rendering are named
+follow-ups (see the rendering matrix above); audio and further formats extend
+the same shape without a new concept.
 
 ## See also
 
