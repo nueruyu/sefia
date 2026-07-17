@@ -18,6 +18,8 @@ the map of everything else. A reasonable first path:
   references: the loop, the unified schema, content-addressed replay.
 - **[Architecture map](./architecture.md)** — package layout, dependency direction,
   and where to change what.
+- **[Media design](./media-design.md)** — *proposal*: image recognition and
+  generation via a reference-typed `Media` value.
 
 ## Compare & decide
 - **[Concept surface, provider leakage, operational weight](./tradeoffs.md)** — the

@@ -1,0 +1,174 @@
+# Media: image recognition and generation (design proposal)
+
+> **Status: proposal — not implemented.** This records the design direction for
+> adding image input (recognition) and image generation to sefia, the
+> alternatives considered, and why they were rejected. Names are provisional.
+
+## Summary
+
+One concept is added to the core: a **`Media` value type** — a *reference* to an
+image (or, later, other media), never the bytes themselves.
+
+- **Recognition** (the model sees an image) is the only part that needs core
+  changes: `Media` values appearing in call arguments or tool results are
+  rendered as image content parts in the messages sent to the model, and the
+  provider adapter resolves the reference into the provider's wire format.
+- **Generation is always a tool.** A `sefios` toolkit calls an image API and
+  returns a `Media` reference. Native image-*output* models (e.g. Gemini's
+  image models) are wrapped as tools too, not integrated into the decision
+  loop.
+- **History stays light.** Only references enter the step history; bytes live
+  in a durable, content-addressed media store, which keeps glyff snapshots
+  small and replay stable.
+
+The decision schema stays what it is today: a constraint on the model's
+*decision*. A decision about an image can only ever be a reference to one, so
+`Media` may appear in schemas as plain structured data (a URI the model copies
+from a tool result), but no machinery ever routes image payloads through the
+schema.
+
+## Design principle: schemas constrain decisions, not payloads
+
+sefia's unified structured-output schema exists to give the model's decision a
+verifiable shape ([how-it-works.md](./how-it-works.md)). Pixels have no
+verifiable shape — validation can say nothing about them. The only judgment a
+model can express about an image in a decision is *which* image: a reference.
+
+This split resolves every design question below:
+
+- References (`Media{uri, media_type}`) are ordinary data. They may appear in
+  arguments, tool results, and return types with zero special machinery — the
+  model reads and writes URIs as strings inside JSON, exactly like any other
+  field.
+- Payloads (bytes) never enter a decision, the history, or a schema. They move
+  through two channels only: *into* the model as content parts built at the
+  client boundary, and *out of* tools as stored blobs behind a fresh reference.
+
+## The `Media` type
+
+A small dependency-free value type in `sefia` core:
+
+```python
+@dataclass(frozen=True)
+class Media:
+    uri: str                      # RFC 3986; data: URIs (RFC 2397) allowed for inline bytes
+    media_type: str | None = None # MIME type, e.g. "image/png"; sniffed when omitted
+```
+
+Every field is a stable, standards-backed format — URIs and MIME types are the
+one representation that will not churn under provider changes, and the shape
+maps mechanically onto Anthropic/OpenAI content parts and MCP resource types.
+
+- `uri` covers remote (`https://`), local (`file://`), inline (`data:`), and
+  store-backed (scheme TBD, e.g. `media://<hash>`) images in one field.
+- Explicitly a *value*, not an annotation: whether something is an image is a
+  property of the value, so it survives being nested in lists and returned
+  from tools, and expansion into context (which costs real tokens) is always
+  an explicit opt-in — a bare string that happens to end in `.png` is never
+  auto-expanded. Extension/scheme sniffing as the *trigger* was rejected for
+  exactly that implicitness; sniffing only ever fills in a missing
+  `media_type` for a value that is already a `Media`.
+
+## Recognition: rendering `Media` into messages
+
+The model sees an image if and only if an image content part is placed in the
+messages sent to the `LLMClient`. Whether the `Media` arrived as a call
+argument or a tool result is irrelevant — rendering is the whole feature.
+
+Changes:
+
+| Layer | Change |
+| --- | --- |
+| `llm/_strategy.py` (`_build_messages`) | Detect `Media` in prompt arguments and tool results; emit image content parts instead of (or alongside) serialized text. `Message.content` already admits `str \| list[Any]`, so the wire type barely moves. |
+| `sefia_litellm` | Resolve the `Media` reference into the provider's format: pass URLs through where the provider accepts them; read and base64 `file://` / store-backed URIs; forward `data:` URIs. All provider variance stays here. |
+
+One known wrinkle the strategy absorbs: most providers reject image parts
+inside `role="tool"` messages. The standard workaround is to keep a textual
+reference in the tool message and append a `user` message carrying the image
+part immediately after it.
+
+Sub-agent composition falls out for free: an `@infer` method that returns
+`Media` (a reference) hands its parent agent something the parent's next step
+can *see*, because the reference lands in history and rendering applies.
+
+## Generation: always a tool
+
+A `sefios` toolkit (extra-gated, e.g. `sefios[images]`) exposes generation as
+an ordinary tool: `generate_image(prompt, ...) -> Media`. The implementation
+calls an image API through a thin client seam (an `ImageGenClient` ABC with a
+LiteLLM-backed implementation in `sefia_litellm`, mirroring how `LLMClient`
+keeps provider specifics in the adapter), stores the returned bytes in the
+media store, and returns the reference.
+
+This framing carries further than it looks:
+
+- **Engraving comes for free.** Tool batches are engraved, so an expensive
+  generation never re-runs on resume — the stored `Media` replays.
+- **Native image-output models are tools too.** A model that emits images in
+  its response (Gemini image models and successors) is wrapped exactly like a
+  DALL-E-style endpoint: from the tool boundary both are `prompt (+ reference
+  images) → Media`. The decision loop's model stays a text/JSON model.
+- **Iterate-by-looking already works at step granularity.** The loop *is* a
+  coarse-grained interleave: generate (tool) → the `Media` enters history →
+  the next step renders it → the model critiques and regenerates. Where a
+  provider supports native interleaved generate-inspect-refine within one
+  response, the wrapped tool can use it *internally* and return only the final
+  image — a tool-implementation detail the core never learns about.
+
+## Persistence: references in history, bytes in a store
+
+Step history is persisted after every step into glyff metadata
+([how-it-works.md](./how-it-works.md)); base64 payloads there would bloat
+every snapshot. So:
+
+- Only `Media` references enter `StepHistory` and engraved outputs.
+- Bytes live in a **media store**: durable (engraved steps reference these
+  URIs, so replay requires them to keep resolving) and content-addressed
+  (hash-keyed URIs make replay stable and deduplicate repeated images),
+  aligned with glyff's own content-addressing.
+- Lifecycle (GC when a session is deleted) is the media store's concern, a
+  deliberate new responsibility this design accepts.
+
+Two follow-ons ride on the same structure:
+
+- **Compaction**: images are the heaviest context items, so the
+  `HistoryCompactor` grows a rule for demoting old images to their reference
+  (or a cached caption) while recent steps keep the rendered image.
+- **Cost accounting**: image input tokens and per-image generation prices are
+  handled where cost already lives (`sefios/handlers/_cost.py` and the
+  adapters).
+
+## Alternatives considered and rejected
+
+| Alternative | Why rejected |
+| --- | --- |
+| **Caption tool** — a tool calls a separate vision model and returns a text description; the main model never sees pixels. | Lossy: anything the caption omits is unrecoverable, and "look again" is impossible. Fine as a stopgap; not the design. (The flaw is information loss, not the extra tool call.) |
+| **Sniff strings by extension/scheme** to decide what is an image. | Implicit and false-positive-prone; expansion must be an explicit opt-in (see above). |
+| **Native image output routed through the decision schema** — mark `Media` fields in the JSON Schema, enable the image modality, have the model reference emitted images via sentinel URIs (`attachment://n`), and let the adapter rewrite sentinels to stored URIs. | Workable but over-engineered: it turns the decision schema into a smuggling channel for binary payloads, adds vendor markers, a correlation protocol, and (on some providers) costs strict JSON mode — all to save one tool-call hop over wrapping the same model as a tool. Contradicts the schema-constrains-decisions principle. |
+| **`LLMResponse.images` / images as first-class model output** in the loop. | Same conflict with the unified JSON decision, without even the schema to anchor it. |
+| **Interleaved generate-inspect-refine in the core loop.** | Real (research systems and current provider APIs support interleaved output), but the step loop already provides it coarsely, and the fine-grained version is available *inside* a wrapped tool. Not worth a core mechanism. |
+
+## Phasing
+
+1. **Generation first (no core changes):** `ImageGenClient` seam +
+   LiteLLM-backed implementation + `sefios[images]` generation toolkit + the
+   media store. Usable immediately; the model handles `Media` as opaque
+   reference data.
+2. **Recognition (the core change):** `Media` type in `sefia`,
+   `_build_messages` rendering, adapter-side URI resolution, the tool-role
+   workaround.
+3. **Hygiene:** image-aware compaction rule; image cost accounting.
+
+Audio and documents (PDF) are out of scope but the `Media` shape was chosen so
+they extend it without a new concept.
+
+## See also
+
+- [how-it-works.md](./how-it-works.md) — the loop, the unified schema, history
+  persistence this design plugs into.
+- [tradeoffs.md](./tradeoffs.md) — why sefia avoids provider-native tool
+  calling; the same reasoning drives keeping provider media formats in the
+  adapter.
+- [architecture.md](./architecture.md) — the layering rules this design
+  preserves (core knows interfaces; provider specifics live in adapters;
+  batteries in `sefios`).
