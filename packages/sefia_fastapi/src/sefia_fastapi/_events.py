@@ -24,6 +24,7 @@ class SSEEvent:
 
     TOKEN = "token"
     INPUT_REQUIRED = "input_required"
+    OUTPUT = "output"
     COMPLETED = "completed"
     EXECUTION_FAILED = "execution_failed"
 

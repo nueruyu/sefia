@@ -10,6 +10,7 @@ class TestSSEEvent:
     def test_names_are_the_wire_contract(self):
         assert SSEEvent.TOKEN == "token"
         assert SSEEvent.INPUT_REQUIRED == "input_required"
+        assert SSEEvent.OUTPUT == "output"
         assert SSEEvent.COMPLETED == "completed"
         assert SSEEvent.EXECUTION_FAILED == "execution_failed"
 

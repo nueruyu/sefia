@@ -4,7 +4,7 @@ import glyff
 from glyff import ArgsHasher, Serializer
 from glyff.store import MemoryBackend
 
-from sefia import Session, infer
+from sefia import Session, Tools, infer
 from sefia.llm import LLMResponse
 from sefios import MemorySessionStorage
 from sefios._session_state import bind_session_storage
@@ -12,6 +12,8 @@ from sefios.tools import OutputMessage, OutputTool
 
 
 class Agent:
+    _output: Tools[OutputTool]
+
     def __init__(self, output_tool: OutputTool):
         self._output = output_tool
 

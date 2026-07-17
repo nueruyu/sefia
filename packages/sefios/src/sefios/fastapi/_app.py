@@ -185,7 +185,7 @@ class SefiaHTTP:
             )
         await self._events.publish(
             session_id,
-            "output",
+            SSEEvent.OUTPUT,
             {
                 "interaction_id": message.interaction_id,
                 "message": message.message,
