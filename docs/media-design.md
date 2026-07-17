@@ -69,23 +69,40 @@ maps mechanically onto Anthropic/OpenAI content parts and MCP resource types.
   exactly that implicitness; sniffing only ever fills in a missing
   `media_type` for a value that is already a `Media`.
 
-## Recognition: rendering `Media` into messages
+## Recognition: `Media` is a message-content primitive
 
-The model sees an image if and only if an image content part is placed in the
-messages sent to the `LLMClient`. Whether the `Media` arrived as a call
-argument or a tool result is irrelevant — rendering is the whole feature.
+The model sees an image if and only if image content reaches the messages sent
+to the `LLMClient`. Whether the `Media` arrived as a call argument or a tool
+result is irrelevant — rendering is the whole feature.
+
+The client-facing content model treats `Media` as a primitive alongside `str`:
+`Message.content` is formalized from today's open-ended `str | list[Any]` to
+**`str | list[str | Media]`**. The strategy places `Media` values into message
+content *as-is*; translating them into a provider wire shape is the adapter's
+job, exactly like the rest of `Message`/`LLMResponse`. The alternative — the
+strategy pre-converting to some "neutral" content-part dict — was rejected:
+any such dict is a provider wire format in disguise, leaking into the core,
+and it would rob the adapter of the choice between passing a URL through and
+inlining base64, which is provider knowledge.
 
 Changes:
 
 | Layer | Change |
 | --- | --- |
-| `llm/_strategy.py` (`_build_messages`) | Detect `Media` in prompt arguments and tool results; emit image content parts instead of (or alongside) serialized text. `Message.content` already admits `str \| list[Any]`, so the wire type barely moves. |
-| `sefia_litellm` | Resolve the `Media` reference into the provider's format: pass URLs through where the provider accepts them; read and base64 `file://` / store-backed URIs; forward `data:` URIs. All provider variance stays here. |
+| `llm/_strategy.py` (`_build_messages`) | Place `Media` from prompt arguments and tool results into message content parts, untranslated. |
+| `llm/_messages.py` | Tighten `Message.content` to `str \| list[str \| Media]`. |
+| `sefia_litellm` | Walk content parts and translate each `Media` into the provider's format: pass URLs through where the provider accepts them; read and base64 `file://` / store-backed URIs; forward `data:` URIs. A blind `msg.to_dict()` no longer suffices — a serialized `Media` dataclass is not a valid content part on any wire. |
 
-One known wrinkle the strategy absorbs: most providers reject image parts
-inside `role="tool"` messages. The standard workaround is to keep a textual
-reference in the tool message and append a `user` message carrying the image
-part immediately after it.
+Two contract points follow:
+
+- **A client that cannot render media must fail loudly.** The `LLMClient`
+  contract states that an implementation receiving a `Media` part it does not
+  support raises, rather than silently serializing it into nonsense.
+- **The tool-role wrinkle lives in the adapter.** Most providers reject image
+  parts inside `role="tool"` messages; the standard workaround (a textual
+  reference in the tool message, the image in an immediately following `user`
+  message) is a provider constraint, so the adapter applies it. The strategy
+  just puts the `Media` where it logically belongs — in the tool result.
 
 Sub-agent composition falls out for free: an `@infer` method that returns
 `Media` (a reference) hands its parent agent something the parent's next step
