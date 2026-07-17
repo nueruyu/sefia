@@ -104,12 +104,17 @@ result is irrelevant — rendering is the whole feature.
 
 The client-facing content model treats `Media` as a primitive alongside `str`:
 `Message.content` is formalized from today's open-ended `str | list[Any]` to
-**`str | list[str | Media]`**. The strategy places `Media` values into message
-content *as-is*; translating them into a provider wire shape is the adapter's
-job, exactly like the rest of `Message`/`LLMResponse`. The alternative — the
-strategy pre-converting to some "neutral" content-part dict — was rejected:
-any such dict is a provider wire format in disguise, leaking into the core,
-and it would rob the adapter of the choice between passing a URL through and
+**`str | list[ContentPart]`**, where **`ContentPart = str | Media`**. This is
+sefia's counterpart of the content-part unions every provider API has
+(OpenAI input items, Anthropic content blocks, Gemini `Part`, Bedrock
+`ContentBlock`): `str` plays the text variant, `Media` the non-text one, and
+in Python the type itself is the discriminator — no `{"type": ...}` tag
+needed. The strategy places `Media` values into message content *as-is*;
+translating them into a provider wire shape is the adapter's job, exactly
+like the rest of `Message`/`LLMResponse`. The alternative — the strategy
+pre-converting to some "neutral" content-part dict — was rejected: any such
+dict is a provider wire format in disguise, leaking into the core, and it
+would rob the adapter of the choice between passing a URL through and
 inlining base64, which is provider knowledge.
 
 Changes:
@@ -117,7 +122,7 @@ Changes:
 | Layer | Change |
 | --- | --- |
 | `llm/_strategy.py` (`_build_messages`) | Place `Media` from prompt arguments and tool results into message content parts, untranslated. |
-| `llm/_messages.py` | Tighten `Message.content` to `str \| list[str \| Media]`. |
+| `llm/_messages.py` | Add `ContentPart = str \| Media`; tighten `Message.content` to `str \| list[ContentPart]`. |
 | `sefia_litellm` | Walk content parts and translate each `Media` into the provider's format: pass URLs through where the provider accepts them; read and base64 `file://` / store-backed URIs; forward `data:` URIs. A blind `msg.to_dict()` no longer suffices — a serialized `Media` dataclass is not a valid content part on any wire. |
 
 ### Which MIME types render
@@ -131,14 +136,18 @@ opt-in to expand it into context, and the MIME family selects how —
 | `image/*` | image content parts (this proposal) |
 | `application/pdf` | provider document blocks — native support exists, same boundary-translation shape as images (follow-up) |
 | `text/*` (csv, markdown, plain, …) | inlined as text parts — well-defined and provider-independent (follow-up) |
-| anything else (docx, xlsx, …) | none — fail loudly |
+| anything else (docx, xlsx, …) | no *universal* rendering — fail loudly by default; adapter-extensible (below) |
 
 The criterion is not the file-format category but whether **boundary
 translation alone** turns the reference into something the model perceives.
-Office formats deliberately have no rendering: making a model perceive a
-`.docx` requires a conversion with real choices in it (extract text and lose
-layout, or convert to PDF), which is processing, not translation — a tool's
-job (`convert_document(media) -> Media`, returning a renderable PDF or
+That makes the last row adapter-relative, not absolute: office formats have no
+universal rendering, but where a provider accepts them natively (Bedrock's
+Converse API takes docx/csv/xlsx as document blocks), its adapter *is* doing
+pure boundary translation and may render them. The default elsewhere stays
+fail-loud, and a run that must stay provider-portable converts explicitly
+instead — a conversion with real choices in it (extract text and lose layout,
+or convert to PDF) is processing, a tool's job
+(`convert_document(media) -> Media`, returning a renderable PDF or
 `text/plain`). The opt-in principle also settles the text case: a `file://`
 reference you do *not* want read stays a plain `str` argument; wrapping it in
 `Media` *is* the request to read it, so `text/*` inlining does not reintroduce
@@ -212,6 +221,7 @@ Two follow-ons ride on the same structure:
 | --- | --- |
 | **Caption tool** — a tool calls a separate vision model and returns a text description; the main model never sees pixels. | Lossy: anything the caption omits is unrecoverable, and "look again" is impossible. Fine as a stopgap; not the design. (The flaw is information loss, not the extra tool call.) |
 | **Sniff strings by extension/scheme** to decide what is an image. | Implicit and false-positive-prone; expansion must be an explicit opt-in (see above). |
+| **A kind-discriminated content-part union in core** (`ImageContent \| DocumentContent \| AudioContent \| …` with a separate `url \| file_id \| inline` source axis), mirroring provider ContentBlock/Part shapes. | The kind vocabulary looks shared across providers but the membership rules disagree — CSV is a `document` on Bedrock, unsupported on Anthropic, plain text on Gemini; PDF is `document` / `input_file` / `fileData` depending on provider — so *kind* is a provider treatment category, derived by the adapter's mime→kind table, not a stable fact about the content (same reasoning as the unified decision schema vs native tool-calling, [tradeoffs.md](./tradeoffs.md)). The source axis adds nothing over URIs (`https:`/`data:` already encode url-vs-inline), and `file_id` is provider+account+TTL-scoped state that would poison durable, provider-portable history — provider upload handles are an adapter-level cache keyed by content hash. The message-level union sefia does need already exists as `ContentPart = str \| Media`. |
 | **Name the type `Resource`** (MCP's term for the same `{uri, name, mimeType}` shape). | Names the mechanism (URI-addressability) instead of the semantic (perceivable content rendered into context, at token cost). A `file://` reference to a config file is a resource but must not be image-rendered, so the "every value of this type gets rendered" contract would be wrong for the name. Also collides with REST/cloud/RAII usage and with MCP's Resource, which is a different lifecycle concept (a listable, subscribable catalog entry). `Media` keeps the terminology straight next to `mime_type` — MIME's own registry is "media types". |
 | **Native image output routed through the decision schema** — mark `Media` fields in the JSON Schema, enable the image modality, have the model reference emitted images via sentinel URIs (`attachment://n`), and let the adapter rewrite sentinels to stored URIs. | Workable but over-engineered: it turns the decision schema into a smuggling channel for binary payloads, adds vendor markers, a correlation protocol, and (on some providers) costs strict JSON mode — all to save one tool-call hop over wrapping the same model as a tool. Contradicts the schema-constrains-decisions principle. |
 | **`LLMResponse.images` / images as first-class model output** in the loop. | Same conflict with the unified JSON decision, without even the schema to anchor it. |
