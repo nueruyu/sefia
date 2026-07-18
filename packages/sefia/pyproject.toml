@@ -23,6 +23,7 @@ packages = ["src/sefia"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "pytest-mock>=3.12.0"]
