@@ -23,8 +23,6 @@ packages = ["src/sefia"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-# The tree has duplicate basenames (units/ vs scenarios/); importlib mode keeps
-# package-scoped runs (`uv run pytest packages/sefia`) from failing on them.
 addopts = ["--import-mode=importlib"]
 
 [dependency-groups]
