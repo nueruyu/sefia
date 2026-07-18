@@ -1,11 +1,7 @@
-import json
 from dataclasses import dataclass
 
-import glyff
-from glyff import ArgsHasher, Serializer
-from glyff.store import MemoryBackend
-from sefia import Policy, Session, infer, policy
-from sefia.llm import LLMResponse
+from sefia import Policy, Tools, infer, policy
+from sefia.testing import memory_session, result_response, tool_calls_response
 from sefios.middleware import StagnationDetector
 
 
@@ -33,8 +29,9 @@ class Report:
     sources: list[str]
 
 
-@dataclass
 class Researcher:
+    _web: Tools[WebToolkit]
+
     def __init__(self, web: WebToolkit):
         self._web = web
 
@@ -47,50 +44,23 @@ class Researcher:
         ...
 
 
-def _make_stores(serializer: Serializer):
-    return MemoryBackend()
-
-
-async def test_stagnation_state_is_isolated_between_infer_calls(
-    serializer: Serializer, hasher: ArgsHasher, make_mock_llm
-):
-    repeated_call_response = LLMResponse(
-        content=json.dumps(
-            {
-                "decision": "tool_calls",
-                "tool_calls": [
-                    {"name": "WebToolkit_search", "arguments": {"query": "sefia"}}
-                ],
-            }
-        )
+async def test_stagnation_state_is_isolated_between_infer_calls(make_mock_llm):
+    repeated_call_response = tool_calls_response(
+        ("WebToolkit_search", {"query": "sefia"})
     )
-    final_response = LLMResponse(
-        content=json.dumps(
-            {
-                "decision": "result",
-                "result": {
-                    "topic": "sefia",
-                    "summary": "Sefia is a framework for building LLM agents.",
-                    "sources": [],
-                },
-            }
+    final_response = result_response(
+        Report(
+            topic="sefia",
+            summary="Sefia is a framework for building LLM agents.",
+            sources=[],
         )
     )
 
     mock_llm = make_mock_llm(
         [
             repeated_call_response,
-            LLMResponse(
-                content=json.dumps(
-                    {
-                        "decision": "result",
-                        "result": {
-                            "topic": "sefia",
-                            "summary": "first call done",
-                            "sources": [],
-                        },
-                    }
-                )
+            result_response(
+                Report(topic="sefia", summary="first call done", sources=[])
             ),
             # The second @infer call repeats the same tool call twice before
             # finishing. If the StagnationDetector were shared across calls,
@@ -101,19 +71,11 @@ async def test_stagnation_state_is_isolated_between_infer_calls(
         ]
     )
 
-    glyff_store = _make_stores(serializer)
+    async with memory_session(mock_llm, session_id="stagnation-isolation-test"):
+        researcher = Researcher(WebToolkit())
 
-    async with glyff.Session(
-        id="stagnation-isolation-test",
-        backend=glyff_store,
-        serializer=serializer,
-        hasher=hasher,
-    ) as gs:
-        async with Session(llm_client=mock_llm, glyff_session=gs):
-            researcher = Researcher(WebToolkit())
+        report1 = await researcher.generate_report(topic="first")
+        assert report1.summary == "first call done"
 
-            report1 = await researcher.generate_report(topic="first")
-            assert report1.summary == "first call done"
-
-            report2 = await researcher.generate_report(topic="sefia")
-            assert report2.topic == "sefia"
+        report2 = await researcher.generate_report(topic="sefia")
+        assert report2.topic == "sefia"

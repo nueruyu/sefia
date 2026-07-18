@@ -7,7 +7,7 @@ from sefia._interfaces import InferenceStrategy
 from sefia.event_system import EventPublisher
 from sefia.tool_collectors import DefaultToolCollector
 
-from ._support import MemoryHistoryStorage
+from sefia.testing import MemoryHistoryStorage
 
 
 class _StubStrategy(InferenceStrategy):

@@ -14,6 +14,7 @@ from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Policy, Session, Tools, infer
 from sefia.llm import LLMResponse
+from sefia.testing import result_response, tool_calls_response
 
 from sefios import FileSessionStorage, NeedsInput
 from sefios.history_storages import SessionHistoryStorage
@@ -25,32 +26,11 @@ _SESSION_ID = "history-compaction-test"
 
 
 def _note_response(text: str) -> LLMResponse:
-    return LLMResponse(
-        content=json.dumps(
-            {
-                "decision": "tool_calls",
-                "tool_calls": [{"name": "Notes_add_note", "arguments": {"text": text}}],
-            }
-        )
-    )
+    return tool_calls_response(("Notes_add_note", {"text": text}))
 
 
-_ASK_RESPONSE = LLMResponse(
-    content=json.dumps(
-        {
-            "decision": "tool_calls",
-            "tool_calls": [
-                {
-                    "name": "Input_get_input",
-                    "arguments": {"prompt": "Anything else?"},
-                }
-            ],
-        }
-    )
-)
-_RESULT_RESPONSE = LLMResponse(
-    content=json.dumps({"decision": "result", "result": "All done."})
-)
+_ASK_RESPONSE = tool_calls_response(("Input_get_input", {"prompt": "Anything else?"}))
+_RESULT_RESPONSE = result_response("All done.")
 
 
 class Notes:

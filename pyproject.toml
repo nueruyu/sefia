@@ -16,8 +16,12 @@ sefia-fastapi = { workspace = true }
 sefios = { workspace = true }
 
 [tool.pytest.ini_options]
-addopts = ["--import-mode=importlib"]
+# e2e tests hit real LLM provider APIs; they are opt-in via `-m e2e`.
+addopts = ["--import-mode=importlib", "-m", "not e2e"]
 asyncio_mode = "auto"
+markers = [
+    "e2e: live LLM provider tests (need API keys; run with `pytest -m e2e`)",
+]
 
 [dependency-groups]
 dev = [

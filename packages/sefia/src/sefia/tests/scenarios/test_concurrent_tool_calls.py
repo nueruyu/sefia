@@ -1,16 +1,26 @@
 import asyncio
 import json
+from dataclasses import dataclass
 
-import glyff
 import pytest
-from glyff import ArgsHasher, Serializer, engrave
+from glyff import engrave
 from glyff.store import MemoryBackend
 
-from sefia import Session, Tools, concurrent, infer
+from sefia import Tools, concurrent, infer
 from sefia.exceptions import PauseException
-from sefia.llm import LLMResponse
+from sefia.testing import (
+    MockLLMClient,
+    memory_session,
+    result_response,
+    tool_calls_response,
+)
 
-from ..conftest import MockLLMClient, Report
+
+@dataclass
+class Report:
+    topic: str
+    summary: str
+    sources: list[str]
 
 
 class HandshakeToolkit:
@@ -44,40 +54,19 @@ class Researcher:
         ...
 
 
-async def test_concurrent_calls_in_one_decision_overlap(
-    serializer: Serializer, hasher: ArgsHasher
-):
-    mock_responses = [
-        LLMResponse(
-            content=json.dumps(
-                {
-                    "decision": "tool_calls",
-                    "tool_calls": [
-                        {"name": "HandshakeToolkit_wait_for_peer", "arguments": {}},
-                        {"name": "HandshakeToolkit_release_peer", "arguments": {}},
-                    ],
-                }
-            )
-        ),
-        LLMResponse(
-            content=json.dumps(
-                {
-                    "decision": "result",
-                    "result": {"topic": "t", "summary": "s", "sources": []},
-                }
-            )
-        ),
-    ]
-    mock_llm = MockLLMClient(responses=mock_responses)
+async def test_concurrent_calls_in_one_decision_overlap():
+    mock_llm = MockLLMClient(
+        responses=[
+            tool_calls_response(
+                ("HandshakeToolkit_wait_for_peer", {}),
+                ("HandshakeToolkit_release_peer", {}),
+            ),
+            result_response(Report(topic="t", summary="s", sources=[])),
+        ]
+    )
 
-    async with glyff.Session(
-        id="concurrent-overlap",
-        backend=MemoryBackend(),
-        serializer=serializer,
-        hasher=hasher,
-    ) as gs:
-        async with Session(llm_client=mock_llm, glyff_session=gs):
-            report = await Researcher(HandshakeToolkit()).generate_report(topic="t")
+    async with memory_session(mock_llm, session_id="concurrent-overlap"):
+        report = await Researcher(HandshakeToolkit()).generate_report(topic="t")
 
     assert report.summary == "s"
     # Both results reach the model in request order: the waiting tool first,
@@ -121,65 +110,37 @@ class Assistant:
         ...
 
 
-async def test_pause_in_concurrent_batch_resumes_without_rerunning_sibling(
-    serializer: Serializer, hasher: ArgsHasher
-):
-    mock_responses = [
-        LLMResponse(
-            content=json.dumps(
-                {
-                    "decision": "tool_calls",
-                    "tool_calls": [
-                        {
-                            "name": "PausingToolkit_fetch_data",
-                            "arguments": {"key": "alpha"},
-                        },
-                        {
-                            "name": "PausingToolkit_ask_user",
-                            "arguments": {"question": "Proceed?"},
-                        },
-                    ],
-                }
-            )
-        ),
-        LLMResponse(
-            content=json.dumps(
-                {
-                    "decision": "result",
-                    "result": {"topic": "t", "summary": "approved", "sources": []},
-                }
-            )
-        ),
-    ]
-    mock_llm = MockLLMClient(responses=mock_responses)
+async def test_pause_in_concurrent_batch_resumes_without_rerunning_sibling():
+    mock_llm = MockLLMClient(
+        responses=[
+            tool_calls_response(
+                ("PausingToolkit_fetch_data", {"key": "alpha"}),
+                ("PausingToolkit_ask_user", {"question": "Proceed?"}),
+            ),
+            result_response(Report(topic="t", summary="approved", sources=[])),
+        ]
+    )
     toolkit = PausingToolkit()
     assistant = Assistant(toolkit)
+    # The two runs share one backend, so the second replays the first's steps.
     glyff_store = MemoryBackend()
 
     # First run: the engraved sibling completes, then the batch pauses.
     with pytest.raises(PauseException):
-        async with glyff.Session(
-            id="concurrent-pause",
-            backend=glyff_store,
-            serializer=serializer,
-            hasher=hasher,
-        ) as gs:
-            async with Session(llm_client=mock_llm, glyff_session=gs):
-                await assistant.prepare_report(topic="t")
+        async with memory_session(
+            mock_llm, session_id="concurrent-pause", backend=glyff_store
+        ):
+            await assistant.prepare_report(topic="t")
 
     assert toolkit.fetch_runs == 1
 
     # Second run: the decision and the engraved sibling replay (no re-run,
     # no extra LLM call); only the pausing tool executes again.
     toolkit.answer = "yes"
-    async with glyff.Session(
-        id="concurrent-pause",
-        backend=glyff_store,
-        serializer=serializer,
-        hasher=hasher,
-    ) as gs:
-        async with Session(llm_client=mock_llm, glyff_session=gs):
-            report = await assistant.prepare_report(topic="t")
+    async with memory_session(
+        mock_llm, session_id="concurrent-pause", backend=glyff_store
+    ):
+        report = await assistant.prepare_report(topic="t")
 
     assert report.summary == "approved"
     assert toolkit.fetch_runs == 1

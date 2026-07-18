@@ -94,6 +94,22 @@ def mock_llm_client():
 DUMMY_SCHEMA: dict = {}
 
 
+def _make_strategy(
+    llm_client=None, *, stream: bool = False, max_repair_attempts: int = 2
+) -> LLMInferenceStrategy:
+    """The strategy under test, with a stub prompt formatter."""
+    formatter = Mock()
+    formatter.format_arguments.return_value = "<arguments/>"
+    return LLMInferenceStrategy(
+        llm_client=llm_client if llm_client is not None else AsyncMock(),
+        decision_builder=PydanticModelBackend(),
+        prompt_formatter=formatter,
+        json_default=pydantic_json_default,
+        stream=stream,
+        max_repair_attempts=max_repair_attempts,
+    )
+
+
 def _resolve(schema: dict, root: dict) -> dict:
     if "$ref" in schema:
         key = schema["$ref"].split("/")[-1]
@@ -131,19 +147,8 @@ def _function_info(
 
 
 class TestLLMInferenceStrategy:
-    def _strategy(self, llm_client, stream: bool = False):
-        mock_formatter = Mock()
-        mock_formatter.format_arguments.return_value = "<arguments/>"
-        return LLMInferenceStrategy(
-            llm_client=llm_client,
-            decision_builder=PydanticModelBackend(),
-            prompt_formatter=mock_formatter,
-            json_default=pydantic_json_default,
-            stream=stream,
-        )
-
     def test_build_messages_correctly(self):
-        strategy = self._strategy(AsyncMock())
+        strategy = _make_strategy()
         history = [
             ToolCallDecision(
                 calls=[
@@ -181,7 +186,7 @@ class TestLLMInferenceStrategy:
         assert json.loads(str(messages[3].content)) == "見つかりました"
 
     def test_build_decision_schema_hoists_nested_definitions(self):
-        strategy = self._strategy(AsyncMock())
+        strategy = _make_strategy()
 
         director = strategy._create_director(list[MyIssue], [_tool(search)])
         schema = director.build_decision_schema()
@@ -200,7 +205,7 @@ class TestLLMInferenceStrategy:
         assert tool_call_ref.endswith("ToolCall")
 
     def test_build_decision_schema_requires_non_null_result_without_tools(self):
-        strategy = self._strategy(AsyncMock())
+        strategy = _make_strategy()
 
         director = strategy._create_director(list[MyIssue], [])
         schema = director.build_decision_schema()
@@ -212,7 +217,7 @@ class TestLLMInferenceStrategy:
         assert "oneOf" not in result_schema
 
     def test_build_decision_schema_uses_decision_discriminator_with_tools(self):
-        strategy = self._strategy(AsyncMock())
+        strategy = _make_strategy()
 
         director = strategy._create_director(list[MyIssue], [_tool(search)])
         schema = director.build_decision_schema()
@@ -232,7 +237,7 @@ class TestLLMInferenceStrategy:
         ]
 
     def test_build_messages_tells_no_tool_agent_to_return_empty_collection(self):
-        strategy = self._strategy(AsyncMock())
+        strategy = _make_strategy()
 
         director = strategy._create_director(list[MyIssue], [])
         messages = strategy._build_messages(
@@ -252,7 +257,7 @@ class TestLLMInferenceStrategy:
             }
         )
         mock_llm_client.complete.return_value = LLMResponse(content=tool_calls_payload)
-        strategy = self._strategy(mock_llm_client, stream=True)
+        strategy = _make_strategy(mock_llm_client, stream=True)
 
         decision = await strategy.decide_next_step(
             _function_info(instructions="do it"),
@@ -277,7 +282,7 @@ class TestLLMInferenceStrategy:
             }
         )
         mock_llm_client.complete.return_value = LLMResponse(content=result_payload)
-        strategy = self._strategy(mock_llm_client, stream=True)
+        strategy = _make_strategy(mock_llm_client, stream=True)
         publisher = MockEventPublisher()
 
         decision = await strategy.decide_next_step(
@@ -307,7 +312,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": "done"}'
         )
-        strategy = self._strategy(mock_llm_client, stream=True)
+        strategy = _make_strategy(mock_llm_client, stream=True)
         publisher = MockEventPublisher()
 
         await strategy.decide_next_step(
@@ -336,7 +341,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": "done"}'
         )
-        strategy = self._strategy(mock_llm_client)
+        strategy = _make_strategy(mock_llm_client)
 
         await strategy.decide_next_step(
             _function_info(instructions="do it"),
@@ -353,7 +358,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": "done"}'
         )
-        strategy = self._strategy(mock_llm_client)
+        strategy = _make_strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
             _function_info(instructions="do it"),
@@ -370,7 +375,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": {"name": "test"}}'
         )
-        strategy = self._strategy(mock_llm_client)
+        strategy = _make_strategy(mock_llm_client)
 
         with pytest.raises(
             InvalidInferenceResponseError, match="LLM output failed validation"
@@ -386,7 +391,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": "Hello, world!"}'
         )
-        strategy = self._strategy(mock_llm_client)
+        strategy = _make_strategy(mock_llm_client)
 
         decision = await strategy.decide_next_step(
             _function_info(instructions="do it"),
@@ -402,7 +407,7 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": null}'
         )
-        strategy = self._strategy(mock_llm_client)
+        strategy = _make_strategy(mock_llm_client)
 
         with pytest.raises(
             InvalidInferenceResponseError, match="LLM output failed validation"
@@ -420,20 +425,9 @@ class TestResponseRepair:
 
     VALID_RESULT = '{"decision": "result", "result": "done"}'
 
-    def _strategy(self, llm_client, max_repair_attempts: int = 2):
-        mock_formatter = Mock()
-        mock_formatter.format_arguments.return_value = "<arguments/>"
-        return LLMInferenceStrategy(
-            llm_client=llm_client,
-            decision_builder=PydanticModelBackend(),
-            prompt_formatter=mock_formatter,
-            json_default=pydantic_json_default,
-            max_repair_attempts=max_repair_attempts,
-        )
-
     def test_rejects_negative_budget(self):
         with pytest.raises(ValueError, match="non-negative"):
-            self._strategy(AsyncMock(), max_repair_attempts=-1)
+            _make_strategy(max_repair_attempts=-1)
 
     async def test_repairs_empty_response(self):
         client = AsyncMock()
@@ -441,7 +435,7 @@ class TestResponseRepair:
             LLMResponse(content=""),
             LLMResponse(content=self.VALID_RESULT),
         ]
-        strategy = self._strategy(client)
+        strategy = _make_strategy(client)
         publisher = MockEventPublisher()
 
         decision = await strategy.decide_next_step(
@@ -470,7 +464,7 @@ class TestResponseRepair:
             LLMResponse(content=None),
             LLMResponse(content=self.VALID_RESULT),
         ]
-        strategy = self._strategy(client)
+        strategy = _make_strategy(client)
 
         decision = await strategy.decide_next_step(
             _function_info(), [], _tool_registry(), MockEventPublisher()
@@ -490,7 +484,7 @@ class TestResponseRepair:
             LLMResponse(content=invalid),
             LLMResponse(content=valid),
         ]
-        strategy = self._strategy(client)
+        strategy = _make_strategy(client)
 
         decision = await strategy.decide_next_step(
             _function_info(return_type=MyOutput),
@@ -528,7 +522,7 @@ class TestResponseRepair:
             LLMResponse(content=invalid),
             LLMResponse(content=valid),
         ]
-        strategy = self._strategy(client)
+        strategy = _make_strategy(client)
 
         decision = await strategy.decide_next_step(
             _function_info(), [], _tool_registry(my_tool), MockEventPublisher()
@@ -544,7 +538,7 @@ class TestResponseRepair:
             LLMResponse(content="not json"),
             LLMResponse(content=self.VALID_RESULT),
         ]
-        strategy = self._strategy(client)
+        strategy = _make_strategy(client)
         history = [
             ToolCallDecision(
                 calls=[ToolCallRequest(id="1", name="search", arguments={"q": "x"})]
@@ -568,7 +562,7 @@ class TestResponseRepair:
         invalid = "not json"
         client = AsyncMock()
         client.complete.return_value = LLMResponse(content=invalid)
-        strategy = self._strategy(client, max_repair_attempts=2)
+        strategy = _make_strategy(client, max_repair_attempts=2)
 
         with pytest.raises(
             InvalidInferenceResponseError, match="LLM output failed validation"
@@ -584,7 +578,7 @@ class TestResponseRepair:
     async def test_zero_budget_disables_repair(self):
         client = AsyncMock()
         client.complete.return_value = LLMResponse(content="not json")
-        strategy = self._strategy(client, max_repair_attempts=0)
+        strategy = _make_strategy(client, max_repair_attempts=0)
 
         with pytest.raises(InvalidInferenceResponseError):
             await strategy.decide_next_step(
@@ -597,28 +591,18 @@ class TestResponseRepair:
 class TestToolOnlyDirector:
     """Tests for _ToolOnlyDirector — the Never return type mode."""
 
-    def _strategy(self):
-        mock_formatter = Mock()
-        mock_formatter.format_arguments.return_value = "<arguments/>"
-        return LLMInferenceStrategy(
-            llm_client=AsyncMock(),
-            decision_builder=PydanticModelBackend(),
-            prompt_formatter=mock_formatter,
-            json_default=pydantic_json_default,
-        )
-
     def test_create_director_returns_tool_only_for_never(self):
-        strategy = self._strategy()
+        strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
         assert isinstance(director, _ToolOnlyDirector)
 
     def test_create_director_raises_for_never_without_tools(self):
-        strategy = self._strategy()
+        strategy = _make_strategy()
         with pytest.raises(ValueError, match="must have tools available"):
             strategy._create_director(Never, [])
 
     def test_build_decision_schema_has_no_result_field(self):
-        strategy = self._strategy()
+        strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
         schema = director.build_decision_schema()
 
@@ -628,7 +612,7 @@ class TestToolOnlyDirector:
         assert schema["required"] == ["decision", "tool_calls"]
 
     def test_build_system_prompt_instructs_tool_only(self):
-        strategy = self._strategy()
+        strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
         schema = director.build_decision_schema()
         prompt = director.build_system_prompt_addition(schema)
@@ -639,7 +623,7 @@ class TestToolOnlyDirector:
         assert '"$defs"' not in prompt
 
     def test_process_decision_accepts_tool_calls(self):
-        strategy = self._strategy()
+        strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
 
         result = director.process_response_data(
@@ -660,13 +644,7 @@ class TestToolOnlyDirector:
                 '"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
             )
         )
-        mock_formatter = Mock()
-        mock_formatter.format_arguments.return_value = "<arguments/>"
-        strategy = LLMInferenceStrategy(
-            llm_client=mock_client,
-            decision_builder=PydanticModelBackend(),
-            prompt_formatter=mock_formatter,
-        )
+        strategy = _make_strategy(mock_client)
 
         result = await strategy.decide_next_step(
             _function_info(return_type=Never, instructions="chat"),
@@ -684,13 +662,7 @@ class TestToolOnlyDirector:
         mock_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": "bye"}'
         )
-        mock_formatter = Mock()
-        mock_formatter.format_arguments.return_value = "<arguments/>"
-        strategy = LLMInferenceStrategy(
-            llm_client=mock_client,
-            decision_builder=PydanticModelBackend(),
-            prompt_formatter=mock_formatter,
-        )
+        strategy = _make_strategy(mock_client)
 
         with pytest.raises(
             InvalidInferenceResponseError, match="LLM output failed validation"

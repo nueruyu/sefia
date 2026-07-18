@@ -13,8 +13,9 @@ explained in [`docs/how-it-works.md`](./docs/how-it-works.md).
 
 ```bash
 uv sync                       # install the workspace
-uv run pytest                 # run all tests (asyncio auto-mode)
+uv run pytest                 # run all tests (asyncio auto-mode; skips e2e)
 uv run pytest packages/sefia  # run one package's tests
+uv run pytest -m e2e          # live-provider e2e tests (needs API keys, see below)
 uv run ruff check .           # lint
 uv run ruff format --check .  # formatting (CI enforces this; drop --check to fix)
 uv run pyright                # type-check
@@ -22,6 +23,32 @@ uv run pyright                # type-check
 
 Tests mirror the source under each package's `tests/units/` (per-module) and
 `tests/scenarios/` (behavioral). Add tests next to the layer you change.
+Shared test doubles and helpers live in the public `sefia.testing` module
+(`MockLLMClient`, `memory_session`, scripted-response builders) rather than
+in conftest imports.
+
+### End-to-end tests against real providers
+
+`packages/sefia_litellm/tests/e2e/` runs the full stack against live LLM APIs,
+once per provider. These tests are excluded from the default run (marker `e2e`)
+and each provider is skipped unless its enabling environment variable is set —
+so `-m e2e` runs whichever subset your environment is configured for:
+
+| Provider | Enabled by | Default model | Model override |
+| --- | --- | --- | --- |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` | `SEFIA_E2E_OPENAI_MODEL` |
+| Anthropic | `ANTHROPIC_API_KEY` | `anthropic/claude-haiku-4-5` | `SEFIA_E2E_ANTHROPIC_MODEL` |
+| Gemini | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` | `SEFIA_E2E_GEMINI_MODEL` |
+| xAI (Grok) | `XAI_API_KEY` | `xai/grok-3-mini` | `SEFIA_E2E_XAI_MODEL` |
+| Mistral | `MISTRAL_API_KEY` | `mistral/mistral-small-latest` | `SEFIA_E2E_MISTRAL_MODEL` |
+| Groq | `GROQ_API_KEY` | `groq/llama-3.3-70b-versatile` | `SEFIA_E2E_GROQ_MODEL` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/deepseek-chat` | `SEFIA_E2E_DEEPSEEK_MODEL` |
+| Ollama (local) | `OLLAMA_API_BASE` | `ollama/llama3.1` | `SEFIA_E2E_OLLAMA_MODEL` |
+
+Hosted providers make real (paid) API calls; Ollama runs against your local
+server (`OLLAMA_API_BASE`, e.g. `http://localhost:11434`) with the model
+already pulled. Run them when touching the LiteLLM adapter, the
+prompt/decision schema, or before a release.
 
 ## Where to make a change
 

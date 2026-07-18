@@ -10,7 +10,7 @@ from glyff.store import MemoryBackend
 
 from sefia import Session, Tools, infer
 from sefia.exceptions import PauseException
-from sefia.llm import LLMResponse
+from sefia.testing import result_response, tool_calls_response
 from sefios import MemorySessionStorage, get_call_state_store
 from sefios._session_state import bind_session_storage, get_state_store
 
@@ -78,29 +78,12 @@ class TestStatefulTool:
         self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
     ):
         mock_responses = [
-            LLMResponse(
-                content=json.dumps(
-                    {
-                        "decision": "tool_calls",
-                        "tool_calls": [
-                            {
-                                "name": "Input_ask_user",
-                                "arguments": {"prompt": "What is your name?"},
-                            }
-                        ],
-                    }
-                )
-            ),
-            LLMResponse(
-                content=json.dumps(
-                    {
-                        "decision": "result",
-                        "result": {
-                            "topic": "User Info",
-                            "summary": "The user's name is Alice.",
-                            "sources": [],
-                        },
-                    }
+            tool_calls_response(("Input_ask_user", {"prompt": "What is your name?"})),
+            result_response(
+                Report(
+                    topic="User Info",
+                    summary="The user's name is Alice.",
+                    sources=[],
                 )
             ),
         ]
@@ -166,43 +149,10 @@ class TestStatefulTool:
         self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
     ):
         mock_responses = [
-            LLMResponse(
-                content=json.dumps(
-                    {
-                        "decision": "tool_calls",
-                        "tool_calls": [
-                            {
-                                "name": "Input_ask_user",
-                                "arguments": {"prompt": "Name?"},
-                            }
-                        ],
-                    }
-                )
-            ),
-            LLMResponse(
-                content=json.dumps(
-                    {
-                        "decision": "tool_calls",
-                        "tool_calls": [
-                            {
-                                "name": "Input_ask_user",
-                                "arguments": {"prompt": "Age?"},
-                            }
-                        ],
-                    }
-                )
-            ),
-            LLMResponse(
-                content=json.dumps(
-                    {
-                        "decision": "result",
-                        "result": {
-                            "topic": "Profile",
-                            "summary": "Alice is 99.",
-                            "sources": [],
-                        },
-                    }
-                )
+            tool_calls_response(("Input_ask_user", {"prompt": "Name?"})),
+            tool_calls_response(("Input_ask_user", {"prompt": "Age?"})),
+            result_response(
+                Report(topic="Profile", summary="Alice is 99.", sources=[])
             ),
         ]
         mock_llm = make_mock_llm(mock_responses)

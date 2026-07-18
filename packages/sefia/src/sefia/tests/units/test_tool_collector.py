@@ -8,7 +8,17 @@ from sefia.inference import Capability, FunctionInfo
 from sefia.pydantic import PydanticModelBackend
 from sefia.tool_collectors import DefaultToolCollector
 
-from ..conftest import WebToolkit
+
+class WebToolkit:
+    """A two-method toolkit; discovery only reads its names and docstrings."""
+
+    async def search(self, query: str) -> str:
+        """Search the web for a query."""
+        raise NotImplementedError
+
+    async def fetch_content(self, url: str) -> str:
+        """Fetch content from a URL."""
+        raise NotImplementedError
 
 
 def _collect_self(instance: object, declared: object | None = None):

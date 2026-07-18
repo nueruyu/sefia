@@ -8,14 +8,12 @@ the *same* interaction id the paused run stored — the idempotency hinge of the
 human-in-the-loop flow.
 """
 
-import json
-
 import glyff
 import pytest
 from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Session, Tools, infer
-from sefia.llm import LLMResponse
+from sefia.testing import result_response, tool_calls_response
 
 from sefios import FileSessionStorage, NeedsInput
 from sefios._session_state import bind_session_storage
@@ -23,22 +21,10 @@ from sefios.tools import Input, InputRequest
 
 _SESSION_ID = "file-backed-resume-test"
 
-_TOOL_CALL_RESPONSE = LLMResponse(
-    content=json.dumps(
-        {
-            "decision": "tool_calls",
-            "tool_calls": [
-                {
-                    "name": "Input_get_input",
-                    "arguments": {"prompt": "What is your name?"},
-                }
-            ],
-        }
-    )
+_TOOL_CALL_RESPONSE = tool_calls_response(
+    ("Input_get_input", {"prompt": "What is your name?"})
 )
-_RESULT_RESPONSE = LLMResponse(
-    content=json.dumps({"decision": "result", "result": "The user's name is Alice."})
-)
+_RESULT_RESPONSE = result_response("The user's name is Alice.")
 
 
 class _Agent:
