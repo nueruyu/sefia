@@ -32,13 +32,9 @@ from .pydantic._json_utils import pydantic_json_default
 
 
 class MockLLMClient(LLMClient):
-    """An ``LLMClient`` that replays scripted responses and records requests.
-
-    Each ``complete()`` call pops the next response from ``responses`` and
-    appends the request it received to ``requests`` (messages as plain dicts,
-    plus the tools, output schema, and callbacks), so tests can assert on
-    exactly what reached the model.
-    """
+    """An ``LLMClient`` that replays scripted ``responses`` and records every
+    request it receives in ``requests`` (messages as plain dicts, plus the
+    tools, output schema, and callbacks)."""
 
     def __init__(self, responses: list[LLMResponse]):
         self.responses = list(responses)
@@ -69,7 +65,12 @@ class MockLLMClient(LLMClient):
 
 
 class MemoryHistoryStorage(HistoryStorage):
-    """In-memory ``HistoryStorage``; records every saved snapshot in ``saves``."""
+    """In-memory ``HistoryStorage``; records every saved snapshot in ``saves``.
+
+    Each entry is its own ``HistorySnapshot`` (the items tuple is copied on
+    save), so later saves cannot rewrite earlier records. The history items
+    themselves are shared by reference.
+    """
 
     def __init__(self, initial: HistorySnapshot | None = None):
         self.snapshot = initial if initial is not None else HistorySnapshot()
@@ -79,8 +80,11 @@ class MemoryHistoryStorage(HistoryStorage):
         return self.snapshot
 
     async def save(self, snapshot: HistorySnapshot) -> None:
-        self.snapshot = snapshot
-        self.saves.append(snapshot)
+        record = HistorySnapshot(
+            items=tuple(snapshot.items), completed_steps=snapshot.completed_steps
+        )
+        self.snapshot = record
+        self.saves.append(record)
 
 
 def result_response(result: Any) -> LLMResponse:
@@ -123,10 +127,8 @@ async def memory_session(
 ) -> AsyncIterator[Session]:
     """A ready-to-use sefia ``Session`` over an in-memory glyff backend.
 
-    Pass ``backend`` (e.g. a shared ``MemoryBackend``) together with a stable
-    ``session_id`` to simulate pause/resume across runs; by default each use
-    gets a fresh backend, so nothing is replayed between tests. Extra keyword
-    arguments go to ``Session`` (``tool_collector=``, ``profiles=``, ...).
+    Pass a shared ``backend`` with a stable ``session_id`` to simulate
+    pause/resume across runs. Extra keyword arguments go to ``Session``.
     """
     async with glyff.Session(
         id=session_id,

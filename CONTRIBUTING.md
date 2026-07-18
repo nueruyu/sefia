@@ -31,17 +31,24 @@ in conftest imports.
 
 `packages/sefia_litellm/tests/e2e/` runs the full stack against live LLM APIs,
 once per provider. These tests are excluded from the default run (marker `e2e`)
-and each provider is skipped unless its API key is set — so `-m e2e` runs
-whichever subset your environment is configured for:
+and each provider is skipped unless its enabling environment variable is set —
+so `-m e2e` runs whichever subset your environment is configured for:
 
-| Provider | Key | Default model | Model override |
+| Provider | Enabled by | Default model | Model override |
 | --- | --- | --- | --- |
 | OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` | `SEFIA_E2E_OPENAI_MODEL` |
-| Anthropic | `ANTHROPIC_API_KEY` | `anthropic/claude-opus-4-8` | `SEFIA_E2E_ANTHROPIC_MODEL` |
+| Anthropic | `ANTHROPIC_API_KEY` | `anthropic/claude-haiku-4-5` | `SEFIA_E2E_ANTHROPIC_MODEL` |
 | Gemini | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` | `SEFIA_E2E_GEMINI_MODEL` |
+| xAI (Grok) | `XAI_API_KEY` | `xai/grok-3-mini` | `SEFIA_E2E_XAI_MODEL` |
+| Mistral | `MISTRAL_API_KEY` | `mistral/mistral-small-latest` | `SEFIA_E2E_MISTRAL_MODEL` |
+| Groq | `GROQ_API_KEY` | `groq/llama-3.3-70b-versatile` | `SEFIA_E2E_GROQ_MODEL` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/deepseek-chat` | `SEFIA_E2E_DEEPSEEK_MODEL` |
+| Ollama (local) | `OLLAMA_API_BASE` | `ollama/llama3.1` | `SEFIA_E2E_OLLAMA_MODEL` |
 
-They make real (paid) API calls; run them when touching the LiteLLM adapter,
-the prompt/decision schema, or before a release.
+Hosted providers make real (paid) API calls; Ollama runs against your local
+server (`OLLAMA_API_BASE`, e.g. `http://localhost:11434`) with the model
+already pulled. Run them when touching the LiteLLM adapter, the
+prompt/decision schema, or before a release.
 
 ## Where to make a change
 

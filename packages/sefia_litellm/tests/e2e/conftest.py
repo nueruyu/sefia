@@ -1,15 +1,13 @@
 """Shared fixtures for the live-provider e2e tests.
 
 These tests talk to real LLM providers through ``LiteLLMClient``. They are
-excluded from the default ``pytest`` run by the ``e2e`` marker (see the
-``-m "not e2e"`` addopts); run them explicitly with::
+excluded from the default ``pytest`` run by the ``e2e`` marker; run them with::
 
     uv run pytest packages/sefia_litellm -m e2e
 
-Each provider is skipped unless its API key is present in the environment, so
-``-m e2e`` runs whatever subset of providers the environment is configured for.
-The model per provider can be overridden with the ``SEFIA_E2E_<PROVIDER>_MODEL``
-environment variables.
+Each provider runs only when its enabling environment variable is set (an API
+key, or the server address for Ollama), and its model can be overridden via
+``SEFIA_E2E_<PROVIDER>_MODEL``.
 """
 
 import os
@@ -25,10 +23,14 @@ from sefia_litellm import LiteLLMClient
 
 @dataclass(frozen=True)
 class Provider:
-    """One live provider the e2e suite can run against."""
+    """One live provider the e2e suite can run against.
+
+    ``required_env`` is the environment variable whose presence enables the
+    provider — its API key, except for Ollama where it is the server address.
+    """
 
     id: str
-    api_key_env: str
+    required_env: str
     default_model: str
     model_env: str
 
@@ -40,33 +42,58 @@ class Provider:
 PROVIDERS = [
     Provider(
         id="openai",
-        api_key_env="OPENAI_API_KEY",
+        required_env="OPENAI_API_KEY",
         default_model="gpt-4o-mini",
         model_env="SEFIA_E2E_OPENAI_MODEL",
     ),
     Provider(
         id="anthropic",
-        api_key_env="ANTHROPIC_API_KEY",
-        default_model="anthropic/claude-opus-4-8",
+        required_env="ANTHROPIC_API_KEY",
+        default_model="anthropic/claude-haiku-4-5",
         model_env="SEFIA_E2E_ANTHROPIC_MODEL",
     ),
     Provider(
         id="gemini",
-        api_key_env="GEMINI_API_KEY",
+        required_env="GEMINI_API_KEY",
         default_model="gemini/gemini-2.5-flash",
         model_env="SEFIA_E2E_GEMINI_MODEL",
+    ),
+    Provider(
+        id="xai",
+        required_env="XAI_API_KEY",
+        default_model="xai/grok-3-mini",
+        model_env="SEFIA_E2E_XAI_MODEL",
+    ),
+    Provider(
+        id="mistral",
+        required_env="MISTRAL_API_KEY",
+        default_model="mistral/mistral-small-latest",
+        model_env="SEFIA_E2E_MISTRAL_MODEL",
+    ),
+    Provider(
+        id="groq",
+        required_env="GROQ_API_KEY",
+        default_model="groq/llama-3.3-70b-versatile",
+        model_env="SEFIA_E2E_GROQ_MODEL",
+    ),
+    Provider(
+        id="deepseek",
+        required_env="DEEPSEEK_API_KEY",
+        default_model="deepseek/deepseek-chat",
+        model_env="SEFIA_E2E_DEEPSEEK_MODEL",
+    ),
+    Provider(
+        id="ollama",
+        required_env="OLLAMA_API_BASE",
+        default_model="ollama/llama3.1",
+        model_env="SEFIA_E2E_OLLAMA_MODEL",
     ),
 ]
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-    """Parametrizes every test taking a ``provider`` argument over PROVIDERS.
-
-    Providers whose API key is absent from the environment are skipped, so the
-    suite runs against whatever subset the environment is configured for. (This
-    tree is not a package, so parametrization lives here rather than in an
-    importable helper.)
-    """
+    """Parametrizes every test taking a ``provider`` argument over PROVIDERS,
+    skipping providers whose enabling environment variable is absent."""
     if "provider" in metafunc.fixturenames:
         metafunc.parametrize(
             "provider",
@@ -75,8 +102,8 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
                     provider,
                     id=provider.id,
                     marks=pytest.mark.skipif(
-                        not os.environ.get(provider.api_key_env),
-                        reason=f"{provider.api_key_env} is not set",
+                        not os.environ.get(provider.required_env),
+                        reason=f"{provider.required_env} is not set",
                     ),
                 )
                 for provider in PROVIDERS
@@ -88,8 +115,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 def live_session():
     """Async-context factory: a sefia Session backed by the provider's real API.
 
-    In-memory glyff backend with a unique session id per use, so nothing is
-    replayed between tests and nothing touches disk.
+    A unique session id per use, so nothing is replayed between tests.
     """
 
     @asynccontextmanager
