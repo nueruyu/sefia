@@ -1,8 +1,10 @@
 """Shared fixtures for the sefia test tree.
 
-Shared helpers live in the public ``sefia.testing`` module rather than here;
-this file only provides fixtures. Domain doubles (toolkits, agents, report
-types) are defined locally in the test files that use them.
+The tree is a plain (non-package) directory like the other packages' test
+trees; nothing imports it. Shared helpers live in the public ``sefia.testing``
+module rather than here; this file only provides fixtures. Domain doubles
+(toolkits, agents, report types) are defined locally in the test files that
+use them.
 """
 
 import pytest
