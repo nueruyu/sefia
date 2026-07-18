@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 
 from sefia import Policy
-from sefia.event_system import EventHandler
-from sefia.events import Event
+from sefia.event_system import Event, EventHandler
 
 
 class _Handler(EventHandler[Event]):

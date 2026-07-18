@@ -1,22 +1,54 @@
 [project]
-name = "sefia_litellm"
-version = "0.1.0"
+name = "sefia-litellm"
 description = "LiteLLM adapter for Sefia."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "nueruyu" }]
 requires-python = ">=3.11"
 dependencies = [
-    "sefia",
+    "sefia>=0.1.0",
     # 1.63.0 is the first release exposing reasoning_content / thinking blocks,
     # which the adapter reads and streams; older versions install fine but would
     # silently drop reasoning.
     "litellm>=1.63.0",
 ]
+dynamic = ["version"]
+keywords = [
+    "llm",
+    "litellm",
+    "inference",
+    "sefia",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/nueruyu/sefia"
+Repository = "https://github.com/nueruyu/sefia"
+Issues = "https://github.com/nueruyu/sefia/issues"
+Documentation = "https://github.com/nueruyu/sefia/tree/main/docs"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sefia_litellm"]
+
+[tool.hatch.version]
+source = "vcs"
+raw-options = { root = "../.." }
 
 # Mirrors the root pyproject's pytest options so `uv run pytest
 # packages/sefia_litellm` (which resolves this file as the config) behaves the

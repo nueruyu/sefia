@@ -5,8 +5,8 @@ import pytest
 from sefia.exceptions import PauseException
 from pytest_mock import MockerFixture
 
-from sefia.event_system import EventHandler, EventPublisher
-from sefia.events import AfterToolCall, BeforeToolCall, Event, ToolExecutionFailed
+from sefia.event_system import Event, EventHandler, EventPublisher
+from sefia.events import AfterToolCall, BeforeToolCall, ToolExecutionFailed
 from sefia.inference import ToolCallRequest
 
 T = TypeVar("T")

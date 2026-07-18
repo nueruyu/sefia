@@ -2250,7 +2250,6 @@ wheels = [
 
 [[package]]
 name = "sefia"
-version = "0.1.0"
 source = { editable = "packages/sefia" }
 dependencies = [
     { name = "glyff" },
@@ -2322,7 +2321,6 @@ dev = [
 
 [[package]]
 name = "sefia-fastapi"
-version = "0.1.0"
 source = { editable = "packages/sefia_fastapi" }
 dependencies = [
     { name = "fastapi" },
@@ -2349,7 +2347,6 @@ dev = [
 
 [[package]]
 name = "sefia-litellm"
-version = "0.1.0"
 source = { editable = "packages/sefia_litellm" }
 dependencies = [
     { name = "litellm" },
@@ -2378,7 +2375,6 @@ dev = [
 
 [[package]]
 name = "sefia-typer"
-version = "0.1.0"
 source = { editable = "packages/sefia_typer" }
 dependencies = [
     { name = "rich" },
@@ -2395,9 +2391,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "rich" },
+    { name = "rich", specifier = ">=13.0" },
     { name = "sefia", editable = "packages/sefia" },
-    { name = "typer" },
+    { name = "typer", specifier = ">=0.12" },
 ]
 
 [package.metadata.requires-dev]
@@ -2409,7 +2405,6 @@ dev = [
 
 [[package]]
 name = "sefios"
-version = "0.1.0"
 source = { editable = "packages/sefios" }
 dependencies = [
     { name = "glyff" },
@@ -2440,20 +2435,20 @@ web = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ddgs", marker = "extra == 'web'" },
+    { name = "ddgs", marker = "extra == 'all'", specifier = ">=9.0" },
+    { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.0" },
     { name = "glyff", specifier = ">=0.13.0" },
     { name = "glyff-file-store", specifier = ">=0.13.0" },
     { name = "glyff-pydantic", specifier = ">=0.13.0" },
     { name = "sefia", editable = "packages/sefia" },
+    { name = "sefia-fastapi", marker = "extra == 'all'", editable = "packages/sefia_fastapi" },
     { name = "sefia-fastapi", marker = "extra == 'fastapi'", editable = "packages/sefia_fastapi" },
+    { name = "sefia-litellm", marker = "extra == 'all'", editable = "packages/sefia_litellm" },
     { name = "sefia-litellm", marker = "extra == 'litellm'", editable = "packages/sefia_litellm" },
+    { name = "sefia-typer", marker = "extra == 'all'", editable = "packages/sefia_typer" },
     { name = "sefia-typer", marker = "extra == 'cli'", editable = "packages/sefia_typer" },
-    { name = "sefios", extras = ["cli"], marker = "extra == 'all'", editable = "packages/sefios" },
-    { name = "sefios", extras = ["fastapi"], marker = "extra == 'all'", editable = "packages/sefios" },
-    { name = "sefios", extras = ["litellm"], marker = "extra == 'all'", editable = "packages/sefios" },
-    { name = "sefios", extras = ["web"], marker = "extra == 'all'", editable = "packages/sefios" },
 ]
-provides-extras = ["litellm", "web", "cli", "fastapi", "all"]
+provides-extras = ["all", "cli", "fastapi", "litellm", "web"]
 
 [[package]]
 name = "shellingham"
