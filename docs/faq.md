@@ -159,7 +159,7 @@ flight.
 ### What are sefia, sefios, sefia_litellm, and glyff?
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, durability glue.
-- **`sefios`** — the official batteries: the `SessionScope` front door, default
+- **`sefios`** — the opinionated batteries: the `SessionScope` front door, default
   policies/middleware, and tools (external input, web search).
 - **`sefia_litellm`** — provider support via [LiteLLM](https://github.com/BerriAI/litellm)
   (installed by the `sefios[litellm]` extra).

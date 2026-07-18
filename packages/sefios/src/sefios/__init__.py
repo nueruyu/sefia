@@ -1,4 +1,4 @@
-"""Official stack for building applications with the Sefia framework."""
+"""Opinionated stack for building applications with the Sefia framework."""
 
 from ._scope import SessionScope
 from ._session_state import get_call_state_store, get_session_storage

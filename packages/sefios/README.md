@@ -1,6 +1,6 @@
 # sefios
 
-Official Stack for building applications with the
+Opinionated Stack for building applications with the
 [Sefia](https://pypi.org/project/sefia/) framework.
 
 Where `sefia` is the core framework (decorators, session, tool system),

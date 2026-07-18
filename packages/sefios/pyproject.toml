@@ -1,6 +1,6 @@
 [project]
 name = "sefios"
-description = "Official Stack for building applications with the Sefia framework."
+description = "Opinionated Stack for building applications with the Sefia framework."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "nueruyu" }]
