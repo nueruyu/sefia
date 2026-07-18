@@ -22,7 +22,8 @@ uv run pyright                # type-check
 ```
 
 Tests mirror the source under each package's `tests/units/` (per-module) and
-`tests/scenarios/` (behavioral). Add tests next to the layer you change.
+`tests/scenarios/` (behavioral) — plain directories, not importable packages
+(no `__init__.py`). Add tests next to the layer you change.
 Shared test doubles and helpers live in the public `sefia.testing` module
 (`MockLLMClient`, `memory_session`, scripted-response builders) rather than
 in conftest imports.
