@@ -7,9 +7,7 @@ from sefios import MemorySessionStorage, SessionScope, get_session_storage
 
 
 class _Probe:
-    """A receiver with no tools of its own, so the run's registry is exactly
-    whatever collector the scope installs (the static collector ignores the
-    receiver's capabilities)."""
+    """Receiver used to exercise the configured tool collector."""
 
     @infer
     async def answer(self) -> str:

@@ -27,12 +27,10 @@ class SessionScope:
     ``history_storage`` selects where run history is persisted; defaults to the
     run's glyff metadata (:class:`~sefia.history_storages.GlyffHistoryStorage`).
 
-    ``tool_collector`` selects how a run's tools are discovered. It defaults to
-    the receiver-introspecting :class:`~sefia.tool_collectors.DefaultToolCollector`
-    (built by :class:`~sefia.Session` when left unset). Pass one — for example a
-    :class:`~sefia.tool_collectors.StaticToolCollector` of JSON-schema tools with
-    no Python instance to introspect — to override it; :meth:`session` takes the
-    same argument to override per call, mirroring ``model``.
+    ``tool_collector`` customizes tool discovery for a run. A collector passed to
+    :meth:`session` overrides the instance default; passing ``None`` there inherits
+    the instance default rather than resetting it. When neither is set,
+    :class:`~sefia.Session` builds its own :class:`DefaultToolCollector`.
     """
 
     def __init__(
@@ -77,7 +75,9 @@ class SessionScope:
         llm_client = self.llm_client
         resolved_model = model or self.model
         resolved_stream = self.stream if stream is None else stream
-        resolved_tool_collector = tool_collector or self.tool_collector
+        resolved_tool_collector = (
+            self.tool_collector if tool_collector is None else tool_collector
+        )
 
         if llm_client is None:
             if resolved_model is None:
