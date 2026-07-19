@@ -142,6 +142,7 @@ implementation noted in parentheses.
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
 | Support a new output type system | `ToolFunctionInspector` / `DecisionModelBuilder` in `pydantic/_model_backend.py` |
 | Register a tool from a raw JSON Schema (no signature) | `JsonSchemaToolEntry` / `ToolRegistry.add_json_tool` in `_tool_system.py` |
+| Install a whole tool-discovery rule for a run (e.g. client-defined tools) | pass `tool_collector=` to `SessionScope`/`SessionScope.session()`/`Session` (seam: `ToolCollector`) |
 | Trace the runtime end to end | [how-it-works.md](./how-it-works.md) |
 
 ## Conventions
