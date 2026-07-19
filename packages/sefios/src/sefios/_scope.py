@@ -6,7 +6,7 @@ import glyff
 import glyff_file_store
 import sefia
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
-from sefia import HistoryStorage, Profile, Policy
+from sefia import HistoryStorage, Profile, Policy, ToolCollector
 from sefia.llm import LLMClient
 
 from ._session_state import bind_session_storage
@@ -26,6 +26,13 @@ class SessionScope:
 
     ``history_storage`` selects where run history is persisted; defaults to the
     run's glyff metadata (:class:`~sefia.history_storages.GlyffHistoryStorage`).
+
+    ``tool_collector`` selects how a run's tools are discovered. It defaults to
+    the receiver-introspecting :class:`~sefia.tool_collectors.DefaultToolCollector`
+    (built by :class:`~sefia.Session` when left unset). Pass one — for example a
+    :class:`~sefia.tool_collectors.StaticToolCollector` of JSON-schema tools with
+    no Python instance to introspect — to override it; :meth:`session` takes the
+    same argument to override per call, mirroring ``model``.
     """
 
     def __init__(
@@ -41,6 +48,7 @@ class SessionScope:
         max_repair_attempts: int = 2,
         session_storage_factory: Callable[[str], SessionStorage] | None = None,
         history_storage: HistoryStorage | None = None,
+        tool_collector: ToolCollector | None = None,
     ):
         self.session_dir = session_dir
         self.model = model
@@ -52,6 +60,7 @@ class SessionScope:
         self.max_repair_attempts = max_repair_attempts
         self.session_storage_factory = session_storage_factory
         self.history_storage = history_storage
+        self.tool_collector = tool_collector
 
     @asynccontextmanager
     async def session(
@@ -62,11 +71,13 @@ class SessionScope:
         stream: bool | None = None,
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
+        tool_collector: ToolCollector | None = None,
     ) -> AsyncIterator[sefia.Session]:
         """Run code within a configured Sefia session context."""
         llm_client = self.llm_client
         resolved_model = model or self.model
         resolved_stream = self.stream if stream is None else stream
+        resolved_tool_collector = tool_collector or self.tool_collector
 
         if llm_client is None:
             if resolved_model is None:
@@ -117,6 +128,7 @@ class SessionScope:
                     policies=final_policies,
                     profiles=final_profiles,
                     stream=resolved_stream,
+                    tool_collector=resolved_tool_collector,
                     history_storage=self.history_storage,
                     max_repair_attempts=self.max_repair_attempts,
                 ) as session:
