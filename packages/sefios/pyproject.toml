@@ -1,7 +1,9 @@
 [project]
 name = "sefios"
-version = "0.1.0"
-description = "Official Stack for building applications with the Sefia framework."
+description = "Opinionated Stack for building applications with the Sefia framework."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "nueruyu" }]
 requires-python = ">=3.11"
 dependencies = [
     "sefia>=0.1.0",
@@ -9,10 +11,31 @@ dependencies = [
     "glyff-file-store>=0.13.0",
     "glyff-pydantic>=0.13.0",
 ]
+dynamic = ["version"]
+keywords = [
+    "llm",
+    "agents",
+    "durable-execution",
+    "human-in-the-loop",
+    "sefia",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 
 [project.optional-dependencies]
 litellm = ["sefia-litellm>=0.1.0"]
-web = ["ddgs"]
+web = ["ddgs>=9.0"]
 cli = ["sefia-typer>=0.1.0"]
 fastapi = ["sefia-fastapi>=0.1.0"]
 all = [
@@ -22,9 +45,19 @@ all = [
     "sefios[fastapi]",
 ]
 
+[project.urls]
+Homepage = "https://github.com/nueruyu/sefia"
+Repository = "https://github.com/nueruyu/sefia"
+Issues = "https://github.com/nueruyu/sefia/issues"
+Documentation = "https://github.com/nueruyu/sefia/tree/main/docs"
+
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sefios"]
+
+[tool.hatch.version]
+source = "vcs"
+raw-options = { root = "../.." }

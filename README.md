@@ -63,7 +63,7 @@ pip install 'sefios[litellm]'
 ```
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
-- **`sefios`** — the official batteries: the `SessionScope` front door, ready-made
+- **`sefios`** — the opinionated batteries: the `SessionScope` front door, ready-made
   policies/middleware, and tools (external input, web search). The `[litellm]` extra
   pulls in **`sefia_litellm`** for provider support via
   [LiteLLM](https://github.com/BerriAI/litellm). The `[cli]` and `[fastapi]` extras

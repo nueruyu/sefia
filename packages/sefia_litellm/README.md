@@ -1,7 +1,18 @@
-# sefia_litellm
+# sefia-litellm
 
-A `sefia` `LLMClient` implementation that connects to various LLM providers via
+A [`sefia`](https://pypi.org/project/sefia/) `LLMClient` implementation that
+connects to various LLM providers via
 [LiteLLM](https://github.com/BerriAI/litellm).
+
+## Install
+
+```bash
+pip install sefia-litellm
+```
+
+Or through the stack: `pip install 'sefios[litellm]'`.
+
+## Usage
 
 ```python
 import sefia_litellm
@@ -83,3 +94,11 @@ This package mitigates that as follows:
 
    threading.Thread(target=__import__, args=("litellm",), daemon=True).start()
    ```
+
+## Status
+
+Early development. APIs may change before v1.0.
+
+## License
+
+MIT

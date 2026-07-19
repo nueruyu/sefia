@@ -1,6 +1,7 @@
 from typing import Sequence
 
-from .._tool_system import Capability, ToolEntry, ToolCollector, ToolRegistry
+from .._tool_system import ToolEntry, ToolCollector, ToolRegistry
+from ..inference import Capability
 
 
 class StaticToolCollector(ToolCollector):
