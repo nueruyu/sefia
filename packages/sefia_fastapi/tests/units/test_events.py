@@ -2,13 +2,12 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 
-from sefia.llm.events import LLMTokenReceived
 from sefia_fastapi import SessionEvents, SSEEvent
 
 
 class TestSSEEvent:
     def test_names_are_the_wire_contract(self):
-        assert SSEEvent.TOKEN == "token"
+        assert SSEEvent.DELTA == "delta"
         assert SSEEvent.INPUT_REQUIRED == "input_required"
         assert SSEEvent.OUTPUT == "output"
         assert SSEEvent.COMPLETED == "completed"
@@ -19,24 +18,24 @@ class TestPublish:
     async def test_publish_without_subscribers_is_a_noop(self):
         events = SessionEvents()
 
-        await events.publish("s1", "token", "hello")
+        await events.publish("s1", "delta", "hello")
 
     async def test_subscriber_receives_published_events(self):
         events = SessionEvents()
 
         async with events._subscribe("s1") as queue:
-            await events.publish("s1", "token", "hello")
+            await events.publish("s1", "delta", "hello")
 
             event = queue.get_nowait()
 
-        assert event.name == "token"
+        assert event.name == "delta"
         assert event.data == "hello"
 
     async def test_events_are_scoped_to_their_session(self):
         events = SessionEvents()
 
         async with events._subscribe("s1") as queue:
-            await events.publish("other", "token", "hello")
+            await events.publish("other", "delta", "hello")
 
             assert queue.empty()
 
@@ -45,23 +44,9 @@ class TestPublish:
 
         async with events._subscribe("s1") as queue:
             pass
-        await events.publish("s1", "token", "late")
+        await events.publish("s1", "delta", "late")
 
         assert queue.empty()
-
-
-class TestTokenHandler:
-    async def test_relays_tokens_to_the_session_stream(self):
-        events = SessionEvents()
-        handler = events.token_handler("s1")
-
-        async with events._subscribe("s1") as queue:
-            await handler.handle(LLMTokenReceived(token="hi"))
-
-            event = queue.get_nowait()
-
-        assert event.name == SSEEvent.TOKEN
-        assert event.data == "hi"
 
 
 class TestResponse:

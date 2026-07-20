@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -40,8 +41,9 @@ class SefiaHTTP:
     The integration facade over the ``sefia_fastapi`` building blocks: it
     wires the HTTP input core to :class:`Input` and the bound
     session storage, runs sessions through a :class:`SessionScope` (with cost
-    accounting installed), relays LLM tokens to per-session SSE streams, and
-    surfaces pauses as :class:`sefia_fastapi.InputRequired`.
+    accounting installed), forwards the parsed prompt/message deltas to
+    per-session SSE streams, and surfaces pauses as
+    :class:`sefia_fastapi.InputRequired`.
     """
 
     def __init__(
@@ -58,12 +60,22 @@ class SefiaHTTP:
         self._active_session_id: ContextVar[str | None] = ContextVar(
             "http_active_session_id", default=None
         )
+        # A streamed prompt/message arrives token-by-token before the discrete
+        # completion event that closes it, so each session's deltas are tagged
+        # with an id minted on the first delta and retired by that event -- so a
+        # client can group a run of deltas into the bubble they belong to.
+        self._input_delta_ids: dict[str, str] = {}
+        self._output_delta_ids: dict[str, str] = {}
         self._input_tool = Input(
             get_input=self._provide_input,
             on_request=self._record_request,
             on_complete=self._complete_request,
+            on_prompt_delta=self._emit_input_delta,
         )
-        self._output_tool = Output(on_output=self._emit_output)
+        self._output_tool = Output(
+            on_output=self._emit_output,
+            on_message_delta=self._emit_output_delta,
+        )
 
         scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
         if policies is not None:
@@ -72,7 +84,7 @@ class SefiaHTTP:
         self._session_scope = SessionScope(
             session_dir=session_dir,
             model=model,
-            stream=False,
+            stream=True,
             max_steps=max_steps,
             policies=scope_policies,
         )
@@ -102,17 +114,12 @@ class SefiaHTTP:
         policies: list[Policy] | None = None,
     ) -> AsyncIterator[SefiaHTTPSession]:
         self.ensure_session(session_id)
-        # Always publish token events. Publishing is a no-op when nobody is
-        # subscribed, and keeping streaming on unconditionally means a client that
-        # subscribes mid-run still receives the remaining tokens -- otherwise
-        # streaming would depend on subscribing strictly before the request that
-        # starts the run.
+        # Stream by default: the parsed prompt/message deltas are decoded from
+        # the streamed tool-call arguments, so LLM-level streaming has to be on
+        # for them to flow. Publishing is a no-op when nobody is subscribed, and
+        # keeping streaming on unconditionally means a client that subscribes
+        # mid-run still receives the remaining deltas.
         resolved_stream = True if stream is None else stream
-        session_policies: list[Policy] = list(policies or [])
-        if resolved_stream:
-            session_policies.append(
-                Policy(handlers=lambda: [self._events.token_handler(session_id)])
-            )
 
         token = self._active_session_id.set(session_id)
         try:
@@ -120,7 +127,7 @@ class SefiaHTTP:
                 session_id=session_id,
                 model=model,
                 stream=resolved_stream,
-                policies=session_policies or None,
+                policies=policies,
             ):
                 with self._input.use_store(get_session_storage()):
                     yield SefiaHTTPSession(channel=self._input)
@@ -142,6 +149,7 @@ class SefiaHTTP:
                     "prompt": pause.prompt,
                 },
             )
+            self._input_delta_ids.pop(session_id, None)
             raise InputRequired(
                 interaction_id=pause.interaction_id,
                 prompt=pause.prompt,
@@ -161,6 +169,8 @@ class SefiaHTTP:
                 session_id, SSEEvent.COMPLETED, {"session_id": session_id}
             )
         finally:
+            self._input_delta_ids.pop(session_id, None)
+            self._output_delta_ids.pop(session_id, None)
             self._active_session_id.reset(token)
 
     def events(self, session_id: str) -> StreamingResponse:
@@ -175,14 +185,27 @@ class SefiaHTTP:
 
     async def _complete_request(self, result: InputResult) -> None:
         await self._input.complete_request(result.interaction_id)
+        self._input_delta_ids.pop(self._require_session_id(), None)
+
+    async def _emit_input_delta(self, text: str) -> None:
+        await self._emit_delta("input", self._input_delta_ids, text)
+
+    async def _emit_output_delta(self, text: str) -> None:
+        await self._emit_delta("output", self._output_delta_ids, text)
+
+    async def _emit_delta(
+        self, delta_type: str, delta_ids: dict[str, str], text: str
+    ) -> None:
+        session_id = self._require_session_id()
+        interaction_id = delta_ids.setdefault(session_id, str(uuid.uuid4()))
+        await self._events.publish(
+            session_id,
+            SSEEvent.DELTA,
+            {"type": delta_type, "interaction_id": interaction_id, "text": text},
+        )
 
     async def _emit_output(self, message: OutputMessage) -> None:
-        session_id = self._active_session_id.get()
-        if session_id is None:
-            raise RuntimeError(
-                "Output tool is not bound to a session; send_output must run "
-                "inside SefiaHTTP.session()."
-            )
+        session_id = self._require_session_id()
         await self._events.publish(
             session_id,
             SSEEvent.OUTPUT,
@@ -191,3 +214,13 @@ class SefiaHTTP:
                 "message": message.message,
             },
         )
+        self._output_delta_ids.pop(session_id, None)
+
+    def _require_session_id(self) -> str:
+        session_id = self._active_session_id.get()
+        if session_id is None:
+            raise RuntimeError(
+                "The Input/Output tools are not bound to a session; they must "
+                "run inside SefiaHTTP.session()."
+            )
+        return session_id
