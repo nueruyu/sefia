@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from pytest_mock import MockerFixture
 
-from sefia import ToolRegistry
+from sefia import ToolRegistry, current_tool_call_id
 from sefia._tool_execution import call_tools
 from sefia.event_system import EventPublisher
 from sefia.exceptions import PauseException
@@ -237,3 +237,53 @@ async def test_identical_concurrent_calls_run_serially(publisher):
 
     assert max_active_same == 1
     assert saw_other_during_same
+
+
+async def test_handler_reads_its_own_call_id(publisher):
+    # Each handler sees the id of the call it is serving, for a signature-based
+    # tool and a JSON-schema tool alike, and distinct calls see distinct ids.
+    seen: dict[str, str] = {}
+
+    def note_signature(label: str) -> str:
+        seen[label] = current_tool_call_id()
+        return "ok"
+
+    def note_json(**arguments) -> str:
+        seen[arguments["label"]] = current_tool_call_id()
+        return "ok"
+
+    registry = ToolRegistry()
+    registry.add(note_signature, name="note_signature")
+    registry.add_json_tool(
+        note_json,
+        name="note_json",
+        description="",
+        parameters={"type": "object"},
+    )
+
+    await call_tools(
+        [
+            ToolCallRequest(
+                id="sig-call", name="note_signature", arguments={"label": "a"}
+            ),
+            ToolCallRequest(id="json-call", name="note_json", arguments={"label": "b"}),
+        ],
+        registry,
+        publisher,
+    )
+
+    assert seen == {"a": "sig-call", "b": "json-call"}
+
+
+async def test_call_id_binding_does_not_outlive_the_call(publisher):
+    registry = ToolRegistry()
+    registry.add(lambda: "ok", name="noop")
+
+    await call_tools(
+        [ToolCallRequest(id="1", name="noop", arguments={})],
+        registry,
+        publisher,
+    )
+
+    with pytest.raises(RuntimeError):
+        current_tool_call_id()
