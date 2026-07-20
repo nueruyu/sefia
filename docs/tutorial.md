@@ -32,8 +32,7 @@ import asyncio
 from pathlib import Path
 
 from pydantic import BaseModel
-from sefia import infer
-from sefios import SessionScope
+from sefios import SessionScope, infer
 
 
 class Summary(BaseModel):
@@ -147,7 +146,8 @@ from pathlib import Path
 
 import typer
 from pydantic import BaseModel
-from sefia import Tools, infer
+from sefia import Tools
+from sefios import infer
 from sefios.cli import SefiaCLI
 from sefios.tools import Input, WebSearch
 

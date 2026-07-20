@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Annotated, Never
 
 import typer
-from sefia import Tools, infer
+from sefia import Tools
+from sefios import infer
 from sefios.cli import SefiaCLI
 from sefios.tools import Input, Output
 

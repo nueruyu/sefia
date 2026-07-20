@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Annotated
 
-from sefia import AsRawText, Tools, infer
+from sefia import AsRawText, Tools
+from sefios import infer
 from sefios.tools import Input
 
 from .models import (

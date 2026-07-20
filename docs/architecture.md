@@ -111,6 +111,7 @@ implementation noted in parentheses.
 
 | Path | Responsibility |
 | --- | --- |
+| `__init__.py` | Re-exports the curated authoring surface (`infer`, `preview`, `policy`, `profile`, `Policy`, `Profile` from `sefia`; `engrave` from `glyff`) so application code imports only from `sefios`. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |
@@ -149,6 +150,10 @@ implementation noted in parentheses.
 
 - **Underscore = internal.** `_module.py` and `_Symbol` are not API; import the public
   names from a package's `__init__.py`.
+- **Import from `sefios`.** Application code imports the authoring surface (`infer`,
+  `engrave`, `SessionScope`, …) from `sefios`, which re-exports the everyday core and
+  glyff symbols. Import from `sefia` (or `glyff`) directly only when writing a library
+  or an extension — a custom `Policy`, `InferenceStrategy`, `LLMClient`, or `ToolCollector`.
 - **Interfaces live in `_interfaces/`** as ABCs; concrete defaults live in
   feature folders (`llm/`, `pydantic/`, `tool_collectors/`).
 - **Tests mirror source** under each package's `tests/units/` (per-module) and
