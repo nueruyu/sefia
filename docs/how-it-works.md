@@ -189,12 +189,10 @@ its handler verbatim. A tool that
 history and fed back to the model so it can recover and continue, rather than failing
 the run.
 
-A handler that needs the identity of the call it is serving — a transport-backed
-or client-side tool correlating a paused call with a later result — reads
-`sefia.current_tool_call_id()` inside its body. It returns the serving call's
-`ToolCallRequest.id`, bound around each `invoke` and stable across the call's
-pause and resume (the decision that carries the id replays from history), so no
-handler has to reach into glyff for a per-call key.
+A handler that needs the identity of the call it is serving reads
+`sefia.current_tool_call_id()` — the serving `ToolCallRequest.id`, stable across
+the call's pause and resume (its decision replays from history), so a
+transport-backed tool needs no glyff-derived per-call key.
 
 When one decision contains several calls, the batch runs **serially by
 default**; consecutive calls to `@concurrent`-marked tools overlap, and an
