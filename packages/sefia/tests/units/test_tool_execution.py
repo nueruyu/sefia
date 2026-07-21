@@ -275,7 +275,10 @@ async def test_handler_reads_its_own_call_id(publisher):
     assert seen == {"a": "sig-call", "b": "json-call"}
 
 
-async def test_call_id_binding_does_not_outlive_the_call(publisher):
+async def test_call_id_is_unbound_in_the_caller_after_the_call_returns(publisher):
+    # The binding is reset in the task that ran the batch, so the caller sees
+    # no id once call_tools returns. (A task spawned during the call keeps its
+    # inherited copy — see the next test.)
     registry = ToolRegistry()
     registry.add(lambda: "ok", name="noop")
 
@@ -287,3 +290,29 @@ async def test_call_id_binding_does_not_outlive_the_call(publisher):
 
     with pytest.raises(RuntimeError):
         current_tool_call_id()
+
+
+async def test_call_id_is_inherited_by_a_task_spawned_during_the_call(publisher):
+    # A task created inside a handler copies the current context, so it keeps
+    # reading the call's id after the handler returns — standard contextvars
+    # inheritance, which the accessor's contract documents rather than fights.
+    seen = asyncio.get_running_loop().create_future()
+
+    async def background() -> None:
+        await asyncio.sleep(0)
+        seen.set_result(current_tool_call_id())
+
+    def spawns_background() -> str:
+        asyncio.ensure_future(background())
+        return "ok"
+
+    registry = ToolRegistry()
+    registry.add(spawns_background, name="spawns_background")
+
+    await call_tools(
+        [ToolCallRequest(id="bg-call", name="spawns_background", arguments={})],
+        registry,
+        publisher,
+    )
+
+    assert await asyncio.wait_for(seen, timeout=1) == "bg-call"

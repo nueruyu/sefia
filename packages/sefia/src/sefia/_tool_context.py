@@ -28,7 +28,14 @@ def current_tool_call_id() -> str:
     replay-safe key to correlate a paused call with a later-provided result,
     without reaching into the durable-execution engine underneath.
 
-    Raises ``RuntimeError`` when called outside a tool invocation.
+    The id is bound only for the duration of the call's ``invoke``, in the
+    current context. Like any ``contextvars`` value it is inherited by a task
+    spawned during the call, so a background task started from a handler keeps
+    reading the call's id after the handler returns; read it synchronously in
+    the tool body when you need it scoped strictly to the call.
+
+    Raises ``RuntimeError`` when no call is bound in the current context —
+    outside a tool body, or from a task created before the call began.
     """
     try:
         return _tool_call_id_var.get()
