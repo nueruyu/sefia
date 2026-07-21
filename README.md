@@ -74,10 +74,12 @@ pip install 'sefios[litellm]'
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
 
-**Import from `sefios`.** Application code gets its whole authoring surface — `infer`,
-`engrave`, `SessionScope`, and friends — from `sefios`, which re-exports the core so you
-only need to know one package. Reach into `sefia` directly when writing a library or a
-custom policy, strategy, or client.
+**Prefer importing from `sefios`.** It re-exports the curated core authoring surface —
+the `infer` / `preview` / `policy` / `profile` decorators, `Policy` / `Profile`, and
+`engrave` — alongside its own `SessionScope` and batteries, so most application code
+touches one package. Lower-level or not-yet-re-exported helpers such as `Tools` and
+`AsRawText`, and the extension seams (a custom policy, strategy, or client), still come
+from `sefia`.
 
 ## Quickstart
 

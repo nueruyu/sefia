@@ -150,10 +150,12 @@ implementation noted in parentheses.
 
 - **Underscore = internal.** `_module.py` and `_Symbol` are not API; import the public
   names from a package's `__init__.py`.
-- **Import from `sefios`.** Application code imports the authoring surface (`infer`,
-  `engrave`, `SessionScope`, …) from `sefios`, which re-exports the everyday core and
-  glyff symbols. Import from `sefia` (or `glyff`) directly only when writing a library
-  or an extension — a custom `Policy`, `InferenceStrategy`, `LLMClient`, or `ToolCollector`.
+- **Prefer importing from `sefios`.** It re-exports the curated core authoring surface
+  (`infer` / `preview` / `policy` / `profile`, `Policy` / `Profile` from `sefia`;
+  `engrave` from `glyff`), so application code touches one package for the everyday
+  decorators. Symbols outside that surface still come from `sefia` (or `glyff`): core
+  helpers not re-exported (`Tools`, `AsRawText`, `concurrent`) and the extension seams
+  (`InferenceStrategy`, `LLMClient`, `ToolCollector`, and subclassing `Policy`).
 - **Interfaces live in `_interfaces/`** as ABCs; concrete defaults live in
   feature folders (`llm/`, `pydantic/`, `tool_collectors/`).
 - **Tests mirror source** under each package's `tests/units/` (per-module) and
