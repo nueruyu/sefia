@@ -1,5 +1,4 @@
-from sefia import Tools
-from sefios import infer
+from sefios import Tools, infer
 from sefios.tools import Input, WebSearch
 
 from .models import ArticleRequest, NewsArticle

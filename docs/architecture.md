@@ -111,7 +111,7 @@ implementation noted in parentheses.
 
 | Path | Responsibility |
 | --- | --- |
-| `__init__.py` | Re-exports the curated authoring surface (`infer`, `preview`, `policy`, `profile`, `Policy`, `Profile` from `sefia`; `engrave` from `glyff`) so application code imports only from `sefios`. |
+| `__init__.py` | Re-exports the everyday authoring surface (`infer`, `preview`, `policy`, `profile`, `Tools`, `AsRawText`, `Policy`, `Profile` from `sefia`; `engrave` from `glyff`) so application code imports only from `sefios`. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |
@@ -150,11 +150,10 @@ implementation noted in parentheses.
 
 - **Underscore = internal.** `_module.py` and `_Symbol` are not API; import the public
   names from a package's `__init__.py`.
-- **Prefer importing from `sefios`.** It re-exports the curated core authoring surface
-  (`infer` / `preview` / `policy` / `profile`, `Policy` / `Profile` from `sefia`;
-  `engrave` from `glyff`), so application code touches one package for the everyday
-  decorators. Symbols outside that surface still come from `sefia` (or `glyff`): core
-  helpers not re-exported (`Tools`, `AsRawText`, `concurrent`) and the extension seams
+- **Import from `sefios`.** It re-exports the everyday authoring surface
+  (`infer` / `preview` / `policy` / `profile`, `Tools`, `AsRawText`, `Policy` / `Profile`
+  from `sefia`; `engrave` from `glyff`), so application code touches one package. Only
+  the `@concurrent` marker and the extension seams still come from `sefia`
   (`InferenceStrategy`, `LLMClient`, `ToolCollector`, and subclassing `Policy`).
 - **Interfaces live in `_interfaces/`** as ABCs; concrete defaults live in
   feature folders (`llm/`, `pydantic/`, `tool_collectors/`).

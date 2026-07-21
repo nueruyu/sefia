@@ -5,8 +5,7 @@ at most one clarifying question, which lets the API demonstrate pause/resume ove
 normal HTTP requests while lifecycle events stream over SSE.
 """
 
-from sefia import Tools
-from sefios import infer
+from sefios import Tools, infer
 from sefios.tools import Input
 
 from .models import Brief

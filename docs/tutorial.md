@@ -75,7 +75,7 @@ Tools are the **public methods of fields granted with the `Tools[...]` annotatio
 annotated `Tools[...]`, and its public methods become callable by the inferred step.
 
 ```python
-from sefia import Tools
+from sefios import Tools
 from sefios.tools import WebSearch
 
 
@@ -146,8 +146,7 @@ from pathlib import Path
 
 import typer
 from pydantic import BaseModel
-from sefia import Tools
-from sefios import infer
+from sefios import Tools, infer
 from sefios.cli import SefiaCLI
 from sefios.tools import Input, WebSearch
 
