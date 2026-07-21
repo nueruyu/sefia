@@ -114,7 +114,7 @@ members are offered.
 
 When the model requests several tool calls in one step, they run one at a time. A
 tool that is safe to overlap with the other calls in its batch — a pure read like a
-search — can be marked with `@concurrent` (`from sefia import concurrent`) on the
+search — can be marked with `@concurrent` (`from sefios import concurrent`) on the
 method; consecutive marked calls then run concurrently, and their results still come
 back in request order. Leave tools unmarked when their side-effect ordering matters.
 

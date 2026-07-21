@@ -75,11 +75,10 @@ The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is inst
 automatically.
 
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
-`infer` / `preview` / `policy` / `profile` decorators, `Tools`, `AsRawText`,
-`Policy` / `Profile`, and `engrave` — alongside its own `SessionScope` and batteries,
-so application code needs only `sefios`. Reach into `sefia` directly for the
-`@concurrent` marker and the extension seams (a custom policy, strategy, client, or
-tool collector).
+`infer` / `concurrent` / `preview` / `policy` / `profile` decorators, `Tools`,
+`AsRawText`, `Policy` / `Profile`, and `engrave` — alongside its own `SessionScope` and
+batteries, so application code needs only `sefios`. Reach into `sefia` directly for the
+extension seams (a custom policy, strategy, client, or tool collector).
 
 ## Quickstart
 

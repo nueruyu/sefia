@@ -7,6 +7,7 @@ import sefios
 
 def test_reexports_are_the_source_objects():
     assert sefios.infer is sefia.infer
+    assert sefios.concurrent is sefia.concurrent
     assert sefios.preview is sefia.preview
     assert sefios.policy is sefia.policy
     assert sefios.profile is sefia.profile
@@ -20,6 +21,7 @@ def test_reexports_are_the_source_objects():
 def test_authoring_surface_is_public():
     for name in (
         "infer",
+        "concurrent",
         "preview",
         "policy",
         "profile",

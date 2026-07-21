@@ -1,7 +1,17 @@
 """Opinionated stack for building applications with the Sefia framework."""
 
 from glyff import engrave
-from sefia import AsRawText, Policy, Profile, Tools, infer, policy, preview, profile
+from sefia import (
+    AsRawText,
+    Policy,
+    Profile,
+    Tools,
+    concurrent,
+    infer,
+    policy,
+    preview,
+    profile,
+)
 
 from ._scope import SessionScope
 from ._session_state import get_call_state_store, get_session_storage
@@ -13,6 +23,7 @@ from .storage import FileSessionStorage, MemorySessionStorage, SessionStorage
 __all__ = [
     # Authoring surface re-exported from the core, so app code only imports `sefios`.
     "infer",
+    "concurrent",
     "preview",
     "policy",
     "profile",
