@@ -20,18 +20,22 @@ or `/docs` for the interactive API docs.
 ## Browser UI
 
 Open `http://127.0.0.1:8000/` for a dependency-free chat UI that creates a
-session and sends messages to the human-in-the-loop interview endpoint. When the
-agent needs more detail, the UI displays the `input_required` prompt as the
-next assistant message and remembers the `interaction_id` for the next user
-reply. When the workflow completes, the UI renders the structured brief.
+session and sends messages to the human-in-the-loop interview endpoint. As the
+agent composes a question its prompt is typed out live from `delta` events;
+when the agent needs more detail, the `input_required` event finalizes that
+prompt and the UI remembers its `interaction_id` for the next user reply. When
+the workflow completes, the UI renders the structured brief.
 
 The demo interviewer asks at most one focused follow-up question. If the request
 is usable with reasonable assumptions, it completes the brief instead of asking
 separately for topic, goal, and audience.
 
-The UI intentionally ignores raw `token` events because this example's `@infer`
-stream contains internal structured output tokens; the user-facing HITL flow is
-shown through `input_required`, `completed`, and the normal HTTP response body.
+The UI streams the `delta` event — the *parsed* prompt and message text — rather
+than the raw `@infer` response, so the internal structured envelope never
+reaches the browser. Each delta carries `type` (`input` for a `get_input`
+prompt, `output` for a `send_output` message) and the `interaction_id` of the
+bubble it belongs to; the discrete `input_required` / `output` events close that
+bubble.
 
 The UI is plain HTML served by the FastAPI example, so it remains easy to inspect
 and does not require a separate frontend toolchain.
@@ -68,6 +72,7 @@ Browser clients can use the standard `EventSource` API for lifecycle events:
 
 ```js
 const events = new EventSource(`/sessions/${sessionId}/events`)
+events.addEventListener("delta", (event) => console.log(JSON.parse(event.data)))
 events.addEventListener("completed", (event) => console.log(JSON.parse(event.data)))
 events.addEventListener("input_required", (event) => console.log(JSON.parse(event.data)))
 events.addEventListener("error", (event) => console.error(JSON.parse(event.data)))
@@ -77,7 +82,7 @@ events.addEventListener("error", (event) => console.error(JSON.parse(event.data)
 
 - Writing FastAPI endpoints as ordinary HTTP request handlers
 - Running a Sefia workflow with a CLI-like procedural session block
-- Publishing `completed`, `input_required`, and `error` events through a separate SSE channel
+- Streaming parsed `delta` text (with a `type` of `input`/`output`) and publishing `completed`, `input_required`, and `error` events through a separate SSE channel
 - Keeping SSE wiring out of the application workflow body
 - Serving a dependency-free HITL chat UI from the same FastAPI process
 

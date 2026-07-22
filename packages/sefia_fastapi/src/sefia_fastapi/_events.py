@@ -1,4 +1,4 @@
-"""Per-session server-sent events: publish, token relay, and the SSE response."""
+"""Per-session server-sent events: publish and the SSE response."""
 
 from __future__ import annotations
 
@@ -11,8 +11,6 @@ from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
-from sefia.event_system import EventHandler
-from sefia.llm.events import LLMTokenReceived
 
 
 class SSEEvent:
@@ -22,7 +20,7 @@ class SSEEvent:
     than repeating literals.
     """
 
-    TOKEN = "token"
+    DELTA = "delta"
     INPUT_REQUIRED = "input_required"
     OUTPUT = "output"
     COMPLETED = "completed"
@@ -39,10 +37,9 @@ class SessionEvents:
     """Per-session event streams for an HTTP application.
 
     One object owns the whole surface: :meth:`publish` fans an event out to a
-    session's subscribers, :meth:`token_handler` returns a sefia event handler
-    that relays LLM tokens into the stream, and :meth:`response` serves the
-    stream as a ``text/event-stream`` response. Publishing to a session nobody
-    is subscribed to is a no-op.
+    session's subscribers and :meth:`response` serves the stream as a
+    ``text/event-stream`` response. Publishing to a session nobody is
+    subscribed to is a no-op.
     """
 
     def __init__(self):
@@ -55,10 +52,6 @@ class SessionEvents:
         event = _SessionEvent(name=name, data=data)
         for queue in subscribers:
             await queue.put(event)
-
-    def token_handler(self, session_id: str) -> EventHandler[LLMTokenReceived]:
-        """A sefia event handler relaying LLM tokens into this session's stream."""
-        return _TokenRelay(self, session_id)
 
     def response(self, session_id: str) -> StreamingResponse:
         """A ``text/event-stream`` response relaying this session's events."""
@@ -86,15 +79,6 @@ class SessionEvents:
             while True:
                 event = await queue.get()
                 yield _format_sse_event(event.name, event.data)
-
-
-class _TokenRelay(EventHandler[LLMTokenReceived]):
-    def __init__(self, events: SessionEvents, session_id: str):
-        self._events = events
-        self._session_id = session_id
-
-    async def handle(self, event: LLMTokenReceived) -> None:
-        await self._events.publish(self._session_id, SSEEvent.TOKEN, event.token)
 
 
 def _format_sse_event(event: str, data: Any) -> str:

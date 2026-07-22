@@ -241,6 +241,8 @@
       let activeAssistantBubble = null;
       let pendingInteractionId = null;
       let lastInputRequiredId = null;
+      let streamingBubbleId = null;
+      let streamingText = "";
       let isSending = false;
 
       const sessionIdElement = document.querySelector("#session-id");
@@ -288,6 +290,8 @@
         activeAssistantBubble = null;
         pendingInteractionId = null;
         lastInputRequiredId = null;
+        streamingBubbleId = null;
+        streamingText = "";
       }
 
       function appendMessage(role, content = "") {
@@ -328,8 +332,23 @@
         ].join("\n");
       }
 
+      function handleDelta(data) {
+        if (streamingBubbleId !== data.interaction_id) {
+          streamingBubbleId = data.interaction_id;
+          streamingText = "";
+        }
+        if (!activeAssistantBubble) {
+          activeAssistantBubble = appendMessage("assistant");
+        }
+        streamingText += data.text;
+        activeAssistantBubble.textContent = streamingText;
+        activeAssistantBubble.classList.add("typing");
+        chatLogElement.scrollTop = chatLogElement.scrollHeight;
+      }
+
       function handleInputRequired(data) {
         pendingInteractionId = data.interaction_id;
+        streamingBubbleId = null;
         if (lastInputRequiredId === data.interaction_id) {
           setStatus("Waiting for your reply");
           return;
@@ -342,6 +361,7 @@
       function handleCompleted(data) {
         pendingInteractionId = null;
         lastInputRequiredId = null;
+        streamingBubbleId = null;
         setAssistantMessage(formatBrief(data.brief));
         setStatus("Completed");
       }
@@ -355,6 +375,11 @@
         }
 
         eventSource = new EventSource(`/sessions/${sessionId}/events`);
+        // `delta` carries the parsed prompt/message text (data.type is "input"
+        // or "output"); this interview only streams input prompts.
+        eventSource.addEventListener("delta", (event) => {
+          handleDelta(parseEventData(event.data));
+        });
         eventSource.addEventListener("input_required", (event) => {
           handleInputRequired(parseEventData(event.data));
         });
@@ -404,6 +429,8 @@
         appendMessage("user", input);
         activeAssistantBubble = appendMessage("assistant", "Thinking...");
         activeAssistantBubble.classList.add("typing");
+        streamingBubbleId = null;
+        streamingText = "";
         inputElement.value = "";
         setSending(true);
         setStatus(replyTo ? "Sending reply..." : "Starting interview...");
