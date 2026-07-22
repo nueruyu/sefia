@@ -39,9 +39,12 @@ class WebToolkit:                                  # a plain class — no base, 
         """Search the web and return URLs."""
         ...
 
-@dataclass
-class ResearchService:
-    _web: Tools[WebToolkit]                        # the field annotation is the grant
+class ResearchService:                             # a plain class — no base, no decorator
+    _web: Tools[WebToolkit]                        # the class-level annotation is the grant
+
+    def __init__(self, web: WebToolkit):
+        self._web = web
+
     @infer
     async def run(self, topic: str) -> Report: ...
 ```
