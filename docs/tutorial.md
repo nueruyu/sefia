@@ -35,8 +35,7 @@ import asyncio
 from pathlib import Path
 
 from pydantic import BaseModel
-from sefia import infer
-from sefios import SessionScope
+from sefios import SessionScope, infer
 
 
 class Summary(BaseModel):
@@ -79,7 +78,7 @@ Tools are the **public methods of fields granted with the `Tools[...]` annotatio
 annotated `Tools[...]`, and its public methods become callable by the inferred step.
 
 ```python
-from sefia import Tools
+from sefios import Tools
 from sefios.tools import WebSearch
 
 
@@ -118,7 +117,7 @@ members are offered.
 
 When the model requests several tool calls in one step, they run one at a time. A
 tool that is safe to overlap with the other calls in its batch — a pure read like a
-search — can be marked with `@concurrent` (`from sefia import concurrent`) on the
+search — can be marked with `@concurrent` (`from sefios import concurrent`) on the
 method; consecutive marked calls then run concurrently, and their results still come
 back in request order. Leave tools unmarked when their side-effect ordering matters.
 
@@ -150,7 +149,7 @@ from pathlib import Path
 
 import typer
 from pydantic import BaseModel
-from sefia import Tools, infer
+from sefios import Tools, infer
 from sefios.cli import SefiaCLI
 from sefios.tools import Input, WebSearch
 

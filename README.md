@@ -9,7 +9,7 @@
 
 ```python
 from pydantic import BaseModel
-from sefia import infer
+from sefios import infer
 
 
 class Summary(BaseModel):
@@ -74,6 +74,12 @@ pip install 'sefios[litellm]'
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
 
+**Import from `sefios`.** It re-exports the everyday authoring surface — the
+`infer` / `concurrent` / `preview` / `policy` / `profile` decorators, `Tools`,
+`AsRawText`, `Policy` / `Profile`, and `engrave` — alongside its own `SessionScope` and
+batteries, so application code needs only `sefios`. Reach into `sefia` directly for the
+extension seams (a custom policy, strategy, client, or tool collector).
+
 ## Quickstart
 
 A plain Python class that holds a dependency, runs an inferred step, and persists its
@@ -82,8 +88,7 @@ run.
 ```python
 from pathlib import Path
 from pydantic import BaseModel
-from sefia import Tools, infer
-from sefios import SessionScope
+from sefios import SessionScope, Tools, infer
 from sefios.tools import WebSearch
 
 
@@ -128,7 +133,7 @@ your provider — `pip install 'sefios[litellm,fastapi]'`.
 
 ```python
 from pathlib import Path
-from sefia import Tools, infer
+from sefios import Tools, infer
 from sefios.fastapi import InputRequired, SefiaHTTP
 from sefios.tools import Input, WebSearch
 

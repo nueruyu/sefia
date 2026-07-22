@@ -2,10 +2,10 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from glyff import engrave
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from sefios import engrave
 from sefios.cli import SefiaCLI
 from sefios.tools import WebSearch
 
