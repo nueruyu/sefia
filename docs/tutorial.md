@@ -10,8 +10,11 @@ example, see the [README](../README.md).
 
 ## Install
 
+The tutorial builds up to the CLI and HTTP integrations, so install their extras
+alongside the provider:
+
 ```bash
-pip install 'sefios[litellm]'
+pip install 'sefios[litellm,cli,fastapi]'
 ```
 
 Set whatever credentials your model needs (LiteLLM reads provider env vars):
