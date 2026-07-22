@@ -56,10 +56,14 @@ A method becomes a tool only when its holder is **granted** with the `Tools` ali
 in a class-level field annotation — holding an object is not enough:
 
 ```python
-@dataclass
 class ResearchService:
     _web: Tools[WebToolkit]     # granted: WebToolkit's public methods are tools
     _config: AppConfig          # plain dependency: never exposed
+
+    def __init__(self, web: WebToolkit, config: AppConfig):
+        self._web = web
+        self._config = config
+
     @infer
     async def run(self, topic: str) -> Report: ...
 ```
@@ -67,8 +71,8 @@ class ResearchService:
 - `Tools[T]` is an `Annotated` alias: checkers treat it as `T`, `T` stays a plain
   class or `Protocol`, and it composes with `Optional`, other `Annotated` metadata,
   dataclass `field(...)`, and defaults.
-- The grant must be a **class-level annotation** (a dataclass field is ideal) — an
-  `__init__`-only assignment is not a declaration and exposes nothing.
+- The grant must be a **class-level annotation** (a bare class-body annotation is
+  enough) — an `__init__`-only assignment is not a declaration and exposes nothing.
 - Narrow a broad object by granting through a protocol: `_web: Tools[ReadOnlyWeb]`
   exposes only the protocol's declared members.
 - Tools ride on the `@infer` method's receiver (`self`); every other parameter is
@@ -132,8 +136,8 @@ one that returns a non-function callable — a class-based wrapper or a bare
 
 - Put task input in function arguments; grant capabilities with `Tools[...]` field
   annotations on the service.
-- The grant must be class-level (a dataclass field is ideal) — an `__init__`-only
-  assignment declares nothing and exposes nothing.
+- The grant must be class-level (a bare class-body annotation is enough) — an
+  `__init__`-only assignment declares nothing and exposes nothing.
 - Keep return types explicit and structured; keep tool parameters explicit and typed.
 - Remember that `self` affects replay identity even though it is not prompt input.
 - Select a method's surface with a `self:` `Protocol` annotation, or split services,

@@ -86,7 +86,8 @@ with the `Tools[...]` annotation** (`_web: Tools[WebToolkit]`); private
 see plain `T`, the type stays an ordinary class — so this is one annotation on top of
 ordinary OOP visibility: no decorator, no registry, no base class, and no ambient
 authority (a held config or store never leaks as a tool). The grant must be a
-class-level annotation (a dataclass field is ideal); discovery is fail-closed. To
+class-level annotation (a bare class-body annotation is enough); discovery is
+fail-closed. To
 expose a narrower surface, grant through a `Protocol` (`Tools[ReadOnlyWeb]`), or
 select a single method's tools by annotating its `self` with a plain surface
 `Protocol`.
