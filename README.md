@@ -123,6 +123,9 @@ A turn that pauses for a human and resumes after a restart, served on an ordinar
 request/response handler: the pause is a tool that **raises**, and resume is calling
 the endpoint again.
 
+This example uses the FastAPI integration, so install the `[fastapi]` extra alongside
+your provider — `pip install 'sefios[litellm,fastapi]'`.
+
 ```python
 from pathlib import Path
 from sefia import Tools, infer
