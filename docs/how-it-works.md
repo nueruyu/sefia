@@ -189,6 +189,11 @@ its handler verbatim. A tool that
 history and fed back to the model so it can recover and continue, rather than failing
 the run.
 
+A handler that needs the identity of the call it is serving reads
+`sefia.current_tool_call_id()` — the serving `ToolCallRequest.id`, stable across
+the call's pause and resume (its decision replays from history), so a
+transport-backed tool needs no glyff-derived per-call key.
+
 When one decision contains several calls, the batch runs **serially by
 default**; consecutive calls to `@concurrent`-marked tools overlap, and an
 unmarked call is a barrier. This is not fire-and-forget: results are awaited

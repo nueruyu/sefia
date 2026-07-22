@@ -12,6 +12,7 @@ from ._interfaces import (
 from ._markers import AsRawText
 from ._profiles import Profile
 from ._session import Session
+from ._tool_context import current_tool_call_id
 from ._tool_system import (
     JsonSchemaToolEntry,
     SignatureToolEntry,
@@ -31,6 +32,7 @@ __all__ = [
     "Profile",
     "AsRawText",
     "Session",
+    "current_tool_call_id",
     "Policy",
     "HistorySnapshot",
     "HistoryStorage",

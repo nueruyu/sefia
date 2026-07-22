@@ -2,6 +2,7 @@ import asyncio
 import json
 
 from . import events
+from ._tool_context import serving_tool_call
 from ._tool_system import ToolRegistry
 from .event_system import EventPublisher
 from .exceptions import PauseException
@@ -103,7 +104,8 @@ async def _call_one(
         )
     else:
         try:
-            result = await tool.invoke(call.arguments)
+            with serving_tool_call(call.id):
+                result = await tool.invoke(call.arguments)
             await publisher.publish(events.AfterToolCall(tool_call=call, result=result))
         except PauseException:
             raise
