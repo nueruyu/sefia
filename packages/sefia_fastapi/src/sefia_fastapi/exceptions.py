@@ -1,6 +1,3 @@
-from dataclasses import dataclass
-
-
 class UnknownSessionError(Exception):
     """Raised when a requested HTTP session is not known."""
 
@@ -26,14 +23,3 @@ class AmbiguousInputError(Exception):
             + ", ".join(interaction_ids)
         )
         self.interaction_ids = interaction_ids
-
-
-@dataclass(frozen=True)
-class InputRequired(Exception):
-    """Raised when a session pauses to wait for external input."""
-
-    interaction_id: str
-    prompt: str
-
-    def __str__(self) -> str:
-        return f"Input required: {self.prompt}"

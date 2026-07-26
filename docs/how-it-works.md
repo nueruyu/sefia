@@ -184,7 +184,7 @@ in the registry and dispatched through `ToolEntry.invoke(arguments)`; sync or as
 returns are normalized. For a `SignatureToolEntry` the decoded arguments are coerced to
 the callable's declared types before the call; a `JsonSchemaToolEntry` forwards them to
 its handler verbatim. A tool that
-**raises `NeedsInput` propagates** — that is the durable pause (see below)
+**raises `InputRequired` propagates** — that is the durable pause (see below)
 — so it reaches your handler; any *other* tool exception is stringified into the
 history and fed back to the model so it can recover and continue, rather than failing
 the run.
@@ -227,12 +227,12 @@ while the work that already completed stays committed, and the exception then
 propagates normally. So no exception type changes glyff's durability: a transient
 provider hiccup or a response that failed schema validation simply propagates and is
 re-run on the next invocation (the strategy's in-step feedback repair and an in-loop
-`Retrier` may retry it first); an input tool raises `NeedsInput` to pause; an ordinary
+`Retrier` may retry it first); an input tool raises `InputRequired` to pause; an ordinary
 bug raises and surfaces to
 you. In every case the completed engraved steps are safe and the interrupted one runs
 again on re-invocation. sefia's control-flow pauses subclass `PauseException`
 (`sefia.exceptions`), which the executor propagates untouched instead of reporting as
-a failure: `NeedsInput` (a tool awaiting input) and the recoverable `InferenceError`
+a failure: `InputRequired` (a tool awaiting input) and the recoverable `InferenceError`
 base are both pauses.
 
 ## History storage and compaction
@@ -260,7 +260,7 @@ An input tool (`packages/sefios/src/sefios/tools/input.py`) is an engraved tool
 that:
 
 1. looks up whether input is recorded; if so, returns it;
-2. if not, records the pending prompt and **raises `NeedsInput`**.
+2. if not, records the pending prompt and **raises `InputRequired`**.
 
 The raise propagates out, glyff leaves that engraved tool call **resumable**, and the
 exception reaches your handler, which returns "needs input". On the next request the
@@ -298,7 +298,7 @@ a single call swap the model/policies by key, resolved per-call in
 2. `@infer` engraves the run; the executor loops: model step (engraved) → "search"
    tool call (engraved) → model step → "ask human to approve" tool call.
 3. The input tool finds no input, records the prompt under its call-scoped state,
-   and raises `NeedsInput`. The search step had already been recorded to the history
+   and raises `InputRequired`. The search step had already been recorded to the history
    snapshot; the ask-input step had not. glyff leaves the input call resumable, and
    the exception surfaces; the handler returns `needs_input` + the prompt.
 4. `POST /turn` again with the input (delivered via `accept_input`). `service.run`

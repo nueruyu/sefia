@@ -1,7 +1,7 @@
 from sefia.exceptions import PauseException
 
 
-class NeedsInput(PauseException):
+class InputRequired(PauseException):
     """
     Raised by an input-awaiting tool to pause the run until input is available.
 

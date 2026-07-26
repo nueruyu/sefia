@@ -53,6 +53,10 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
 
     @app.exception_handler(InputRequired)
     async def _input_required(request: Request, exc: InputRequired):
+        # The Input tool always identifies its request, so a pause surfaced to
+        # the client carries an interaction_id (the core type allows None for
+        # tools that don't).
+        assert exc.interaction_id is not None
         return JSONResponse(
             status_code=200,
             content=InputRequiredResponse(

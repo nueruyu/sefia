@@ -13,7 +13,6 @@ from ._input import InputChannel, InputRequest
 from ._kv import KeyValueStore
 from .exceptions import (
     AmbiguousInputError,
-    InputRequired,
     UnknownInputError,
     UnknownSessionError,
 )
@@ -24,7 +23,6 @@ __all__ = [
     "KeyValueStore",
     "SessionEvents",
     "SSEEvent",
-    "InputRequired",
     "UnknownSessionError",
     "UnknownInputError",
     "AmbiguousInputError",

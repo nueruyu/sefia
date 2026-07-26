@@ -10,7 +10,7 @@ from sefia import preview
 from sefia.streaming import ArgStream, StringDelta
 
 from .._session_state import get_call_state_store
-from ..exceptions import NeedsInput
+from ..exceptions import InputRequired
 
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
@@ -119,7 +119,7 @@ class Input:
             return value
 
         await self._notify_request(request)
-        raise NeedsInput(prompt_text, interaction_id=request.interaction_id)
+        raise InputRequired(prompt_text, interaction_id=request.interaction_id)
 
     @preview(get_input)
     async def _stream_get_input(self, events: ArgStream) -> None:

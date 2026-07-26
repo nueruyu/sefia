@@ -16,7 +16,7 @@ from sefia import Policy, Session, Tools, infer
 from sefia.llm import LLMResponse
 from sefia.testing import result_response, tool_calls_response
 
-from sefios import FileSessionStorage, NeedsInput
+from sefios import FileSessionStorage, InputRequired
 from sefios.history_storages import SessionHistoryStorage
 from sefios._session_state import bind_session_storage
 from sefios.middleware import HistoryCompactor
@@ -97,7 +97,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
             _ASK_RESPONSE,
         ]
     )
-    with pytest.raises(NeedsInput):
+    with pytest.raises(InputRequired):
         async with make_glyff_session() as gs:
             with bind_session_storage(make_state_storage()):
                 async with Session(

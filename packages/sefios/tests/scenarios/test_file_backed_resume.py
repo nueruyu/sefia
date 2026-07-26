@@ -15,7 +15,7 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Session, Tools, infer
 from sefia.testing import result_response, tool_calls_response
 
-from sefios import FileSessionStorage, NeedsInput
+from sefios import FileSessionStorage, InputRequired
 from sefios._session_state import bind_session_storage
 from sefios.tools import Input, InputRequest
 
@@ -65,7 +65,7 @@ async def test_pause_resume_survives_process_restart(tmp_path, make_mock_llm):
 
     # --- First run: no answer available, the run pauses. ---
     mock_llm = make_mock_llm([_TOOL_CALL_RESPONSE])
-    with pytest.raises(NeedsInput) as pause_info:
+    with pytest.raises(InputRequired) as pause_info:
         async with make_glyff_session() as gs:
             with bind_session_storage(make_state_storage()):
                 async with Session(llm_client=mock_llm, glyff_session=gs):

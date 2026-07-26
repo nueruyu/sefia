@@ -8,12 +8,12 @@ from pathlib import Path
 
 from fastapi.responses import StreamingResponse
 from sefia import Policy
-from sefia_fastapi import InputChannel, InputRequired, SessionEvents, SSEEvent
+from sefia_fastapi import InputChannel, SessionEvents, SSEEvent
 from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
 
 from .._scope import SessionScope
 from .._session_state import get_session_storage
-from ..exceptions import NeedsInput
+from ..exceptions import InputRequired
 from ..handlers import CostCalculator
 from ..sessions import SessionManager
 from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
@@ -43,7 +43,7 @@ class SefiaHTTP:
     session storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), forwards the parsed prompt/message deltas to
     per-session SSE streams, and surfaces pauses as
-    :class:`sefia_fastapi.InputRequired`.
+    :class:`~sefios.InputRequired`.
     """
 
     def __init__(
@@ -131,14 +131,14 @@ class SefiaHTTP:
             ):
                 with self._input.use_store(get_session_storage()):
                     yield SefiaHTTPSession(channel=self._input)
-        except NeedsInput as pause:
-            # The pause identifies its own request, so no state is re-read.
-            # InputRequired is raised only after the session scope has exited,
-            # both to keep glyff's pause/resume semantics and because it is a
-            # frozen dataclass that cannot carry the traceback the scope's
-            # exit would set on it. A pause from a tool that did not identify
-            # itself cannot be described to the HTTP client, so it propagates
-            # unchanged.
+        except InputRequired as pause:
+            # The pause identifies its own request, so no state is re-read. The
+            # SSE event is published only after the session scope has exited, to
+            # keep glyff's pause/resume semantics; the pause itself then
+            # propagates unchanged for the application to map to a response. A
+            # pause from a tool that did not identify itself cannot be described
+            # to the HTTP client, so it skips the event and propagates all the
+            # same.
             if pause.interaction_id is None:
                 raise
             await self._events.publish(
@@ -150,10 +150,7 @@ class SefiaHTTP:
                 },
             )
             self._input_delta_ids.pop(session_id, None)
-            raise InputRequired(
-                interaction_id=pause.interaction_id,
-                prompt=pause.prompt,
-            ) from None
+            raise
         except Exception as exc:
             await self._events.publish(
                 session_id,
