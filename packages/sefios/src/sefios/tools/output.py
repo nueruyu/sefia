@@ -5,7 +5,7 @@ from typing import Annotated, TypeVar
 
 from glyff import engrave
 from pydantic import Field
-from sefia import current_tool_call_id, preview
+from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
 T = TypeVar("T")
@@ -67,8 +67,13 @@ class Output:
         question; unlike ``get_input`` it does not wait for a response. Being
         engraved, the emit fires exactly once even across a resume.
         """
+        interaction_id = current_tool_call_id_for(self.send_output)
+        if interaction_id is None:
+            raise RuntimeError(
+                "Output.send_output() must be invoked as a dispatched tool."
+            )
         output = OutputMessage(
-            interaction_id=current_tool_call_id(),
+            interaction_id=interaction_id,
             message=message,
         )
         await self._notify_output(output)

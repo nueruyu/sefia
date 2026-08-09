@@ -1,7 +1,9 @@
 import pytest
 
-from sefia import Tools
-from sefia.inference import Capability
+from sefia import ToolRegistry, Tools
+from sefia._tool_execution import call_tools
+from sefia.event_system import EventPublisher
+from sefia.inference import Capability, ToolCallRequest
 from sefia.llm._arg_stream import _ArgStreamChannel
 from sefia.streaming import StringDelta
 from sefia.testing import MockLLMClient, memory_session
@@ -40,5 +42,25 @@ async def test_input_tool_streams_prompt_deltas():
 
 async def test_input_fails_fast_outside_tool_dispatch():
     async with memory_session(MockLLMClient([])):
-        with pytest.raises(RuntimeError, match="only available inside a tool call"):
+        with pytest.raises(RuntimeError, match="must be invoked as a dispatched tool"):
             await Input().get_input("Name?")
+
+
+async def test_nested_input_fails_instead_of_reusing_parent_call_id():
+    input_tool = Input()
+
+    async def parent() -> str:
+        return await input_tool.get_input("Name?")
+
+    registry = ToolRegistry()
+    registry.add(parent, name="parent")
+
+    async with memory_session(MockLLMClient([])):
+        results = await call_tools(
+            [ToolCallRequest(id="parent-call", name="parent", arguments={})],
+            registry,
+            EventPublisher([]),
+        )
+
+    assert results[0].tool_call_id == "parent-call"
+    assert "Input.get_input() must be invoked as a dispatched tool" in results[0].result

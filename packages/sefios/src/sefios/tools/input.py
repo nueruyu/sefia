@@ -5,7 +5,7 @@ from typing import Annotated, TypeVar
 
 from glyff import engrave
 from pydantic import Field
-from sefia import current_tool_call_id, preview
+from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
 from ..exceptions import InputRequired
@@ -87,8 +87,13 @@ class Input:
         is interrupted until it is provided.
         """
         prompt_text = prompt or ""
+        interaction_id = current_tool_call_id_for(self.get_input)
+        if interaction_id is None:
+            raise RuntimeError(
+                "Input.get_input() must be invoked as a dispatched tool."
+            )
         request = InputRequest(
-            interaction_id=current_tool_call_id(),
+            interaction_id=interaction_id,
             prompt=prompt_text,
         )
         value = await _maybe_await(self._get_input(request))

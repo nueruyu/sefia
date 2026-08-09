@@ -104,7 +104,7 @@ async def _call_one(
         )
     else:
         try:
-            with serving_tool_call(call.id):
+            with serving_tool_call(call.id, tool.function):
                 result = await tool.invoke(call.arguments)
             await publisher.publish(events.AfterToolCall(tool_call=call, result=result))
         except PauseException:

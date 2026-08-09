@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from sefia.testing import MockLLMClient, result_response, tool_calls_response
 
 from sefios.fastapi import SefiaHTTP
 
@@ -46,16 +47,23 @@ def test_index_serves_hitl_browser_ui(api):
 
 
 class TestInterviewFlow:
-    def test_pauses_then_resumes_to_completion(self, api, monkeypatch):
+    def test_pauses_then_resumes_to_completion(self, api):
         question = "Who is the target audience?"
-        tool = api.service.input_tool
-
-        async def fake_run(self):
-            topic = await tool.get_input("What should this be about?")
-            audience = await tool.get_input(question)
-            return Brief(topic=topic, goal="Inform", audience=audience)
-
-        monkeypatch.setattr(agents_module.Interviewer, "run", fake_run)
+        api.service._session_scope.llm_client = MockLLMClient(
+            responses=[
+                tool_calls_response(
+                    ("Input_get_input", {"prompt": "What should this be about?"}),
+                    ("Input_get_input", {"prompt": question}),
+                ),
+                result_response(
+                    Brief(
+                        topic="Write about our product.",
+                        goal="Inform",
+                        audience="Developers",
+                    )
+                ),
+            ]
+        )
         session_id = _new_session(api.client)
 
         first = api.client.post(
