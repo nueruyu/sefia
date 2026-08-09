@@ -16,7 +16,7 @@ from sefia import (
 from ._scope import SessionScope
 from ._session_state import get_call_state_store, get_session_storage
 from ._state_store import StateStore
-from .exceptions import NeedsInput
+from .exceptions import InputRequired
 from .state import StateContainer, StateRegistry, get_state, state
 from .storage import FileSessionStorage, MemorySessionStorage, SessionStorage
 
@@ -34,7 +34,7 @@ __all__ = [
     "engrave",
     # sefios' own front door and batteries.
     "SessionScope",
-    "NeedsInput",
+    "InputRequired",
     "SessionStorage",
     "StateStore",
     "MemorySessionStorage",

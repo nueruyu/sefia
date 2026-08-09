@@ -55,7 +55,7 @@ the decision guide is [choosing.md](./choosing.md).
 ### How does the human-in-the-loop pause actually work? Exceptions?
 
 Yes. An input tool checks for recorded input; if there isn't one, it records
-the prompt and **raises `NeedsInput`**. glyff treats exceptions
+the prompt and **raises `InputRequired`**. glyff treats exceptions
 as non-terminal: completed engraved calls commit, the interrupted call stays resumable,
 and the exception propagates so your handler can return "needs input". When the input
 arrives in a later request (delivered with `accept_input`), you re-invoke the same

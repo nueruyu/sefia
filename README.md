@@ -173,9 +173,9 @@ async def turn(session_id: str, body: TurnBody):
         return {"status": "needs_input", "prompt": e.prompt}
 ```
 
-When the input tool has no recorded input it raises `NeedsInput`; `SefiaHTTP`
-translates that pause into `InputRequired` after the session context exits, and the
-handler returns "needs input". The input arrives in a later request and is delivered
+When the input tool has no recorded input it raises `InputRequired`; `SefiaHTTP`
+publishes the pause as an SSE event and re-raises it after the session context exits,
+and the handler returns "needs input". The input arrives in a later request and is delivered
 with `session.accept_input`; the same endpoint re-invokes, every completed LLM/tool
 call **replays its exact output** (the approved draft is byte-for-byte the same), and
 only the pending step runs. You write no checkpoint code, step keys, idempotency

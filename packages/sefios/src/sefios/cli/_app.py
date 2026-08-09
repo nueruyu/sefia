@@ -192,7 +192,7 @@ class SefiaCLI:
                         await self._report_inference_error(e)
                         raise
                     except PauseException:
-                        # Any pause (NeedsInput, or a future pause type) is a
+                        # Any pause (InputRequired, or a future pause type) is a
                         # graceful interrupt, not a failure. The session context
                         # is still alive here, so reporters may read running
                         # state (e.g. cost) via get_state().

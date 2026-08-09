@@ -95,7 +95,7 @@ class UserInput:
         if provided := await self._pending.input_for(prompt):
             return provided
         await self._pending.record(prompt)
-        raise NeedsInput(prompt)                   # pause — durably
+        raise InputRequired(prompt)                   # pause — durably
 
 @app.post("/sessions/{id}/turn")
 async def turn(id, body):
