@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal, cast
 
@@ -108,10 +107,10 @@ class ToolArgStreamer:
     def __init__(
         self,
         tool_stream_handlers: Mapping[str, StreamHandler],
-        tool_call_ids: dict[int, str] | None = None,
+        get_tool_call_id: Callable[[int], str],
     ) -> None:
         self._tool_stream_handlers = tool_stream_handlers
-        self._tool_call_ids = tool_call_ids if tool_call_ids is not None else {}
+        self._get_tool_call_id = get_tool_call_id
         self._reset()
 
     def _reset(self) -> None:
@@ -192,9 +191,7 @@ class ToolArgStreamer:
 
         channel = _ArgStreamChannel()
         self._channels[index] = channel
-        tool_call_id = self._tool_call_ids.setdefault(
-            index, f"call_{uuid.uuid4().hex[:12]}"
-        )
+        tool_call_id = self._get_tool_call_id(index)
         task = asyncio.create_task(_run_handler(handler, tool_call_id, channel))
         task.add_done_callback(self._log_task_result)
         self._tasks.append(task)

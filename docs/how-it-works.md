@@ -198,10 +198,11 @@ is itself the dispatched tool. A helper called as ordinary Python from inside
 another tool therefore does not accidentally adopt its parent's interaction id.
 
 An `@preview` handler receives that same id before its `ArgStream`:
-`handler(tool_call_id, events)`. The streaming parser assigns the id when it
-recognizes the tool call and the decision builder reuses it for the eventual
-`ToolCallRequest`. Preview deltas and the authoritative tool result can therefore
-refer to the same interaction even though the preview runs before tool execution.
+`handler(tool_call_id, events)`. A step-scoped registry in the inference strategy
+allocates one id per tool-call index; both the streaming router and decision builder
+request the id from that registry. Preview deltas and the authoritative tool result
+can therefore refer to the same interaction even though the preview runs before tool
+execution.
 
 When one decision contains several calls, the batch runs **serially by
 default**; consecutive calls to `@concurrent`-marked tools overlap, and an

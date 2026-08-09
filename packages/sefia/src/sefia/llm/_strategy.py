@@ -38,6 +38,16 @@ from ._prompt_formatter import PromptFormatter
 JsonDefault = Callable[[Any], Any]
 
 
+class _ToolCallIdRegistry:
+    """Allocates one stable call id per tool-call index in an LLM step."""
+
+    def __init__(self) -> None:
+        self._ids: dict[int, str] = {}
+
+    def get_or_create(self, index: int) -> str:
+        return self._ids.setdefault(index, f"call_{uuid.uuid4().hex[:12]}")
+
+
 class _ExecutionDirector(ABC):
     """
     Abstract base class for directing the LLM's execution flow.
@@ -69,16 +79,18 @@ class _ExecutionDirector(ABC):
         raise NotImplementedError
 
     def process_response_data(
-        self, data: Any, tool_call_ids: dict[int, str] | None = None
+        self, data: Any, tool_call_ids: _ToolCallIdRegistry | None = None
     ) -> InferenceDecision:
         """Validate raw decision data and convert it to an inference decision."""
         decision = self.decision_model.validate(data)
-        if isinstance(decision, ToolCallsLLMDecision):
-            return self._tool_call_decision(decision.tool_calls, tool_call_ids)
-        return self._process_decision(decision)
+        return self._process_decision(decision, tool_call_ids)
 
     @abstractmethod
-    def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
+    def _process_decision(
+        self,
+        decision: LLMDecision,
+        tool_call_ids: _ToolCallIdRegistry | None,
+    ) -> InferenceDecision:
         """Convert a validated decision to an inference decision."""
         raise NotImplementedError
 
@@ -88,14 +100,13 @@ class _ExecutionDirector(ABC):
     def _tool_call_decision(
         self,
         tool_calls: list[DecisionToolCall],
-        tool_call_ids: dict[int, str] | None = None,
+        tool_call_ids: _ToolCallIdRegistry,
     ) -> ToolCallDecision:
         calls = []
         for index, tc in enumerate(tool_calls):
-            call_id = None if tool_call_ids is None else tool_call_ids.get(index)
             calls.append(
                 ToolCallRequest(
-                    id=call_id or f"call_{uuid.uuid4().hex[:12]}",
+                    id=tool_call_ids.get_or_create(index),
                     name=tc.name,
                     arguments=tc.arguments,
                 )
@@ -147,9 +158,15 @@ class _ToolOnlyDirector(_ExecutionDirector):
             f"{_TOOL_CALLS_RESPONSE_FORMAT}"
         )
 
-    def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
+    def _process_decision(
+        self,
+        decision: LLMDecision,
+        tool_call_ids: _ToolCallIdRegistry | None,
+    ) -> InferenceDecision:
         if isinstance(decision, ToolCallsLLMDecision):
-            return self._tool_call_decision(decision.tool_calls)
+            if tool_call_ids is None:
+                raise RuntimeError("Tool call ids are required for a tool decision.")
+            return self._tool_call_decision(decision.tool_calls, tool_call_ids)
         raise InvalidInferenceResponseError("LLM response must contain 'tool_calls'.")
 
 
@@ -184,9 +201,15 @@ class _ToolEnabledDirector(_ExecutionDirector):
             f"{_RESULT_RESPONSE_FORMAT}"
         )
 
-    def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
+    def _process_decision(
+        self,
+        decision: LLMDecision,
+        tool_call_ids: _ToolCallIdRegistry | None,
+    ) -> InferenceDecision:
         if isinstance(decision, ToolCallsLLMDecision):
-            return self._tool_call_decision(decision.tool_calls)
+            if tool_call_ids is None:
+                raise RuntimeError("Tool call ids are required for a tool decision.")
+            return self._tool_call_decision(decision.tool_calls, tool_call_ids)
         if isinstance(decision, ResultLLMDecision):
             return ResultDecision(result=decision.result)
 
@@ -215,7 +238,11 @@ class _OutputOnlyDirector(_ExecutionDirector):
             f"{_RESULT_RESPONSE_FORMAT}"
         )
 
-    def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
+    def _process_decision(
+        self,
+        decision: LLMDecision,
+        tool_call_ids: _ToolCallIdRegistry | None,
+    ) -> InferenceDecision:
         if isinstance(decision, ResultLLMDecision):
             return ResultDecision(result=decision.result)
         raise InvalidInferenceResponseError(
@@ -319,9 +346,11 @@ class LLMInferenceStrategy(InferenceStrategy):
         reasoning_callback = None
         tool_stream_handlers = _tool_stream_handlers(tools)
         tool_arg_streamer = None
-        tool_call_ids: dict[int, str] = {}
+        tool_call_ids = _ToolCallIdRegistry()
         if self._stream and tool_stream_handlers:
-            tool_arg_streamer = ToolArgStreamer(tool_stream_handlers, tool_call_ids)
+            tool_arg_streamer = ToolArgStreamer(
+                tool_stream_handlers, tool_call_ids.get_or_create
+            )
         if self._stream:
 
             async def on_token(token: str):
