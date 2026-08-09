@@ -53,6 +53,8 @@ class TestInterviewFlow:
             responses=[
                 tool_calls_response(
                     ("Input_get_input", {"prompt": "What should this be about?"}),
+                ),
+                tool_calls_response(
                     ("Input_get_input", {"prompt": question}),
                 ),
                 result_response(
