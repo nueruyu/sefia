@@ -1,15 +1,13 @@
 import inspect
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Annotated, TypeVar
 
 from glyff import engrave
 from pydantic import Field
-from sefia import current_tool_call_id_for, preview
+from sefia import current_tool_call_id, preview
 from sefia.streaming import ArgStream, StringDelta
 
-from .._session_state import get_call_state_store
 from ..exceptions import InputRequired
 
 T = TypeVar("T")
@@ -37,11 +35,6 @@ InputProvider = Callable[[InputRequest], MaybeAwaitable[str | None]]
 InputRequestCallback = Callable[[InputRequest], MaybeAwaitable[None]]
 InputCompleteCallback = Callable[[InputResult], MaybeAwaitable[None]]
 InputPromptDeltaCallback = Callable[[str, str], MaybeAwaitable[None]]
-
-
-@dataclass
-class _InputCallState:
-    interaction_id: str | None = None
 
 
 async def _maybe_await(value: MaybeAwaitable[T]) -> T:
@@ -94,16 +87,8 @@ class Input:
         is interrupted until it is provided.
         """
         prompt_text = prompt or ""
-        call_store = get_call_state_store("internal_state", _InputCallState)
-        call_state = await call_store.ensure()
-        if call_state.interaction_id is None:
-            call_state.interaction_id = current_tool_call_id_for(self.get_input) or str(
-                uuid.uuid4()
-            )
-            await call_store.save(call_state)
-
         request = InputRequest(
-            interaction_id=call_state.interaction_id,
+            interaction_id=current_tool_call_id(),
             prompt=prompt_text,
         )
         value = await _maybe_await(self._get_input(request))

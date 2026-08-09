@@ -1,39 +1,18 @@
 import contextvars
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
-from typing import Any
 
-
-@dataclass(frozen=True)
-class _ToolCallContext:
-    id: str
-    function: Callable[..., Any] | None
-
-
-_tool_call_var = contextvars.ContextVar[_ToolCallContext]("sefia_tool_call")
-
-
-def _callable_identity(
-    function: Callable[..., Any] | None,
-) -> Callable[..., Any] | None:
-    if function is None:
-        return None
-    return getattr(function, "__func__", function)
+_tool_call_id_var = contextvars.ContextVar[str]("sefia_tool_call_id")
 
 
 @contextmanager
-def serving_tool_call(
-    call_id: str, function: Callable[..., Any] | None = None
-) -> Iterator[None]:
+def serving_tool_call(call_id: str) -> Iterator[None]:
     """Bind ``call_id`` as the tool call the current handler is serving."""
-    token = _tool_call_var.set(
-        _ToolCallContext(id=call_id, function=_callable_identity(function))
-    )
+    token = _tool_call_id_var.set(call_id)
     try:
         yield
     finally:
-        _tool_call_var.reset(token)
+        _tool_call_id_var.reset(token)
 
 
 def current_tool_call_id() -> str:
@@ -46,20 +25,8 @@ def current_tool_call_id() -> str:
     when no call is bound in the current context.
     """
     try:
-        return _tool_call_var.get().id
+        return _tool_call_id_var.get()
     except LookupError:
         raise RuntimeError(
             "current_tool_call_id() is only available inside a tool call."
         ) from None
-
-
-def current_tool_call_id_for(function: Callable[..., Any]) -> str | None:
-    """Return the call id only when ``function`` is the dispatched tool."""
-    try:
-        context = _tool_call_var.get()
-    except LookupError:
-        return None
-
-    if context.function is not _callable_identity(function):
-        return None
-    return context.id

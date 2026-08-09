@@ -1,12 +1,11 @@
 import inspect
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, TypeVar
 
 from glyff import engrave
 from pydantic import Field
-from sefia import current_tool_call_id_for, preview
+from sefia import current_tool_call_id, preview
 from sefia.streaming import ArgStream, StringDelta
 
 T = TypeVar("T")
@@ -29,10 +28,6 @@ async def _maybe_await(value: MaybeAwaitable[T]) -> T:
     if inspect.isawaitable(value):
         return await value
     return value
-
-
-def _interaction_id(tool: Callable[..., Any]) -> str:
-    return current_tool_call_id_for(tool) or str(uuid.uuid4())
 
 
 class Output:
@@ -73,7 +68,7 @@ class Output:
         engraved, the emit fires exactly once even across a resume.
         """
         output = OutputMessage(
-            interaction_id=_interaction_id(self.send_output),
+            interaction_id=current_tool_call_id(),
             message=message,
         )
         await self._notify_output(output)
