@@ -21,7 +21,7 @@ async def test_stream_handler_is_collected_and_bound_to_instance():
             return question
 
         @preview(ask_human)
-        async def _ask_human_stream(self, events) -> None:
+        async def _ask_human_stream(self, tool_call_id, events) -> None:
             seen_self.append(self)
             async for _ in events:
                 pass
@@ -40,7 +40,7 @@ async def test_stream_handler_is_collected_and_bound_to_instance():
 
     channel = _ArgStreamChannel()
     channel.close()
-    await registered.stream_handler(channel)
+    await registered.stream_handler("call-1", channel)
     assert seen_self == [agent._toolkit]  # bound to the toolkit instance
 
 
@@ -52,7 +52,7 @@ async def test_bound_stream_handler_consumes_events():
             return question
 
         @preview(ask_human)
-        async def _ask_human_stream(self, events) -> None:
+        async def _ask_human_stream(self, tool_call_id, events) -> None:
             async for event in events:
                 received.append(event)
 
@@ -69,7 +69,7 @@ async def test_bound_stream_handler_consumes_events():
     channel = _ArgStreamChannel()
     channel.feed(StringDelta(name="question", text="hi"))
     channel.close()
-    await registered.stream_handler(channel)
+    await registered.stream_handler("call-1", channel)
 
     assert received == [StringDelta(name="question", text="hi")]
 
@@ -99,8 +99,9 @@ async def test_static_tool_stream_handler_is_collected():
         async def ask_human(question: str) -> str:
             return question
 
+        @staticmethod
         @preview(ask_human)
-        async def _ask_human_stream(events: ArgStream) -> None:
+        async def _ask_human_stream(tool_call_id: str, events: ArgStream) -> None:
             async for event in events:
                 received.append(event)
 
@@ -117,7 +118,7 @@ async def test_static_tool_stream_handler_is_collected():
     channel = _ArgStreamChannel()
     channel.feed(StringDelta(name="question", text="hi"))
     channel.close()
-    await registered.stream_handler(channel)
+    await registered.stream_handler("call-1", channel)
 
     assert received == [StringDelta(name="question", text="hi")]
 
@@ -131,7 +132,7 @@ async def test_class_tool_stream_handler_is_bound_to_class():
             return question
 
         @preview(ask_human)
-        async def _ask_human_stream(cls, events: ArgStream) -> None:
+        async def _ask_human_stream(cls, tool_call_id: str, events: ArgStream) -> None:
             seen_cls.append(cls)
             async for _ in events:
                 pass
@@ -148,7 +149,7 @@ async def test_class_tool_stream_handler_is_bound_to_class():
 
     channel = _ArgStreamChannel()
     channel.close()
-    await registered.stream_handler(channel)
+    await registered.stream_handler("call-1", channel)
 
     assert seen_cls == [Toolkit]
 
@@ -167,7 +168,7 @@ async def test_stream_handler_is_found_when_the_field_is_protocol_narrowed():
             return question
 
         @preview(ask_human)
-        async def _ask_human_stream(self, events) -> None:
+        async def _ask_human_stream(self, tool_call_id, events) -> None:
             async for event in events:
                 received.append(event)
 
@@ -184,6 +185,6 @@ async def test_stream_handler_is_found_when_the_field_is_protocol_narrowed():
     channel = _ArgStreamChannel()
     channel.feed(StringDelta(name="question", text="hi"))
     channel.close()
-    await registered.stream_handler(channel)
+    await registered.stream_handler("call-1", channel)
 
     assert received == [StringDelta(name="question", text="hi")]

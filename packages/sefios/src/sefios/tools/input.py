@@ -1,15 +1,13 @@
 import inspect
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Annotated, TypeVar
 
 from glyff import engrave
 from pydantic import Field
-from sefia import preview
+from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
-from .._session_state import get_call_state_store
 from ..exceptions import InputRequired
 
 T = TypeVar("T")
@@ -36,14 +34,7 @@ class InputResult:
 InputProvider = Callable[[InputRequest], MaybeAwaitable[str | None]]
 InputRequestCallback = Callable[[InputRequest], MaybeAwaitable[None]]
 InputCompleteCallback = Callable[[InputResult], MaybeAwaitable[None]]
-InputPromptDeltaCallback = Callable[[str], MaybeAwaitable[None]]
-
-
-@dataclass
-class _InputCallState:
-    """Internal state for a single get_input tool call."""
-
-    interaction_id: str | None = None
+InputPromptDeltaCallback = Callable[[str, str], MaybeAwaitable[None]]
 
 
 async def _maybe_await(value: MaybeAwaitable[T]) -> T:
@@ -77,9 +68,9 @@ class Input:
         if self._on_complete is not None:
             await _maybe_await(self._on_complete(result))
 
-    async def _notify_prompt_delta(self, text: str) -> None:
+    async def _notify_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self._on_prompt_delta is not None:
-            await _maybe_await(self._on_prompt_delta(text))
+            await _maybe_await(self._on_prompt_delta(interaction_id, text))
 
     @engrave
     async def get_input(
@@ -96,15 +87,13 @@ class Input:
         is interrupted until it is provided.
         """
         prompt_text = prompt or ""
-        call_store = get_call_state_store("internal_state", _InputCallState)
-        call_state = await call_store.ensure()
-
-        if call_state.interaction_id is None:
-            call_state.interaction_id = str(uuid.uuid4())
-            await call_store.save(call_state)
-
+        interaction_id = current_tool_call_id_for(self.get_input)
+        if interaction_id is None:
+            raise RuntimeError(
+                "Input.get_input() must be invoked as a dispatched tool."
+            )
         request = InputRequest(
-            interaction_id=call_state.interaction_id,
+            interaction_id=interaction_id,
             prompt=prompt_text,
         )
         value = await _maybe_await(self._get_input(request))
@@ -122,7 +111,7 @@ class Input:
         raise InputRequired(prompt_text, interaction_id=request.interaction_id)
 
     @preview(get_input)
-    async def _stream_get_input(self, events: ArgStream) -> None:
+    async def _stream_get_input(self, tool_call_id: str, events: ArgStream) -> None:
         async for event in events:
             if isinstance(event, StringDelta) and event.name == "prompt":
-                await self._notify_prompt_delta(event.text)
+                await self._notify_prompt_delta(tool_call_id, event.text)

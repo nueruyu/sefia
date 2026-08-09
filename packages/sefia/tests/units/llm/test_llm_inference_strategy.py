@@ -19,6 +19,7 @@ from sefia.inference import (
 from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._strategy import (
     _OutputOnlyDirector,
+    _ToolCallIdRegistry,
     _ToolEnabledDirector,
     _ToolOnlyDirector,
 )
@@ -67,6 +68,15 @@ def chat_tool() -> str:
 
 
 _BACKEND = PydanticModelBackend()
+
+
+def test_tool_call_id_registry_reuses_ids_by_index():
+    registry = _ToolCallIdRegistry()
+
+    first = registry.get_or_create(0)
+
+    assert registry.get_or_create(0) == first
+    assert registry.get_or_create(1) != first
 
 
 def _tool(func: Callable[..., Any]) -> ToolEntry:
@@ -630,7 +640,8 @@ class TestToolOnlyDirector:
             {
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "chat_tool", "arguments": {}}],
-            }
+            },
+            _ToolCallIdRegistry(),
         )
 
         assert isinstance(result, ToolCallDecision)
@@ -710,6 +721,7 @@ class TestToolEnabledDirector:
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
             },
+            _ToolCallIdRegistry(),
         )
 
         assert isinstance(result, ToolCallDecision)

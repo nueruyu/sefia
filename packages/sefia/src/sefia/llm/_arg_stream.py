@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal, cast
 
@@ -95,15 +95,22 @@ class _ArgStreamChannel:
             self._queue.put_nowait(_CLOSED)
 
 
-async def _run_handler(handler: StreamHandler, channel: _ArgStreamChannel) -> None:
-    await handler(channel)
+async def _run_handler(
+    handler: StreamHandler, tool_call_id: str, channel: _ArgStreamChannel
+) -> None:
+    await handler(tool_call_id, channel)
 
 
 class ToolArgStreamer:
     """Feeds incrementally decoded tool arguments to per-tool stream handlers."""
 
-    def __init__(self, tool_stream_handlers: Mapping[str, StreamHandler]) -> None:
+    def __init__(
+        self,
+        tool_stream_handlers: Mapping[str, StreamHandler],
+        get_tool_call_id: Callable[[int], str],
+    ) -> None:
         self._tool_stream_handlers = tool_stream_handlers
+        self._get_tool_call_id = get_tool_call_id
         self._reset()
 
     def _reset(self) -> None:
@@ -184,7 +191,8 @@ class ToolArgStreamer:
 
         channel = _ArgStreamChannel()
         self._channels[index] = channel
-        task = asyncio.create_task(_run_handler(handler, channel))
+        tool_call_id = self._get_tool_call_id(index)
+        task = asyncio.create_task(_run_handler(handler, tool_call_id, channel))
         task.add_done_callback(self._log_task_result)
         self._tasks.append(task)
         for arg_event in buffered:

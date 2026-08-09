@@ -46,14 +46,18 @@ class CostReportingCLIReporter(CLIReporter):
     def on_input_request(self, request: CLIInputRequest) -> MaybeAwaitable[None]:
         return self._inner.on_input_request(request)
 
-    def on_input_prompt_delta(self, text: str) -> MaybeAwaitable[None]:
-        return self._inner.on_input_prompt_delta(text)
+    def on_input_prompt_delta(
+        self, interaction_id: str, text: str
+    ) -> MaybeAwaitable[None]:
+        return self._inner.on_input_prompt_delta(interaction_id, text)
 
     def on_output(self, message: CLIOutputMessage) -> MaybeAwaitable[None]:
         return self._inner.on_output(message)
 
-    def on_output_message_delta(self, text: str) -> MaybeAwaitable[None]:
-        return self._inner.on_output_message_delta(text)
+    def on_output_message_delta(
+        self, interaction_id: str, text: str
+    ) -> MaybeAwaitable[None]:
+        return self._inner.on_output_message_delta(interaction_id, text)
 
     async def on_interrupted(self, session: CLIResolvedSession) -> None:
         await _maybe_await(self._inner.on_interrupted(session))
@@ -222,9 +226,11 @@ class SefiaCLI:
         if self._reporter is not None:
             await _maybe_await(self._reporter.on_input_request(request))
 
-    async def _report_input_prompt_delta(self, text: str) -> None:
+    async def _report_input_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_input_prompt_delta(text))
+            await _maybe_await(
+                self._reporter.on_input_prompt_delta(interaction_id, text)
+            )
 
     async def _report_output(self, message: OutputMessage) -> None:
         if self._reporter is not None:
@@ -237,9 +243,13 @@ class SefiaCLI:
                 )
             )
 
-    async def _report_output_message_delta(self, text: str) -> None:
+    async def _report_output_message_delta(
+        self, interaction_id: str, text: str
+    ) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_output_message_delta(text))
+            await _maybe_await(
+                self._reporter.on_output_message_delta(interaction_id, text)
+            )
 
     async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:

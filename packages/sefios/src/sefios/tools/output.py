@@ -1,12 +1,11 @@
 import inspect
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Annotated, TypeVar
 
 from glyff import engrave
 from pydantic import Field
-from sefia import preview
+from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
 T = TypeVar("T")
@@ -22,7 +21,7 @@ class OutputMessage:
 
 
 OutputCallback = Callable[[OutputMessage], MaybeAwaitable[None]]
-OutputMessageDeltaCallback = Callable[[str], MaybeAwaitable[None]]
+OutputMessageDeltaCallback = Callable[[str, str], MaybeAwaitable[None]]
 
 
 async def _maybe_await(value: MaybeAwaitable[T]) -> T:
@@ -52,9 +51,9 @@ class Output:
         if self._on_output is not None:
             await _maybe_await(self._on_output(message))
 
-    async def _notify_message_delta(self, text: str) -> None:
+    async def _notify_message_delta(self, interaction_id: str, text: str) -> None:
         if self._on_message_delta is not None:
-            await _maybe_await(self._on_message_delta(text))
+            await _maybe_await(self._on_message_delta(interaction_id, text))
 
     @engrave
     async def send_output(
@@ -68,15 +67,20 @@ class Output:
         question; unlike ``get_input`` it does not wait for a response. Being
         engraved, the emit fires exactly once even across a resume.
         """
+        interaction_id = current_tool_call_id_for(self.send_output)
+        if interaction_id is None:
+            raise RuntimeError(
+                "Output.send_output() must be invoked as a dispatched tool."
+            )
         output = OutputMessage(
-            interaction_id=str(uuid.uuid4()),
+            interaction_id=interaction_id,
             message=message,
         )
         await self._notify_output(output)
         return "Message delivered to the user."
 
     @preview(send_output)
-    async def _stream_send_output(self, events: ArgStream) -> None:
+    async def _stream_send_output(self, tool_call_id: str, events: ArgStream) -> None:
         async for event in events:
             if isinstance(event, StringDelta) and event.name == "message":
-                await self._notify_message_delta(event.text)
+                await self._notify_message_delta(tool_call_id, event.text)

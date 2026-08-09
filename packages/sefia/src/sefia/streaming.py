@@ -46,4 +46,4 @@ class Scalar:
 
 ArgEvent: TypeAlias = StringDelta | StringEnd | Scalar
 ArgStream: TypeAlias = AsyncIterator[ArgEvent]
-StreamHandler: TypeAlias = Callable[[ArgStream], Awaitable[None]]
+StreamHandler: TypeAlias = Callable[[str, ArgStream], Awaitable[None]]

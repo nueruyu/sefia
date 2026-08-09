@@ -28,17 +28,23 @@ class Collector:
 
     def __init__(self) -> None:
         self.events: list[Any] = []
+        self.tool_call_ids: list[str] = []
 
-    async def __call__(self, stream: ArgStream) -> None:
+    async def __call__(self, tool_call_id: str, stream: ArgStream) -> None:
+        self.tool_call_ids.append(tool_call_id)
         async for event in stream:
             self.events.append(event)
+
+
+def _tool_call_id(index: int) -> str:
+    return f"call-{index}"
 
 
 async def run_router(
     json_text: str, *, chunk_size: int = 10_000, tool: str = "ask_human"
 ) -> list[Any]:
     collector = Collector()
-    streamer = ToolArgStreamer({tool: collector})
+    streamer = ToolArgStreamer({tool: collector}, _tool_call_id)
 
     for start in range(0, len(json_text), chunk_size):
         streamer.on_token(json_text[start : start + chunk_size])
@@ -50,7 +56,7 @@ async def run_router_handlers(
     json_text: str, tools: list[str], *, chunk_size: int = 10_000
 ) -> dict[str, list[Any]]:
     collectors = {name: Collector() for name in tools}
-    streamer = ToolArgStreamer(dict(collectors))
+    streamer = ToolArgStreamer(dict(collectors), _tool_call_id)
 
     for start in range(0, len(json_text), chunk_size):
         streamer.on_token(json_text[start : start + chunk_size])
@@ -134,7 +140,7 @@ def test_malformed_tool_call_index_is_ignored():
 
 async def test_logs_token_processing_exception_and_closes_channels(caplog):
     channel = _ArgStreamChannel()
-    streamer = ToolArgStreamer({})
+    streamer = ToolArgStreamer({}, _tool_call_id)
     streamer._channels[0] = channel
     streamer._dispatch = Mock(side_effect=RuntimeError("boom"))  # type: ignore[method-assign]
 
@@ -149,11 +155,11 @@ async def test_logs_token_processing_exception_and_closes_channels(caplog):
 
 
 async def test_duplicate_tool_name_resolution_is_ignored():
-    async def handler(stream: ArgStream) -> None:
+    async def handler(tool_call_id: str, stream: ArgStream) -> None:
         async for _ in stream:
             pass
 
-    streamer = ToolArgStreamer({"ask_human": handler})
+    streamer = ToolArgStreamer({"ask_human": handler}, _tool_call_id)
     streamer._resolve_tool_name(0, "ask_human")
     first_channel = streamer._channels[0]
     first_tasks = list(streamer._tasks)
@@ -279,6 +285,7 @@ async def test_arguments_stream_through_a_real_strategy():
     )
 
     assert isinstance(decision, ToolCallDecision)
+    assert collector.tool_call_ids == [decision.calls[0].id]
     assert (
         "".join(e.text for e in collector.events if isinstance(e, StringDelta))
         == "What is your name?"
