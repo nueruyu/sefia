@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
 from sefios.fastapi import SefiaHTTP
-from sefios.tools import Input, InputResult, Output, OutputMessage
+from sefios.tools import Input, Output, OutputMessage
 
 
 @pytest.fixture
@@ -63,7 +63,9 @@ class TestSefiaHTTPOutput:
 
         async with http._events._subscribe(session_id) as queue:
             async with http.session(session_id=session_id):
-                await http.output_tool.send_output("Hello there!")
+                await http._emit_output(
+                    OutputMessage(interaction_id="call-1", message="Hello there!")
+                )
 
         outputs = [event for event in _drain(queue) if event.name == "output"]
         assert len(outputs) == 1
@@ -76,7 +78,9 @@ class TestSefiaHTTPOutput:
 
         async def emit(session_id: str, message: str) -> None:
             async with http.session(session_id=session_id):
-                await http.output_tool.send_output(message)
+                await http._emit_output(
+                    OutputMessage(interaction_id=session_id, message=message)
+                )
 
         async with (
             http._events._subscribe(first) as first_queue,
@@ -100,42 +104,39 @@ class TestSefiaHTTPOutput:
 
 
 class TestSefiaHTTPDeltas:
-    async def test_output_deltas_share_a_bubble_id_until_the_output_closes_it(
+    async def test_output_deltas_use_the_completion_interaction_id(
         self, http: SefiaHTTP
     ):
         session_id = http.create_session()
 
         async with http._events._subscribe(session_id) as queue:
             async with http.session(session_id=session_id):
-                await http._emit_output_delta("Hel")
-                await http._emit_output_delta("lo")
-                await http.output_tool.send_output("Hello")
-                await http._emit_output_delta("Again")
-
-        deltas = [e for e in _drain(queue) if e.name == "delta"]
-        assert all(e.data["type"] == "output" for e in deltas)
-        assert [e.data["text"] for e in deltas] == ["Hel", "lo", "Again"]
-        assert deltas[0].data["interaction_id"] == deltas[1].data["interaction_id"]
-        # The output event retires the id, so the next delta opens a new bubble.
-        assert deltas[2].data["interaction_id"] != deltas[0].data["interaction_id"]
-
-    async def test_input_deltas_get_a_fresh_id_once_the_request_resolves(
-        self, http: SefiaHTTP
-    ):
-        session_id = http.create_session()
-
-        async with http._events._subscribe(session_id) as queue:
-            async with http.session(session_id=session_id):
-                await http._emit_input_delta("Q1")
-                await http._complete_request(
-                    InputResult(interaction_id="i1", prompt="Q1", value="answer")
+                await http._emit_output_delta("call-1", "Hel")
+                await http._emit_output_delta("call-1", "lo")
+                await http._emit_output(
+                    OutputMessage(interaction_id="call-1", message="Hello")
                 )
-                await http._emit_input_delta("Q2")
+
+        events = _drain(queue)
+        deltas = [e for e in events if e.name == "delta"]
+        assert all(e.data["type"] == "output" for e in deltas)
+        assert [e.data["text"] for e in deltas] == ["Hel", "lo"]
+        assert {e.data["interaction_id"] for e in deltas} == {"call-1"}
+        outputs = [e for e in events if e.name == "output"]
+        assert outputs[0].data["interaction_id"] == "call-1"
+
+    async def test_input_deltas_use_their_tool_call_ids(self, http: SefiaHTTP):
+        session_id = http.create_session()
+
+        async with http._events._subscribe(session_id) as queue:
+            async with http.session(session_id=session_id):
+                await http._emit_input_delta("call-1", "Q1")
+                await http._emit_input_delta("call-2", "Q2")
 
         deltas = [e for e in _drain(queue) if e.name == "delta"]
         assert all(e.data["type"] == "input" for e in deltas)
         assert [e.data["text"] for e in deltas] == ["Q1", "Q2"]
-        assert deltas[0].data["interaction_id"] != deltas[1].data["interaction_id"]
+        assert [e.data["interaction_id"] for e in deltas] == ["call-1", "call-2"]
 
     async def test_input_and_output_deltas_keep_independent_bubble_ids(
         self, http: SefiaHTTP
@@ -144,8 +145,8 @@ class TestSefiaHTTPDeltas:
 
         async with http._events._subscribe(session_id) as queue:
             async with http.session(session_id=session_id):
-                await http._emit_output_delta("narrating")
-                await http._emit_input_delta("asking")
+                await http._emit_output_delta("output-call", "narrating")
+                await http._emit_input_delta("input-call", "asking")
 
         deltas = {e.data["type"]: e.data for e in _drain(queue) if e.name == "delta"}
         assert deltas["output"]["interaction_id"] != deltas["input"]["interaction_id"]

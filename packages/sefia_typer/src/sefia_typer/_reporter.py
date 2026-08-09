@@ -42,11 +42,15 @@ class CLIReporter(Protocol):
         request: InputRequest,
     ) -> MaybeAwaitable[None]: ...
 
-    def on_input_prompt_delta(self, text: str) -> MaybeAwaitable[None]: ...
+    def on_input_prompt_delta(
+        self, interaction_id: str, text: str
+    ) -> MaybeAwaitable[None]: ...
 
     def on_output(self, message: OutputMessage) -> MaybeAwaitable[None]: ...
 
-    def on_output_message_delta(self, text: str) -> MaybeAwaitable[None]: ...
+    def on_output_message_delta(
+        self, interaction_id: str, text: str
+    ) -> MaybeAwaitable[None]: ...
 
     def on_interrupted(
         self,
@@ -81,7 +85,7 @@ class DefaultCLIReporter(CLIReporter):
         typer.echo(f" {request.prompt}")
         typer.echo()
 
-    def on_input_prompt_delta(self, text: str) -> None:
+    def on_input_prompt_delta(self, interaction_id: str, text: str) -> None:
         typer.echo(text, nl=False)
 
     def on_output(self, message: OutputMessage) -> None:
@@ -95,7 +99,7 @@ class DefaultCLIReporter(CLIReporter):
         typer.echo(f" {message.message}")
         typer.echo()
 
-    def on_output_message_delta(self, text: str) -> None:
+    def on_output_message_delta(self, interaction_id: str, text: str) -> None:
         typer.echo(text, nl=False)
 
     def on_interrupted(self, session: ResolvedSession) -> None:

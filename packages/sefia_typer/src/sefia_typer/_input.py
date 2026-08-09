@@ -21,7 +21,7 @@ _DEFAULT_NAMESPACE = "input_channel"
 T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 InputRequestHandler = Callable[["InputRequest"], MaybeAwaitable[None]]
-InputPromptDeltaHandler = Callable[[str], MaybeAwaitable[None]]
+InputPromptDeltaHandler = Callable[[str, str], MaybeAwaitable[None]]
 
 
 @dataclass(frozen=True)
@@ -148,9 +148,9 @@ class InputChannel:
         pending.pop(interaction_id, None)
         await self._save_pending(pending)
 
-    async def notify_prompt_delta(self, text: str) -> None:
+    async def notify_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self._on_prompt_delta is not None:
-            await _maybe_await(self._on_prompt_delta(text))
+            await _maybe_await(self._on_prompt_delta(interaction_id, text))
 
     async def _pending_map(self) -> dict[str, dict]:
         store = self._store()

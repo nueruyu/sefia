@@ -6,7 +6,7 @@ from typing import Annotated, TypeVar
 
 from glyff import engrave
 from pydantic import Field
-from sefia import preview
+from sefia import current_tool_call_id, preview
 from sefia.streaming import ArgStream, StringDelta
 
 from .._session_state import get_call_state_store
@@ -36,13 +36,11 @@ class InputResult:
 InputProvider = Callable[[InputRequest], MaybeAwaitable[str | None]]
 InputRequestCallback = Callable[[InputRequest], MaybeAwaitable[None]]
 InputCompleteCallback = Callable[[InputResult], MaybeAwaitable[None]]
-InputPromptDeltaCallback = Callable[[str], MaybeAwaitable[None]]
+InputPromptDeltaCallback = Callable[[str, str], MaybeAwaitable[None]]
 
 
 @dataclass
 class _InputCallState:
-    """Internal state for a single get_input tool call."""
-
     interaction_id: str | None = None
 
 
@@ -54,6 +52,13 @@ async def _maybe_await(value: MaybeAwaitable[T]) -> T:
 
 async def _no_input(_: InputRequest) -> str | None:
     return None
+
+
+def _interaction_id() -> str:
+    try:
+        return current_tool_call_id()
+    except RuntimeError:
+        return str(uuid.uuid4())
 
 
 class Input:
@@ -77,9 +82,9 @@ class Input:
         if self._on_complete is not None:
             await _maybe_await(self._on_complete(result))
 
-    async def _notify_prompt_delta(self, text: str) -> None:
+    async def _notify_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self._on_prompt_delta is not None:
-            await _maybe_await(self._on_prompt_delta(text))
+            await _maybe_await(self._on_prompt_delta(interaction_id, text))
 
     @engrave
     async def get_input(
@@ -98,9 +103,8 @@ class Input:
         prompt_text = prompt or ""
         call_store = get_call_state_store("internal_state", _InputCallState)
         call_state = await call_store.ensure()
-
         if call_state.interaction_id is None:
-            call_state.interaction_id = str(uuid.uuid4())
+            call_state.interaction_id = _interaction_id()
             await call_store.save(call_state)
 
         request = InputRequest(
@@ -122,7 +126,7 @@ class Input:
         raise InputRequired(prompt_text, interaction_id=request.interaction_id)
 
     @preview(get_input)
-    async def _stream_get_input(self, events: ArgStream) -> None:
+    async def _stream_get_input(self, tool_call_id: str, events: ArgStream) -> None:
         async for event in events:
             if isinstance(event, StringDelta) and event.name == "prompt":
-                await self._notify_prompt_delta(event.text)
+                await self._notify_prompt_delta(tool_call_id, event.text)

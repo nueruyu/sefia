@@ -28,8 +28,10 @@ class Collector:
 
     def __init__(self) -> None:
         self.events: list[Any] = []
+        self.tool_call_ids: list[str] = []
 
-    async def __call__(self, stream: ArgStream) -> None:
+    async def __call__(self, tool_call_id: str, stream: ArgStream) -> None:
+        self.tool_call_ids.append(tool_call_id)
         async for event in stream:
             self.events.append(event)
 
@@ -149,7 +151,7 @@ async def test_logs_token_processing_exception_and_closes_channels(caplog):
 
 
 async def test_duplicate_tool_name_resolution_is_ignored():
-    async def handler(stream: ArgStream) -> None:
+    async def handler(tool_call_id: str, stream: ArgStream) -> None:
         async for _ in stream:
             pass
 
@@ -279,6 +281,7 @@ async def test_arguments_stream_through_a_real_strategy():
     )
 
     assert isinstance(decision, ToolCallDecision)
+    assert collector.tool_call_ids == [decision.calls[0].id]
     assert (
         "".join(e.text for e in collector.events if isinstance(e, StringDelta))
         == "What is your name?"

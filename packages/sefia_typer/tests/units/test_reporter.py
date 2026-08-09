@@ -52,8 +52,8 @@ class TestDefaultCLIReporter:
     def test_input_prompt_delta_is_printed_without_newline(self, capsys):
         reporter = DefaultCLIReporter()
 
-        reporter.on_input_prompt_delta("What ")
-        reporter.on_input_prompt_delta("topic?")
+        reporter.on_input_prompt_delta("call-1", "What ")
+        reporter.on_input_prompt_delta("call-1", "topic?")
 
         assert capsys.readouterr().out == "What topic?"
 
@@ -69,8 +69,8 @@ class TestDefaultCLIReporter:
     def test_output_message_delta_is_printed_without_newline(self, capsys):
         reporter = DefaultCLIReporter()
 
-        reporter.on_output_message_delta("Hello ")
-        reporter.on_output_message_delta("there!")
+        reporter.on_output_message_delta("call-1", "Hello ")
+        reporter.on_output_message_delta("call-1", "there!")
 
         assert capsys.readouterr().out == "Hello there!"
 

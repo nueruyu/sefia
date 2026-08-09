@@ -194,6 +194,12 @@ A handler that needs the identity of the call it is serving reads
 the call's pause and resume (its decision replays from history), so a
 transport-backed tool needs no glyff-derived per-call key.
 
+An `@preview` handler receives that same id before its `ArgStream`:
+`handler(tool_call_id, events)`. The streaming parser assigns the id when it
+recognizes the tool call and the decision builder reuses it for the eventual
+`ToolCallRequest`. Preview deltas and the authoritative tool result can therefore
+refer to the same interaction even though the preview runs before tool execution.
+
 When one decision contains several calls, the batch runs **serially by
 default**; consecutive calls to `@concurrent`-marked tools overlap, and an
 unmarked call is a barrier. This is not fire-and-forget: results are awaited
@@ -273,13 +279,12 @@ composes multiple input tool calls emitted in the same model decision into one
 prompt. It does not carry state across steps, so a follow-up question produced
 after resume remains a normal separate interaction.
 
-The idempotency hinge is `get_call_state_store`
-(`sefios/_session_state.py`): it scopes a small state store to the **current engraved
-call's `ExecutionId`** (hashed). Because a resumed invocation re-enters the *same*
-engraved call with the *same* execution id, the tool reads back the *same*
-`interaction_id` it stored before — so the pending prompt is keyed stably and a
-re-entry doesn't create a duplicate. The store commits immediately, so this state
-survives the pause; everything else is just function arguments and return values.
+The idempotency hinge is the `ToolCallRequest.id`. The input tool uses it as its
+`interaction_id`; because a resumed invocation restores the same decision from
+history, it routes the reply to the same pending prompt instead of creating a
+duplicate. The input/output preview callbacks receive this id alongside each text
+delta, so HTTP SSE clients can merge a live preview directly into its authoritative
+`input_required` or `output` event.
 
 ## Sessions and context
 

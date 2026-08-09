@@ -9,7 +9,7 @@ async def standalone(question: str, count: int = 0) -> str:
 
 
 @preview(standalone)
-async def _standalone_stream(events: ArgStream) -> None:
+async def _standalone_stream(tool_call_id: str, events: ArgStream) -> None:
     async for _ in events:
         pass
 
@@ -19,7 +19,7 @@ class Toolkit:
         return question
 
     @preview(ask)
-    async def _ask_stream(self, events: ArgStream) -> None:
+    async def _ask_stream(self, tool_call_id: str, events: ArgStream) -> None:
         async for _ in events:
             pass
 
@@ -27,8 +27,9 @@ class Toolkit:
     async def static_ask(question: str) -> str:
         return question
 
+    @staticmethod
     @preview(static_ask)
-    async def _static_ask_stream(events: ArgStream) -> None:
+    async def _static_ask_stream(tool_call_id: str, events: ArgStream) -> None:
         async for _ in events:
             pass
 
@@ -37,7 +38,7 @@ class Toolkit:
         return question
 
     @preview(class_ask)
-    async def _class_ask_stream(cls, events: ArgStream) -> None:
+    async def _class_ask_stream(cls, tool_call_id: str, events: ArgStream) -> None:
         async for _ in events:
             pass
 

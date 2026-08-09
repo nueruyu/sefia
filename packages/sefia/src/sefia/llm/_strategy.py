@@ -68,9 +68,14 @@ class _ExecutionDirector(ABC):
         """Builds the core instruction part of the system prompt."""
         raise NotImplementedError
 
-    def process_response_data(self, data: Any) -> InferenceDecision:
+    def process_response_data(
+        self, data: Any, tool_call_ids: dict[int, str] | None = None
+    ) -> InferenceDecision:
         """Validate raw decision data and convert it to an inference decision."""
-        return self._process_decision(self.decision_model.validate(data))
+        decision = self.decision_model.validate(data)
+        if isinstance(decision, ToolCallsLLMDecision):
+            return self._tool_call_decision(decision.tool_calls, tool_call_ids)
+        return self._process_decision(decision)
 
     @abstractmethod
     def _process_decision(self, decision: LLMDecision) -> InferenceDecision:
@@ -81,13 +86,16 @@ class _ExecutionDirector(ABC):
         return [tool.definition().to_dict() for tool in self.tools]
 
     def _tool_call_decision(
-        self, tool_calls: list[DecisionToolCall]
+        self,
+        tool_calls: list[DecisionToolCall],
+        tool_call_ids: dict[int, str] | None = None,
     ) -> ToolCallDecision:
         calls = []
-        for tc in tool_calls:
+        for index, tc in enumerate(tool_calls):
+            call_id = None if tool_call_ids is None else tool_call_ids.get(index)
             calls.append(
                 ToolCallRequest(
-                    id=f"call_{uuid.uuid4().hex[:12]}",
+                    id=call_id or f"call_{uuid.uuid4().hex[:12]}",
                     name=tc.name,
                     arguments=tc.arguments,
                 )
@@ -311,8 +319,9 @@ class LLMInferenceStrategy(InferenceStrategy):
         reasoning_callback = None
         tool_stream_handlers = _tool_stream_handlers(tools)
         tool_arg_streamer = None
+        tool_call_ids: dict[int, str] = {}
         if self._stream and tool_stream_handlers:
-            tool_arg_streamer = ToolArgStreamer(tool_stream_handlers)
+            tool_arg_streamer = ToolArgStreamer(tool_stream_handlers, tool_call_ids)
         if self._stream:
 
             async def on_token(token: str):
@@ -354,7 +363,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 raw = "\n".join(lines[1:-1]).strip()
 
             decision_data = json.loads(raw)
-            return director.process_response_data(decision_data)
+            return director.process_response_data(decision_data, tool_call_ids)
 
         except UnknownToolDecisionError as e:
             raise InvalidInferenceResponseError(

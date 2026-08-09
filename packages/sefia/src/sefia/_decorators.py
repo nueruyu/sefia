@@ -48,7 +48,7 @@ def preview(target: Callable[..., Any]) -> Callable[[_StreamH], _StreamH]:
             async def ask_human(self, question: str) -> str: ...
 
             @preview(ask_human)
-            async def _ask_human_stream(self, events) -> None:
+            async def _ask_human_stream(self, tool_call_id, events) -> None:
                 async for ev in events: ...
 
     This is independent of tool exposure (a public method is a tool because it

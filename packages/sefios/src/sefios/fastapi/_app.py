@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -60,12 +59,6 @@ class SefiaHTTP:
         self._active_session_id: ContextVar[str | None] = ContextVar(
             "http_active_session_id", default=None
         )
-        # A streamed prompt/message arrives token-by-token before the discrete
-        # completion event that closes it, so each session's deltas are tagged
-        # with an id minted on the first delta and retired by that event -- so a
-        # client can group a run of deltas into the bubble they belong to.
-        self._input_delta_ids: dict[str, str] = {}
-        self._output_delta_ids: dict[str, str] = {}
         self._input_tool = Input(
             get_input=self._provide_input,
             on_request=self._record_request,
@@ -149,7 +142,6 @@ class SefiaHTTP:
                     "prompt": pause.prompt,
                 },
             )
-            self._input_delta_ids.pop(session_id, None)
             raise
         except Exception as exc:
             await self._events.publish(
@@ -166,8 +158,6 @@ class SefiaHTTP:
                 session_id, SSEEvent.COMPLETED, {"session_id": session_id}
             )
         finally:
-            self._input_delta_ids.pop(session_id, None)
-            self._output_delta_ids.pop(session_id, None)
             self._active_session_id.reset(token)
 
     def events(self, session_id: str) -> StreamingResponse:
@@ -182,19 +172,17 @@ class SefiaHTTP:
 
     async def _complete_request(self, result: InputResult) -> None:
         await self._input.complete_request(result.interaction_id)
-        self._input_delta_ids.pop(self._require_session_id(), None)
 
-    async def _emit_input_delta(self, text: str) -> None:
-        await self._emit_delta("input", self._input_delta_ids, text)
+    async def _emit_input_delta(self, interaction_id: str, text: str) -> None:
+        await self._emit_delta("input", interaction_id, text)
 
-    async def _emit_output_delta(self, text: str) -> None:
-        await self._emit_delta("output", self._output_delta_ids, text)
+    async def _emit_output_delta(self, interaction_id: str, text: str) -> None:
+        await self._emit_delta("output", interaction_id, text)
 
     async def _emit_delta(
-        self, delta_type: str, delta_ids: dict[str, str], text: str
+        self, delta_type: str, interaction_id: str, text: str
     ) -> None:
         session_id = self._require_session_id()
-        interaction_id = delta_ids.setdefault(session_id, str(uuid.uuid4()))
         await self._events.publish(
             session_id,
             SSEEvent.DELTA,
@@ -211,7 +199,6 @@ class SefiaHTTP:
                 "message": message.message,
             },
         )
-        self._output_delta_ids.pop(session_id, None)
 
     def _require_session_id(self) -> str:
         session_id = self._active_session_id.get()

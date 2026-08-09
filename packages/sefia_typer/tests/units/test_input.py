@@ -97,14 +97,16 @@ class TestPending:
         assert seen == [InputRequest(interaction_id="x", prompt="why?")]
 
     async def test_prompt_delta_notifies(self, kv_store):
-        seen: list[str] = []
-        channel = InputChannel(on_prompt_delta=seen.append)
+        seen: list[tuple[str, str]] = []
+        channel = InputChannel(
+            on_prompt_delta=lambda call_id, text: seen.append((call_id, text))
+        )
 
         with channel.use_store(kv_store):
-            await channel.notify_prompt_delta("What ")
-            await channel.notify_prompt_delta("topic?")
+            await channel.notify_prompt_delta("call-1", "What ")
+            await channel.notify_prompt_delta("call-1", "topic?")
 
-        assert seen == ["What ", "topic?"]
+        assert seen == [("call-1", "What "), ("call-1", "topic?")]
 
 
 class TestReceiveInput:
