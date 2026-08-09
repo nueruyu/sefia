@@ -6,7 +6,7 @@ from typing import Annotated, TypeVar
 
 from glyff import engrave
 from pydantic import Field
-from sefia import current_tool_call_id, preview
+from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
 from .._session_state import get_call_state_store
@@ -54,13 +54,6 @@ async def _no_input(_: InputRequest) -> str | None:
     return None
 
 
-def _interaction_id() -> str:
-    try:
-        return current_tool_call_id()
-    except RuntimeError:
-        return str(uuid.uuid4())
-
-
 class Input:
     def __init__(
         self,
@@ -104,7 +97,9 @@ class Input:
         call_store = get_call_state_store("internal_state", _InputCallState)
         call_state = await call_store.ensure()
         if call_state.interaction_id is None:
-            call_state.interaction_id = _interaction_id()
+            call_state.interaction_id = current_tool_call_id_for(self.get_input) or str(
+                uuid.uuid4()
+            )
             await call_store.save(call_state)
 
         request = InputRequest(

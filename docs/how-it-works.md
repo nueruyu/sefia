@@ -193,6 +193,9 @@ A handler that needs the identity of the call it is serving reads
 `sefia.current_tool_call_id()` — the serving `ToolCallRequest.id`, stable across
 the call's pause and resume (its decision replays from history), so a
 transport-backed tool needs no glyff-derived per-call key.
+`sefia.current_tool_call_id_for(function)` returns that id only when `function`
+is itself the dispatched tool. A helper called as ordinary Python from inside
+another tool therefore does not accidentally adopt its parent's interaction id.
 
 An `@preview` handler receives that same id before its `ArgStream`:
 `handler(tool_call_id, events)`. The streaming parser assigns the id when it

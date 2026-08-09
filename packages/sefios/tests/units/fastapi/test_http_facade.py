@@ -1,9 +1,65 @@
 import asyncio
+import json
 
 import pytest
+from sefia import Tools, infer
 from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
+from sefia.llm import LLMClient, LLMResponse
 from sefios.fastapi import SefiaHTTP
+from sefios import InputRequired
 from sefios.tools import Input, Output, OutputMessage
+
+
+class StreamingClient(LLMClient):
+    def __init__(self, responses: list[str]):
+        self.responses = responses
+
+    async def complete(
+        self,
+        messages,
+        tools=None,
+        output_schema=None,
+        stream_callback=None,
+        reasoning_callback=None,
+    ) -> LLMResponse:
+        content = self.responses.pop(0)
+        if stream_callback is not None:
+            for character in content:
+                await stream_callback(character)
+        return LLMResponse(content=content)
+
+
+class OutputAgent:
+    _output: Tools[Output]
+
+    def __init__(self, output: Output):
+        self._output = output
+
+    @infer
+    async def run(self) -> str:
+        """Send an output message."""
+        ...
+
+
+class InputAgent:
+    _input: Tools[Input]
+
+    def __init__(self, input_tool: Input):
+        self._input = input_tool
+
+    @infer
+    async def run(self) -> str:
+        """Ask for input."""
+        ...
+
+
+def _tool_response(name: str, arguments: dict) -> str:
+    return json.dumps(
+        {
+            "decision": "tool_calls",
+            "tool_calls": [{"name": name, "arguments": arguments}],
+        }
+    )
 
 
 @pytest.fixture
@@ -104,39 +160,52 @@ class TestSefiaHTTPOutput:
 
 
 class TestSefiaHTTPDeltas:
-    async def test_output_deltas_use_the_completion_interaction_id(
+    async def test_streamed_output_deltas_match_the_completion_id(
         self, http: SefiaHTTP
     ):
         session_id = http.create_session()
+        http._session_scope.llm_client = StreamingClient(
+            [
+                _tool_response("Output_send_output", {"message": "Hello"}),
+                json.dumps({"decision": "result", "result": "done"}),
+            ]
+        )
 
         async with http._events._subscribe(session_id) as queue:
             async with http.session(session_id=session_id):
-                await http._emit_output_delta("call-1", "Hel")
-                await http._emit_output_delta("call-1", "lo")
-                await http._emit_output(
-                    OutputMessage(interaction_id="call-1", message="Hello")
-                )
+                await OutputAgent(http.output_tool).run()
 
         events = _drain(queue)
         deltas = [e for e in events if e.name == "delta"]
         assert all(e.data["type"] == "output" for e in deltas)
-        assert [e.data["text"] for e in deltas] == ["Hel", "lo"]
-        assert {e.data["interaction_id"] for e in deltas} == {"call-1"}
+        assert "".join(e.data["text"] for e in deltas) == "Hello"
         outputs = [e for e in events if e.name == "output"]
-        assert outputs[0].data["interaction_id"] == "call-1"
+        assert len(outputs) == 1
+        assert {e.data["interaction_id"] for e in deltas} == {
+            outputs[0].data["interaction_id"]
+        }
 
-    async def test_input_deltas_use_their_tool_call_ids(self, http: SefiaHTTP):
+    async def test_streamed_input_deltas_match_the_pause_id(self, http: SefiaHTTP):
         session_id = http.create_session()
+        http._session_scope.llm_client = StreamingClient(
+            [_tool_response("Input_get_input", {"prompt": "Your name?"})]
+        )
 
         async with http._events._subscribe(session_id) as queue:
-            async with http.session(session_id=session_id):
-                await http._emit_input_delta("call-1", "Q1")
-                await http._emit_input_delta("call-2", "Q2")
+            with pytest.raises(InputRequired) as pause:
+                async with http.session(session_id=session_id):
+                    await InputAgent(http.input_tool).run()
 
-        deltas = [e for e in _drain(queue) if e.name == "delta"]
+        events = _drain(queue)
+        deltas = [e for e in events if e.name == "delta"]
         assert all(e.data["type"] == "input" for e in deltas)
-        assert [e.data["text"] for e in deltas] == ["Q1", "Q2"]
-        assert [e.data["interaction_id"] for e in deltas] == ["call-1", "call-2"]
+        assert "".join(e.data["text"] for e in deltas) == "Your name?"
+        required = [e for e in events if e.name == "input_required"]
+        assert len(required) == 1
+        assert {e.data["interaction_id"] for e in deltas} == {
+            pause.value.interaction_id,
+            required[0].data["interaction_id"],
+        }
 
     async def test_input_and_output_deltas_keep_independent_bubble_ids(
         self, http: SefiaHTTP

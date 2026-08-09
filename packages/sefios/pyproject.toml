@@ -6,7 +6,7 @@ license = { file = "LICENSE" }
 authors = [{ name = "nueruyu" }]
 requires-python = ">=3.11"
 dependencies = [
-    "sefia>=0.1.0",
+    "sefia>=0.2.0",
     "glyff>=0.13.0",
     "glyff-file-store>=0.13.0",
     "glyff-pydantic>=0.13.0",
@@ -36,7 +36,7 @@ classifiers = [
 [project.optional-dependencies]
 litellm = ["sefia-litellm>=0.1.0"]
 web = ["ddgs>=9.0"]
-cli = ["sefia-typer>=0.1.0"]
+cli = ["sefia-typer>=0.2.0"]
 fastapi = ["sefia-fastapi>=0.1.0"]
 all = [
     "sefios[litellm]",
