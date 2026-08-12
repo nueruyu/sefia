@@ -2,6 +2,7 @@ import json
 from collections.abc import Sequence
 from typing import Any, Callable
 
+from ..exceptions import InvalidInferenceResponseError
 from ..inference import FunctionInfo, HistoryItem, ToolCallDecision, ToolCallResult
 from ._execution_directors import ExecutionDirector
 from ._messages import Message
@@ -72,4 +73,25 @@ def build_messages(
                 )
             )
 
+    return messages
+
+
+def build_repair_messages(error: InvalidInferenceResponseError) -> list[Message]:
+    messages: list[Message] = []
+    if error.raw_content:
+        messages.append(Message(role="assistant", content=error.raw_content))
+        content_note = ""
+    else:
+        content_note = "Your previous response was empty.\n"
+
+    feedback = (
+        "Your previous response was invalid and could not be used as the "
+        "required decision JSON.\n"
+        f"Error: {error.detail}\n"
+        f"{content_note}"
+        "Respond again with exactly one valid raw JSON object matching the "
+        "decision schema in the system instructions. Do not include prose, "
+        "markdown, or code fences."
+    )
+    messages.append(Message(role="user", content=feedback))
     return messages

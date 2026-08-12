@@ -19,7 +19,7 @@ from ._execution_directors import (
     ToolEnabledDirector,
     ToolOnlyDirector,
 )
-from ._message_builder import build_messages
+from ._message_builder import build_messages, build_repair_messages
 from ._messages import Message
 from ._prompt_formatter import PromptFormatter
 from ._tool_call_ids import ToolCallIdRegistry
@@ -91,7 +91,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 await publisher.publish(
                     events.LLMResponseRepairAttempt(error=error, attempt=attempt)
                 )
-                messages = messages + self._repair_messages(error)
+                messages = messages + build_repair_messages(error)
 
     async def _complete_once(
         self,
@@ -167,27 +167,6 @@ class LLMInferenceStrategy(InferenceStrategy):
                 f"LLM output failed validation against the master schema: {error}",
                 raw_content=response.content,
             ) from error
-
-    def _repair_messages(self, error: InvalidInferenceResponseError) -> list[Message]:
-        feedback_messages: list[Message] = []
-        if error.raw_content:
-            feedback_messages.append(
-                Message(role="assistant", content=error.raw_content)
-            )
-            content_note = ""
-        else:
-            content_note = "Your previous response was empty.\n"
-        feedback = (
-            "Your previous response was invalid and could not be used as the "
-            "required decision JSON.\n"
-            f"Error: {error.detail}\n"
-            f"{content_note}"
-            "Respond again with exactly one valid raw JSON object matching the "
-            "decision schema in the system instructions. Do not include prose, "
-            "markdown, or code fences."
-        )
-        feedback_messages.append(Message(role="user", content=feedback))
-        return feedback_messages
 
     def _build_messages(
         self,
