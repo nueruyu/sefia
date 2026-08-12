@@ -23,7 +23,8 @@ except ImportError as e:
         ) from e
     raise
 
-from ._app import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
+from ._app import SefiaCLI, SefiaCLISession
+from ._cost_reporter import CostReportingCLIReporter
 
 __all__ = [
     "SefiaCLI",

@@ -6,74 +6,18 @@ from typing import cast
 import typer
 from sefia import Policy
 from sefia.exceptions import InferenceError, PauseException
-from sefia_typer import (
-    CLIReporter,
-    DefaultCLIReporter,
-    InputChannel,
-)
-from sefia_typer import InputRequest as CLIInputRequest
-from sefia_typer import OutputMessage as CLIOutputMessage
-from sefia_typer import ResolvedSession as CLIResolvedSession
+from sefia_typer import CLIReporter, InputChannel
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 
-from .._async import MaybeAwaitable, maybe_await
 from .._scope import SessionScope
 from .._session_state import get_session_storage
-from ..handlers import CostCalculator, CostState
-from ..sessions import ResolvedSession, SessionManager, UnknownSessionError
-from ..state import get_state
-from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
+from ..handlers import CostCalculator
+from ..sessions import SessionManager, UnknownSessionError
+from ..tools import Input, InputRequest, InputResult, Output
+from ._cost_reporter import CostReportingCLIReporter
+from ._reporting import CLIReporting
 
 _USE_DEFAULT_REPORTER = object()
-
-
-class CostReportingCLIReporter(CLIReporter):
-    """Wraps a reporter to also echo the session's total cost.
-
-    Reads the :class:`CostState` accumulated by the scope's
-    :class:`CostCalculator`, so it only works inside a session run by
-    :class:`SefiaCLI`. This is the default reporter of :class:`SefiaCLI`.
-    """
-
-    def __init__(self, inner: CLIReporter | None = None):
-        self._inner = inner or DefaultCLIReporter()
-
-    def on_session_resolved(self, session: CLIResolvedSession) -> MaybeAwaitable[None]:
-        return self._inner.on_session_resolved(session)
-
-    def on_input_request(self, request: CLIInputRequest) -> MaybeAwaitable[None]:
-        return self._inner.on_input_request(request)
-
-    def on_input_prompt_delta(
-        self, interaction_id: str, text: str
-    ) -> MaybeAwaitable[None]:
-        return self._inner.on_input_prompt_delta(interaction_id, text)
-
-    def on_output(self, message: CLIOutputMessage) -> MaybeAwaitable[None]:
-        return self._inner.on_output(message)
-
-    def on_output_message_delta(
-        self, interaction_id: str, text: str
-    ) -> MaybeAwaitable[None]:
-        return self._inner.on_output_message_delta(interaction_id, text)
-
-    async def on_interrupted(self, session: CLIResolvedSession) -> None:
-        await maybe_await(self._inner.on_interrupted(session))
-        await self._echo_total_cost()
-
-    async def on_inference_error(self, error: InferenceError) -> None:
-        await maybe_await(self._inner.on_inference_error(error))
-        await self._echo_total_cost()
-
-    async def on_session_finished(self) -> None:
-        await maybe_await(self._inner.on_session_finished())
-        await self._echo_total_cost()
-
-    @staticmethod
-    async def _echo_total_cost() -> None:
-        cost_state = await get_state().get(CostState).ensure()
-        typer.echo()
-        typer.secho(f"> Total cost: ${cost_state.cost:.4f}", bold=True)
 
 
 class SefiaCLISession:
@@ -113,10 +57,11 @@ class SefiaCLI:
         policies: list[Policy] | None = None,
     ):
         self._reporter = self._resolve_reporter(reporter)
+        self._reporting = CLIReporting(self._reporter)
         self._session_manager = SessionManager(session_dir)
         self._input = InputChannel(
-            on_request=self._report_input_request,
-            on_prompt_delta=self._report_input_prompt_delta,
+            on_request=self._reporting.input_request,
+            on_prompt_delta=self._reporting.input_prompt_delta,
             namespace="cli/input_channel",
         )
         self._input_tool = Input(
@@ -126,8 +71,8 @@ class SefiaCLI:
             on_prompt_delta=self._input.notify_prompt_delta,
         )
         self._output_tool = Output(
-            on_output=self._report_output,
-            on_message_delta=self._report_output_message_delta,
+            on_output=self._reporting.output,
+            on_message_delta=self._reporting.output_message_delta,
         )
 
         scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
@@ -180,7 +125,7 @@ class SefiaCLI:
             raise CLIUnknownSessionError(e.session_id) from None
 
         try:
-            await self._report_session_resolved(resolved_session)
+            await self._reporting.session_resolved(resolved_session)
             async with self._session_scope.session(
                 session_id=resolved_session.session_id,
                 model=model,
@@ -191,17 +136,17 @@ class SefiaCLI:
                     try:
                         yield SefiaCLISession(channel=self._input)
                     except InferenceError as e:
-                        await self._report_inference_error(e)
+                        await self._reporting.inference_error(e)
                         raise
                     except PauseException:
                         # Any pause (InputRequired, or a future pause type) is a
                         # graceful interrupt, not a failure. The session context
                         # is still alive here, so reporters may read running
                         # state (e.g. cost) via get_state().
-                        await self._report_interrupted(resolved_session)
+                        await self._reporting.interrupted(resolved_session)
                         raise
                     else:
-                        await self._report_session_finished()
+                        await self._reporting.session_finished()
         except InferenceError:
             raise typer.Exit(code=1) from None
         except PauseException:
@@ -215,51 +160,6 @@ class SefiaCLI:
 
     async def _complete_request(self, result: InputResult) -> None:
         await self._input.complete_request(result.interaction_id)
-
-    async def _report_session_resolved(self, session: ResolvedSession) -> None:
-        if self._reporter is not None:
-            await maybe_await(self._reporter.on_session_resolved(session))
-
-    async def _report_input_request(self, request: CLIInputRequest) -> None:
-        if self._reporter is not None:
-            await maybe_await(self._reporter.on_input_request(request))
-
-    async def _report_input_prompt_delta(self, interaction_id: str, text: str) -> None:
-        if self._reporter is not None:
-            await maybe_await(
-                self._reporter.on_input_prompt_delta(interaction_id, text)
-            )
-
-    async def _report_output(self, message: OutputMessage) -> None:
-        if self._reporter is not None:
-            await maybe_await(
-                self._reporter.on_output(
-                    CLIOutputMessage(
-                        interaction_id=message.interaction_id,
-                        message=message.message,
-                    )
-                )
-            )
-
-    async def _report_output_message_delta(
-        self, interaction_id: str, text: str
-    ) -> None:
-        if self._reporter is not None:
-            await maybe_await(
-                self._reporter.on_output_message_delta(interaction_id, text)
-            )
-
-    async def _report_interrupted(self, session: ResolvedSession) -> None:
-        if self._reporter is not None:
-            await maybe_await(self._reporter.on_interrupted(session))
-
-    async def _report_inference_error(self, error: InferenceError) -> None:
-        if self._reporter is not None:
-            await maybe_await(self._reporter.on_inference_error(error))
-
-    async def _report_session_finished(self) -> None:
-        if self._reporter is not None:
-            await maybe_await(self._reporter.on_session_finished())
 
     @staticmethod
     def _resolve_reporter(reporter: CLIReporter | None | object) -> CLIReporter | None:
