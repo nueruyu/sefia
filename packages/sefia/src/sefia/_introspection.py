@@ -121,7 +121,7 @@ def declared_fields(cls: type) -> dict[str, Any]:
                 continue
             try:
                 ret = inspect.get_annotations(member.fget, eval_str=True).get("return")
-            except Exception:  # noqa: BLE001 — fail-closed on any resolution error
+            except Exception:
                 ret = None
             if ret is not None:
                 fields[name] = ret
@@ -132,7 +132,7 @@ def _resolve(annotation: Any, globalns: dict, localns: dict) -> Any:
     if not isinstance(annotation, str):
         return annotation
     try:
-        return eval(annotation, globalns, localns)  # noqa: S307 — resolving a type hint
-    except Exception:  # noqa: BLE001 — fail-closed: an unresolved field is not discovered
+        return eval(annotation, globalns, localns)
+    except Exception:
         _log.debug("skipping unresolvable field annotation %r", annotation)
         return None

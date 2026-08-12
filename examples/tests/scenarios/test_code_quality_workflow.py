@@ -97,14 +97,11 @@ class TestCodeQualityWorkflow:
             verbose=False,
         )
 
-        # Every review perspective is consulted, and the final report is rendered.
         for mock in review_mocks.values():
             mock.assert_awaited_once()
         create_report.assert_awaited_once()
-        # The reviewed file's content was read and handed to each reviewer.
         coding_style_call = review_mocks[perspective].await_args.args[0]
         assert coding_style_call == {"app.py": "x = 1\n"}
-        # The perspective is stamped onto each issue before reporting.
         assert issue.perspective == perspective.value
 
         output = capsys.readouterr().out
@@ -132,7 +129,6 @@ class TestCodeQualityWorkflow:
             verbose=False,
         )
 
-        # With nothing to review, reviewers and the reporter are never invoked.
         for mock in review_mocks.values():
             mock.assert_not_awaited()
         create_report.assert_not_awaited()

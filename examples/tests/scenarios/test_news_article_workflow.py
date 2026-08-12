@@ -49,7 +49,6 @@ class TestNewsArticleWorkflow:
             verbose=False,
         )
 
-        # The stages run in order, threading each result into the next.
         clarify.assert_awaited_once()
         research.assert_awaited_once_with(request)
         write.assert_awaited_once_with(

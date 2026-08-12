@@ -26,11 +26,6 @@ logger = logging.getLogger(__name__)
 # offline. A user who has already set this explicitly is respected.
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
-# LiteLLM is imported lazily (inside the methods that need it) because importing
-# it eagerly is slow and would penalize anyone who merely imports
-# ``sefia_litellm`` without making a request. After the first call the module is
-# cached in ``sys.modules``, so subsequent local imports are effectively free.
-
 _LOG_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 
 # A level above CRITICAL drops every record, fully silencing the logger. LiteLLM
@@ -51,26 +46,14 @@ def _env_suppress_logs_default() -> bool:
 
 
 def _apply_litellm_log_level(suppress: bool) -> None:
-    """Sets the ``"LiteLLM"`` logger level.
-
-    Does not import litellm, so it can run before litellm is imported — that way
-    even litellm's import-time warnings (e.g. optional-dependency preload
-    warnings) are suppressed. ``suppress`` fully silences the logger; otherwise
-    the level is reset to ``NOTSET`` (inherit from the root logger).
-    """
+    """Set the LiteLLM logger without importing LiteLLM."""
     logging.getLogger("LiteLLM").setLevel(
         _SILENCE_LEVEL if suppress else logging.NOTSET
     )
 
 
 def _configure_litellm_logging(suppress: bool) -> None:
-    """Applies the full logging configuration once LiteLLM is imported.
-
-    Called from ``complete()``. Sets the logger level and toggles
-    ``suppress_debug_info`` (which controls the "Provider List: ..." banner and
-    the debug info printed alongside exceptions). Both are process-global, so with
-    multiple clients the last ``complete()`` call wins.
-    """
+    """Apply process-global LiteLLM logging; the last client call wins."""
     import litellm
 
     _apply_litellm_log_level(suppress)

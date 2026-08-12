@@ -1,19 +1,12 @@
-import inspect
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable
 
 from sefia._interfaces.middleware import StepContext, StepMiddleware
 from sefia.inference import InferenceDecision, ToolCallDecision, ToolCallRequest
 from sefios.tools.input import Input
 
-T = TypeVar("T")
-MaybeAwaitable = T | Awaitable[T]
+from .._async import MaybeAwaitable, maybe_await
+
 PromptComposer = Callable[[list[str]], MaybeAwaitable[str]]
-
-
-async def _maybe_await(value: MaybeAwaitable[T]) -> T:
-    if inspect.isawaitable(value):
-        return await value
-    return value
 
 
 def _join_prompts(prompts: list[str]) -> str:
@@ -37,7 +30,7 @@ async def _compose_input_calls(
             return decision
         prompts.append(prompt)
 
-    composed_prompt = await _maybe_await(compose_prompts(prompts))
+    composed_prompt = await maybe_await(compose_prompts(prompts))
     first_input_call = input_calls[0]
     composed_call = ToolCallRequest(
         id=first_input_call.id,

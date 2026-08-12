@@ -11,13 +11,13 @@ then pauses until you run the command again with the next message.
 Run from the repository root. See the [examples README](../README.md) for setup.
 
 ```bash
-python -m examples.00_simple_chat.main chat "Hello"
+uv run python -m examples.00_simple_chat.main chat "Hello"
 ```
 
 You can choose a model with either `--model` or `EXAMPLE_DEFAULT_MODEL`:
 
 ```bash
-EXAMPLE_DEFAULT_MODEL=gpt-4o-mini python -m examples.00_simple_chat.main chat "Hello"
+EXAMPLE_DEFAULT_MODEL=gpt-4o-mini uv run python -m examples.00_simple_chat.main chat "Hello"
 ```
 
 ## Sessions
@@ -26,8 +26,8 @@ The example uses `SefiaCLI`, so conversation state is persisted under the
 example's local session directory and can be resumed by later invocations.
 
 ```bash
-python -m examples.00_simple_chat.main session new
-python -m examples.00_simple_chat.main session switch <session-id>
+uv run python -m examples.00_simple_chat.main session new
+uv run python -m examples.00_simple_chat.main session switch <session-id>
 ```
 
 ## What it shows

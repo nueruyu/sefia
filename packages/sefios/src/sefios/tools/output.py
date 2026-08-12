@@ -1,15 +1,13 @@
-import inspect
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated, TypeVar
+from typing import Annotated
 
 from glyff import engrave
 from pydantic import Field
 from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
-T = TypeVar("T")
-MaybeAwaitable = T | Awaitable[T]
+from .._async import MaybeAwaitable, maybe_await
 
 
 @dataclass(frozen=True)
@@ -22,12 +20,6 @@ class OutputMessage:
 
 OutputCallback = Callable[[OutputMessage], MaybeAwaitable[None]]
 OutputMessageDeltaCallback = Callable[[str, str], MaybeAwaitable[None]]
-
-
-async def _maybe_await(value: MaybeAwaitable[T]) -> T:
-    if inspect.isawaitable(value):
-        return await value
-    return value
 
 
 class Output:
@@ -49,11 +41,11 @@ class Output:
 
     async def _notify_output(self, message: OutputMessage) -> None:
         if self._on_output is not None:
-            await _maybe_await(self._on_output(message))
+            await maybe_await(self._on_output(message))
 
     async def _notify_message_delta(self, interaction_id: str, text: str) -> None:
         if self._on_message_delta is not None:
-            await _maybe_await(self._on_message_delta(interaction_id, text))
+            await maybe_await(self._on_message_delta(interaction_id, text))
 
     @engrave
     async def send_output(

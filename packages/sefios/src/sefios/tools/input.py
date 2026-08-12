@@ -1,17 +1,14 @@
-import inspect
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated, TypeVar
+from typing import Annotated
 
 from glyff import engrave
 from pydantic import Field
 from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
+from .._async import MaybeAwaitable, maybe_await
 from ..exceptions import InputRequired
-
-T = TypeVar("T")
-MaybeAwaitable = T | Awaitable[T]
 
 
 @dataclass(frozen=True)
@@ -37,12 +34,6 @@ InputCompleteCallback = Callable[[InputResult], MaybeAwaitable[None]]
 InputPromptDeltaCallback = Callable[[str, str], MaybeAwaitable[None]]
 
 
-async def _maybe_await(value: MaybeAwaitable[T]) -> T:
-    if inspect.isawaitable(value):
-        return await value
-    return value
-
-
 async def _no_input(_: InputRequest) -> str | None:
     return None
 
@@ -62,15 +53,15 @@ class Input:
 
     async def _notify_request(self, request: InputRequest) -> None:
         if self._on_request is not None:
-            await _maybe_await(self._on_request(request))
+            await maybe_await(self._on_request(request))
 
     async def _notify_complete(self, result: InputResult) -> None:
         if self._on_complete is not None:
-            await _maybe_await(self._on_complete(result))
+            await maybe_await(self._on_complete(result))
 
     async def _notify_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self._on_prompt_delta is not None:
-            await _maybe_await(self._on_prompt_delta(interaction_id, text))
+            await maybe_await(self._on_prompt_delta(interaction_id, text))
 
     @engrave
     async def get_input(
@@ -96,7 +87,7 @@ class Input:
             interaction_id=interaction_id,
             prompt=prompt_text,
         )
-        value = await _maybe_await(self._get_input(request))
+        value = await maybe_await(self._get_input(request))
         if value is not None:
             await self._notify_complete(
                 InputResult(

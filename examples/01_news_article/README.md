@@ -14,24 +14,24 @@ for setup.
 ### Start or Resume Chat
 
 ```bash
-python -m examples.01_news_article.main chat "The impact of generative AI on software development"
+uv run python -m examples.01_news_article.main chat "The impact of generative AI on software development"
 ```
 
 If the workflow asks for human input, run the same command with your answer:
 
 ```bash
-python -m examples.01_news_article.main chat "Software engineering managers"
+uv run python -m examples.01_news_article.main chat "Software engineering managers"
 ```
 
 ### Verbose Mode
 
 ```bash
-python -m examples.01_news_article.main chat "The impact of generative AI on software development" --verbose
+uv run python -m examples.01_news_article.main chat "The impact of generative AI on software development" --verbose
 ```
 
 ### Sessions
 
 ```bash
-python -m examples.01_news_article.main session new
-python -m examples.01_news_article.main session switch <session-id>
+uv run python -m examples.01_news_article.main session new
+uv run python -m examples.01_news_article.main session switch <session-id>
 ```

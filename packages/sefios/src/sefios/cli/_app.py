@@ -1,8 +1,7 @@
-import inspect
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import cast
 
 import typer
 from sefia import Policy
@@ -17,6 +16,7 @@ from sefia_typer import OutputMessage as CLIOutputMessage
 from sefia_typer import ResolvedSession as CLIResolvedSession
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 
+from .._async import MaybeAwaitable, maybe_await
 from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..handlers import CostCalculator, CostState
@@ -24,8 +24,6 @@ from ..sessions import ResolvedSession, SessionManager, UnknownSessionError
 from ..state import get_state
 from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
 
-T = TypeVar("T")
-MaybeAwaitable = T | Awaitable[T]
 _USE_DEFAULT_REPORTER = object()
 
 
@@ -60,15 +58,15 @@ class CostReportingCLIReporter(CLIReporter):
         return self._inner.on_output_message_delta(interaction_id, text)
 
     async def on_interrupted(self, session: CLIResolvedSession) -> None:
-        await _maybe_await(self._inner.on_interrupted(session))
+        await maybe_await(self._inner.on_interrupted(session))
         await self._echo_total_cost()
 
     async def on_inference_error(self, error: InferenceError) -> None:
-        await _maybe_await(self._inner.on_inference_error(error))
+        await maybe_await(self._inner.on_inference_error(error))
         await self._echo_total_cost()
 
     async def on_session_finished(self) -> None:
-        await _maybe_await(self._inner.on_session_finished())
+        await maybe_await(self._inner.on_session_finished())
         await self._echo_total_cost()
 
     @staticmethod
@@ -220,21 +218,21 @@ class SefiaCLI:
 
     async def _report_session_resolved(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_session_resolved(session))
+            await maybe_await(self._reporter.on_session_resolved(session))
 
     async def _report_input_request(self, request: CLIInputRequest) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_input_request(request))
+            await maybe_await(self._reporter.on_input_request(request))
 
     async def _report_input_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self._reporter is not None:
-            await _maybe_await(
+            await maybe_await(
                 self._reporter.on_input_prompt_delta(interaction_id, text)
             )
 
     async def _report_output(self, message: OutputMessage) -> None:
         if self._reporter is not None:
-            await _maybe_await(
+            await maybe_await(
                 self._reporter.on_output(
                     CLIOutputMessage(
                         interaction_id=message.interaction_id,
@@ -247,30 +245,24 @@ class SefiaCLI:
         self, interaction_id: str, text: str
     ) -> None:
         if self._reporter is not None:
-            await _maybe_await(
+            await maybe_await(
                 self._reporter.on_output_message_delta(interaction_id, text)
             )
 
     async def _report_interrupted(self, session: ResolvedSession) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_interrupted(session))
+            await maybe_await(self._reporter.on_interrupted(session))
 
     async def _report_inference_error(self, error: InferenceError) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_inference_error(error))
+            await maybe_await(self._reporter.on_inference_error(error))
 
     async def _report_session_finished(self) -> None:
         if self._reporter is not None:
-            await _maybe_await(self._reporter.on_session_finished())
+            await maybe_await(self._reporter.on_session_finished())
 
     @staticmethod
     def _resolve_reporter(reporter: CLIReporter | None | object) -> CLIReporter | None:
         if reporter is _USE_DEFAULT_REPORTER:
             return CostReportingCLIReporter()
         return cast(CLIReporter | None, reporter)
-
-
-async def _maybe_await(value: MaybeAwaitable[T]) -> T:
-    if inspect.isawaitable(value):
-        return await value
-    return value

@@ -14,24 +14,24 @@ for setup.
 ### Start or Resume Chat
 
 ```bash
-python -m examples.02_code_quality.main chat "Review this repository for maintainability issues"
+uv run python -m examples.02_code_quality.main chat "Review this repository for maintainability issues"
 ```
 
 If the workflow asks for human input, run the same command with your answer:
 
 ```bash
-python -m examples.02_code_quality.main chat "Use E:/path/to/project and focus on the Python files"
+uv run python -m examples.02_code_quality.main chat "Use E:/path/to/project and focus on the Python files"
 ```
 
 ### Verbose Mode
 
 ```bash
-python -m examples.02_code_quality.main chat "Review this repository for maintainability issues" --verbose
+uv run python -m examples.02_code_quality.main chat "Review this repository for maintainability issues" --verbose
 ```
 
 ### Sessions
 
 ```bash
-python -m examples.02_code_quality.main session new
-python -m examples.02_code_quality.main session switch <session-id>
+uv run python -m examples.02_code_quality.main session new
+uv run python -m examples.02_code_quality.main session switch <session-id>
 ```
