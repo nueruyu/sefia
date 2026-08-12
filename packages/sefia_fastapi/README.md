@@ -5,8 +5,8 @@ applications.
 
 This package holds the HTTP-side pieces that depend only on `sefia` and
 FastAPI: the input core (an `InputChannel` persisted over a `KeyValueStore`),
-per-session SSE streams (`SessionEvents`), and the exceptions an application
-maps to HTTP responses. The runtime wiring — session management, persistence,
+per-session SSE streams (`sefia_fastapi.events`), and the exceptions an application
+maps to HTTP responses (`sefia_fastapi.exceptions`). The runtime wiring — session management, persistence,
 and the pausing tool — is provided by an integration layer such as
 `sefios.fastapi` from [`sefios`](https://pypi.org/project/sefios/).
 

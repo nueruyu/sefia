@@ -95,7 +95,8 @@ The turn is an ordinary typed function; the pause is a tool that raises:
 
 ```python
 from pathlib import Path
-from sefios.fastapi import InputRequired, SefiaHTTP
+from sefios.fastapi import SefiaHTTP
+from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input
 
 

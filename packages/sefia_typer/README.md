@@ -10,6 +10,9 @@ session management, persistence, and the pausing tool — is provided by an
 integration layer such as `sefios.cli` from
 [`sefios`](https://pypi.org/project/sefios/).
 
+Import exception types from `sefia_typer.exceptions`; they are intentionally not
+re-exported from the package root.
+
 ## Install
 
 ```bash

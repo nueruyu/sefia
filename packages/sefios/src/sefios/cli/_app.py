@@ -15,7 +15,7 @@ from sefia_typer import (
 from sefia_typer import InputRequest as CLIInputRequest
 from sefia_typer import OutputMessage as CLIOutputMessage
 from sefia_typer import ResolvedSession as CLIResolvedSession
-from sefia_typer import UnknownSessionError as CLIUnknownSessionError
+from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 
 from .._scope import SessionScope
 from .._session_state import get_session_storage

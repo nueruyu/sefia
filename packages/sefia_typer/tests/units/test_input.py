@@ -1,11 +1,17 @@
 import pytest
-from sefia_typer import (
-    AmbiguousInputError,
-    InputChannel,
-    InputRequest,
-    UnknownInputError,
-)
+import sefia_typer
+from sefia_typer import InputChannel, InputRequest
 from sefia_typer._input import _to_input_text
+from sefia_typer.exceptions import AmbiguousInputError, UnknownInputError
+
+
+def test_exceptions_are_not_reexported_from_package_root():
+    assert "AmbiguousInputError" not in sefia_typer.__all__
+    assert "UnknownInputError" not in sefia_typer.__all__
+    assert "UnknownSessionError" not in sefia_typer.__all__
+    assert not hasattr(sefia_typer, "AmbiguousInputError")
+    assert not hasattr(sefia_typer, "UnknownInputError")
+    assert not hasattr(sefia_typer, "UnknownSessionError")
 
 
 class TestToInputText:

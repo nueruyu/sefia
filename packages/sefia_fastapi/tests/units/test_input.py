@@ -5,12 +5,18 @@ suites aligned guards against unintentional drift.
 """
 
 import pytest
-from sefia_fastapi import (
-    AmbiguousInputError,
-    InputChannel,
-    InputRequest,
-    UnknownInputError,
-)
+import sefia_fastapi
+from sefia_fastapi import InputChannel, InputRequest
+from sefia_fastapi.exceptions import AmbiguousInputError, UnknownInputError
+
+
+def test_exceptions_are_not_reexported_from_package_root():
+    assert "AmbiguousInputError" not in sefia_fastapi.__all__
+    assert "UnknownInputError" not in sefia_fastapi.__all__
+    assert "UnknownSessionError" not in sefia_fastapi.__all__
+    assert not hasattr(sefia_fastapi, "AmbiguousInputError")
+    assert not hasattr(sefia_fastapi, "UnknownInputError")
+    assert not hasattr(sefia_fastapi, "UnknownSessionError")
 
 
 @pytest.fixture

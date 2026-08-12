@@ -2,7 +2,15 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 
-from sefia_fastapi import SessionEvents, SSEEvent
+import sefia_fastapi
+from sefia_fastapi.events import SessionEvents, SSEEvent
+
+
+def test_events_are_not_reexported_from_package_root():
+    assert "SessionEvents" not in sefia_fastapi.__all__
+    assert "SSEEvent" not in sefia_fastapi.__all__
+    assert not hasattr(sefia_fastapi, "SessionEvents")
+    assert not hasattr(sefia_fastapi, "SSEEvent")
 
 
 class TestSSEEvent:

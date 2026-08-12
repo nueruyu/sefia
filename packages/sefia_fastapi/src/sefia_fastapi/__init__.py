@@ -2,28 +2,18 @@
 
 This package holds the HTTP-side pieces that depend only on ``sefia`` and
 FastAPI: the input core (an :class:`InputChannel` persisted over a
-:class:`KeyValueStore`), per-session SSE streams (:class:`SessionEvents`),
-and the exceptions an application maps to HTTP responses. The runtime
+:class:`KeyValueStore`). Per-session SSE streams and application-facing
+exceptions live in :mod:`sefia_fastapi.events` and
+:mod:`sefia_fastapi.exceptions`. The runtime
 wiring — session management, persistence, and the pausing tool — is provided
 by an integration layer such as ``sefios.fastapi``.
 """
 
-from ._events import SessionEvents, SSEEvent
 from ._input import InputChannel, InputRequest
 from ._kv import KeyValueStore
-from .exceptions import (
-    AmbiguousInputError,
-    UnknownInputError,
-    UnknownSessionError,
-)
 
 __all__ = [
     "InputChannel",
     "InputRequest",
     "KeyValueStore",
-    "SessionEvents",
-    "SSEEvent",
-    "UnknownSessionError",
-    "UnknownInputError",
-    "AmbiguousInputError",
 ]

@@ -1,7 +1,7 @@
 import pytest
 from glyff_pydantic import PydanticSerializer
 from sefia_typer import InputChannel
-from sefia_typer import UnknownSessionError as CLIUnknownSessionError
+from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 from sefios.cli import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
 from sefios.cli._app import _USE_DEFAULT_REPORTER
 from sefios.storage import MemorySessionStorage

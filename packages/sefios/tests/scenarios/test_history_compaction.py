@@ -16,7 +16,8 @@ from sefia import Policy, Session, Tools, infer
 from sefia.llm import LLMResponse
 from sefia.testing import result_response, tool_calls_response
 
-from sefios import FileSessionStorage, InputRequired
+from sefios import FileSessionStorage
+from sefios.exceptions import InputRequired
 from sefios.history_storages import SessionHistoryStorage
 from sefios._session_state import bind_session_storage
 from sefios.middleware import HistoryCompactor
