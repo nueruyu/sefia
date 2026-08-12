@@ -11,7 +11,7 @@ from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.inference import FunctionInfo, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
-from sefia.llm._strategy import _ToolOnlyDirector
+from sefia.llm._execution_directors import ToolOnlyDirector
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._decision_model import _unknown_tool_name_from_error
 
@@ -72,7 +72,7 @@ def _name_constraint(name_schema: dict) -> Any:
 
 
 def test_tool_only_schema_embeds_tool_argument_schema() -> None:
-    director = _ToolOnlyDirector(PydanticModelBackend(), Never, [_tool()])
+    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_tool()])
 
     schema = director.build_decision_schema()
 

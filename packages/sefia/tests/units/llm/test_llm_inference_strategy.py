@@ -17,12 +17,12 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import LLMInferenceStrategy, LLMResponse
-from sefia.llm._strategy import (
-    _OutputOnlyDirector,
-    _ToolCallIdRegistry,
-    _ToolEnabledDirector,
-    _ToolOnlyDirector,
+from sefia.llm._execution_directors import (
+    OutputOnlyDirector,
+    ToolEnabledDirector,
+    ToolOnlyDirector,
 )
+from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.events import (
     LLMReasoningTokenReceived,
     LLMResponseRepairAttempt,
@@ -71,7 +71,7 @@ _BACKEND = PydanticModelBackend()
 
 
 def test_tool_call_id_registry_reuses_ids_by_index():
-    registry = _ToolCallIdRegistry()
+    registry = ToolCallIdRegistry()
 
     first = registry.get_or_create(0)
 
@@ -604,7 +604,7 @@ class TestToolOnlyDirector:
     def test_create_director_returns_tool_only_for_never(self):
         strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
-        assert isinstance(director, _ToolOnlyDirector)
+        assert isinstance(director, ToolOnlyDirector)
 
     def test_create_director_raises_for_never_without_tools(self):
         strategy = _make_strategy()
@@ -641,7 +641,7 @@ class TestToolOnlyDirector:
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "chat_tool", "arguments": {}}],
             },
-            _ToolCallIdRegistry(),
+            ToolCallIdRegistry(),
         )
 
         assert isinstance(result, ToolCallDecision)
@@ -690,9 +690,7 @@ class TestToolEnabledDirector:
     """Tests for _ToolEnabledDirector — tools and result are both allowed."""
 
     def _director(self, output_type: Any = str):
-        return _ToolEnabledDirector(
-            PydanticModelBackend(), output_type, [_tool(search)]
-        )
+        return ToolEnabledDirector(PydanticModelBackend(), output_type, [_tool(search)])
 
     def test_build_decision_schema_has_decision_branches(self):
         schema = self._director().build_decision_schema()
@@ -721,7 +719,7 @@ class TestToolEnabledDirector:
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
             },
-            _ToolCallIdRegistry(),
+            ToolCallIdRegistry(),
         )
 
         assert isinstance(result, ToolCallDecision)
@@ -774,7 +772,7 @@ class TestOutputOnlyDirector:
     """Tests for _OutputOnlyDirector — no tools, result required."""
 
     def _director(self, output_type: Any = str):
-        return _OutputOnlyDirector(PydanticModelBackend(), output_type, [])
+        return OutputOnlyDirector(PydanticModelBackend(), output_type, [])
 
     def test_build_decision_schema_has_only_result(self):
         schema = self._director().build_decision_schema()

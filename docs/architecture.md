@@ -91,7 +91,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: function → prompt+schema → decision. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
+| `llm/` | The **default** `InferenceStrategy`: `_strategy.py` orchestrates calls and repair, `_execution_directors.py` owns execution modes and decision conversion, `_message_builder.py` serializes calls/history, and `_tool_call_ids.py` keeps streamed and final tool-call identities stable. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
 | `pydantic/` | The **default** `ToolFunctionInspector` + `DecisionModelBuilder`: schema gen & validation via Pydantic. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
 | `input_channels.py` | Framework-neutral persisted routing for external input; adapters re-export its main types and add transport-specific behavior around it. | `InputChannel`, `InputRequest`, `KeyValueStore`, `UnknownInputError`, `AmbiguousInputError` |
