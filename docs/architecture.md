@@ -150,15 +150,24 @@ implementation noted in parentheses.
 
 ## Conventions
 
-- **Underscore = internal.** `_module.py` and `_Symbol` are not API; import the public
-  names from a package's `__init__.py`.
+- **Underscore = internal import path.** A public class may be implemented in an
+  underscore module and deliberately exposed through the package `__init__.py`; users
+  import the class from that facade, not its implementation module.
+- **The package root is the primary authoring surface, not an inventory of every public
+  type.** Narrowly categorized APIs such as events and exceptions, plus low-level APIs
+  intended mainly for authors of Sefia extension libraries, live in descriptively
+  named submodules without a leading underscore and are not re-exported from the
+  package root. Ordinary application extension points and configuration types may
+  remain at the root (for example, `Policy`).
 - **Import from `sefios`.** It re-exports the everyday authoring surface
   (`infer` / `concurrent` / `preview` / `policy` / `profile`, `Tools`, `AsRawText`,
-  `Policy` / `Profile` from `sefia`; `engrave` from `glyff`), so application code touches
-  one package. Only the extension seams still come from `sefia` (`InferenceStrategy`,
-  `LLMClient`, `ToolCollector`, and subclassing `Policy`).
-- **Interfaces live in `_interfaces/`** as ABCs; concrete defaults live in
-  feature folders (`llm/`, `pydantic/`, `tool_collectors/`).
+  `Policy` / `Profile` from `sefia`; `engrave` from `glyff`), so application code
+  touches one package. Low-level contracts intended mainly for extension-library
+  authors come from their specialized `sefia` submodules instead.
+- **Interfaces live in `_interfaces/`** as ABCs; concrete defaults live in feature
+  folders (`llm/`, `pydantic/`, `tool_collectors/`). Interfaces that belong to the
+  ordinary authoring surface may be selected into the root facade; low-level contracts
+  for extension-library authors should have a dedicated public submodule instead.
 - **Tests mirror source** under each package's `tests/units/` (per-module) and
   `tests/scenarios/` (behavioral). Add tests next to the layer you change.
 - **The two seams are deliberately separate:** *middleware* controls (can retry /
