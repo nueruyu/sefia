@@ -1,22 +1,47 @@
-"""The HTTP-side input core.
+"""Framework-neutral routing and persistence for external input."""
 
-Pending prompts, provided inputs, and queued inputs are persisted through a
-:class:`KeyValueStore`, so a paused request can be resumed by a later one. The
-channel only sees primitives; how the runtime provides persistence (and which
-tool raises the pause) is wired up by the integration layer.
-
-Deliberately independent from the CLI counterpart in ``sefia_typer``: the two
-surfaces share semantics today but are free to diverge.
-"""
-
+import inspect
+from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-
-from ._kv import KeyValueStore
-from .exceptions import AmbiguousInputError, UnknownInputError
+from typing import Any, Protocol, TypeVar
 
 _DEFAULT_NAMESPACE = "input_channel"
+
+T = TypeVar("T")
+MaybeAwaitable = T | Awaitable[T]
+InputRequestHandler = Callable[["InputRequest"], MaybeAwaitable[None]]
+InputPromptDeltaHandler = Callable[[str, str], MaybeAwaitable[None]]
+
+
+class KeyValueStore(Protocol):
+    """Async persistence required by an input channel."""
+
+    async def get(self, key: str, type_hint: type[T]) -> T | None: ...
+
+    async def set(self, key: str, value: Any, type_hint: type) -> None: ...
+
+    async def delete(self, key: str) -> None: ...
+
+
+class UnknownInputError(Exception):
+    """Raised when input targets an unknown pending request."""
+
+    def __init__(self, interaction_id: str):
+        super().__init__(f"Unknown pending input: {interaction_id}")
+        self.interaction_id = interaction_id
+
+
+class AmbiguousInputError(Exception):
+    """Raised when input cannot be routed among multiple pending requests."""
+
+    def __init__(self, interaction_ids: list[str]):
+        super().__init__(
+            "Multiple pending inputs exist. Specify one with reply_to: "
+            + ", ".join(interaction_ids)
+        )
+        self.interaction_ids = interaction_ids
 
 
 @dataclass(frozen=True)
@@ -28,23 +53,20 @@ class InputRequest:
 
 
 class InputChannel:
-    """The input pipe between an HTTP application and a paused agent.
+    """Routes external input to persisted pending requests.
 
-    One object owns the whole lifecycle. The tool-facing side records prompts
-    and picks up provided input (:meth:`record_request` / :meth:`provide_input`
-    / :meth:`complete_request`); the application-facing side routes arriving
-    input to pending requests (:meth:`receive_input`); :meth:`use_store` binds
-    the persistence both sides share.
-
-    Reads observe writes made earlier in the same session because the bound
-    :class:`KeyValueStore` is expected to provide read-your-writes consistency.
-    The active binding is held in a :class:`~contextvars.ContextVar` rather
-    than a plain attribute so that a single shared channel stays correct when
-    several sessions run concurrently (e.g. one asyncio task per HTTP
-    request): each task binds and reads its own store.
+    A channel binds persistence per context so one shared instance remains safe
+    across concurrent sessions. Optional callbacks let an adapter observe new
+    requests and streamed prompt text without changing the routing state machine.
     """
 
-    def __init__(self, *, namespace: str = _DEFAULT_NAMESPACE):
+    def __init__(
+        self,
+        *,
+        on_request: InputRequestHandler | None = None,
+        on_prompt_delta: InputPromptDeltaHandler | None = None,
+        namespace: str = _DEFAULT_NAMESPACE,
+    ):
         namespace = namespace.strip("/")
         if not namespace:
             raise ValueError("Input channel namespace must not be empty.")
@@ -52,6 +74,8 @@ class InputChannel:
         self._active_store: ContextVar[KeyValueStore | None] = ContextVar(
             "input_active_store", default=None
         )
+        self._on_request = on_request
+        self._on_prompt_delta = on_prompt_delta
 
     @contextmanager
     def use_store(self, store: KeyValueStore):
@@ -63,7 +87,7 @@ class InputChannel:
             self._active_store.reset(token)
 
     async def pending(self) -> list[InputRequest]:
-        """The requests still waiting for input, ordered by interaction id."""
+        """Return requests still waiting for input, ordered by interaction id."""
         pending = await self._pending_map()
         return [
             InputRequest(interaction_id=entry["id"], prompt=entry["prompt"])
@@ -76,14 +100,7 @@ class InputChannel:
         *,
         reply_to: str | None = None,
     ) -> None:
-        """Route request input to a pending prompt, or queue it for the next.
-
-        ``None`` and blank input are ignored. With ``reply_to`` the input
-        resolves that specific request; otherwise a single pending request is
-        resolved directly, multiple pending requests raise
-        :class:`AmbiguousInputError`, and no pending request queues the input
-        for the next prompt.
-        """
+        """Route input to a pending request, or queue it for the next one."""
         if input_value is None:
             return
         input_text = _to_input_text(input_value)
@@ -108,7 +125,7 @@ class InputChannel:
         await self._queue_input(input_text)
 
     async def provide_input(self, interaction_id: str) -> str | None:
-        """Return the stored input, or claim a queued one if unambiguous."""
+        """Return stored input, or claim a queued input when unambiguous."""
         provided = await self._stored_input(interaction_id)
         if provided is not None:
             return provided
@@ -123,11 +140,21 @@ class InputChannel:
         pending = await self._pending_map()
         pending[interaction_id] = {"id": interaction_id, "prompt": prompt}
         await self._save_pending(pending)
+        if self._on_request is not None:
+            await _maybe_await(
+                self._on_request(
+                    InputRequest(interaction_id=interaction_id, prompt=prompt)
+                )
+            )
 
     async def complete_request(self, interaction_id: str) -> None:
         pending = await self._pending_map()
         pending.pop(interaction_id, None)
         await self._save_pending(pending)
+
+    async def notify_prompt_delta(self, interaction_id: str, text: str) -> None:
+        if self._on_prompt_delta is not None:
+            await _maybe_await(self._on_prompt_delta(interaction_id, text))
 
     async def _pending_map(self) -> dict[str, dict]:
         store = self._store()
@@ -149,7 +176,6 @@ class InputChannel:
         if pending:
             await store.set(self._pending_key, pending, dict)
             return
-
         await store.delete(self._pending_key)
 
     async def _stored_input(self, interaction_id: str) -> str | None:
@@ -199,3 +225,21 @@ def _to_input_text(input_value: str | list[str]) -> str:
     if isinstance(input_value, str):
         return input_value.strip()
     return " ".join(input_value).strip()
+
+
+async def _maybe_await(value: MaybeAwaitable[T]) -> T:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+__all__ = [
+    "AmbiguousInputError",
+    "InputChannel",
+    "InputPromptDeltaHandler",
+    "InputRequest",
+    "InputRequestHandler",
+    "KeyValueStore",
+    "MaybeAwaitable",
+    "UnknownInputError",
+]

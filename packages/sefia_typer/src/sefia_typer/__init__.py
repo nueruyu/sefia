@@ -8,8 +8,7 @@ and the pausing tool — is provided by an integration layer such as
 ``sefios.cli``.
 """
 
-from ._input import InputChannel, InputRequest
-from ._kv import KeyValueStore
+from sefia.input_channels import InputChannel, InputRequest, KeyValueStore
 from ._reporter import (
     CLIReporter,
     DefaultCLIReporter,

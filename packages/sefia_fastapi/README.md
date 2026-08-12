@@ -4,7 +4,8 @@ FastAPI (HTTP) building blocks for [Sefia](https://pypi.org/project/sefia/)
 applications.
 
 This package holds the HTTP-side pieces that depend only on `sefia` and
-FastAPI: the input core (an `InputChannel` persisted over a `KeyValueStore`),
+FastAPI: the framework-neutral `sefia.input_channels.InputChannel` persisted over a
+`KeyValueStore`,
 per-session SSE streams (`sefia_fastapi.events`), and the exceptions an application
 maps to HTTP responses (`sefia_fastapi.exceptions`). The runtime wiring — session management, persistence,
 and the pausing tool — is provided by an integration layer such as

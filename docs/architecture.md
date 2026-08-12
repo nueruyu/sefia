@@ -13,8 +13,8 @@ A `uv` workspace (`pyproject.toml` → `[tool.uv.workspace]`) of small packages:
 | **sefia** | `packages/sefia` | The core: `@infer`, the inference loop, tool model, sessions, the default LLM strategy. |
 | **sefios** | `packages/sefios` | Opinionated batteries and integration layer: `SessionScope`, default policies/middleware/handlers, ready-made tools, and the extra-gated CLI/HTTP facades. |
 | **sefia_litellm** | `packages/sefia_litellm` | Provider adapter — an `LLMClient` implemented over LiteLLM. |
-| **sefia_typer** | `packages/sefia_typer` | Typer (CLI) building blocks: the CLI input core (`InputChannel`) and the reporter surface. |
-| **sefia_fastapi** | `packages/sefia_fastapi` | FastAPI (HTTP) building blocks: the HTTP input core (`InputChannel`), SSE streams (`sefia_fastapi.events.SessionEvents`) with the SSE event names as the single source of truth (`SSEEvent`), and HTTP-facing exceptions in `sefia_fastapi.exceptions`. |
+| **sefia_typer** | `packages/sefia_typer` | Typer (CLI) building blocks: the shared input channel with CLI reporting hooks, and the reporter surface. |
+| **sefia_fastapi** | `packages/sefia_fastapi` | FastAPI (HTTP) building blocks: the shared input channel, SSE streams (`sefia_fastapi.events.SessionEvents`) with the SSE event names as the single source of truth (`SSEEvent`), and HTTP-facing exceptions in `sefia_fastapi.exceptions`. |
 | **examples** | `examples` | Runnable end-to-end workflows. |
 | **glyff** | *(separate repo)* | Content-addressed durable execution. A dependency, not vendored. |
 | **jsonweir** | *(separate repo / PyPI)* | Standalone incremental JSON parser used for streaming tool args. |
@@ -58,9 +58,10 @@ Rules that keep the layering clean — worth preserving in any change:
 - **`sefios` depends on `sefia` directly.** Its provider, web, CLI, and HTTP
   integrations are optional extras, so installing `sefios` alone pulls in only the core.
 - **Framework adapters depend only on `sefia` and their framework.** `sefia_typer` and
-  `sefia_fastapi` own everything the framework touches directly — including the
-  exceptions applications catch and the input core — persisted through a small
-  `KeyValueStore` protocol they declare. They never import `sefios`.
+  `sefia_fastapi` own everything the framework touches directly, including the
+  exceptions applications catch. They share the framework-neutral input state machine
+  and `KeyValueStore` protocol from `sefia.input_channels`; neither imports `sefios` or
+  the other adapter.
 - **`sefios` is the composition layer for the adapters.** The extra-gated
   `sefios/cli` and `sefios/fastapi` facades are the only modules that import
   `sefia_typer` / `sefia_fastapi`; they wire the adapters to `SessionScope`,
@@ -93,6 +94,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `llm/` | The **default** `InferenceStrategy`: function → prompt+schema → decision. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
 | `pydantic/` | The **default** `ToolFunctionInspector` + `DecisionModelBuilder`: schema gen & validation via Pydantic. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
+| `input_channels.py` | Framework-neutral persisted routing for external input; adapters re-export its main types and add transport-specific behavior around it. | `InputChannel`, `InputRequest`, `KeyValueStore`, `UnknownInputError`, `AmbiguousInputError` |
 
 ### The seams (`_interfaces/`) — the extension ports
 
@@ -137,8 +139,9 @@ implementation noted in parentheses.
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
 | Add a session-state persistence backend | implement `sefios` `SessionStorage` and pass a `session_storage_factory` to `SessionScope`; reference `sefios/storage/_file.py` |
 | Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); to change where history lives, pass `history_storage=` to `SessionScope`/`Session` (seam: `HistoryStorage`) |
-| Change CLI rendering / the CLI input rules | `packages/sefia_typer` |
-| Change HTTP events / SSE / the HTTP input rules | `packages/sefia_fastapi` |
+| Change shared input routing / persistence rules | `sefia/input_channels.py` |
+| Change CLI rendering / input callbacks | `packages/sefia_typer` |
+| Change HTTP events / SSE | `packages/sefia_fastapi` |
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |
 | Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role alias in `_tool_system.py`, scanners in `_introspection.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |

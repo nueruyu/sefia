@@ -3,8 +3,7 @@ from typing import Protocol
 
 import typer
 from sefia.exceptions import InferenceError
-
-from ._input import InputRequest, MaybeAwaitable
+from sefia.input_channels import InputRequest, MaybeAwaitable
 
 
 @dataclass(frozen=True)
