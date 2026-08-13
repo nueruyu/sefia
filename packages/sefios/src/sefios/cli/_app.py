@@ -8,6 +8,7 @@ from sefia import Policy
 from sefia.exceptions import InferenceError, PauseException
 from sefia_typer import CLIReporter
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
+from typing_extensions import final
 
 from .._scope import SessionScope
 from .._input_channel import InputChannel
@@ -21,6 +22,7 @@ from ._reporting import CLIReporting
 _USE_DEFAULT_REPORTER = object()
 
 
+@final
 class SefiaCLISession:
     """Operations available inside a Sefia CLI session context."""
 
@@ -37,6 +39,7 @@ class SefiaCLISession:
         await self._input.receive_input(input_value, reply_to=reply_to)
 
 
+@final
 class SefiaCLI:
     """Creates Sefia session contexts for Typer commands.
 

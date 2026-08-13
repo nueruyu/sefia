@@ -2,6 +2,7 @@ from collections.abc import Hashable
 from typing import Self
 
 import glyff
+from typing_extensions import final
 
 from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import DecisionModelBuilder, Policy
@@ -17,6 +18,7 @@ from .pydantic._model_backend import PydanticModelBackend
 from .tool_collectors import DefaultToolCollector
 
 
+@final
 class Session:
     """
     Manages the lifecycle of an inference execution.

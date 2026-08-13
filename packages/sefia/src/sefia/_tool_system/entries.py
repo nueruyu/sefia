@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from typing_extensions import final, override
+
 from ..streaming import StreamHandler
 
 
@@ -49,6 +51,7 @@ class ToolEntry(ABC):
         return None
 
 
+@final
 class SignatureToolEntry(ToolEntry):
     def __init__(
         self,
@@ -67,18 +70,22 @@ class SignatureToolEntry(ToolEntry):
         self._schema_source = schema_source
         self._inspector = inspector
 
+    @override
     def definition(self) -> ToolDefinition:
         return self._inspector.definition(self._schema_source, name=self.name)
 
+    @override
     async def invoke(self, arguments: dict[str, Any]) -> Any:
         bound = self._inspector.bind(self._function, arguments)
         return await _maybe_await(self._function(**bound))
 
     @property
+    @override
     def function(self) -> Callable[..., Any]:
         return self._function
 
 
+@final
 class JsonSchemaToolEntry(ToolEntry):
     def __init__(
         self,
@@ -97,6 +104,7 @@ class JsonSchemaToolEntry(ToolEntry):
         self._parameters = parameters
         self._description = description
 
+    @override
     def definition(self) -> ToolDefinition:
         return ToolDefinition(
             name=self.name,
@@ -104,10 +112,12 @@ class JsonSchemaToolEntry(ToolEntry):
             parameters=self._parameters,
         )
 
+    @override
     async def invoke(self, arguments: dict[str, Any]) -> Any:
         return await _maybe_await(self._handler(**arguments))
 
     @property
+    @override
     def function(self) -> Callable[..., Any]:
         return self._handler
 

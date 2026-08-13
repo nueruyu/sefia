@@ -5,6 +5,8 @@ import os
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
 
+from typing_extensions import final, override
+
 from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
 
@@ -97,6 +99,7 @@ def _to_inference_error(error: Exception) -> InferenceError | None:
     return None
 
 
+@final
 class LiteLLMClient(LLMClient):
     """
     An LLMClient implementation that uses LiteLLM to interact with
@@ -112,6 +115,7 @@ class LiteLLMClient(LLMClient):
             _env_suppress_logs_default() if suppress_logs is None else suppress_logs
         )
 
+    @override
     async def complete(
         self,
         messages: list[Message],

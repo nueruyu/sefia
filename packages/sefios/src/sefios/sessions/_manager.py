@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from typing_extensions import final
+
 SessionSource = Literal["explicit", "active", "created"]
 
 
@@ -23,6 +25,7 @@ class ResolvedSession:
     source: SessionSource
 
 
+@final
 class SessionManager:
     """Manages the lifecycle of application sessions, including the active one.
 

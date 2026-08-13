@@ -2,6 +2,7 @@ from collections.abc import Hashable, Sequence
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar, overload
 
 import glyff
+from typing_extensions import final
 
 from ._decorators import _infer
 from ._glyff import engrave as engrave_call
@@ -11,6 +12,7 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
+@final
 class Domain:
     """Sefia authoring defaults bound to a versioned Glyff ownership domain."""
 
