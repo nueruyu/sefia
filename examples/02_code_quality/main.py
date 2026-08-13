@@ -55,13 +55,13 @@ review_agents = {
 app = typer.Typer(help="A multi-agent workflow for code quality review.")
 
 
-@workflow.engrave(name="define_scope")
+@workflow.engrave
 async def _define_scope() -> ProjectScope:
     console.print("[bold]> Stage 1: Defining scope...[/bold]")
     return await scoping_agent.define_scope()
 
 
-@workflow.engrave(name="understand_project")
+@workflow.engrave
 async def _understand_project(scope: ProjectScope) -> ProjectUnderstanding:
     console.print("\n[bold]> Stage 2: Understanding project...[/bold]")
     file_paths = await git_tool.list_tracked_files(scope.project_path)
@@ -85,7 +85,7 @@ async def _understand_project(scope: ProjectScope) -> ProjectUnderstanding:
     return understanding
 
 
-@workflow.engrave(name="confirm_review_files")
+@workflow.engrave
 async def _confirm_review_files(
     scope: ProjectScope,
     understanding: ProjectUnderstanding,
@@ -101,7 +101,7 @@ async def _confirm_review_files(
     return list(dict.fromkeys(path for path in review_files if path in tracked_files))
 
 
-@workflow.engrave(name="run_reviews")
+@workflow.engrave
 async def _run_reviews(
     review_files: list[str],
     project_path: str,
@@ -133,7 +133,7 @@ async def _run_reviews(
     return all_issues
 
 
-@workflow.engrave(name="create_report")
+@workflow.engrave
 async def _create_report(
     issues: list[CodeIssue],
     understanding: ProjectUnderstanding,

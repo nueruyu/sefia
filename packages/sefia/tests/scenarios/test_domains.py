@@ -34,11 +34,64 @@ async def test_domain_inference_records_stable_application_and_runtime_boundarie
     assert step.id.parent_id == outer.id
 
 
+async def test_domain_engrave_uses_the_function_name():
+    backend = MemoryBackend()
+    reports = Domain(glyff.Domain("com.example.reports", version="1"))
+
+    @reports.engrave
+    async def prepare(document: str) -> str:
+        return document.upper()
+
+    async with memory_session(
+        MockLLMClient([]), session_id="domain-engrave", backend=backend
+    ):
+        assert await prepare("draft") == "DRAFT"
+
+    executions = [
+        execution
+        async for execution in backend.repository.executions(
+            glyff.SessionId("domain-engrave")
+        )
+    ]
+    assert len(executions) == 1
+    assert executions[0].id.name == glyff.ExecutionName("prepare")
+
+
+async def test_domain_engrave_accepts_an_explicit_name():
+    backend = MemoryBackend()
+    reports = Domain(glyff.Domain("com.example.reports", version="1"))
+
+    @reports.engrave(name="prepare_report")
+    async def prepare(document: str) -> str:
+        return document.upper()
+
+    async with memory_session(
+        MockLLMClient([]), session_id="named-domain-engrave", backend=backend
+    ):
+        assert await prepare("draft") == "DRAFT"
+
+    executions = [
+        execution
+        async for execution in backend.repository.executions(
+            glyff.SessionId("named-domain-engrave")
+        )
+    ]
+    assert len(executions) == 1
+    assert executions[0].id.name == glyff.ExecutionName("prepare_report")
+
+
 def test_domain_requires_explicit_non_empty_execution_names():
     reports = Domain(glyff.Domain("com.example.reports", version="1"))
 
     try:
         reports.infer(name="")
+    except ValueError as error:
+        assert "name" in str(error)
+    else:
+        raise AssertionError("Expected an empty execution name to be rejected.")
+
+    try:
+        reports.engrave(name="")
     except ValueError as error:
         assert "name" in str(error)
     else:

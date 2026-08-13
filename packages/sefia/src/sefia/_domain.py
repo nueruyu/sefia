@@ -1,5 +1,5 @@
 from collections.abc import Hashable, Sequence
-from typing import Awaitable, Callable, ParamSpec, TypeVar
+from typing import Any, Awaitable, Callable, ParamSpec, TypeVar, overload
 
 import glyff
 
@@ -42,16 +42,27 @@ class Domain:
 
         return decorator
 
+    @overload
+    def engrave(self, func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]: ...
+
+    @overload
     def engrave(
         self, *, name: str
-    ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
-        """Decorate a non-inference function with stable domain-owned identity."""
+    ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]: ...
+
+    def engrave(
+        self,
+        func: Callable[..., Awaitable[Any]] | None = None,
+        *,
+        name: str | None = None,
+    ) -> Any:
+        """Decorate a function using its name or an explicit stable name."""
+        if func is not None:
+            return engrave_call(self.glyff, func.__name__, func)
         if not name:
             raise ValueError("An execution name cannot be empty.")
 
-        def decorator(
-            func: Callable[P, Awaitable[R]],
-        ) -> Callable[P, Awaitable[R]]:
+        def decorator(func):
             return engrave_call(self.glyff, name, func)
 
         return decorator

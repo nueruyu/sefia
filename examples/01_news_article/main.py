@@ -30,7 +30,7 @@ app = typer.Typer(
 )
 
 
-@workflow.engrave(name="clarify")
+@workflow.engrave
 async def _clarify() -> ArticleRequest:
     console.print("[bold]> Stage 1: Clarifying request...[/bold]")
     article_request = await clarifier.clarify_request()
@@ -40,7 +40,7 @@ async def _clarify() -> ArticleRequest:
     return article_request
 
 
-@workflow.engrave(name="research")
+@workflow.engrave
 async def _research(article_request: ArticleRequest) -> list[str]:
     console.print("[bold]> Stage 2: Researching topic...[/bold]")
     sources = await researcher.research_topic(article_request)
@@ -48,7 +48,7 @@ async def _research(article_request: ArticleRequest) -> list[str]:
     return sources
 
 
-@workflow.engrave(name="write")
+@workflow.engrave
 async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArticle:
     console.print("[bold]> Stage 3: Writing article...[/bold]")
     return await writer.write_article(article_request=article_request, sources=sources)
