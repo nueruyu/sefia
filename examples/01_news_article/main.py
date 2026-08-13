@@ -5,13 +5,13 @@ import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefios import domain
 from sefios.cli import SefiaCLI
 from sefios.tools import WebSearch
 
 from .._common.policies import VerbosePolicy
 from .._common.typer_utils import add_session_commands, async_command
 from .agents import NewsWriter, RequirementsClarifier, Researcher
+from .authoring import engrave
 from .models import ArticleRequest, NewsArticle
 from .rendering import render_article_request, render_news_article
 
@@ -19,7 +19,6 @@ console = Console()
 SESSION_DIR = Path(__file__).parent / ".local"
 sefia_cli = SefiaCLI(session_dir=SESSION_DIR, stream=True)
 input_tool = sefia_cli.input_tool
-workflow = domain("examples.news_article", version="1")
 
 clarifier = RequirementsClarifier(input_tool)
 researcher = Researcher(WebSearch())
@@ -30,7 +29,7 @@ app = typer.Typer(
 )
 
 
-@workflow.engrave
+@engrave
 async def _clarify() -> ArticleRequest:
     console.print("[bold]> Stage 1: Clarifying request...[/bold]")
     article_request = await clarifier.clarify_request()
@@ -40,7 +39,7 @@ async def _clarify() -> ArticleRequest:
     return article_request
 
 
-@workflow.engrave
+@engrave
 async def _research(article_request: ArticleRequest) -> list[str]:
     console.print("[bold]> Stage 2: Researching topic...[/bold]")
     sources = await researcher.research_topic(article_request)
@@ -48,7 +47,7 @@ async def _research(article_request: ArticleRequest) -> list[str]:
     return sources
 
 
-@workflow.engrave
+@engrave
 async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArticle:
     console.print("[bold]> Stage 3: Writing article...[/bold]")
     return await writer.write_article(article_request=article_request, sources=sources)

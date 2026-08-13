@@ -9,13 +9,12 @@ from pathlib import Path
 from typing import Annotated, Never
 
 import typer
-from sefios import domain, Tools
+from sefios import Tools
 from sefios.cli import SefiaCLI
 from sefios.tools import Input, Output
 
 from .._common.typer_utils import add_session_commands, async_command
-
-infer = domain("examples.simple_chat", version="1").infer
+from .authoring import infer
 
 
 class ChatAgent:

@@ -1,9 +1,8 @@
-from sefios import domain, Tools
+from sefios import Tools
 from sefios.tools import Input, WebSearch
 
+from .authoring import infer
 from .models import ArticleRequest, NewsArticle
-
-infer = domain("examples.news_article", version="1").infer
 
 
 class RequirementsClarifier:

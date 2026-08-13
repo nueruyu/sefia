@@ -1,9 +1,10 @@
 from pathlib import Path
 from typing import Annotated
 
-from sefios import domain, AsRawText, Tools
+from sefios import AsRawText, Tools
 from sefios.tools import Input
 
+from .authoring import infer
 from .models import (
     CodeIssue,
     ProjectScope,
@@ -11,8 +12,6 @@ from .models import (
     QualityReport,
 )
 from .tools import Files
-
-infer = domain("examples.code_quality", version="1").infer
 
 RawCode = Annotated[str, AsRawText]
 

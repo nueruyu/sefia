@@ -5,12 +5,11 @@ at most one clarifying question, which lets the API demonstrate pause/resume ove
 normal HTTP requests while lifecycle events stream over SSE.
 """
 
-from sefios import domain, Tools
+from sefios import Tools
 from sefios.tools import Input
 
+from .authoring import infer
 from .models import Brief
-
-infer = domain("examples.fastapi_api", version="1").infer
 
 
 class Interviewer:
