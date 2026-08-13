@@ -4,6 +4,8 @@ import json
 from collections.abc import Sequence
 from typing import Any, Callable, Never
 
+from typing_extensions import final, override
+
 from .._interfaces import DecisionModelBuilder, InferenceStrategy
 from .._tool_system import ToolEntry, ToolRegistry
 from ..event_system import EventPublisher
@@ -27,6 +29,7 @@ from ._tool_call_ids import ToolCallIdRegistry
 JsonDefault = Callable[[Any], Any]
 
 
+@final
 class LLMInferenceStrategy(InferenceStrategy):
     """Uses an LLM to decide the next inference step.
 
@@ -67,6 +70,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             return ToolEnabledDirector(self.decision_builder, output_type, tools)
         return OutputOnlyDirector(self.decision_builder, output_type, tools)
 
+    @override
     async def decide_next_step(
         self,
         function_info: FunctionInfo,

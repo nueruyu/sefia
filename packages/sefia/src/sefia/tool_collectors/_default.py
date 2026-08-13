@@ -1,6 +1,8 @@
 import inspect
 from typing import Any, Callable
 
+from typing_extensions import final, override
+
 from .._introspection import declared_fields, declared_methods, is_protocol
 from .._tool_system import (
     ToolCollector,
@@ -15,6 +17,7 @@ from ..inference import Capability
 from ..streaming import StreamHandler
 
 
+@final
 class DefaultToolCollector(ToolCollector):
     """The default implementation of ToolCollector.
 
@@ -50,6 +53,7 @@ class DefaultToolCollector(ToolCollector):
             inspector = PydanticModelBackend()
         self._inspector = inspector
 
+    @override
     def collect(self, capabilities: list[Capability]) -> ToolRegistry:
         registry = ToolRegistry()
         for cap in capabilities:

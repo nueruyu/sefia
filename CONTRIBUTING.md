@@ -81,6 +81,12 @@ in [`docs/architecture.md`](./docs/architecture.md#conventions). The load-bearin
   example, prefer `sefia.events.SomeEvent` or
   `sefia_litellm.exceptions.InferenceTimeoutError` over adding either name to the
   corresponding root `__init__.py`.
+- **Make inheritance contracts explicit.** Extension points are ABCs or Protocols;
+  mark behavior-bearing concrete implementations and lifecycle facades that are not
+  supported as subclassing surfaces with `@final`, and mark implementations of
+  inherited methods with `@override`. Leave such a class or method open only when
+  subclassing it is an intentional public extension mechanism. Event and exception
+  families may remain open when deriving a new variant is itself part of their role.
 - Match the surrounding code's style and density; don't introduce a workflow engine or
   break the stateless-HTTP model.
 

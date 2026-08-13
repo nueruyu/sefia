@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, create_model
+from typing_extensions import final, override
 
 from .._interfaces.decision_model import (
     DecisionMode,
@@ -19,6 +20,7 @@ from ..exceptions import UnknownToolDecisionError
 from ._function_models import json_schema_argument_type
 
 
+@final
 class PydanticDecisionModel(DecisionModel):
     def __init__(
         self,
@@ -27,11 +29,13 @@ class PydanticDecisionModel(DecisionModel):
     ):
         self._adapter = TypeAdapter(model)
 
+    @override
     def schema(self) -> dict:
         schema = dict(self._adapter.json_schema())
         schema["description"] = "The model for the LLM's decision on the next action."
         return schema
 
+    @override
     def validate(self, data: Any) -> LLMDecision:
         try:
             decision = self._adapter.validate_python(data)
@@ -83,7 +87,9 @@ def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
     return None
 
 
+@final
 class PydanticDecisionModelFactory(DecisionModelBuilder):
+    @override
     def build(self, spec: DecisionModelSpec) -> DecisionModel:
         return PydanticDecisionModel(
             model=self._model(spec),

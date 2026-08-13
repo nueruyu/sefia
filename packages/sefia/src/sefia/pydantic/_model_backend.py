@@ -1,5 +1,7 @@
 from typing import Any, Callable
 
+from typing_extensions import final, override
+
 from .._interfaces.decision_model import (
     DecisionModel,
     DecisionModelBuilder,
@@ -16,6 +18,7 @@ from ._function_models import (
 )
 
 
+@final
 class PydanticModelBackend(ToolFunctionInspector, DecisionModelBuilder):
     """
     Pydantic-backed tool-function inspector and decision-model builder.
@@ -32,9 +35,11 @@ class PydanticModelBackend(ToolFunctionInspector, DecisionModelBuilder):
         self._decision_model_factory = PydanticDecisionModelFactory()
         self._definition_cache: dict[Any, ToolDefinition] = {}
 
+    @override
     def tool_name(self, func: Callable[..., Any]) -> str:
         return sanitize_function_name(get_callable_qualname(func))
 
+    @override
     def definition(
         self,
         func: Callable[..., Any],
@@ -59,6 +64,7 @@ class PydanticModelBackend(ToolFunctionInspector, DecisionModelBuilder):
         self._definition_cache[cache_key_value] = definition
         return definition
 
+    @override
     def bind(
         self,
         func: Callable[..., Any],
@@ -78,5 +84,6 @@ class PydanticModelBackend(ToolFunctionInspector, DecisionModelBuilder):
         # the callable's annotations asked for.
         return {**dict(validated), **(validated.model_extra or {})}
 
+    @override
     def build(self, spec: DecisionModelSpec) -> DecisionModel:
         return self._decision_model_factory.build(spec)

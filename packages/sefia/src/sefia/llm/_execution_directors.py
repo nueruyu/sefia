@@ -2,6 +2,8 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any
 
+from typing_extensions import final, override
+
 from .._interfaces import (
     DecisionModel,
     DecisionModelBuilder,
@@ -57,6 +59,7 @@ class ExecutionDirector(ABC):
     def _build_decision_model(self) -> DecisionModel:
         raise NotImplementedError
 
+    @final
     def build_decision_schema(self) -> dict:
         return self.decision_model.schema()
 
@@ -64,6 +67,7 @@ class ExecutionDirector(ABC):
     def build_system_prompt_addition(self, output_schema: dict) -> str:
         raise NotImplementedError
 
+    @final
     def process_response_data(
         self, data: Any, tool_call_ids: ToolCallIdRegistry | None = None
     ) -> InferenceDecision:
@@ -98,7 +102,9 @@ class ExecutionDirector(ABC):
         )
 
 
+@final
 class ToolOnlyDirector(ExecutionDirector):
+    @override
     def _build_decision_model(self) -> DecisionModel:
         return self.decision_builder.build(
             DecisionModelSpec.tool_only(
@@ -106,6 +112,7 @@ class ToolOnlyDirector(ExecutionDirector):
             )
         )
 
+    @override
     def build_system_prompt_addition(self, output_schema: dict) -> str:
         core_instruction = (
             "Your task is to call tools. You MUST set `decision` to `tool_calls` "
@@ -120,6 +127,7 @@ class ToolOnlyDirector(ExecutionDirector):
             f"{_TOOL_CALLS_RESPONSE_FORMAT}"
         )
 
+    @override
     def _process_decision(
         self, decision: LLMDecision, tool_call_ids: ToolCallIdRegistry | None
     ) -> InferenceDecision:
@@ -130,7 +138,9 @@ class ToolOnlyDirector(ExecutionDirector):
         raise InvalidInferenceResponseError("LLM response must contain 'tool_calls'.")
 
 
+@final
 class ToolEnabledDirector(ExecutionDirector):
+    @override
     def _build_decision_model(self) -> DecisionModel:
         return self.decision_builder.build(
             DecisionModelSpec.tool_enabled(
@@ -138,6 +148,7 @@ class ToolEnabledDirector(ExecutionDirector):
             )
         )
 
+    @override
     def build_system_prompt_addition(self, output_schema: dict) -> str:
         core_instruction = (
             "Your task is to decide the next step. You have two options:\n"
@@ -157,6 +168,7 @@ class ToolEnabledDirector(ExecutionDirector):
             f"{_RESULT_RESPONSE_FORMAT}"
         )
 
+    @override
     def _process_decision(
         self, decision: LLMDecision, tool_call_ids: ToolCallIdRegistry | None
     ) -> InferenceDecision:
@@ -168,7 +180,9 @@ class ToolEnabledDirector(ExecutionDirector):
             return ResultDecision(result=decision.result)
 
 
+@final
 class OutputOnlyDirector(ExecutionDirector):
+    @override
     def _build_decision_model(self) -> DecisionModel:
         return self.decision_builder.build(
             DecisionModelSpec.output_only(
@@ -176,6 +190,7 @@ class OutputOnlyDirector(ExecutionDirector):
             )
         )
 
+    @override
     def build_system_prompt_addition(self, output_schema: dict) -> str:
         core_instruction = (
             "Your task is to provide a non-null result by setting `decision` "
@@ -189,6 +204,7 @@ class OutputOnlyDirector(ExecutionDirector):
             f"{_RESULT_RESPONSE_FORMAT}"
         )
 
+    @override
     def _process_decision(
         self, decision: LLMDecision, tool_call_ids: ToolCallIdRegistry | None
     ) -> InferenceDecision:

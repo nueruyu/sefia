@@ -2,12 +2,15 @@ import typing
 import xml.dom.minidom as minidom
 from typing import Any, Callable
 
+from typing_extensions import final, override
+
 from .._markers import AsRawText
 from ._prompt_formatter import PromptFormatter
 
 JsonDefault = Callable[[Any], Any]
 
 
+@final
 class XmlPromptFormatter(PromptFormatter):
     """Formats inference arguments as well-formed XML for inclusion in LLM prompts."""
 
@@ -17,6 +20,7 @@ class XmlPromptFormatter(PromptFormatter):
     ):
         self._json_default = json_default
 
+    @override
     def format_arguments(
         self, arguments: dict[str, Any], type_hints: dict[str, Any]
     ) -> str:

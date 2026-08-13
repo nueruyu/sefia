@@ -1,13 +1,16 @@
 import glyff
+from typing_extensions import final, override
 
 from .._interfaces.history_storage import HistorySnapshot, HistoryStorage
 
 _METADATA_KEY = "sefia:history"
 
 
+@final
 class GlyffHistoryStorage(HistoryStorage):
     """Stores history in the current run's glyff metadata."""
 
+    @override
     async def load(self) -> HistorySnapshot:
         ctx = glyff.get_context()
         snapshot = await ctx.metadata.get(
@@ -17,6 +20,7 @@ class GlyffHistoryStorage(HistoryStorage):
         )
         return snapshot if snapshot is not None else HistorySnapshot()
 
+    @override
     async def save(self, snapshot: HistorySnapshot) -> None:
         ctx = glyff.get_context()
         # Long-lived runs do not commit their surrounding transaction.

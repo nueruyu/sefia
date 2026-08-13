@@ -3,6 +3,7 @@ from typing import Awaitable, Callable
 from sefia._interfaces.middleware import StepContext, StepMiddleware
 from sefia.inference import InferenceDecision, ToolCallDecision, ToolCallRequest
 from sefios.tools.input import Input
+from typing_extensions import final, override
 
 from .._async import MaybeAwaitable, maybe_await
 
@@ -54,6 +55,7 @@ async def _compose_input_calls(
     return ToolCallDecision(calls=calls)
 
 
+@final
 class InputCallComposer(StepMiddleware):
     """
     Composes multiple input requests emitted in the same inference step.
@@ -65,6 +67,7 @@ class InputCallComposer(StepMiddleware):
     def __init__(self, compose_prompts: PromptComposer = _join_prompts) -> None:
         self._compose_prompts = compose_prompts
 
+    @override
     async def wrap(
         self,
         ctx: StepContext,

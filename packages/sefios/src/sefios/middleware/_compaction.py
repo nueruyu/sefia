@@ -2,6 +2,7 @@ from typing import Awaitable, Callable
 
 from sefia._interfaces.middleware import StepContext, StepMiddleware
 from sefia.inference import HistoryItem, InferenceDecision, ToolCallDecision
+from typing_extensions import final, override
 
 
 def _truncate_history(history: list[HistoryItem], keep_items: int) -> list[HistoryItem]:
@@ -20,6 +21,7 @@ def _truncate_history(history: list[HistoryItem], keep_items: int) -> list[Histo
     return tail[start:]
 
 
+@final
 class HistoryCompactor(StepMiddleware):
     """Truncates history at a decision boundary once it exceeds ``max_items``."""
 
@@ -36,6 +38,7 @@ class HistoryCompactor(StepMiddleware):
         self.max_items = max_items
         self._keep_items = keep_items if keep_items is not None else max_items // 2
 
+    @override
     async def wrap(
         self,
         ctx: StepContext,

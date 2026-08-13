@@ -5,12 +5,14 @@ from typing import Any, Awaitable, Callable
 from sefia._interfaces.middleware import StepContext, StepMiddleware
 from sefia.exceptions import SefiaError
 from sefia.inference import InferenceDecision, ToolCallDecision
+from typing_extensions import final, override
 
 
 class StagnationError(SefiaError):
     """Raised when the inference run appears stuck repeating the same tool call."""
 
 
+@final
 class StagnationDetector(StepMiddleware):
     """
     Detects if the agent is stagnating by repeating the same tool call.
@@ -50,6 +52,7 @@ class StagnationDetector(StepMiddleware):
                 "times with the same arguments."
             )
 
+    @override
     async def wrap(
         self,
         ctx: StepContext,
