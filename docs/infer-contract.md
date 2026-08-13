@@ -68,7 +68,7 @@ class ResearchService:
         self._web = web
         self._config = config
 
-    @infer
+    @reports.infer(name="run")
     async def run(self, topic: str) -> Report: ...
 ```
 
@@ -97,7 +97,7 @@ class ResearchService:
     _web: Tools[WebToolkit]
     _config: AppConfig                   # not in the protocol -> never exposed
     async def _score(self, url: str) -> float: ...
-    @infer
+    @reports.infer(name="run")
     async def run(self: ResearchSurface, topic: str) -> Report: ...
 ```
 

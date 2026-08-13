@@ -9,10 +9,13 @@ about the mechanics (types, tool dispatch, sentinel values).
 See ``conftest.py`` for how providers are selected and skipped.
 """
 
+import glyff
+import sefia
+
 from dataclasses import dataclass
 
 import pytest
-from sefia import Tools, infer
+from sefia import Tools
 
 pytestmark = pytest.mark.e2e
 
@@ -21,7 +24,9 @@ pytestmark = pytest.mark.e2e
 _SENTINEL = "XK-7391-QZ"
 
 
-@infer
+@sefia.Domain(
+    glyff.Domain("packages.sefia_litellm.tests.e2e.test_live_providers", version="1")
+).infer(name="echo_word")
 async def echo_word(word: str) -> str:
     """Reply with exactly the given word, lowercase, and nothing else."""
     ...
@@ -33,7 +38,9 @@ class Capital:
     country: str
 
 
-@infer
+@sefia.Domain(
+    glyff.Domain("packages.sefia_litellm.tests.e2e.test_live_providers", version="1")
+).infer(name="capital_of")
 async def capital_of(country: str) -> Capital:
     """Return the capital city of the given country."""
     ...
@@ -58,7 +65,11 @@ class VaultAgent:
     def __init__(self, vault: VaultToolkit) -> None:
         self._vault = vault
 
-    @infer
+    @sefia.Domain(
+        glyff.Domain(
+            "packages.sefia_litellm.tests.e2e.test_live_providers", version="1"
+        )
+    ).infer(name="VaultAgent.fetch_launch_code")
     async def fetch_launch_code(self) -> str:
         """Read the vault value stored under the key 'launch-code' using the
         available tool, then answer with that exact value and nothing else."""

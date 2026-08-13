@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Annotated, Never
 
 import typer
-from sefios import Tools, infer
+from sefios import domain, Tools
 from sefios.cli import SefiaCLI
 from sefios.tools import Input, Output
 
@@ -24,7 +24,7 @@ class ChatAgent:
         self._input = input_tool
         self._output = output_tool
 
-    @infer
+    @domain("examples.00_simple_chat.main", version="1").infer(name="ChatAgent.chat")
     async def chat(self) -> Never:
         """
         You are a helpful assistant having a conversation with a user.

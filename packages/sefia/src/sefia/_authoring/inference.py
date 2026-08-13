@@ -9,7 +9,7 @@ import glyff
 
 from .._context import get_context
 from .._executor import InferenceExecutor
-from .._glyff import DEFAULT_APPLICATION_DOMAIN, engrave
+from .._glyff import engrave
 from .._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from ..event_system import EventPublisher
 from . import metadata
@@ -35,17 +35,6 @@ def partition_middleware(
                 f"or StepMiddleware, got {type(item).__name__}"
             )
     return inference_middlewares, step_middlewares
-
-
-def infer(func: Callable[P, R]) -> Callable[P, R]:
-    """Replace a function's implementation with an LLM-backed inference."""
-    return decorate_inference(
-        func,
-        domain=DEFAULT_APPLICATION_DOMAIN,
-        name=func.__name__,
-        domain_profile=None,
-        domain_policies=(),
-    )
 
 
 def decorate_inference(

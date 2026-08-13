@@ -1,8 +1,10 @@
+import glyff
+import sefia
 from typing import Annotated, Optional, Protocol
 
 import pytest
 
-from sefia import Tools, infer
+from sefia import Tools
 from sefia.exceptions import ToolConflictError
 from sefia.inference import Capability
 from sefia.tool_collectors import DefaultToolCollector
@@ -225,7 +227,11 @@ class SelfMethodAgent:
         """A public helper, but it belongs to the running instance."""
         return value
 
-    @infer
+    @sefia.Domain(
+        glyff.Domain(
+            "packages.sefia.tests.units.tool_collectors.test_default", version="1"
+        )
+    ).infer(name="SelfMethodAgent.run")
     async def run(self, task: str) -> str:
         """An inference entry point — also never a self-tool."""
         ...
@@ -239,7 +245,11 @@ def test_collect_never_exposes_the_instance_own_methods():
 class SubAgent:
     """A nested agent whose @infer method is a tool once granted as a field."""
 
-    @infer
+    @sefia.Domain(
+        glyff.Domain(
+            "packages.sefia.tests.units.tool_collectors.test_default", version="1"
+        )
+    ).infer(name="SubAgent.analyze")
     async def analyze(self, topic: str) -> str:
         """Analyze the topic."""
         ...

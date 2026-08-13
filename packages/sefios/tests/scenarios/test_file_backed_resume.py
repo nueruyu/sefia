@@ -13,10 +13,10 @@ from glyff.serialization import FallbackByTypeQualname
 import pytest
 from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
-from sefia import Session, Tools, infer
+from sefia import Session, Tools
 from sefia.testing import result_response, tool_calls_response
 
-from sefios import FileSessionStorage
+from sefios import domain, FileSessionStorage
 from sefios.exceptions import InputRequired
 from sefios._session_state import bind_session_storage
 from sefios.tools import Input, InputRequest
@@ -35,7 +35,9 @@ class _Agent:
     def __init__(self, tool: Input):
         self._tool = tool
 
-    @infer
+    @domain(
+        "packages.sefios.tests.scenarios.test_file_backed_resume", version="1"
+    ).infer(name="_Agent.get_user_name")
     async def get_user_name(self) -> str:
         """Ask the user for their name and report it."""
         ...

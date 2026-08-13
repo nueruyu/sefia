@@ -78,7 +78,7 @@ The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is inst
 automatically.
 
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
-`domain` / `infer` / `concurrent` / `preview` / `policy` / `profile` decorators,
+`domain` / `concurrent` / `preview` / `policy` / `profile` decorators,
 `Tools`, `AsRawText`, and `Policy` / `Profile` — alongside its own `SessionScope` and
 batteries, so application code needs only `sefios`. Reach into `sefia` directly for the
 extension seams (a custom policy, strategy, client, or tool collector) and tool-call
@@ -92,7 +92,7 @@ run.
 ```python
 from pathlib import Path
 from pydantic import BaseModel
-from sefios import SessionScope, Tools, infer
+from sefios import SessionScope, Tools, domain
 from sefios.tools import WebSearch
 
 
@@ -102,13 +102,15 @@ class Report(BaseModel):
     sources: list[str]
 
 
+research = domain("com.example.research", version="1")
+
 class ResearchService:
     _web: Tools[WebSearch]                # the field annotation grants the tools
 
     def __init__(self, web: WebSearch):
         self._web = web
 
-    @infer
+    @research.infer(name="run")
     async def run(self, topic: str) -> Report:
         """Research the topic with web search and produce a structured report."""
         ...
@@ -137,11 +139,13 @@ your provider — `pip install 'sefios[litellm,fastapi]'`.
 
 ```python
 from pathlib import Path
-from sefios import Tools, infer
+from sefios import Tools, domain
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input, WebSearch
 
+
+research = domain("com.example.research", version="1")
 
 class ResearchService:
     _web: Tools[WebSearch]
@@ -151,7 +155,7 @@ class ResearchService:
         self._web = web
         self._input = input_tool
 
-    @infer
+    @research.infer(name="run")
     async def run(self, task: str) -> Report:
         """Research the task, draft a report, ask the human to approve it, then finalize."""
         ...

@@ -1,8 +1,9 @@
+from sefios import domain
 import asyncio
 import json
 
 import pytest
-from sefia import Tools, infer
+from sefia import Tools
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 from sefia.llm import LLMClient, LLMResponse
 from sefios.fastapi import SefiaHTTP
@@ -35,7 +36,9 @@ class OutputAgent:
     def __init__(self, output: Output):
         self._output = output
 
-    @infer
+    @domain("packages.sefios.tests.units.fastapi.test_http_facade", version="1").infer(
+        name="run"
+    )
     async def run(self) -> str:
         """Send an output message."""
         ...
@@ -47,7 +50,9 @@ class InputAgent:
     def __init__(self, input_tool: Input):
         self._input = input_tool
 
-    @infer
+    @domain("packages.sefios.tests.units.fastapi.test_http_facade", version="1").infer(
+        name="run"
+    )
     async def run(self) -> str:
         """Ask for input."""
         ...

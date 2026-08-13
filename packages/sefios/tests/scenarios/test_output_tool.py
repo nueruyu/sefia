@@ -4,9 +4,9 @@ import glyff
 from glyff import ArgumentCanonicalizer, Serializer
 from glyff.store import MemoryBackend
 
-from sefia import Session, Tools, infer
+from sefia import Session, Tools
 from sefia.llm import LLMResponse
-from sefios import MemorySessionStorage
+from sefios import domain, MemorySessionStorage
 from sefios._session_state import bind_session_storage
 from sefios.tools import Output, OutputMessage
 
@@ -17,7 +17,9 @@ class Agent:
     def __init__(self, output_tool: Output):
         self._output = output_tool
 
-    @infer
+    @domain("packages.sefios.tests.scenarios.test_output_tool", version="1").infer(
+        name="greet"
+    )
     async def greet(self) -> str:
         """Send a greeting to the user, then report that it was sent."""
         ...

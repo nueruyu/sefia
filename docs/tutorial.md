@@ -35,7 +35,7 @@ import asyncio
 from pathlib import Path
 
 from pydantic import BaseModel
-from sefios import SessionScope, infer
+from sefios import SessionScope, domain
 
 
 class Summary(BaseModel):
@@ -43,7 +43,9 @@ class Summary(BaseModel):
     uncertainty: str
 
 
-@infer
+workflow = domain("com.example.quickstart", version="1")
+
+@workflow.infer(name="summarize")
 async def summarize(article: str) -> Summary:
     """Summarize the article for a technical audience; note key uncertainty."""
     ...
@@ -94,7 +96,7 @@ class ResearchService:
     def __init__(self, web: WebSearch):
         self._web = web
 
-    @infer
+    @workflow.infer(name="run")
     async def run(self, topic: str) -> Report:
         """Research the topic with web search and produce a structured report."""
         ...
@@ -149,7 +151,7 @@ from pathlib import Path
 
 import typer
 from pydantic import BaseModel
-from sefios import Tools, infer
+from sefios import Tools, domain
 from sefios.cli import SefiaCLI
 from sefios.tools import Input, WebSearch
 
@@ -159,6 +161,8 @@ class Report(BaseModel):
     summary: str
 
 
+workflow = domain("com.example.research", version="1")
+
 class ResearchService:
     _web: Tools[WebSearch]
     _input: Tools[Input]
@@ -167,7 +171,7 @@ class ResearchService:
         self._web = web
         self._input = input_tool
 
-    @infer
+    @workflow.infer(name="run")
     async def run(self, task: str) -> Report:
         """Research the task, draft a report, ask the human to approve it, then finalize."""
         ...

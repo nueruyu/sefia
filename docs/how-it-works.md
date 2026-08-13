@@ -27,7 +27,7 @@ At a high level:
 
 ## `@infer`: calling a function runs an inference
 
-`infer()` returns a wrapper that, on each call (`_authoring/inference.py`):
+`Domain.infer()` returns a wrapper that, on each call (`_authoring/inference.py`):
 
 1. **Resolves configuration** — gets the current `SessionContext` (a contextvar),
    reads domain defaults and the function's `__sefia_metadata__` for any

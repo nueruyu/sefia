@@ -95,9 +95,12 @@ The turn is an ordinary typed function; the pause is a tool that raises:
 
 ```python
 from pathlib import Path
+from sefios import domain
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input
+
+research = domain("com.example.research", version="1")
 
 
 class Research:
@@ -105,7 +108,7 @@ class Research:
         self._web = web
         self._input = input_tool
 
-    @infer
+    @research.infer(name="run")
     async def run(self, task: str) -> Report:
         """Clarify the task, research it with web search, draft a report, get the
         human's approval of the draft, then finalize and send."""

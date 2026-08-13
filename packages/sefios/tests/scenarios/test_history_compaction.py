@@ -13,11 +13,11 @@ from glyff.serialization import FallbackByTypeQualname
 import pytest
 from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
-from sefia import Policy, Session, Tools, infer
+from sefia import Policy, Session, Tools
 from sefia.llm import LLMResponse
 from sefia.testing import result_response, tool_calls_response
 
-from sefios import FileSessionStorage
+from sefios import domain, FileSessionStorage
 from sefios.exceptions import InputRequired
 from sefios.history_storages import SessionHistoryStorage
 from sefios._session_state import bind_session_storage
@@ -48,7 +48,9 @@ class _Agent:
         self._notes = notes
         self._input = input_tool
 
-    @infer
+    @domain(
+        "packages.sefios.tests.scenarios.test_history_compaction", version="1"
+    ).infer(name="_Agent.chat")
     async def chat(self) -> str:
         """Take notes for the user and confirm before finishing."""
         ...

@@ -1,4 +1,4 @@
-from ._authoring import Domain, concurrent, infer, policy, preview, profile
+from ._authoring import Domain, concurrent, policy, preview, profile
 from ._interfaces import (
     HistorySnapshot,
     HistoryStorage,
@@ -24,7 +24,6 @@ from ._tool_system import (
 )
 
 __all__ = [
-    "infer",
     "Domain",
     "concurrent",
     "preview",

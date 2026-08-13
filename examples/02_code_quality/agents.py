@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Annotated
 
-from sefios import AsRawText, Tools, infer
+from sefios import domain, AsRawText, Tools
 from sefios.tools import Input
 
 from .models import (
@@ -21,7 +21,9 @@ class ScopingAgent:
     def __init__(self, input_tool: Input):
         self._input = input_tool
 
-    @infer
+    @domain("examples.02_code_quality.agents", version="1").infer(
+        name="ScopingAgent.define_scope"
+    )
     async def define_scope(self) -> ProjectScope:
         """
         Defines a concrete code-review scope from the user's review request.
@@ -40,7 +42,9 @@ class UnderstandingAgent:
     def __init__(self, file_tool: Files):
         self._file_tool = file_tool
 
-    @infer
+    @domain("examples.02_code_quality.agents", version="1").infer(
+        name="UnderstandingAgent._prioritize_files_to_read"
+    )
     async def _prioritize_files_to_read(
         self,
         current_understanding: ProjectUnderstanding,
@@ -58,7 +62,9 @@ class UnderstandingAgent:
         """
         ...
 
-    @infer
+    @domain("examples.02_code_quality.agents", version="1").infer(
+        name="UnderstandingAgent._update_understanding"
+    )
     async def _update_understanding(
         self,
         current_understanding: ProjectUnderstanding,
@@ -111,7 +117,9 @@ class ReviewScopingAgent:
     def __init__(self, input_tool: Input):
         self._input = input_tool
 
-    @infer
+    @domain("examples.02_code_quality.agents", version="1").infer(
+        name="ReviewScopingAgent.propose_and_confirm_review_files"
+    )
     async def propose_and_confirm_review_files(
         self,
         understanding: ProjectUnderstanding,
@@ -132,7 +140,9 @@ class ReviewScopingAgent:
 
 
 class CodingStyleAuditor:
-    @infer
+    @domain("examples.02_code_quality.agents", version="1").infer(
+        name="CodingStyleAuditor.review"
+    )
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Returns coding-style issues found in the supplied files.
@@ -154,7 +164,9 @@ class CodingStyleAuditor:
 
 
 class DesignPrincipleArchitect:
-    @infer
+    @domain("examples.02_code_quality.agents", version="1").infer(
+        name="DesignPrincipleArchitect.review"
+    )
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Returns software-design issues found in the supplied files.
@@ -175,7 +187,9 @@ class DesignPrincipleArchitect:
 
 
 class MaintainabilityAssessor:
-    @infer
+    @domain("examples.02_code_quality.agents", version="1").infer(
+        name="MaintainabilityAssessor.review"
+    )
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Returns maintainability and readability issues found in the supplied
@@ -198,7 +212,9 @@ class MaintainabilityAssessor:
 
 
 class DependencySpecialist:
-    @infer
+    @domain("examples.02_code_quality.agents", version="1").infer(
+        name="DependencySpecialist.review"
+    )
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Returns external-dependency issues found in the supplied files.
@@ -221,7 +237,9 @@ class DependencySpecialist:
 
 
 class ReportingAgent:
-    @infer
+    @domain("examples.02_code_quality.agents", version="1").infer(
+        name="ReportingAgent.create_report"
+    )
     async def create_report(
         self,
         all_issues: list[CodeIssue],

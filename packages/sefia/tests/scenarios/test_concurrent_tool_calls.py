@@ -1,3 +1,5 @@
+import glyff
+import sefia
 import asyncio
 import json
 from dataclasses import dataclass
@@ -6,7 +8,7 @@ import pytest
 from glyff import Domain
 from glyff.store import MemoryBackend
 
-from sefia import Tools, concurrent, infer
+from sefia import Tools, concurrent
 from sefia.exceptions import PauseException
 from sefia.testing import (
     MockLLMClient,
@@ -48,7 +50,11 @@ class Researcher:
     def __init__(self, kit: HandshakeToolkit):
         self._kit = kit
 
-    @infer
+    @sefia.Domain(
+        glyff.Domain(
+            "packages.sefia.tests.scenarios.test_concurrent_tool_calls", version="1"
+        )
+    ).infer(name="Researcher.generate_report")
     async def generate_report(self, topic: str) -> Report:
         """Generate a report on the given topic."""
         ...
@@ -104,7 +110,11 @@ class Assistant:
     def __init__(self, kit: PausingToolkit):
         self._kit = kit
 
-    @infer
+    @sefia.Domain(
+        glyff.Domain(
+            "packages.sefia.tests.scenarios.test_concurrent_tool_calls", version="1"
+        )
+    ).infer(name="Assistant.prepare_report")
     async def prepare_report(self, topic: str) -> Report:
         """Prepare a report on the given topic."""
         ...

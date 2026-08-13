@@ -1,7 +1,8 @@
+import glyff
+import sefia
 import inspect
 from typing import Protocol
 
-from sefia import infer
 from sefia._executor import InferenceExecutor
 from sefia._interfaces import InferenceStrategy
 from sefia.event_system import EventPublisher
@@ -24,12 +25,20 @@ class BothSurface(Protocol):
 
 
 class Service:
-    @infer
+    @sefia.Domain(
+        glyff.Domain(
+            "packages.sefia.tests.units.test_executor_tool_surface", version="1"
+        )
+    ).infer(name="Service.run")
     async def run(self: BothSurface, topic: str) -> str:
         """Entry point."""
         ...
 
-    @infer
+    @sefia.Domain(
+        glyff.Domain(
+            "packages.sefia.tests.units.test_executor_tool_surface", version="1"
+        )
+    ).infer(name="Service.analyze")
     async def analyze(self, topic: str) -> str:
         """A sibling inference, exposed as a tool via the surface."""
         ...

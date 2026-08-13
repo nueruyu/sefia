@@ -1,7 +1,9 @@
+import glyff
+import sefia
 from typing import Protocol
 
 
-from sefia import Tools, infer
+from sefia import Tools
 from sefia.inference import Capability
 from sefia.tool_collectors import DefaultToolCollector
 
@@ -72,7 +74,11 @@ class Researcher:
         """Score a URL."""
         return 1.0
 
-    @infer
+    @sefia.Domain(
+        glyff.Domain(
+            "packages.sefia.tests.units.tool_collectors.test_surfaces", version="1"
+        )
+    ).infer(name="Researcher.run")
     async def run(self, topic: str) -> str:
         """Research the topic."""
         ...

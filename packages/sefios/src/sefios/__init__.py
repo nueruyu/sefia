@@ -6,7 +6,6 @@ from sefia import (
     Profile,
     Tools,
     concurrent,
-    infer,
     policy,
     preview,
     profile,
@@ -21,7 +20,6 @@ from .storage import FileSessionStorage, MemorySessionStorage, SessionStorage
 
 __all__ = [
     # Authoring surface re-exported from the core, so app code only imports `sefios`.
-    "infer",
     "concurrent",
     "preview",
     "policy",

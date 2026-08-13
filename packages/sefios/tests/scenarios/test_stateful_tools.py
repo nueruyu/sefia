@@ -8,10 +8,10 @@ import pytest
 from glyff import ArgumentCanonicalizer, Domain, Serializer
 from glyff.store import MemoryBackend
 
-from sefia import Session, Tools, infer
+from sefia import Session, Tools
 from sefia.exceptions import PauseException
 from sefia.testing import result_response, tool_calls_response
-from sefios import MemorySessionStorage, get_call_state_store
+from sefios import domain, MemorySessionStorage, get_call_state_store
 from sefios._session_state import bind_session_storage, get_state_store
 
 
@@ -101,7 +101,11 @@ class TestStatefulTool:
             def __init__(self, tool: Input):
                 self._tool = tool
 
-            @infer
+            @domain(
+                "packages.sefios.tests.scenarios.test_stateful_tools", version="1"
+            ).infer(
+                name="TestStatefulTool.test_ask_user_interrupts_and_resumes_correctly.Agent.get_user_name"
+            )
             async def get_user_name(self) -> Report:
                 """Ask the user for their name and create a report."""
                 ...
@@ -173,7 +177,11 @@ class TestStatefulTool:
             def __init__(self, tool: Input):
                 self._tool = tool
 
-            @infer
+            @domain(
+                "packages.sefios.tests.scenarios.test_stateful_tools", version="1"
+            ).infer(
+                name="TestStatefulTool.test_multiple_ask_user_calls_are_independent.Agent.get_profile"
+            )
             async def get_profile(self) -> Report:
                 """Ask for name, then age, then report."""
                 ...

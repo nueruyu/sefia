@@ -8,7 +8,6 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 RUNTIME_DOMAIN = glyff.Domain("sefia.runtime", version="1")
-DEFAULT_APPLICATION_DOMAIN = glyff.Domain("sefia.application", version="1")
 
 
 def engrave(

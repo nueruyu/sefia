@@ -75,7 +75,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 
 | Module | Responsibility | Key symbols |
 | --- | --- | --- |
-| `_authoring/` | Authoring API split by responsibility: domain ownership, inference assembly, profile/policy selection, tool markers, and decorator metadata. | `Domain`, `infer`, `concurrent`, `preview`, `policy`, `profile` |
+| `_authoring/` | Authoring API split by responsibility: domain ownership, inference assembly, profile/policy selection, tool markers, and decorator metadata. | `Domain`, `concurrent`, `preview`, `policy`, `profile` |
 | `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
 | `_glyff.py` | Owns the default application/runtime Glyff domains and stable-name engraving adapter. | internal |
 | `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
@@ -113,7 +113,7 @@ implementation noted in parentheses.
 
 | Path | Responsibility |
 | --- | --- |
-| `__init__.py` | Re-exports the everyday authoring surface (`domain`, `infer`, `concurrent`, `preview`, `policy`, `profile`, `Tools`, `AsRawText`, `Policy`, `Profile`) so application code imports only from `sefios`. |
+| `__init__.py` | Re-exports the everyday authoring surface (`domain`, `concurrent`, `preview`, `policy`, `profile`, `Tools`, `AsRawText`, `Policy`, `Profile`) so application code imports only from `sefios`. |
 | `_domain.py` | Convenience constructor for an application-owned `sefia.Domain`. |
 | `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
@@ -165,7 +165,7 @@ implementation noted in parentheses.
   package root. Ordinary application extension points and configuration types may
   remain at the root (for example, `Policy`).
 - **Import from `sefios`.** It re-exports the everyday authoring surface
-  (`domain` / `infer` / `concurrent` / `preview` / `policy` / `profile`, `Tools`,
+  (`domain` / `concurrent` / `preview` / `policy` / `profile`, `Tools`,
   `AsRawText`, `Policy` / `Profile`), so application code
   touches one package. Low-level contracts intended mainly for extension-library
   authors come from their specialized `sefia` submodules instead.

@@ -5,7 +5,7 @@ at most one clarifying question, which lets the API demonstrate pause/resume ove
 normal HTTP requests while lifecycle events stream over SSE.
 """
 
-from sefios import Tools, infer
+from sefios import domain, Tools
 from sefios.tools import Input
 
 from .models import Brief
@@ -19,7 +19,7 @@ class Interviewer:
     def __init__(self, input_tool: Input):
         self._input = input_tool
 
-    @infer
+    @domain("examples.03_fastapi_api.agents", version="1").infer(name="Interviewer.run")
     async def run(self) -> Brief:
         """
         Turn a user's request into a concrete content brief.
@@ -29,8 +29,7 @@ class Interviewer:
 
         This is a demo workflow, so keep the human-in-the-loop interaction short:
         ask at most one focused follow-up question. Only ask when the request is
-        so underspecified that a reasonable brief cannot be produced. Otherwise,
-        infer sensible defaults from the user's wording.
+        so underspecified that a reasonable brief cannot be produced. Otherwise sensible defaults from the user's wording.
 
         Produce the final Brief with:
         - topic: the content topic, inferred from the request when possible

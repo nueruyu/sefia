@@ -1,6 +1,8 @@
+import glyff
+import sefia
 from dataclasses import dataclass
 
-from sefia import JsonSchemaToolEntry, infer
+from sefia import JsonSchemaToolEntry
 from sefia.testing import (
     MockLLMClient,
     memory_session,
@@ -27,7 +29,11 @@ class Report:
 class SimpleAgent:
     """An agent that has no tools of its own."""
 
-    @infer
+    @sefia.Domain(
+        glyff.Domain(
+            "packages.sefia.tests.scenarios.test_json_schema_tool", version="1"
+        )
+    ).infer(name="SimpleAgent.generate_report")
     async def generate_report(self, topic: str) -> Report:
         """Generate a report on the given topic."""
         ...
