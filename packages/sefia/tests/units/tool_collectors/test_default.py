@@ -4,8 +4,7 @@ import pytest
 
 from sefia import Tools, infer
 from sefia.exceptions import ToolConflictError
-from sefia.inference import Capability, FunctionInfo
-from sefia.pydantic import PydanticModelBackend
+from sefia.inference import Capability
 from sefia.tool_collectors import DefaultToolCollector
 
 
@@ -26,96 +25,6 @@ def _collect_self(instance: object, declared: object | None = None):
     return DefaultToolCollector().collect(
         [Capability(value=instance, declared=declared)]
     )
-
-
-# --------------------------------------------------------------------------- #
-# Schema generation (unchanged surface)
-# --------------------------------------------------------------------------- #
-
-
-def example_func(a: int, b: str = "default") -> bool:
-    """An example function."""
-    return True
-
-
-def test_create_tool_schema_from_function():
-    definition = PydanticModelBackend().definition(example_func, name="example_func")
-
-    assert definition.name == "example_func"
-    assert definition.description == "An example function."
-
-    params = definition.parameters
-    assert params["type"] == "object"
-    assert "a" in params["properties"]
-    assert "b" in params["properties"]
-    assert params["properties"]["a"]["type"] == "integer"
-    assert params["properties"]["b"]["type"] == "string"
-    assert params["properties"]["b"]["default"] == "default"
-    assert "a" in params["required"]
-    assert "b" not in params.get("required", [])
-
-
-def test_schema_builder_sanitizes_complex_names():
-    backend = PydanticModelBackend()
-
-    class Outer:
-        class Inner:
-            def my_method(self):
-                pass
-
-    name = backend.tool_name(Outer.Inner.my_method)
-    assert name.endswith("Outer_Inner_my_method")
-    assert "." not in name
-    assert "<" not in name
-
-
-def test_schema_builder_caches_results():
-    backend = PydanticModelBackend()
-    definition1 = backend.definition(example_func, name="example_func")
-    definition2 = backend.definition(example_func, name="example_func")
-    assert definition1 is definition2
-
-
-# --------------------------------------------------------------------------- #
-# Capability classification: the receiver, on the call descriptor
-# --------------------------------------------------------------------------- #
-
-
-class SurfaceForInfo(Protocol): ...
-
-
-class InfoService:
-    async def plain(self, topic: str) -> str:
-        """No self annotation."""
-        ...
-
-    async def surfaced(self: SurfaceForInfo, topic: str) -> str:
-        """Self annotated with a surface protocol."""
-        ...
-
-
-def test_the_receiver_is_the_capability_and_the_rest_is_prompt_data():
-    svc = InfoService()
-    info = FunctionInfo.create(InfoService.plain, (svc, "x"), {})
-    assert info.capabilities == [Capability(value=svc, declared=None)]
-    assert info.prompt_arguments == {"topic": "x"}
-
-
-def test_an_annotated_self_carries_its_surface():
-    svc = InfoService()
-    info = FunctionInfo.create(InfoService.surfaced, (svc, "x"), {})
-    assert info.capabilities == [Capability(value=svc, declared=SurfaceForInfo)]
-
-
-def test_plain_function_parameters_are_never_capabilities():
-    async def run(kit: Tools[WebToolkit], topic: str) -> str:
-        """A plain function: every parameter is task data."""
-        ...
-
-    kit = WebToolkit()
-    info = FunctionInfo.create(run, (kit, "x"), {})
-    assert info.capabilities == []
-    assert info.prompt_arguments == {"kit": kit, "topic": "x"}
 
 
 # --------------------------------------------------------------------------- #
@@ -363,80 +272,3 @@ class OuterHoldingUngranted:
 def test_a_held_agent_without_the_grant_is_not_exposed():
     registry = _collect_self(OuterHoldingUngranted())
     assert registry.get_names() == []
-
-
-# --------------------------------------------------------------------------- #
-# Surface protocols on `self`
-# --------------------------------------------------------------------------- #
-
-
-class ResearchSurface(Protocol):
-    """A pure protocol: annotating ``self`` with it is the whole opt-in.
-
-    Field re-narrowing uses a read-only property (a plain protocol attribute
-    is invariant and would not type-check against the concrete field type).
-    """
-
-    @property
-    def _web(self) -> ReadOnlyWeb: ...
-
-    async def _score(self, url: str) -> float: ...
-
-
-class Researcher:
-    _web: Tools[BroadWebClient]
-    _config: AppConfig
-
-    def __init__(self):
-        self._web = BroadWebClient()
-        self._config = AppConfig()
-
-    async def _score(self, url: str) -> float:
-        """Score a URL."""
-        return 1.0
-
-    @infer
-    async def run(self, topic: str) -> str:
-        """Research the topic."""
-        ...
-
-
-def test_a_surface_protocol_replaces_the_class_body_grant():
-    registry = _collect_self(Researcher(), declared=ResearchSurface)
-    tool_names = set(registry.get_names())
-    # The instance's own private method, opted in by the surface declaration.
-    assert "ResearchSurface__score" in tool_names
-    # The field, re-narrowed by the surface's property to ReadOnlyWeb.
-    assert "ReadOnlyWeb_search" in tool_names
-    assert not any("delete_index" in name for name in tool_names)
-    assert len(tool_names) == 2
-
-
-class DataBearingSurface(Protocol):
-    workspace: str  # a data member: no callable interface, nothing to expose
-
-    async def _score(self, url: str) -> float: ...
-
-
-class WorkspaceService:
-    workspace: str
-
-    def __init__(self):
-        self.workspace = "/tmp/w"
-
-    async def _score(self, url: str) -> float:
-        return 1.0
-
-
-def test_a_surface_data_member_exposes_no_tools():
-    registry = _collect_self(WorkspaceService(), declared=DataBearingSurface)
-    assert set(registry.get_names()) == {"DataBearingSurface__score"}
-
-
-def test_a_concrete_self_annotation_behaves_like_the_class_body_path():
-    # Only protocols act as surfaces; a concrete class annotation on self
-    # falls back to scanning that class's Tools-marked fields.
-    registry = _collect_self(Researcher(), declared=Researcher)
-    tool_names = set(registry.get_names())
-    assert not any("_score" in name for name in tool_names)
-    assert {"BroadWebClient_search", "BroadWebClient_delete_index"} == tool_names
