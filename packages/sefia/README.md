@@ -18,9 +18,9 @@ class Summary(BaseModel):
     uncertainty: str
 
 
-workflow = Domain(glyff.Domain("com.example.summaries", version="1"))
+infer = Domain(glyff.Domain("com.example.summaries", version="1")).infer
 
-@workflow.infer(name="summarize")
+@infer(name="summarize")
 async def summarize(article: str) -> Summary:
     """Summarize the article for a technical audience; note key uncertainty."""
     ...

@@ -3,6 +3,8 @@ from sefios.tools import Input, WebSearch
 
 from .models import ArticleRequest, NewsArticle
 
+infer = domain("examples.news_article", version="1").infer
+
 
 class RequirementsClarifier:
     _input: Tools[Input]
@@ -10,9 +12,7 @@ class RequirementsClarifier:
     def __init__(self, input_tool: Input):
         self._input = input_tool
 
-    @domain("examples.01_news_article.agents", version="1").infer(
-        name="RequirementsClarifier.clarify_request"
-    )
+    @infer(name="RequirementsClarifier.clarify_request")
     async def clarify_request(self) -> ArticleRequest:
         """
         Clarify the user's request for a news article before research or writing.
@@ -46,9 +46,7 @@ class Researcher:
     def __init__(self, web_search: WebSearch):
         self._web = web_search
 
-    @domain("examples.01_news_article.agents", version="1").infer(
-        name="Researcher.research_topic"
-    )
+    @infer(name="Researcher.research_topic")
     async def research_topic(self, article_request: ArticleRequest) -> list[str]:
         """
         Research the clarified article request to find relevant online sources.
@@ -70,9 +68,7 @@ class NewsWriter:
         self._input = input_tool
         self._researcher = researcher
 
-    @domain("examples.01_news_article.agents", version="1").infer(
-        name="NewsWriter.write_article"
-    )
+    @infer(name="NewsWriter.write_article")
     async def write_article(
         self, article_request: ArticleRequest, sources: list[str]
     ) -> NewsArticle:

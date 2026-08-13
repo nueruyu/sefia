@@ -11,9 +11,9 @@ Use explicit parameters, an explicit return type, and a docstring instruction.
 ```python
 from sefios import domain
 
-reports = domain("com.example.reports", version="1")
+infer = domain("com.example.reports", version="1").infer
 
-@reports.infer(name="summarize")
+@infer(name="summarize")
 async def summarize(article: str) -> Summary:
     """Summarize the article and return a structured summary."""
     ...
@@ -68,7 +68,7 @@ class ResearchService:
         self._web = web
         self._config = config
 
-    @reports.infer(name="run")
+    @infer(name="ResearchService.run")
     async def run(self, topic: str) -> Report: ...
 ```
 
@@ -97,7 +97,7 @@ class ResearchService:
     _web: Tools[WebToolkit]
     _config: AppConfig                   # not in the protocol -> never exposed
     async def _score(self, url: str) -> float: ...
-    @reports.infer(name="run")
+    @infer(name="ResearchService.run")
     async def run(self: ResearchSurface, topic: str) -> Report: ...
 ```
 

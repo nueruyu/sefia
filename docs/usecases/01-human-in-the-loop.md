@@ -100,7 +100,7 @@ from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input
 
-research = domain("com.example.research", version="1")
+infer = domain("com.example.research", version="1").infer
 
 
 class Research:
@@ -108,7 +108,7 @@ class Research:
         self._web = web
         self._input = input_tool
 
-    @research.infer(name="run")
+    @infer(name="Research.run")
     async def run(self, task: str) -> Report:
         """Clarify the task, research it with web search, draft a report, get the
         human's approval of the draft, then finalize and send."""

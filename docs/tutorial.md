@@ -43,9 +43,9 @@ class Summary(BaseModel):
     uncertainty: str
 
 
-workflow = domain("com.example.quickstart", version="1")
+infer = domain("com.example.quickstart", version="1").infer
 
-@workflow.infer(name="summarize")
+@infer(name="summarize")
 async def summarize(article: str) -> Summary:
     """Summarize the article for a technical audience; note key uncertainty."""
     ...
@@ -96,7 +96,7 @@ class ResearchService:
     def __init__(self, web: WebSearch):
         self._web = web
 
-    @workflow.infer(name="run")
+    @infer(name="ResearchService.run")
     async def run(self, topic: str) -> Report:
         """Research the topic with web search and produce a structured report."""
         ...
@@ -161,7 +161,7 @@ class Report(BaseModel):
     summary: str
 
 
-workflow = domain("com.example.research", version="1")
+infer = domain("com.example.research", version="1").infer
 
 class ResearchService:
     _web: Tools[WebSearch]
@@ -171,7 +171,7 @@ class ResearchService:
         self._web = web
         self._input = input_tool
 
-    @workflow.infer(name="run")
+    @infer(name="ResearchService.run")
     async def run(self, task: str) -> Report:
         """Research the task, draft a report, ask the human to approve it, then finalize."""
         ...

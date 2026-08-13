@@ -10,6 +10,8 @@ from sefios.tools import Input
 
 from .models import Brief
 
+infer = domain("examples.fastapi_api", version="1").infer
+
 
 class Interviewer:
     """Clarifies a vague request into a structured brief via input."""
@@ -19,7 +21,7 @@ class Interviewer:
     def __init__(self, input_tool: Input):
         self._input = input_tool
 
-    @domain("examples.03_fastapi_api.agents", version="1").infer(name="Interviewer.run")
+    @infer(name="Interviewer.run")
     async def run(self) -> Brief:
         """
         Turn a user's request into a concrete content brief.

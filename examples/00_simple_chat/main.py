@@ -15,6 +15,8 @@ from sefios.tools import Input, Output
 
 from .._common.typer_utils import add_session_commands, async_command
 
+infer = domain("examples.simple_chat", version="1").infer
+
 
 class ChatAgent:
     _input: Tools[Input]
@@ -24,7 +26,7 @@ class ChatAgent:
         self._input = input_tool
         self._output = output_tool
 
-    @domain("examples.00_simple_chat.main", version="1").infer(name="ChatAgent.chat")
+    @infer(name="ChatAgent.chat")
     async def chat(self) -> Never:
         """
         You are a helpful assistant having a conversation with a user.
