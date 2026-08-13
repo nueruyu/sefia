@@ -64,17 +64,19 @@ class Domain:
     ) -> Any:
         """Decorate an inferred function using its qualified or explicit name."""
 
-        def decorator(func: Callable[P, R], execution_name: str) -> Callable[P, R]:
+        def decorator(
+            func: Callable[P, R], execution_name: str | None
+        ) -> Callable[P, R]:
             return self._decorate_inference(func, execution_name)
 
         if func is not None:
-            return decorator(func, func.__qualname__)
+            return decorator(func, None)
         if not name:
             raise ValueError("An inference execution name cannot be empty.")
         return lambda func: decorator(func, name)
 
     def _decorate_inference(
-        self, func: Callable[P, R], execution_name: str
+        self, func: Callable[P, R], execution_name: str | None
     ) -> Callable[P, R]:
         unwrapped = inspect.unwrap(func)
 
@@ -107,7 +109,9 @@ class Domain:
                 kwargs=kwargs,
                 inference_strategy=inference_strategy,
                 tool_collector=context.tool_collector,
-                engrave=functools.partial(engrave_call, RUNTIME_DOMAIN),
+                engrave=lambda name, func: engrave_call(
+                    RUNTIME_DOMAIN, func, name=name
+                ),
                 publisher=EventPublisher(handlers),
                 inference_middlewares=inference_middleware,
                 step_middlewares=step_middleware,
@@ -118,7 +122,7 @@ class Domain:
             async def engraved_run(*_args, **_kwargs):
                 return await executor.run()
 
-            return await engrave_call(self.glyff, execution_name, engraved_run)(
+            return await engrave_call(self.glyff, engraved_run, name=execution_name)(
                 *args, **kwargs
             )
 
@@ -140,11 +144,11 @@ class Domain:
     ) -> Any:
         """Decorate a function using its qualified or explicit name."""
         if func is not None:
-            return engrave_call(self.glyff, func.__qualname__, func)
+            return engrave_call(self.glyff, func)
         if not name:
             raise ValueError("An execution name cannot be empty.")
 
         def decorator(func):
-            return engrave_call(self.glyff, name, func)
+            return engrave_call(self.glyff, func, name=name)
 
         return decorator
