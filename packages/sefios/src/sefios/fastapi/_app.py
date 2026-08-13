@@ -43,7 +43,7 @@ class SefiaHTTP:
     session storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), forwards the parsed prompt/message deltas to
     per-session SSE streams, and surfaces pauses as
-    :class:`~sefios.InputRequired`.
+    :class:`~sefios.fastapi.exceptions.InputRequired`.
     """
 
     def __init__(

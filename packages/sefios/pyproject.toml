@@ -37,7 +37,7 @@ classifiers = [
 litellm = ["sefia-litellm>=0.1.0"]
 web = ["ddgs>=9.0"]
 cli = ["sefia-typer>=0.2.0"]
-fastapi = ["sefia-fastapi>=0.1.0"]
+fastapi = ["sefia-fastapi>=0.3.0"]
 all = [
     "sefios[litellm]",
     "sefios[web]",
