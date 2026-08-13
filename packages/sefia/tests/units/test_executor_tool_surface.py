@@ -51,7 +51,7 @@ def _executor_for(bound_wrapper, *args) -> InferenceExecutor:
         kwargs={},
         inference_strategy=_StubStrategy(),
         tool_collector=DefaultToolCollector(),
-        engrave=lambda f: f,
+        engrave=lambda _name, f: f,
         publisher=EventPublisher([]),
         history_storage=MemoryHistoryStorage(),
     )

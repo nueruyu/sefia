@@ -8,7 +8,7 @@ from typing_extensions import final
 
 from .._context import get_context
 from .._executor import InferenceExecutor
-from .._glyff import engrave as engrave_call
+from .._glyff import RUNTIME_DOMAIN, engrave as engrave_call
 from .._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from ..event_system import EventPublisher
 from . import metadata
@@ -107,7 +107,7 @@ class Domain:
                 kwargs=kwargs,
                 inference_strategy=inference_strategy,
                 tool_collector=context.tool_collector,
-                engrave=None,
+                engrave=functools.partial(engrave_call, RUNTIME_DOMAIN),
                 publisher=EventPublisher(handlers),
                 inference_middlewares=inference_middleware,
                 step_middlewares=step_middleware,

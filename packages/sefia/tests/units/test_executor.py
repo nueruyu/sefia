@@ -90,7 +90,7 @@ def executor_dependencies(mocker: MockerFixture):
 
     mock_collector.collect.return_value = ToolRegistry()
 
-    def non_engrave(f):
+    def non_engrave(_name, f):
         return f
 
     return (
@@ -649,9 +649,9 @@ class TestInferenceExecutor:
 
         engraved_step_args: list[tuple] = []
 
-        def recording_engrave(f):
+        def recording_engrave(name, f):
             async def wrapper(*args, **kwargs):
-                if getattr(f, "__name__", "") == "_next_step":
+                if name == "inference_step":
                     engraved_step_args.append(args)
                 return await f(*args, **kwargs)
 
