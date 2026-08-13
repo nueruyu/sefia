@@ -9,7 +9,7 @@ implement each step.
 
 | Piece | File | Role |
 | --- | --- | --- |
-| `@infer` decorator | `packages/sefia/src/sefia/_authoring/inference.py` | Wraps a function so calling it runs an inference instead of the body. |
+| `@infer` decorator | `packages/sefia/src/sefia/_authoring/domain.py` | Wraps a function so calling it runs an inference instead of the body. |
 | `InferenceExecutor` | `packages/sefia/src/sefia/_executor.py` | Owns the step loop, tool execution, middleware. |
 | `LLMInferenceStrategy` | `packages/sefia/src/sefia/llm/_strategy.py` | Turns the function + history into a prompt + schema, parses the reply. |
 | `DefaultToolCollector` | `packages/sefia/src/sefia/tool_collectors/_default.py` | Discovers tools from the bound object and its held dependencies. |
@@ -27,7 +27,7 @@ At a high level:
 
 ## `@infer`: calling a function runs an inference
 
-`Domain.infer()` returns a wrapper that, on each call (`_authoring/inference.py`):
+`Domain.infer()` returns a wrapper that, on each call (`_authoring/domain.py`):
 
 1. **Resolves configuration** — gets the current `SessionContext` (a contextvar),
    reads domain defaults and the function's `__sefia_metadata__` for any

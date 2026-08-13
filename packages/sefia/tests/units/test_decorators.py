@@ -1,7 +1,7 @@
 import pytest
 
 from sefia import InferenceContext, InferenceMiddleware, StepContext, StepMiddleware
-from sefia._authoring.inference import partition_middleware
+from sefia._authoring.domain import partition_middleware
 from sefia.inference import InferenceDecision
 
 
