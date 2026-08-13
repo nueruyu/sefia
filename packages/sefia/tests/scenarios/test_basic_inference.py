@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import pytest
 
 from sefia import Policy, Tools, infer, policy
-from sefia._metadata import get_metadata
+from sefia._authoring.metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.llm import LLMResponse
 from sefia.testing import (

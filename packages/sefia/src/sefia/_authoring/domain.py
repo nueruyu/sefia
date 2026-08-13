@@ -4,9 +4,9 @@ from typing import Any, Awaitable, Callable, ParamSpec, TypeVar, overload
 import glyff
 from typing_extensions import final
 
-from ._decorators import decorate_inference
-from ._glyff import engrave as engrave_call
-from ._interfaces import Policy
+from .._glyff import engrave as engrave_call
+from .._interfaces import Policy
+from .inference import decorate_inference
 
 P = ParamSpec("P")
 R = TypeVar("R")

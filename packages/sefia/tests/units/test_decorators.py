@@ -1,7 +1,7 @@
 import pytest
 
 from sefia import InferenceContext, InferenceMiddleware, StepContext, StepMiddleware
-from sefia._decorators import _partition_middleware
+from sefia._authoring.inference import partition_middleware
 from sefia.inference import InferenceDecision
 
 
@@ -21,7 +21,7 @@ class TestPartitionMiddleware:
         step_middleware_1 = _StepMiddlewareFixture()
         step_middleware_2 = _StepMiddlewareFixture()
 
-        inference, step = _partition_middleware(
+        inference, step = partition_middleware(
             [inference_middleware, step_middleware_1, step_middleware_2]
         )
 
@@ -29,11 +29,11 @@ class TestPartitionMiddleware:
         assert step == [step_middleware_1, step_middleware_2]
 
     def test_empty(self):
-        assert _partition_middleware([]) == ([], [])
+        assert partition_middleware([]) == ([], [])
 
     def test_rejects_unknown_middleware_type(self):
         class NotMiddleware:
             pass
 
         with pytest.raises(TypeError, match="InferenceMiddleware or StepMiddleware"):
-            _partition_middleware([NotMiddleware()])
+            partition_middleware([NotMiddleware()])

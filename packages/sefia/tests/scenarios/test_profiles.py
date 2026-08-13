@@ -7,7 +7,7 @@ from glyff import ArgumentCanonicalizer, Serializer
 from glyff.store import MemoryBackend
 
 from sefia import Domain, Policy, Profile, Session, infer, policy, profile
-from sefia._metadata import KEY_PROFILE_KEY, get_metadata
+from sefia._authoring.metadata import KEY_PROFILE_KEY, get_metadata
 from sefia.event_system import EventHandler
 from sefia.llm import LLMResponse
 from sefia.testing import MockLLMClient, memory_session, result_response

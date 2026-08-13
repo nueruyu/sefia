@@ -1,5 +1,4 @@
-from ._decorators import concurrent, infer, policy, preview, profile
-from ._domain import Domain
+from ._authoring import Domain, concurrent, infer, policy, preview, profile
 from ._interfaces import (
     HistorySnapshot,
     HistoryStorage,
