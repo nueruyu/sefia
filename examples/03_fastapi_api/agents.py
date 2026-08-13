@@ -21,7 +21,7 @@ class Interviewer:
     def __init__(self, input_tool: Input):
         self._input = input_tool
 
-    @infer(name="Interviewer.run")
+    @infer
     async def run(self) -> Brief:
         """
         Turn a user's request into a concrete content brief.

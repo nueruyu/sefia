@@ -26,7 +26,7 @@ class ChatAgent:
         self._input = input_tool
         self._output = output_tool
 
-    @infer(name="ChatAgent.chat")
+    @infer
     async def chat(self) -> Never:
         """
         You are a helpful assistant having a conversation with a user.

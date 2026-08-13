@@ -27,22 +27,34 @@ class Domain:
         self.default_profile = default_profile
         self.policies = tuple(policies)
 
-    def infer(self, *, name: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
-        """Decorate an inferred function with stable domain-owned identity."""
+    @overload
+    def infer(self, func: Callable[P, R]) -> Callable[P, R]: ...
 
-        if not name:
-            raise ValueError("An inference execution name cannot be empty.")
+    @overload
+    def infer(self, *, name: str) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
-        def decorator(func: Callable[P, R]) -> Callable[P, R]:
+    def infer(
+        self,
+        func: Callable[..., Any] | None = None,
+        *,
+        name: str | None = None,
+    ) -> Any:
+        """Decorate an inferred function using its qualified or explicit name."""
+
+        def decorator(func: Callable[P, R], execution_name: str) -> Callable[P, R]:
             return decorate_inference(
                 func,
                 domain=self.glyff,
-                name=name,
+                name=execution_name,
                 domain_profile=self.default_profile,
                 domain_policies=self.policies,
             )
 
-        return decorator
+        if func is not None:
+            return decorator(func, func.__qualname__)
+        if not name:
+            raise ValueError("An inference execution name cannot be empty.")
+        return lambda func: decorator(func, name)
 
     @overload
     def engrave(self, func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]: ...

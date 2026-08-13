@@ -108,7 +108,7 @@ class Research:
         self._web = web
         self._input = input_tool
 
-    @infer(name="Research.run")
+    @infer
     async def run(self, task: str) -> Report:
         """Clarify the task, research it with web search, draft a report, get the
         human's approval of the draft, then finalize and send."""

@@ -20,7 +20,7 @@ class Summary(BaseModel):
 
 infer = Domain(glyff.Domain("com.example.summaries", version="1")).infer
 
-@infer(name="summarize")
+@infer
 async def summarize(article: str) -> Summary:
     """Summarize the article for a technical audience; note key uncertainty."""
     ...

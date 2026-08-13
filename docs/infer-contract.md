@@ -13,7 +13,7 @@ from sefios import domain
 
 infer = domain("com.example.reports", version="1").infer
 
-@infer(name="summarize")
+@infer
 async def summarize(article: str) -> Summary:
     """Summarize the article and return a structured summary."""
     ...
@@ -68,7 +68,7 @@ class ResearchService:
         self._web = web
         self._config = config
 
-    @infer(name="ResearchService.run")
+    @infer
     async def run(self, topic: str) -> Report: ...
 ```
 
@@ -97,7 +97,7 @@ class ResearchService:
     _web: Tools[WebToolkit]
     _config: AppConfig                   # not in the protocol -> never exposed
     async def _score(self, url: str) -> float: ...
-    @infer(name="ResearchService.run")
+    @infer
     async def run(self: ResearchSurface, topic: str) -> Report: ...
 ```
 
@@ -138,8 +138,10 @@ Domain-bound engrave decorators and similar `functools.wraps`-based decorators a
 
 ## Persistent execution identity
 
-Use `Domain.infer(name=...)` for persisted application boundaries. The domain id and
-explicit name are storage contracts: keep them stable across refactors. Increment the
+Use a domain-bound `infer` decorator for persisted application boundaries. Without a
+`name`, it uses the function's qualified name; pass `name=...` when that derived name
+must not follow a refactor. The domain id and execution name are storage contracts.
+Keep them stable across refactors. Increment the
 domain version when recorded execution shapes change, and use Glyff's domain migration
 API to remap existing sessions. Sefia's internal `inference_step` and `tool_batch`
 records belong to `sefia.runtime`, so application migrations do not need to know their

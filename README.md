@@ -20,7 +20,7 @@ class Summary(BaseModel):
 infer = domain("com.example.reports", version="1").infer
 
 
-@infer(name="summarize")
+@infer
 async def summarize(article: str) -> Summary:
     """Summarize the article for a technical audience; note key uncertainty."""
     ...
@@ -110,7 +110,7 @@ class ResearchService:
     def __init__(self, web: WebSearch):
         self._web = web
 
-    @infer(name="ResearchService.run")
+    @infer
     async def run(self, topic: str) -> Report:
         """Research the topic with web search and produce a structured report."""
         ...
@@ -155,7 +155,7 @@ class ResearchService:
         self._web = web
         self._input = input_tool
 
-    @infer(name="ResearchService.run")
+    @infer
     async def run(self, task: str) -> Report:
         """Research the task, draft a report, ask the human to approve it, then finalize."""
         ...

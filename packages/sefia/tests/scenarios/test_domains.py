@@ -34,6 +34,32 @@ async def test_domain_inference_records_stable_application_and_runtime_boundarie
     assert step.id.parent_id == outer.id
 
 
+async def test_domain_infer_uses_the_qualified_function_name():
+    backend = MemoryBackend()
+    reports = Domain(glyff.Domain("com.example.reports", version="1"))
+
+    class Reporter:
+        @reports.infer
+        async def prepare(self, document: str) -> str: ...
+
+    async with memory_session(
+        MockLLMClient([result_response("summary")]),
+        session_id="implicit-inference-name",
+        backend=backend,
+    ):
+        assert await Reporter().prepare("document") == "summary"
+
+    executions = [
+        execution
+        async for execution in backend.repository.executions(
+            glyff.SessionId("implicit-inference-name")
+        )
+    ]
+    assert any(
+        execution.id.name.value.endswith("Reporter.prepare") for execution in executions
+    )
+
+
 async def test_domain_engrave_uses_the_function_name():
     backend = MemoryBackend()
     reports = Domain(glyff.Domain("com.example.reports", version="1"))

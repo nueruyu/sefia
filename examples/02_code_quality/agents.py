@@ -23,7 +23,7 @@ class ScopingAgent:
     def __init__(self, input_tool: Input):
         self._input = input_tool
 
-    @infer(name="ScopingAgent.define_scope")
+    @infer
     async def define_scope(self) -> ProjectScope:
         """
         Defines a concrete code-review scope from the user's review request.
@@ -42,7 +42,7 @@ class UnderstandingAgent:
     def __init__(self, file_tool: Files):
         self._file_tool = file_tool
 
-    @infer(name="UnderstandingAgent._prioritize_files_to_read")
+    @infer
     async def _prioritize_files_to_read(
         self,
         current_understanding: ProjectUnderstanding,
@@ -60,7 +60,7 @@ class UnderstandingAgent:
         """
         ...
 
-    @infer(name="UnderstandingAgent._update_understanding")
+    @infer
     async def _update_understanding(
         self,
         current_understanding: ProjectUnderstanding,
@@ -113,7 +113,7 @@ class ReviewScopingAgent:
     def __init__(self, input_tool: Input):
         self._input = input_tool
 
-    @infer(name="ReviewScopingAgent.propose_and_confirm_review_files")
+    @infer
     async def propose_and_confirm_review_files(
         self,
         understanding: ProjectUnderstanding,
@@ -134,7 +134,7 @@ class ReviewScopingAgent:
 
 
 class CodingStyleAuditor:
-    @infer(name="CodingStyleAuditor.review")
+    @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Returns coding-style issues found in the supplied files.
@@ -156,7 +156,7 @@ class CodingStyleAuditor:
 
 
 class DesignPrincipleArchitect:
-    @infer(name="DesignPrincipleArchitect.review")
+    @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Returns software-design issues found in the supplied files.
@@ -177,7 +177,7 @@ class DesignPrincipleArchitect:
 
 
 class MaintainabilityAssessor:
-    @infer(name="MaintainabilityAssessor.review")
+    @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Returns maintainability and readability issues found in the supplied
@@ -200,7 +200,7 @@ class MaintainabilityAssessor:
 
 
 class DependencySpecialist:
-    @infer(name="DependencySpecialist.review")
+    @infer
     async def review(self, file_contents: dict[str, RawCode]) -> list[CodeIssue]:
         """
         Returns external-dependency issues found in the supplied files.
@@ -223,7 +223,7 @@ class DependencySpecialist:
 
 
 class ReportingAgent:
-    @infer(name="ReportingAgent.create_report")
+    @infer
     async def create_report(
         self,
         all_issues: list[CodeIssue],
