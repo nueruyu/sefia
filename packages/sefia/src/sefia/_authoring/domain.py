@@ -17,7 +17,7 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-def partition_middleware(
+def _partition_middleware(
     middleware: list,
 ) -> tuple[list[InferenceMiddleware], list[StepMiddleware]]:
     inference_middlewares: list[InferenceMiddleware] = []
@@ -100,7 +100,7 @@ class Domain:
             middleware = [
                 item for policy in policies for item in policy.create_middleware()
             ]
-            inference_middleware, step_middleware = partition_middleware(middleware)
+            inference_middleware, step_middleware = _partition_middleware(middleware)
             executor = InferenceExecutor(
                 func=unwrapped,
                 args=args,
