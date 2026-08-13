@@ -4,7 +4,7 @@ from typing import Any, Awaitable, Callable, ParamSpec, TypeVar, overload
 import glyff
 from typing_extensions import final
 
-from ._decorators import _infer
+from ._decorators import decorate_inference
 from ._glyff import engrave as engrave_call
 from ._interfaces import Policy
 
@@ -34,7 +34,7 @@ class Domain:
             raise ValueError("An inference execution name cannot be empty.")
 
         def decorator(func: Callable[P, R]) -> Callable[P, R]:
-            return _infer(
+            return decorate_inference(
                 func,
                 domain=self.glyff,
                 name=name,

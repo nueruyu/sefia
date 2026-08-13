@@ -205,7 +205,7 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
     ``__wrapped__`` chain (``functools.wraps``) for the policy to be found.
     """
 
-    return _infer(
+    return decorate_inference(
         func,
         domain=DEFAULT_APPLICATION_DOMAIN,
         name=func.__name__,
@@ -214,7 +214,7 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
     )
 
 
-def _infer(
+def decorate_inference(
     func: Callable[P, R],
     *,
     domain: glyff.Domain,
