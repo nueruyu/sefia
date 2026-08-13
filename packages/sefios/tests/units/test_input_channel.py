@@ -1,13 +1,10 @@
 from typing import Any
 
 import pytest
-from sefia.input_channels import (
-    AmbiguousInputError,
-    InputChannel,
-    InputRequest,
-    UnknownInputError,
-    _to_input_text,
-)
+
+from sefios._input_channel import InputChannel, _to_input_text
+from sefios.exceptions import AmbiguousInputError, UnknownInputError
+from sefios.tools import InputRequest
 
 
 class InMemoryKeyValueStore:

@@ -7,11 +7,11 @@ from pathlib import Path
 
 from fastapi.responses import StreamingResponse
 from sefia import Policy
-from sefia_fastapi import InputChannel
 from sefia_fastapi.events import SessionEvents, SSEEvent
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 
 from .._scope import SessionScope
+from .._input_channel import InputChannel
 from .._session_state import get_session_storage
 from ..exceptions import InputRequired
 from ..handlers import CostCalculator

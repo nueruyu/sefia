@@ -1,8 +1,8 @@
 """Typer (CLI) integration for the sefios stack.
 
 The facade over the ``sefia_typer`` building blocks: :class:`SefiaCLI` wires
-the CLI input core to sefios' :class:`Input`, session storage,
-and cost accounting. Reporter types are re-exported here; exceptions live in
+sefios' input routing and :class:`Input` tool to session storage and cost
+accounting. Reporter types are re-exported here; exceptions live in
 :mod:`sefios.cli.exceptions`.
 """
 

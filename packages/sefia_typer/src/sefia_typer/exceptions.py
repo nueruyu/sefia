@@ -1,6 +1,3 @@
-from sefia.input_channels import AmbiguousInputError, UnknownInputError
-
-
 class UnknownSessionError(Exception):
     """Raised when a requested CLI session is not known."""
 
@@ -9,4 +6,4 @@ class UnknownSessionError(Exception):
         self.session_id = session_id
 
 
-__all__ = ["AmbiguousInputError", "UnknownInputError", "UnknownSessionError"]
+__all__ = ["UnknownSessionError"]

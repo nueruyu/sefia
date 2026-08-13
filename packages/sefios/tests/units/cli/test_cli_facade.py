@@ -1,6 +1,6 @@
 import pytest
 from glyff_pydantic import PydanticSerializer
-from sefia_typer import InputChannel
+from sefios._input_channel import InputChannel
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 from sefios.cli import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
 from sefios.cli._app import _USE_DEFAULT_REPORTER
@@ -20,7 +20,7 @@ class TestSefiaCLISession:
 
     @pytest.fixture
     def session(self, channel, session_storage):
-        # A bound SessionStorage satisfies the adapter's KeyValueStore protocol.
+        # A bound SessionStorage satisfies the input channel's store protocol.
         with channel.use_store(session_storage):
             yield SefiaCLISession(channel=channel)
 

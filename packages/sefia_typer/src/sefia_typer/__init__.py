@@ -1,25 +1,20 @@
 """Typer (CLI) building blocks for Sefia applications.
 
-This package holds the CLI-side pieces that depend only on ``sefia`` and
-Typer: the input core (an :class:`InputChannel` persisted over a
-:class:`KeyValueStore`), the reporter surface, and the exceptions
-applications catch. The runtime wiring — session management, persistence,
-and the pausing tool — is provided by an integration layer such as
-``sefios.cli``.
+This package holds CLI reporting types and exceptions that depend only on
+``sefia`` and Typer. Runtime wiring, input routing, persistence, and pausing
+tools are provided by an integration layer such as ``sefios.cli``.
 """
 
-from sefia.input_channels import InputChannel, InputRequest, KeyValueStore
 from ._reporter import (
     CLIReporter,
     DefaultCLIReporter,
+    InputRequest,
     OutputMessage,
     ResolvedSession,
 )
 
 __all__ = [
-    "InputChannel",
     "InputRequest",
-    "KeyValueStore",
     "CLIReporter",
     "DefaultCLIReporter",
     "OutputMessage",
