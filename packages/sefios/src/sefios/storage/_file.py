@@ -5,12 +5,14 @@ from pathlib import Path
 from typing import Any
 
 from glyff import Serializer
+from typing_extensions import final, override
 
 from ._base import SessionStorage
 
 _UNSAFE = re.compile(r'[<>:"\\|?*%' + r"\x00-\x1f]")
 
 
+@final
 class FileSessionStorage(SessionStorage):
     """A file-based storage for session-scoped state.
 
@@ -50,6 +52,7 @@ class FileSessionStorage(SessionStorage):
         tmp.write_bytes(data)
         os.replace(tmp, path)
 
+    @override
     async def get(self, key: str, type_hint: type) -> Any | None:
         path = self._key_to_path(key)
         data = await asyncio.to_thread(self._read_bytes, path)
@@ -57,11 +60,13 @@ class FileSessionStorage(SessionStorage):
             return await self._serializer.deserialize(data, type_hint)
         return None
 
+    @override
     async def set(self, key: str, value: Any, type_hint: type) -> None:
         path = self._key_to_path(key)
         data = await self._serializer.serialize(value, type_hint)
         await asyncio.to_thread(self._write_bytes, path, data)
 
+    @override
     async def delete(self, key: str) -> None:
         path = self._key_to_path(key)
         await asyncio.to_thread(path.unlink, missing_ok=True)

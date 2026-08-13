@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from sefia import Policy
 from sefia_fastapi.events import SessionEvents, SSEEvent
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
+from typing_extensions import final
 
 from .._scope import SessionScope
 from .._input_channel import InputChannel
@@ -19,6 +20,7 @@ from ..sessions import SessionManager
 from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
 
 
+@final
 class SefiaHTTPSession:
     """Operations available inside a Sefia HTTP session context."""
 
@@ -35,6 +37,7 @@ class SefiaHTTPSession:
         await self._input.receive_input(input_value, reply_to=reply_to)
 
 
+@final
 class SefiaHTTP:
     """Creates Sefia session contexts for HTTP endpoints, with event streams.
 

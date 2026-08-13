@@ -2,8 +2,10 @@ from typing import Any, Awaitable, Callable
 
 from sefia._interfaces.middleware import InferenceContext, InferenceMiddleware
 from sefia.exceptions import InferenceError
+from typing_extensions import final, override
 
 
+@final
 class Retrier(InferenceMiddleware):
     """
     Retries a recoverable inference failure within the current process.
@@ -45,6 +47,7 @@ class Retrier(InferenceMiddleware):
         self.max_retries = max_retries
         self._retries_used = 0
 
+    @override
     async def wrap(
         self, ctx: InferenceContext, nxt: Callable[[], Awaitable[Any]]
     ) -> Any:

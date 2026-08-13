@@ -3,10 +3,12 @@
 from glyff import get_context as get_glyff_context
 from glyff.exceptions import ContextNotSetError
 from sefia import HistorySnapshot, HistoryStorage
+from typing_extensions import final, override
 
 from .._session_state import _execution_id_scope_key, get_session_storage
 
 
+@final
 class SessionHistoryStorage(HistoryStorage):
     """Persists each run's history in the sefios session storage, keyed by the
     run's glyff ``ExecutionId`` — an alternative to the default
@@ -29,9 +31,11 @@ class SessionHistoryStorage(HistoryStorage):
             )
         return f"{self._KEY_PREFIX}/{_execution_id_scope_key(execution_id)}"
 
+    @override
     async def load(self) -> HistorySnapshot:
         stored = await get_session_storage().get(self._key(), HistorySnapshot)
         return stored if stored is not None else HistorySnapshot()
 
+    @override
     async def save(self, snapshot: HistorySnapshot) -> None:
         await get_session_storage().set(self._key(), snapshot, HistorySnapshot)

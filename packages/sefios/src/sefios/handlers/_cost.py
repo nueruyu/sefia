@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from sefia.event_system import EventHandler
 from sefia.llm.events import AfterLLMCall
+from typing_extensions import final, override
 
 from ..state import get_state, state
 
@@ -14,6 +15,7 @@ class CostState:
     cost: float = 0.0
 
 
+@final
 class CostCalculator(EventHandler[AfterLLMCall]):
     """
     Calculates the cumulative cost of LLM calls and persists it via the state
@@ -21,6 +23,7 @@ class CostCalculator(EventHandler[AfterLLMCall]):
     retrieved from the session's state container after execution.
     """
 
+    @override
     async def handle(self, event: AfterLLMCall):
         state_store = get_state().get(CostState)
         current = await state_store.ensure()

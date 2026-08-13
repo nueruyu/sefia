@@ -4,8 +4,10 @@ from sefia._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from sefios.middleware._input import InputCallComposer
 from sefios.middleware._max_steps import StepLimiter
 from sefios.middleware._stagnation import StagnationDetector
+from typing_extensions import final, override
 
 
+@final
 @dataclass
 class DefaultPolicy(Policy):
     """Sefios default policy: step limit, HITL composition, and stagnation detection."""
@@ -13,6 +15,7 @@ class DefaultPolicy(Policy):
     max_steps: int | None = 25
     max_repeats: int = 3
 
+    @override
     def create_middleware(self) -> list[InferenceMiddleware | StepMiddleware]:
         middleware: list[InferenceMiddleware | StepMiddleware] = []
         if self.max_steps is not None:

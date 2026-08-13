@@ -24,6 +24,7 @@ from typing import Any, AsyncIterator, Callable, Coroutine
 import glyff
 from glyff.store import MemoryBackend
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
+from typing_extensions import final, override
 
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._session import Session
@@ -31,6 +32,7 @@ from .llm import LLMClient, LLMResponse, Message
 from .pydantic._json_utils import pydantic_json_default
 
 
+@final
 class MockLLMClient(LLMClient):
     """An ``LLMClient`` that replays scripted ``responses`` and records every
     request it receives in ``requests`` (messages as plain dicts, plus the
@@ -40,6 +42,7 @@ class MockLLMClient(LLMClient):
         self.responses = list(responses)
         self.requests: list[dict[str, Any]] = []
 
+    @override
     async def complete(
         self,
         messages: list[Message],
@@ -64,6 +67,7 @@ class MockLLMClient(LLMClient):
         return self.responses.pop(0)
 
 
+@final
 class MemoryHistoryStorage(HistoryStorage):
     """In-memory ``HistoryStorage``; records every saved snapshot in ``saves``.
 
@@ -76,9 +80,11 @@ class MemoryHistoryStorage(HistoryStorage):
         self.snapshot = initial if initial is not None else HistorySnapshot()
         self.saves: list[HistorySnapshot] = []
 
+    @override
     async def load(self) -> HistorySnapshot:
         return self.snapshot
 
+    @override
     async def save(self, snapshot: HistorySnapshot) -> None:
         record = HistorySnapshot(
             items=tuple(snapshot.items), completed_steps=snapshot.completed_steps

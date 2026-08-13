@@ -8,12 +8,14 @@ import sefia
 from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import HistoryStorage, Profile, Policy, ToolCollector
 from sefia.llm import LLMClient
+from typing_extensions import final
 
 from ._session_state import bind_session_storage
 from .policies import DefaultPolicy
 from .storage import FileSessionStorage, SessionStorage
 
 
+@final
 class SessionScope:
     """
     Manages shared configuration for Sefia sessions and provides helpers to run

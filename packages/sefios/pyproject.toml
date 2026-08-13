@@ -7,6 +7,7 @@ authors = [{ name = "nueruyu" }]
 requires-python = ">=3.11"
 dependencies = [
     "sefia>=0.2.0",
+    "typing-extensions>=4.6",
     "glyff>=0.13.0",
     "glyff-file-store>=0.13.0",
     "glyff-pydantic>=0.13.0",

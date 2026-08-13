@@ -1,10 +1,12 @@
 from typing import Any
 
 from glyff import Serializer
+from typing_extensions import final, override
 
 from ._base import SessionStorage
 
 
+@final
 class MemorySessionStorage(SessionStorage):
     """An in-memory storage for session-scoped state.
 
@@ -17,14 +19,17 @@ class MemorySessionStorage(SessionStorage):
         self._serializer = serializer
         self._data: dict[str, bytes] = {}
 
+    @override
     async def get(self, key: str, type_hint: type) -> Any | None:
         raw_value = self._data.get(key)
         if raw_value is not None:
             return await self._serializer.deserialize(raw_value, type_hint)
         return None
 
+    @override
     async def set(self, key: str, value: Any, type_hint: type) -> None:
         self._data[key] = await self._serializer.serialize(value, type_hint)
 
+    @override
     async def delete(self, key: str) -> None:
         self._data.pop(key, None)

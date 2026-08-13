@@ -3,12 +3,14 @@ from typing import Awaitable, Callable
 from sefia._interfaces.middleware import StepContext, StepMiddleware
 from sefia.exceptions import SefiaError
 from sefia.inference import InferenceDecision
+from typing_extensions import final, override
 
 
 class MaxStepsExceededError(SefiaError):
     """Raised when an inference run exceeds its maximum number of steps."""
 
 
+@final
 class StepLimiter(StepMiddleware):
     """
     Stops the inference loop once it would exceed a maximum number of steps.
@@ -24,6 +26,7 @@ class StepLimiter(StepMiddleware):
             raise ValueError("max_steps must be at least 1 or None")
         self.max_steps = max_steps
 
+    @override
     async def wrap(
         self,
         ctx: StepContext,
