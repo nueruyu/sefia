@@ -5,7 +5,7 @@ from sefia_typer import OutputMessage as CLIOutputMessage
 
 from .._async import maybe_await
 from ..sessions import ResolvedSession
-from ..tools import OutputMessage
+from ..tools import InputRequest, OutputMessage
 
 
 class CLIReporting:
@@ -18,9 +18,16 @@ class CLIReporting:
         if self.reporter is not None:
             await maybe_await(self.reporter.on_session_resolved(session))
 
-    async def input_request(self, request: CLIInputRequest) -> None:
+    async def input_request(self, request: InputRequest) -> None:
         if self.reporter is not None:
-            await maybe_await(self.reporter.on_input_request(request))
+            await maybe_await(
+                self.reporter.on_input_request(
+                    CLIInputRequest(
+                        interaction_id=request.interaction_id,
+                        prompt=request.prompt,
+                    )
+                )
+            )
 
     async def input_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self.reporter is not None:

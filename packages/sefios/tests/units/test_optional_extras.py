@@ -37,7 +37,7 @@ def test_missing_adapter_raises_install_hint(monkeypatch, module, adapter, extra
         return real_find_spec(name, *args, **kwargs)
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == adapter and fromlist:
+        if (name == adapter or name.startswith(f"{adapter}.")) and fromlist:
             raise ModuleNotFoundError(f"No module named '{adapter}'")
         return real_import(name, globals, locals, fromlist, level)
 
@@ -69,7 +69,7 @@ def test_adapter_import_errors_are_not_reported_as_missing_extra(
         return real_find_spec(name, *args, **kwargs)
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == adapter and fromlist:
+        if (name == adapter or name.startswith(f"{adapter}.")) and fromlist:
             raise ImportError("adapter dependency exploded")
         return real_import(name, globals, locals, fromlist, level)
 

@@ -6,10 +6,11 @@ from typing import cast
 import typer
 from sefia import Policy
 from sefia.exceptions import InferenceError, PauseException
-from sefia_typer import CLIReporter, InputChannel
+from sefia_typer import CLIReporter
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 
 from .._scope import SessionScope
+from .._input_channel import InputChannel
 from .._session_state import get_session_storage
 from ..handlers import CostCalculator
 from ..sessions import SessionManager, UnknownSessionError

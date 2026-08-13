@@ -1,16 +1,17 @@
-"""Framework-neutral routing and persistence for external input."""
+"""Persisted routing between sefios input tools and host integrations."""
 
-import inspect
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
+
+from ._async import MaybeAwaitable, maybe_await
+from .exceptions import AmbiguousInputError, UnknownInputError
+from .tools.input import InputRequest
 
 _DEFAULT_NAMESPACE = "input_channel"
 
 T = TypeVar("T")
-MaybeAwaitable = T | Awaitable[T]
 InputRequestHandler = Callable[["InputRequest"], MaybeAwaitable[None]]
 InputPromptDeltaHandler = Callable[[str, str], MaybeAwaitable[None]]
 
@@ -23,33 +24,6 @@ class KeyValueStore(Protocol):
     async def set(self, key: str, value: Any, type_hint: type) -> None: ...
 
     async def delete(self, key: str) -> None: ...
-
-
-class UnknownInputError(Exception):
-    """Raised when input targets an unknown pending request."""
-
-    def __init__(self, interaction_id: str):
-        super().__init__(f"Unknown pending input: {interaction_id}")
-        self.interaction_id = interaction_id
-
-
-class AmbiguousInputError(Exception):
-    """Raised when input cannot be routed among multiple pending requests."""
-
-    def __init__(self, interaction_ids: list[str]):
-        super().__init__(
-            "Multiple pending inputs exist. Specify one with reply_to: "
-            + ", ".join(interaction_ids)
-        )
-        self.interaction_ids = interaction_ids
-
-
-@dataclass(frozen=True)
-class InputRequest:
-    """A pending request for external input."""
-
-    interaction_id: str
-    prompt: str
 
 
 class InputChannel:
@@ -141,7 +115,7 @@ class InputChannel:
         pending[interaction_id] = {"id": interaction_id, "prompt": prompt}
         await self._save_pending(pending)
         if self._on_request is not None:
-            await _maybe_await(
+            await maybe_await(
                 self._on_request(
                     InputRequest(interaction_id=interaction_id, prompt=prompt)
                 )
@@ -154,7 +128,7 @@ class InputChannel:
 
     async def notify_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self._on_prompt_delta is not None:
-            await _maybe_await(self._on_prompt_delta(interaction_id, text))
+            await maybe_await(self._on_prompt_delta(interaction_id, text))
 
     async def _pending_map(self) -> dict[str, dict]:
         store = self._store()
@@ -225,21 +199,3 @@ def _to_input_text(input_value: str | list[str]) -> str:
     if isinstance(input_value, str):
         return input_value.strip()
     return " ".join(input_value).strip()
-
-
-async def _maybe_await(value: MaybeAwaitable[T]) -> T:
-    if inspect.isawaitable(value):
-        return await value
-    return value
-
-
-__all__ = [
-    "AmbiguousInputError",
-    "InputChannel",
-    "InputPromptDeltaHandler",
-    "InputRequest",
-    "InputRequestHandler",
-    "KeyValueStore",
-    "MaybeAwaitable",
-    "UnknownInputError",
-]

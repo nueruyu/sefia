@@ -1,8 +1,8 @@
 """FastAPI (HTTP) integration for the sefios stack.
 
 The facade over the ``sefia_fastapi`` building blocks: :class:`SefiaHTTP`
-wires the HTTP input core to sefios' :class:`Input`, session
-storage, cost accounting, and per-session SSE event streams. The surface that
+wires sefios' input routing and :class:`Input` tool to session storage, cost
+accounting, and per-session SSE event streams. The surface that
 applications need is exposed by this subpackage; its exception types live in
 :mod:`sefios.fastapi.exceptions`.
 """

@@ -1,9 +1,20 @@
+from collections.abc import Awaitable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 import typer
 from sefia.exceptions import InferenceError
-from sefia.input_channels import InputRequest, MaybeAwaitable
+
+T = TypeVar("T")
+MaybeAwaitable = T | Awaitable[T]
+
+
+@dataclass(frozen=True)
+class InputRequest:
+    """An external-input request rendered by a CLI reporter."""
+
+    interaction_id: str
+    prompt: str
 
 
 @dataclass(frozen=True)
