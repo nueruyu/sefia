@@ -7,7 +7,7 @@ from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
 from .._async import MaybeAwaitable, maybe_await
-from .._glyff import engrave
+from .._glyff import GLYFF_DOMAIN
 from ..exceptions import InputRequired
 
 
@@ -63,7 +63,7 @@ class Input:
         if self._on_prompt_delta is not None:
             await maybe_await(self._on_prompt_delta(interaction_id, text))
 
-    @engrave("input")
+    @GLYFF_DOMAIN.engrave(name="input")
     async def get_input(
         self,
         prompt: Annotated[str, Field(min_length=1)] | None = None,

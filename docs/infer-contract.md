@@ -139,12 +139,12 @@ Domain-bound engrave decorators and similar `functools.wraps`-based decorators a
 ## Persistent execution identity
 
 Use a domain-bound `infer` decorator for persisted application boundaries. Without a
-`name`, it uses the function's qualified name; pass `name=...` when that derived name
-must not follow a refactor. The domain id and execution name are storage contracts.
+`name`, it uses the function's module-qualified name; pass `name=...` when that
+derived name must not follow a refactor. The domain id and execution name are storage contracts.
 Keep them stable across refactors. Increment the
 domain version when recorded execution shapes change, and use Glyff's domain migration
 API to remap existing sessions. Sefia's internal `inference_step` and `tool_batch`
-records belong to `sefia.runtime`, so application migrations do not need to know their
+records belong to `sefia`, so application migrations do not need to know their
 shapes.
 
 An identity migration does not migrate completed result payloads or Sefia history

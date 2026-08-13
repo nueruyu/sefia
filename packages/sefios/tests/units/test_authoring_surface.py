@@ -13,7 +13,6 @@ def test_reexports_are_the_source_objects():
     assert sefios.Profile is sefia.Profile
     assert sefios.Tools is sefia.Tools
     assert sefios.AsRawText is sefia.AsRawText
-    assert callable(sefios.domain)
 
 
 def test_authoring_surface_is_public():

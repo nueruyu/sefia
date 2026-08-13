@@ -765,37 +765,37 @@ wheels = [
 
 [[package]]
 name = "glyff"
-version = "0.14.0"
+version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0c/00/37746f949612c4d9df20c7d83e384926f9d7353722801579a3caebdb8252/glyff-0.14.0.tar.gz", hash = "sha256:dba4529fa7478d8732ca62dcc3951ae5ed8d06faecddb1e25bb54485ebf010ad", size = 72637, upload-time = "2026-08-13T10:50:00.918Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/51/a9f58e9ede4afb69bc7ebfb50e819aed65ac890b33c85e5b3a20067b4079/glyff-0.15.0.tar.gz", hash = "sha256:e5ee5ed749ca90b4d74f1869d2f902eb7ed481aea431d16d261bf0e2cbd008eb", size = 73013, upload-time = "2026-08-13T11:54:04.494Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/11/3b/75062547496b301bcb53b1b66476b623380458c8bfe88ba343ca2a5385b1/glyff-0.14.0-py3-none-any.whl", hash = "sha256:76ffec774f094a46a7828cbc12111710a7a0682a334895c983e40fbd90e9e632", size = 64063, upload-time = "2026-08-13T10:49:59.69Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/99/d6eef8d82901584817a7ed814658b3add1ec1628a2e0b9be7eeb4fe1fe69/glyff-0.15.0-py3-none-any.whl", hash = "sha256:be056596f6232a382e80dcb6ede3df8e02aa9f4cc5a1f71decd12023ea184e74", size = 64311, upload-time = "2026-08-13T11:54:03.25Z" },
 ]
 
 [[package]]
 name = "glyff-file-store"
-version = "0.14.0"
+version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
     { name = "glyff" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9e/8e/66eaf7761083a4bbef57cd618c2637cded86ebbbfe301d64c2d6a649bdc3/glyff_file_store-0.14.0.tar.gz", hash = "sha256:926a51200dd9e078129f943a74d01987e798f5b5e6c9ba7451cdade497f5607c", size = 14030, upload-time = "2026-08-13T10:50:06.279Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ea/3d/5f0a895477846432a376baae5958cebdd13932da7c02c8c8c77893a2dc91/glyff_file_store-0.15.0.tar.gz", hash = "sha256:e4bf1ca691f11d5ca28e02e42b2697f7156a944746a56c6288be95c7770455ba", size = 14035, upload-time = "2026-08-13T11:53:48.132Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/00/88351d9de8255d195ee69cbba01df8a60c590c790e3b9820f2ba6c07c012/glyff_file_store-0.14.0-py3-none-any.whl", hash = "sha256:8e1ff3da77b6e2dcc3900d01323ec11d92ee5dc853c2877c071ff9c2c9020ff9", size = 10466, upload-time = "2026-08-13T10:50:05.255Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/0b/4ca81df1a33252fc97b779eadad2b0800884c5c211337e58aa4f4c27b812/glyff_file_store-0.15.0-py3-none-any.whl", hash = "sha256:be15df426b48f3227f1e2e758e9295f4c3f4d792c142cd5d49a97925540b8266", size = 10469, upload-time = "2026-08-13T11:53:47.022Z" },
 ]
 
 [[package]]
 name = "glyff-pydantic"
-version = "0.14.0"
+version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "glyff" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c0/43/07a016a97da78f22346b0df4d229ee5316cb0692b1457e7997160fa2b3c9/glyff_pydantic-0.14.0.tar.gz", hash = "sha256:0e5d0a65634dfa2f1241c038b3b942f29f5b44629c7734ecefef6b37e9b6dbff", size = 7848, upload-time = "2026-08-13T10:50:02.382Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/99/82/09770f9d8d6809a9501d1b6dc73e52e0988c0db2260608ce217e97eaa19c/glyff_pydantic-0.15.0.tar.gz", hash = "sha256:e151e60fe45eb826118d60db62a178e2bc6280c52dd5ccb91b93c642694a438b", size = 7851, upload-time = "2026-08-13T11:53:54.649Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/36/58e2cbeb6ac72c39dfa255a86f70ff622af9b91ea4a8de29d8e88095b113/glyff_pydantic-0.14.0-py3-none-any.whl", hash = "sha256:66138b7e601253dcba4493bc086fd6820d0959c3ffdab9ec8be0e46115f0646f", size = 4963, upload-time = "2026-08-13T10:50:01.407Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/3a/a1d91e2fadca23e4d51ffe02dead636f4d73254bb55ce925590aa3082785/glyff_pydantic-0.15.0-py3-none-any.whl", hash = "sha256:47f8708c7deba315901e3f7f842e762c070cf5205d3f4dfd0b89ebe060272e41", size = 4965, upload-time = "2026-08-13T11:53:53.53Z" },
 ]
 
 [[package]]
@@ -2271,9 +2271,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "glyff", specifier = ">=0.14.0" },
-    { name = "glyff-file-store", specifier = ">=0.14.0" },
-    { name = "glyff-pydantic", specifier = ">=0.14.0" },
+    { name = "glyff", specifier = ">=0.15.0" },
+    { name = "glyff-file-store", specifier = ">=0.15.0" },
+    { name = "glyff-pydantic", specifier = ">=0.15.0" },
     { name = "jsonschema", specifier = ">=4.18" },
     { name = "jsonweir", specifier = ">=0.1.0" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -2352,6 +2352,7 @@ source = { editable = "packages/sefia_litellm" }
 dependencies = [
     { name = "litellm" },
     { name = "sefia" },
+    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -2365,6 +2366,7 @@ dev = [
 requires-dist = [
     { name = "litellm", specifier = ">=1.63.0" },
     { name = "sefia", editable = "packages/sefia" },
+    { name = "typing-extensions", specifier = ">=4.6" },
 ]
 
 [package.metadata.requires-dev]
@@ -2381,6 +2383,7 @@ dependencies = [
     { name = "rich" },
     { name = "sefia" },
     { name = "typer" },
+    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -2395,6 +2398,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.0" },
     { name = "sefia", editable = "packages/sefia" },
     { name = "typer", specifier = ">=0.12" },
+    { name = "typing-extensions", specifier = ">=4.6" },
 ]
 
 [package.metadata.requires-dev]
@@ -2412,6 +2416,7 @@ dependencies = [
     { name = "glyff-file-store" },
     { name = "glyff-pydantic" },
     { name = "sefia" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -2438,9 +2443,9 @@ web = [
 requires-dist = [
     { name = "ddgs", marker = "extra == 'all'", specifier = ">=9.0" },
     { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.0" },
-    { name = "glyff", specifier = ">=0.14.0" },
-    { name = "glyff-file-store", specifier = ">=0.14.0" },
-    { name = "glyff-pydantic", specifier = ">=0.14.0" },
+    { name = "glyff", specifier = ">=0.15.0" },
+    { name = "glyff-file-store", specifier = ">=0.15.0" },
+    { name = "glyff-pydantic", specifier = ">=0.15.0" },
     { name = "sefia", editable = "packages/sefia" },
     { name = "sefia-fastapi", marker = "extra == 'all'", editable = "packages/sefia_fastapi" },
     { name = "sefia-fastapi", marker = "extra == 'fastapi'", editable = "packages/sefia_fastapi" },
@@ -2448,6 +2453,7 @@ requires-dist = [
     { name = "sefia-litellm", marker = "extra == 'litellm'", editable = "packages/sefia_litellm" },
     { name = "sefia-typer", marker = "extra == 'all'", editable = "packages/sefia_typer" },
     { name = "sefia-typer", marker = "extra == 'cli'", editable = "packages/sefia_typer" },
+    { name = "typing-extensions", specifier = ">=4.6" },
 ]
 provides-extras = ["all", "cli", "fastapi", "litellm", "web"]
 

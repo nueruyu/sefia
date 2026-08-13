@@ -8,13 +8,14 @@ from typing_extensions import final
 
 from .._context import get_context
 from .._executor import InferenceExecutor
-from .._glyff import RUNTIME_DOMAIN, engrave as engrave_call
 from .._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from ..event_system import EventPublisher
 from . import metadata
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+GLYFF_DOMAIN = glyff.Domain("sefia", version="1")
 
 
 def _partition_middleware(
@@ -39,6 +40,8 @@ def _partition_middleware(
 class Domain:
     """Sefia authoring defaults bound to a versioned Glyff ownership domain."""
 
+    __slots__ = ("_glyff", "_default_profile", "_policies")
+
     def __init__(
         self,
         domain: glyff.Domain,
@@ -46,9 +49,9 @@ class Domain:
         default_profile: Hashable | None = None,
         policies: Sequence[Policy] = (),
     ) -> None:
-        self.glyff = domain
-        self.default_profile = default_profile
-        self.policies = tuple(policies)
+        self._glyff = domain
+        self._default_profile = default_profile
+        self._policies = tuple(policies)
 
     @overload
     def infer(self, func: Callable[P, R]) -> Callable[P, R]: ...
@@ -86,13 +89,13 @@ class Domain:
             function_metadata = metadata.get_metadata(unwrapped)
             function_policies = function_metadata.get(metadata.KEY_POLICIES, [])
             profile_key = function_metadata.get(
-                metadata.KEY_PROFILE_KEY, self.default_profile
+                metadata.KEY_PROFILE_KEY, self._default_profile
             )
             inference_strategy, profile_policies = context.resolve_profile(profile_key)
 
             policies = [
                 *context.policies,
-                *self.policies,
+                *self._policies,
                 *profile_policies,
                 *function_policies,
             ]
@@ -109,9 +112,7 @@ class Domain:
                 kwargs=kwargs,
                 inference_strategy=inference_strategy,
                 tool_collector=context.tool_collector,
-                engrave=lambda name, func: engrave_call(
-                    RUNTIME_DOMAIN, func, name=name
-                ),
+                engrave=lambda name, func: GLYFF_DOMAIN.engrave(func, name=name),
                 publisher=EventPublisher(handlers),
                 inference_middlewares=inference_middleware,
                 step_middlewares=step_middleware,
@@ -122,7 +123,7 @@ class Domain:
             async def engraved_run(*_args, **_kwargs):
                 return await executor.run()
 
-            return await engrave_call(self.glyff, engraved_run, name=execution_name)(
+            return await self._glyff.engrave(engraved_run, name=execution_name)(
                 *args, **kwargs
             )
 
@@ -144,11 +145,11 @@ class Domain:
     ) -> Any:
         """Decorate a function using its qualified or explicit name."""
         if func is not None:
-            return engrave_call(self.glyff, func)
+            return self._glyff.engrave(func)
         if not name:
             raise ValueError("An execution name cannot be empty.")
 
         def decorator(func):
-            return engrave_call(self.glyff, func, name=name)
+            return self._glyff.engrave(func, name=name)
 
         return decorator

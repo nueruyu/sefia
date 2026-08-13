@@ -75,9 +75,8 @@ Modules with a leading underscore are internal; the public surface is whatever
 
 | Module | Responsibility | Key symbols |
 | --- | --- | --- |
-| `_authoring/` | Authoring API split by responsibility: domain ownership, inference assembly, profile/policy selection, tool markers, and decorator metadata. | `Domain`, `concurrent`, `preview`, `policy`, `profile` |
+| `_authoring/` | Authoring API split by responsibility: domain ownership and runtime engraving, inference assembly, profile/policy selection, tool markers, and decorator metadata. | `Domain`, `concurrent`, `preview`, `policy`, `profile` |
 | `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
-| `_glyff.py` | Owns the default application/runtime Glyff domains and stable-name engraving adapter. | internal |
 | `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
 | `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallDecision`, `FinalAnswerDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |

@@ -40,9 +40,9 @@ At a high level:
 3. **Engraves the run.** The configuration above happens *outside* the engrave
    boundary on purpose — a misconfigured policy should surface as an ordinary error,
    not an engraved failure that replays forever. Only `executor.run()` is wrapped in
-   a domain-bound engraved function with a stable qualified or explicit name. Its user arguments
-   key the durable record; internal steps run under the independent `sefia.runtime`
-   domain as `inference_step` and `tool_batch`.
+   a domain-bound engraved function with a stable module-qualified or explicit name.
+   Its user arguments key the durable record; internal steps run under the independent
+   `sefia` domain as `inference_step` and `tool_batch`.
 
 The original function body is never executed — it exists only so its **signature,
 type hints, and docstring** can be read (`FunctionInfo.create` in `inference.py`).

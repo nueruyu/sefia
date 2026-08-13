@@ -30,7 +30,7 @@ async def test_domain_inference_records_stable_application_and_runtime_boundarie
     outer = by_name["summarize"]
     step = by_name["inference_step"]
     assert outer.id.domain_id == glyff.DomainId("com.example.reports")
-    assert step.id.domain_id == glyff.DomainId("sefia.runtime")
+    assert step.id.domain_id == glyff.DomainId("sefia")
     assert step.id.parent_id == outer.id
 
 
@@ -55,8 +55,14 @@ async def test_domain_infer_uses_the_qualified_function_name():
             glyff.SessionId("implicit-inference-name")
         )
     ]
-    assert any(
-        execution.id.name.value.endswith("Reporter.prepare") for execution in executions
+    application_execution = next(
+        execution
+        for execution in executions
+        if execution.id.domain_id == glyff.DomainId("com.example.reports")
+    )
+    assert (
+        application_execution.id.name.value
+        == f"{__name__}.{Reporter.prepare.__qualname__}"
     )
 
 
