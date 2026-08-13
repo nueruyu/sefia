@@ -6,7 +6,7 @@ from typing import Annotated, Any, Callable, Coroutine, Protocol, TypeVar
 
 import typer
 from rich.console import Console
-from sefios.cli import UnknownSessionError
+from sefios.cli.exceptions import UnknownSessionError
 from typing_extensions import ParamSpec
 
 _P = ParamSpec("_P")

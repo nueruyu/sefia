@@ -3,19 +3,14 @@
 The facade over the ``sefia_fastapi`` building blocks: :class:`SefiaHTTP`
 wires the HTTP input core to sefios' :class:`Input`, session
 storage, cost accounting, and per-session SSE event streams. The surface that
-applications need is re-exported here — the ``sefia_fastapi`` HTTP
-input-routing errors, plus the core :class:`~sefios.InputRequired` pause the
-facade surfaces — so a single ``from sefios.fastapi import ...`` suffices.
+applications need is exposed by this subpackage; its exception types live in
+:mod:`sefios.fastapi.exceptions`.
 """
 
 from importlib.util import find_spec
 
 try:
-    from sefia_fastapi import (
-        AmbiguousInputError,
-        UnknownInputError,
-        UnknownSessionError,
-    )
+    from ._app import SefiaHTTP, SefiaHTTPSession
 except ImportError as e:
     if find_spec("sefia_fastapi") is None:
         raise ImportError(
@@ -24,14 +19,7 @@ except ImportError as e:
         ) from e
     raise
 
-from ..exceptions import InputRequired
-from ._app import SefiaHTTP, SefiaHTTPSession
-
 __all__ = [
     "SefiaHTTP",
     "SefiaHTTPSession",
-    "InputRequired",
-    "UnknownSessionError",
-    "UnknownInputError",
-    "AmbiguousInputError",
 ]

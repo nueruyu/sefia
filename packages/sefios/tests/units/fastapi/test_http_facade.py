@@ -3,10 +3,10 @@ import json
 
 import pytest
 from sefia import Tools, infer
-from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
+from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 from sefia.llm import LLMClient, LLMResponse
 from sefios.fastapi import SefiaHTTP
-from sefios import InputRequired
+from sefios.exceptions import InputRequired
 from sefios.tools import Input, Output, OutputMessage
 
 

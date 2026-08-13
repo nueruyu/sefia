@@ -225,7 +225,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from pydantic import BaseModel
-from sefios.fastapi import InputRequired, SefiaHTTP
+from sefios.fastapi import SefiaHTTP
+from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import WebSearch
 
 # (ResearchService, Report from hitl_cli.py)

@@ -2,7 +2,7 @@ import pytest
 import typer
 from pytest_mock import MockerFixture
 from sefia.exceptions import InvalidInferenceResponseError
-from sefios import InputRequired
+from sefios.exceptions import InputRequired
 
 from sefios.cli import SefiaCLI
 

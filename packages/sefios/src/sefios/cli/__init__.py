@@ -2,22 +2,18 @@
 
 The facade over the ``sefia_typer`` building blocks: :class:`SefiaCLI` wires
 the CLI input core to sefios' :class:`Input`, session storage,
-and cost accounting. The ``sefia_typer`` surface that applications need
-(reporters and exceptions) is re-exported here, so a single
-``from sefios.cli import ...`` suffices.
+and cost accounting. Reporter types are re-exported here; exceptions live in
+:mod:`sefios.cli.exceptions`.
 """
 
 from importlib.util import find_spec
 
 try:
     from sefia_typer import (
-        AmbiguousInputError,
         CLIReporter,
         DefaultCLIReporter,
         InputRequest,
         ResolvedSession,
-        UnknownInputError,
-        UnknownSessionError,
     )
 except ImportError as e:
     if find_spec("sefia_typer") is None:
@@ -27,7 +23,8 @@ except ImportError as e:
         ) from e
     raise
 
-from ._app import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
+from ._app import SefiaCLI, SefiaCLISession
+from ._cost_reporter import CostReportingCLIReporter
 
 __all__ = [
     "SefiaCLI",
@@ -37,7 +34,4 @@ __all__ = [
     "CostReportingCLIReporter",
     "InputRequest",
     "ResolvedSession",
-    "UnknownSessionError",
-    "UnknownInputError",
-    "AmbiguousInputError",
 ]

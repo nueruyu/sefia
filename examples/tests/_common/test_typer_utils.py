@@ -2,7 +2,7 @@ import typer
 from typer.testing import CliRunner
 
 from examples._common.typer_utils import add_session_commands, async_command
-from sefios.cli import UnknownSessionError
+from sefios.cli.exceptions import UnknownSessionError
 
 runner = CliRunner()
 

@@ -32,3 +32,8 @@ def test_authoring_surface_is_public():
         "engrave",
     ):
         assert name in sefios.__all__
+
+
+def test_exceptions_are_not_reexported_from_package_root():
+    assert "InputRequired" not in sefios.__all__
+    assert not hasattr(sefios, "InputRequired")

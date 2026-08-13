@@ -150,11 +150,6 @@ def test_is_protocol():
     assert not is_protocol(Concrete)
 
 
-# --------------------------------------------------------------------------- #
-# declared_fields
-# --------------------------------------------------------------------------- #
-
-
 class FieldBase:
     _base_field: WebToolkit
 

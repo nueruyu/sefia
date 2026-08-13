@@ -167,8 +167,6 @@ class TestLiteLLMClient:
     async def test_provider_errors_map_to_inference_errors(
         self, mock_acompletion, provider_error, expected_error
     ):
-        # The adapter translates LiteLLM's transient errors into sefia's abstract
-        # errors so callers never have to know about LiteLLM's types.
         mock_acompletion.side_effect = provider_error
         client = LiteLLMClient(model="gpt-4o")
 
@@ -176,8 +174,6 @@ class TestLiteLLMClient:
             await client.complete([])
 
     async def test_unmapped_provider_error_propagates_unchanged(self, mock_acompletion):
-        # A deterministic error (bad credentials) is not mapped; it surfaces as
-        # itself so it is engraved as a genuine failure.
         mock_acompletion.side_effect = AuthenticationError(
             message="bad key", llm_provider="openai", model="gpt-4o"
         )
@@ -214,7 +210,6 @@ class TestLiteLLMClient:
     ):
         import litellm
 
-        # Simulate an earlier client having suppressed logging globally.
         monkeypatch.setattr(litellm, "suppress_debug_info", True, raising=False)
         logging.getLogger("LiteLLM").setLevel(_SILENCE_LEVEL)
         mock_acompletion.return_value = ModelResponse(
@@ -230,7 +225,6 @@ class TestLiteLLMClient:
 
         await client.complete([])
 
-        # suppress_logs=False wins over the earlier suppression and restores defaults.
         assert litellm.suppress_debug_info is False
         assert logging.getLogger("LiteLLM").level == logging.NOTSET
 

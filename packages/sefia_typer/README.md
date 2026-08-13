@@ -4,11 +4,14 @@ Typer (CLI) building blocks for [Sefia](https://pypi.org/project/sefia/)
 applications.
 
 This package holds the CLI-side pieces that depend only on `sefia` and Typer:
-the input core (an `InputChannel` persisted over a `KeyValueStore`), the
-reporter surface, and the exceptions applications catch. The runtime wiring —
+the framework-neutral `sefia.input_channels.InputChannel` with CLI reporting hooks,
+the reporter surface, and the exceptions applications catch. The runtime wiring —
 session management, persistence, and the pausing tool — is provided by an
 integration layer such as `sefios.cli` from
 [`sefios`](https://pypi.org/project/sefios/).
+
+Import exception types from `sefia_typer.exceptions`; they are intentionally not
+re-exported from the package root.
 
 ## Install
 

@@ -13,8 +13,8 @@ A `uv` workspace (`pyproject.toml` → `[tool.uv.workspace]`) of small packages:
 | **sefia** | `packages/sefia` | The core: `@infer`, the inference loop, tool model, sessions, the default LLM strategy. |
 | **sefios** | `packages/sefios` | Opinionated batteries and integration layer: `SessionScope`, default policies/middleware/handlers, ready-made tools, and the extra-gated CLI/HTTP facades. |
 | **sefia_litellm** | `packages/sefia_litellm` | Provider adapter — an `LLMClient` implemented over LiteLLM. |
-| **sefia_typer** | `packages/sefia_typer` | Typer (CLI) building blocks: the CLI input core (`InputChannel`) and the reporter surface. |
-| **sefia_fastapi** | `packages/sefia_fastapi` | FastAPI (HTTP) building blocks: the HTTP input core (`InputChannel`), SSE streams (`SessionEvents`) with the SSE event names as the single source of truth (`SSEEvent`), and HTTP-facing exceptions. |
+| **sefia_typer** | `packages/sefia_typer` | Typer (CLI) building blocks: the shared input channel with CLI reporting hooks, and the reporter surface. |
+| **sefia_fastapi** | `packages/sefia_fastapi` | FastAPI (HTTP) building blocks: the shared input channel, SSE streams (`sefia_fastapi.events.SessionEvents`) with the SSE event names as the single source of truth (`SSEEvent`), and HTTP-facing exceptions in `sefia_fastapi.exceptions`. |
 | **examples** | `examples` | Runnable end-to-end workflows. |
 | **glyff** | *(separate repo)* | Content-addressed durable execution. A dependency, not vendored. |
 | **jsonweir** | *(separate repo / PyPI)* | Standalone incremental JSON parser used for streaming tool args. |
@@ -58,9 +58,10 @@ Rules that keep the layering clean — worth preserving in any change:
 - **`sefios` depends on `sefia` directly.** Its provider, web, CLI, and HTTP
   integrations are optional extras, so installing `sefios` alone pulls in only the core.
 - **Framework adapters depend only on `sefia` and their framework.** `sefia_typer` and
-  `sefia_fastapi` own everything the framework touches directly — including the
-  exceptions applications catch and the input core — persisted through a small
-  `KeyValueStore` protocol they declare. They never import `sefios`.
+  `sefia_fastapi` own everything the framework touches directly, including the
+  exceptions applications catch. They share the framework-neutral input state machine
+  and `KeyValueStore` protocol from `sefia.input_channels`; neither imports `sefios` or
+  the other adapter.
 - **`sefios` is the composition layer for the adapters.** The extra-gated
   `sefios/cli` and `sefios/fastapi` facades are the only modules that import
   `sefia_typer` / `sefia_fastapi`; they wire the adapters to `SessionScope`,
@@ -84,15 +85,16 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `_history.py` | The run's conversation history as pure in-memory state (loading/persistence/step-count live on the executor). | `StepHistory` |
 | `history_storages/` | `HistoryStorage` implementations (default: history in the run's glyff metadata). | `GlyffHistoryStorage` |
 | `_profiles.py` / `_metadata.py` | Per-call model/policy selection; the `__sefia_metadata__` store. | `Profile` |
-| `_tool_system.py` | The tool hierarchy, registry, collector interface, and the `Tools[...]` role alias. | `ToolEntry`, `SignatureToolEntry`, `JsonSchemaToolEntry`, `ToolDefinition`, `ToolRegistry`, `ToolCollector`, `Tools` |
+| `_tool_system/` | The tool system split by responsibility: `roles.py` owns `Tools[...]` and decorator metadata, `entries.py` owns definitions and executable entries, and `registry.py` owns registration and collection contracts. | `ToolEntry`, `SignatureToolEntry`, `JsonSchemaToolEntry`, `ToolDefinition`, `ToolRegistry`, `ToolCollector`, `Tools` |
 | `_tool_context.py` | The serving tool call's id and callable identity, bound around each `invoke` and read from a handler body. | `current_tool_call_id`, `current_tool_call_id_for` |
 | `_introspection.py` | Sefia-agnostic reflection: annotation unwrapping, method/field scanning for classes and `Protocol`s. | `unwrap_annotation`, `declared_methods`, `declared_fields`, `is_protocol` |
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: function → prompt+schema → decision. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
+| `llm/` | The **default** `InferenceStrategy`: `_strategy.py` orchestrates calls and repair, `_execution_directors.py` owns execution modes and decision conversion, `_message_builder.py` serializes calls/history, and `_tool_call_ids.py` keeps streamed and final tool-call identities stable. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
 | `pydantic/` | The **default** `ToolFunctionInspector` + `DecisionModelBuilder`: schema gen & validation via Pydantic. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
+| `input_channels.py` | Framework-neutral persisted routing for external input; adapters re-export its main types and add transport-specific behavior around it. | `InputChannel`, `InputRequest`, `KeyValueStore`, `UnknownInputError`, `AmbiguousInputError` |
 
 ### The seams (`_interfaces/`) — the extension ports
 
@@ -121,8 +123,8 @@ implementation noted in parentheses.
 | `tools/` | `input.py` (external input, pause-by-raise), `output.py` (agent-authored, non-blocking output), `web.py` (DuckDuckGo search). |
 | `storage/` | Session-scoped persistence: the `SessionStorage` interface + `MemorySessionStorage` / `FileSessionStorage`. |
 | `sessions/` | `SessionManager` — the file-backed registry of known sessions and the active one. |
-| `cli/` | Gated on `sefios[cli]`: the `SefiaCLI` facade composing `sefia_typer` with `SessionScope`, `Input`, `Output`, and cost reporting; re-exports the `sefia_typer` surface. |
-| `fastapi/` | Gated on `sefios[fastapi]`: the `SefiaHTTP` facade composing `sefia_fastapi` with `SessionScope`, `Input`, `Output`, and SSE lifecycle/delta streaming; re-exports the `sefia_fastapi` HTTP input-routing exceptions and the core `InputRequired` pause. |
+| `cli/` | Gated on `sefios[cli]`: `_app.py` owns the `SefiaCLI` session facade, `_reporting.py` bridges tool/session events to reporter DTOs, and `_cost_reporter.py` adds cost output; the package re-exports the `sefia_typer` reporter surface. |
+| `fastapi/` | Gated on `sefios[fastapi]`: the `SefiaHTTP` facade composing `sefia_fastapi` with `SessionScope`, `Input`, `Output`, and SSE lifecycle/delta streaming; integration exceptions live in `sefios.fastapi.exceptions`. |
 | `_state_store.py` / `_session_state.py` | Typed `StateStore`; the session-state binding and its accessors (`get_state`'s type-keyed tier sits on top; `get_call_state_store` / `get_session_storage` are the tool-facing tier). |
 | `state.py` | App-level state helpers: `StateRegistry`, `StateContainer`, `state`, `get_state`. |
 
@@ -137,28 +139,38 @@ implementation noted in parentheses.
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
 | Add a session-state persistence backend | implement `sefios` `SessionStorage` and pass a `session_storage_factory` to `SessionScope`; reference `sefios/storage/_file.py` |
 | Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); to change where history lives, pass `history_storage=` to `SessionScope`/`Session` (seam: `HistoryStorage`) |
-| Change CLI rendering / the CLI input rules | `packages/sefia_typer` |
-| Change HTTP events / SSE / the HTTP input rules | `packages/sefia_fastapi` |
+| Change shared input routing / persistence rules | `sefia/input_channels.py` |
+| Change CLI rendering / input callbacks | `packages/sefia_typer` |
+| Change HTTP events / SSE | `packages/sefia_fastapi` |
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |
 | Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role alias in `_tool_system.py`, scanners in `_introspection.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
 | Support a new output type system | `ToolFunctionInspector` / `DecisionModelBuilder` in `pydantic/_model_backend.py` |
-| Register a tool from a raw JSON Schema (no signature) | `JsonSchemaToolEntry` / `ToolRegistry.add_json_tool` in `_tool_system.py` |
+| Register a tool from a raw JSON Schema (no signature) | `JsonSchemaToolEntry` / `ToolRegistry.add_json_tool` in `_tool_system/` |
 | Read the serving call's id inside a tool body | `current_tool_call_id` / `current_tool_call_id_for` in `_tool_context.py` |
 | Install a whole tool-discovery rule for a run (e.g. client-defined tools) | pass `tool_collector=` to `SessionScope`/`SessionScope.session()`/`Session` (seam: `ToolCollector`) |
 | Trace the runtime end to end | [how-it-works.md](./how-it-works.md) |
 
 ## Conventions
 
-- **Underscore = internal.** `_module.py` and `_Symbol` are not API; import the public
-  names from a package's `__init__.py`.
+- **Underscore = internal import path.** A public class may be implemented in an
+  underscore module and deliberately exposed through the package `__init__.py`; users
+  import the class from that facade, not its implementation module.
+- **The package root is the primary authoring surface, not an inventory of every public
+  type.** Narrowly categorized APIs such as events and exceptions, plus low-level APIs
+  intended mainly for authors of Sefia extension libraries, live in descriptively
+  named submodules without a leading underscore and are not re-exported from the
+  package root. Ordinary application extension points and configuration types may
+  remain at the root (for example, `Policy`).
 - **Import from `sefios`.** It re-exports the everyday authoring surface
   (`infer` / `concurrent` / `preview` / `policy` / `profile`, `Tools`, `AsRawText`,
-  `Policy` / `Profile` from `sefia`; `engrave` from `glyff`), so application code touches
-  one package. Only the extension seams still come from `sefia` (`InferenceStrategy`,
-  `LLMClient`, `ToolCollector`, and subclassing `Policy`).
-- **Interfaces live in `_interfaces/`** as ABCs; concrete defaults live in
-  feature folders (`llm/`, `pydantic/`, `tool_collectors/`).
+  `Policy` / `Profile` from `sefia`; `engrave` from `glyff`), so application code
+  touches one package. Low-level contracts intended mainly for extension-library
+  authors come from their specialized `sefia` submodules instead.
+- **Interfaces live in `_interfaces/`** as ABCs; concrete defaults live in feature
+  folders (`llm/`, `pydantic/`, `tool_collectors/`). Interfaces that belong to the
+  ordinary authoring surface may be selected into the root facade; low-level contracts
+  for extension-library authors should have a dedicated public submodule instead.
 - **Tests mirror source** under each package's `tests/units/` (per-module) and
   `tests/scenarios/` (behavioral). Add tests next to the layer you change.
 - **The two seams are deliberately separate:** *middleware* controls (can retry /

@@ -11,7 +11,7 @@ Run from the repository root. See the [examples README](../README.md) for setup
 (`OPENAI_API_KEY`, optional `EXAMPLE_DEFAULT_MODEL`).
 
 ```bash
-python -m examples.03_fastapi_api
+uv run python -m examples.03_fastapi_api
 ```
 
 The server listens on `http://127.0.0.1:8000`. Open `/` for a small HITL chat UI,

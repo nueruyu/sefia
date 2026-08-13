@@ -141,7 +141,6 @@ class TestStatefulTool:
         assert report.summary == "The user's name is Alice."
         assert len(mock_llm.requests) == 2
         final_messages = mock_llm.requests[1]["messages"]
-        # system, user, assistant(tool_call), tool(result)
         assert len(final_messages) == 4
         assert json.loads(final_messages[3]["content"]) == "Alice"
 

@@ -7,8 +7,9 @@ from pathlib import Path
 
 from fastapi.responses import StreamingResponse
 from sefia import Policy
-from sefia_fastapi import InputChannel, SessionEvents, SSEEvent
-from sefia_fastapi import UnknownSessionError as HTTPUnknownSessionError
+from sefia_fastapi import InputChannel
+from sefia_fastapi.events import SessionEvents, SSEEvent
+from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 
 from .._scope import SessionScope
 from .._session_state import get_session_storage
@@ -42,7 +43,7 @@ class SefiaHTTP:
     session storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), forwards the parsed prompt/message deltas to
     per-session SSE streams, and surfaces pauses as
-    :class:`~sefios.InputRequired`.
+    :class:`~sefios.fastapi.exceptions.InputRequired`.
     """
 
     def __init__(

@@ -135,7 +135,8 @@ your provider — `pip install 'sefios[litellm,fastapi]'`.
 ```python
 from pathlib import Path
 from sefios import Tools, infer
-from sefios.fastapi import InputRequired, SefiaHTTP
+from sefios.fastapi import SefiaHTTP
+from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input, WebSearch
 
 

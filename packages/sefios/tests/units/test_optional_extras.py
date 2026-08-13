@@ -9,6 +9,15 @@ from importlib.machinery import ModuleSpec
 import pytest
 
 
+def _unload_package(monkeypatch, module):
+    owner, module_name = module.rsplit(".", 1)
+    package = importlib.import_module(owner)
+    monkeypatch.delattr(package, module_name, raising=False)
+    for loaded in tuple(sys.modules):
+        if loaded == module or loaded.startswith(f"{module}."):
+            monkeypatch.delitem(sys.modules, loaded)
+
+
 @pytest.mark.parametrize(
     ("module", "adapter", "extra"),
     [
@@ -17,11 +26,7 @@ import pytest
     ],
 )
 def test_missing_adapter_raises_install_hint(monkeypatch, module, adapter, extra):
-    owner = module.rsplit(".", 1)[0]
-    module_name = module.rsplit(".", 1)[1]
-    package = importlib.import_module(owner)
-    monkeypatch.delattr(package, module_name, raising=False)
-    monkeypatch.delitem(sys.modules, module, raising=False)
+    _unload_package(monkeypatch, module)
 
     real_find_spec = importlib_util.find_spec
     real_import = builtins.__import__
@@ -53,11 +58,7 @@ def test_missing_adapter_raises_install_hint(monkeypatch, module, adapter, extra
 def test_adapter_import_errors_are_not_reported_as_missing_extra(
     monkeypatch, module, adapter
 ):
-    owner = module.rsplit(".", 1)[0]
-    module_name = module.rsplit(".", 1)[1]
-    package = importlib.import_module(owner)
-    monkeypatch.delattr(package, module_name, raising=False)
-    monkeypatch.delitem(sys.modules, module, raising=False)
+    _unload_package(monkeypatch, module)
 
     real_find_spec = importlib_util.find_spec
     real_import = builtins.__import__

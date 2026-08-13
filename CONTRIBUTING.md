@@ -70,7 +70,17 @@ in [`docs/architecture.md`](./docs/architecture.md#conventions). The load-bearin
   in `sefia_litellm` behind `LLMClient`.
 - **Respect the two seams** — *middleware* controls (may retry/short-circuit),
   *handlers* only observe. Don't route control through a handler.
-- **Underscore = internal.** Import public names from a package's `__init__.py`.
+- **Underscore = internal import path.** A public class may be implemented in an
+  underscore module and deliberately exposed through the package `__init__.py`; users
+  import the class from that facade, not its implementation module.
+- **Keep narrowly categorized APIs out of the package root.** Event and exception
+  types, and low-level APIs intended mainly for authors of Sefia extension libraries,
+  live in descriptively named, non-underscore submodules and are imported from there;
+  do not also re-export them from the package root. Ordinary application extension
+  points and configuration types may remain on the root authoring surface. For
+  example, prefer `sefia.events.SomeEvent` or
+  `sefia_litellm.exceptions.InferenceTimeoutError` over adding either name to the
+  corresponding root `__init__.py`.
 - Match the surrounding code's style and density; don't introduce a workflow engine or
   break the stateless-HTTP model.
 

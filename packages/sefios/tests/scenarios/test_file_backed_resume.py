@@ -15,7 +15,8 @@ from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
 from sefia import Session, Tools, infer
 from sefia.testing import result_response, tool_calls_response
 
-from sefios import FileSessionStorage, InputRequired
+from sefios import FileSessionStorage
+from sefios.exceptions import InputRequired
 from sefios._session_state import bind_session_storage
 from sefios.tools import Input, InputRequest
 

@@ -3,10 +3,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
-from sefios.fastapi import (
+from sefios.fastapi import SefiaHTTP
+from sefios.fastapi.exceptions import (
     AmbiguousInputError,
     InputRequired,
-    SefiaHTTP,
     UnknownInputError,
     UnknownSessionError,
 )
