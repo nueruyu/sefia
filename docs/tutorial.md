@@ -43,7 +43,7 @@ class Summary(BaseModel):
     uncertainty: str
 
 
-infer = domain("com.example.quickstart", version="1").infer
+infer = domain("quickstart").infer
 
 @infer
 async def summarize(article: str) -> Summary:
@@ -161,7 +161,7 @@ class Report(BaseModel):
     summary: str
 
 
-infer = domain("com.example.research", version="1").infer
+infer = domain("research").infer
 
 class ResearchService:
     _web: Tools[WebSearch]

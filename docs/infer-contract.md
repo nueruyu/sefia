@@ -11,7 +11,7 @@ Use explicit parameters, an explicit return type, and a docstring instruction.
 ```python
 from sefios import domain
 
-infer = domain("com.example.reports", version="1").infer
+infer = domain("reports").infer
 
 @infer
 async def summarize(article: str) -> Summary:
@@ -140,12 +140,12 @@ Domain-bound engrave decorators and similar `functools.wraps`-based decorators a
 
 Use a domain-bound `infer` decorator for persisted application boundaries. Without a
 `name`, it uses the function's module-qualified name; pass `name=...` when that
-derived name must not follow a refactor. The domain id and execution name are storage contracts.
-Keep them stable across refactors. Increment the
-domain version when recorded execution shapes change, and use Glyff's domain migration
-API to remap existing sessions. Sefia's internal `inference_step` and `tool_batch`
-records belong to `sefia`, so application migrations do not need to know their
-shapes.
+derived name must not follow a refactor. The domain id and execution name are storage
+contracts. Keep them stable across refactors. Domains start at version `"1"`; pass
+`version=` when migrating an existing domain to a new contract, then use Glyff's
+domain migration API to remap existing sessions. Sefia's internal `inference_step`
+and `tool_batch` records belong to `sefia`, so application migrations do not need to
+know their shapes.
 
 An identity migration does not migrate completed result payloads or Sefia history
 metadata. Keep readers backward-compatible, discard and re-run incompatible records,

@@ -5,7 +5,7 @@ from sefia.testing import result_response, tool_calls_response
 
 from sefios import domain, MemorySessionStorage, SessionScope, get_session_storage
 
-infer = domain("packages.sefios.tests.units.test_scope", version="1").infer
+infer = domain("packages.sefios.tests.units.test_scope").infer
 
 
 class _Probe:

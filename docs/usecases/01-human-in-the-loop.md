@@ -100,7 +100,7 @@ from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input
 
-infer = domain("com.example.research", version="1").infer
+infer = domain("research").infer
 
 
 class Research:

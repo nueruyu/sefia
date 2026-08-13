@@ -17,7 +17,7 @@ class Summary(BaseModel):
     uncertainty: str
 
 
-infer = domain("com.example.reports", version="1").infer
+infer = domain("reports").infer
 
 
 @infer
@@ -102,7 +102,7 @@ class Report(BaseModel):
     sources: list[str]
 
 
-infer = domain("com.example.research", version="1").infer
+infer = domain("research").infer
 
 class ResearchService:
     _web: Tools[WebSearch]                # the field annotation grants the tools
@@ -145,7 +145,7 @@ from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input, WebSearch
 
 
-infer = domain("com.example.research", version="1").infer
+infer = domain("research").infer
 
 class ResearchService:
     _web: Tools[WebSearch]
