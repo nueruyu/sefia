@@ -5,6 +5,10 @@ from sefia import Policy, Tools, policy
 from sefia.testing import memory_session, result_response, tool_calls_response
 from sefios.middleware import StagnationDetector
 
+infer = domain(
+    "packages.sefios.tests.scenarios.test_stagnation_policy", version="1"
+).infer
+
 
 @dataclass
 class SearchResult:
@@ -37,9 +41,7 @@ class Researcher:
         self._web = web
 
     @policy(Policy(middleware=lambda: [StagnationDetector(max_repeats=3)]))
-    @domain(
-        "packages.sefios.tests.scenarios.test_stagnation_policy", version="1"
-    ).infer(name="Researcher.generate_report")
+    @infer
     async def generate_report(self, topic: str) -> Report:
         """
         Generate a report on the given topic by searching the web and summarizing it.

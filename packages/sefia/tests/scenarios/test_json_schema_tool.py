@@ -11,6 +11,10 @@ from sefia.testing import (
 )
 from sefia.tool_collectors import StaticToolCollector
 
+infer = sefia.Domain(
+    glyff.Domain("packages.sefia.tests.scenarios.test_json_schema_tool", version="1")
+).infer
+
 _SEARCH_SCHEMA = {
     "type": "object",
     "properties": {"query": {"type": "string"}},
@@ -29,11 +33,7 @@ class Report:
 class SimpleAgent:
     """An agent that has no tools of its own."""
 
-    @sefia.Domain(
-        glyff.Domain(
-            "packages.sefia.tests.scenarios.test_json_schema_tool", version="1"
-        )
-    ).infer(name="SimpleAgent.generate_report")
+    @infer
     async def generate_report(self, topic: str) -> Report:
         """Generate a report on the given topic."""
         ...

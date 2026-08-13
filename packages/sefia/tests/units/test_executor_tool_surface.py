@@ -10,6 +10,10 @@ from sefia.tool_collectors import DefaultToolCollector
 
 from sefia.testing import MemoryHistoryStorage
 
+infer = sefia.Domain(
+    glyff.Domain("packages.sefia.tests.units.test_executor_tool_surface", version="1")
+).infer
+
 
 class _StubStrategy(InferenceStrategy):
     async def decide_next_step(self, function_info, history, tools, publisher):
@@ -25,20 +29,12 @@ class BothSurface(Protocol):
 
 
 class Service:
-    @sefia.Domain(
-        glyff.Domain(
-            "packages.sefia.tests.units.test_executor_tool_surface", version="1"
-        )
-    ).infer(name="Service.run")
+    @infer
     async def run(self: BothSurface, topic: str) -> str:
         """Entry point."""
         ...
 
-    @sefia.Domain(
-        glyff.Domain(
-            "packages.sefia.tests.units.test_executor_tool_surface", version="1"
-        )
-    ).infer(name="Service.analyze")
+    @infer
     async def analyze(self, topic: str) -> str:
         """A sibling inference, exposed as a tool via the surface."""
         ...

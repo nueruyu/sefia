@@ -10,6 +10,10 @@ from sefios.fastapi import SefiaHTTP
 from sefios.exceptions import InputRequired
 from sefios.tools import Input, Output, OutputMessage
 
+infer = domain(
+    "packages.sefios.tests.units.fastapi.test_http_facade", version="1"
+).infer
+
 
 class StreamingClient(LLMClient):
     def __init__(self, responses: list[str]):
@@ -36,9 +40,7 @@ class OutputAgent:
     def __init__(self, output: Output):
         self._output = output
 
-    @domain("packages.sefios.tests.units.fastapi.test_http_facade", version="1").infer(
-        name="run"
-    )
+    @infer
     async def run(self) -> str:
         """Send an output message."""
         ...
@@ -50,9 +52,7 @@ class InputAgent:
     def __init__(self, input_tool: Input):
         self._input = input_tool
 
-    @domain("packages.sefios.tests.units.fastapi.test_http_facade", version="1").infer(
-        name="run"
-    )
+    @infer
     async def run(self) -> str:
         """Ask for input."""
         ...

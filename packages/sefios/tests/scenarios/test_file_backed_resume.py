@@ -21,6 +21,10 @@ from sefios.exceptions import InputRequired
 from sefios._session_state import bind_session_storage
 from sefios.tools import Input, InputRequest
 
+infer = domain(
+    "packages.sefios.tests.scenarios.test_file_backed_resume", version="1"
+).infer
+
 _SESSION_ID = "file-backed-resume-test"
 
 _TOOL_CALL_RESPONSE = tool_calls_response(
@@ -35,9 +39,7 @@ class _Agent:
     def __init__(self, tool: Input):
         self._tool = tool
 
-    @domain(
-        "packages.sefios.tests.scenarios.test_file_backed_resume", version="1"
-    ).infer(name="_Agent.get_user_name")
+    @infer
     async def get_user_name(self) -> str:
         """Ask the user for their name and report it."""
         ...

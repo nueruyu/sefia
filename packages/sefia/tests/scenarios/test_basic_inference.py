@@ -15,6 +15,10 @@ from sefia.testing import (
     tool_calls_response,
 )
 
+infer = sefia.Domain(
+    glyff.Domain("packages.sefia.tests.scenarios.test_basic_inference", version="1")
+).infer
+
 
 @dataclass
 class SearchResult:
@@ -56,9 +60,7 @@ class Researcher:
     def __init__(self, web: WebToolkit):
         self._web = web
 
-    @sefia.Domain(
-        glyff.Domain("packages.sefia.tests.scenarios.test_basic_inference", version="1")
-    ).infer(name="Researcher.generate_report")
+    @infer
     async def generate_report(self, topic: str) -> Report:
         """
         Generate a report on the given topic by searching the web,
@@ -78,9 +80,7 @@ class BrokenToolkit:
 class SimpleAgent:
     """An agent that has no tools."""
 
-    @sefia.Domain(
-        glyff.Domain("packages.sefia.tests.scenarios.test_basic_inference", version="1")
-    ).infer(name="SimpleAgent.generate_report")
+    @infer
     async def generate_report(self, topic: str) -> Report:
         """
         Generate a report on the given topic.
@@ -176,13 +176,7 @@ async def test_inference_with_tool_exception():
         def __init__(self, kit: BrokenToolkit):
             self._kit = kit
 
-        @sefia.Domain(
-            glyff.Domain(
-                "packages.sefia.tests.scenarios.test_basic_inference", version="1"
-            )
-        ).infer(
-            name="test_inference_with_tool_exception.AgentWithBrokenTool.run_and_report"
-        )
+        @infer
         async def run_and_report(self) -> Report:
             """Run a tool and report on the outcome."""
             ...
@@ -266,9 +260,7 @@ async def test_invalid_response_is_repaired_with_feedback():
 async def test_inference_on_standalone_function():
     """Tests that @infer works correctly on a standalone function without any tools."""
 
-    @sefia.Domain(
-        glyff.Domain("packages.sefia.tests.scenarios.test_basic_inference", version="1")
-    ).infer(name="test_inference_on_standalone_function.summarize_text")
+    @infer
     async def summarize_text(text: str, length: int) -> str:
         """Summarize the given text to the specified length in sentences."""
         ...
@@ -290,18 +282,14 @@ def test_policy_attaches_metadata():
     """`@policy` records its policy under the metadata "policies" key, no matter
     where it sits relative to @infer."""
 
-    @sefia.Domain(
-        glyff.Domain("packages.sefia.tests.scenarios.test_basic_inference", version="1")
-    ).infer(name="test_policy_attaches_metadata.below")
+    @infer
     @policy(_PolicyFixture(count=3))
     async def below(value: int) -> int:
         """Policy applied below @infer."""
         ...
 
     @policy(_PolicyFixture(count=3))
-    @sefia.Domain(
-        glyff.Domain("packages.sefia.tests.scenarios.test_basic_inference", version="1")
-    ).infer(name="test_policy_attaches_metadata.above")
+    @infer
     async def above(value: int) -> int:
         """Policy applied above @infer."""
         ...
@@ -322,14 +310,8 @@ def test_policy_coexists_with_other_metadata():
 
     setattr(fn, "__sefia_metadata__", {"other": True})
 
-    # @policy sits above @so the policy lands on the wrapper chain.
-    decorated = policy(_PolicyFixture(count=2))(
-        sefia.Domain(
-            glyff.Domain(
-                "packages.sefia.tests.scenarios.test_basic_inference", version="1"
-            )
-        ).infer(name="fn")(fn)
-    )
+    # @policy sits above @infer, so the policy lands on the wrapper chain.
+    decorated = policy(_PolicyFixture(count=2))(infer(fn))
 
     metadata = get_metadata(decorated)
     assert metadata.get("other") is True

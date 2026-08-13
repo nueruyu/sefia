@@ -5,13 +5,13 @@ from sefia.testing import result_response, tool_calls_response
 
 from sefios import domain, MemorySessionStorage, SessionScope, get_session_storage
 
+infer = domain("packages.sefios.tests.units.test_scope", version="1").infer
+
 
 class _Probe:
     """Receiver used to exercise the configured tool collector."""
 
-    @domain("packages.sefios.tests.units.test_scope", version="1").infer(
-        name="_Probe.answer"
-    )
+    @infer
     async def answer(self) -> str:
         """Answer using the available tools."""
         ...

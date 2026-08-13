@@ -138,9 +138,9 @@ class Domain:
         *,
         name: str | None = None,
     ) -> Any:
-        """Decorate a function using its name or an explicit stable name."""
+        """Decorate a function using its qualified or explicit name."""
         if func is not None:
-            return engrave_call(self.glyff, func.__name__, func)
+            return engrave_call(self.glyff, func.__qualname__, func)
         if not name:
             raise ValueError("An execution name cannot be empty.")
 

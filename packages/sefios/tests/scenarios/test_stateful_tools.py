@@ -14,6 +14,8 @@ from sefia.testing import result_response, tool_calls_response
 from sefios import domain, MemorySessionStorage, get_call_state_store
 from sefios._session_state import bind_session_storage, get_state_store
 
+infer = domain("packages.sefios.tests.scenarios.test_stateful_tools", version="1").infer
+
 
 @dataclass
 class Report:
@@ -101,11 +103,7 @@ class TestStatefulTool:
             def __init__(self, tool: Input):
                 self._tool = tool
 
-            @domain(
-                "packages.sefios.tests.scenarios.test_stateful_tools", version="1"
-            ).infer(
-                name="TestStatefulTool.test_ask_user_interrupts_and_resumes_correctly.Agent.get_user_name"
-            )
+            @infer
             async def get_user_name(self) -> Report:
                 """Ask the user for their name and create a report."""
                 ...
@@ -177,11 +175,7 @@ class TestStatefulTool:
             def __init__(self, tool: Input):
                 self._tool = tool
 
-            @domain(
-                "packages.sefios.tests.scenarios.test_stateful_tools", version="1"
-            ).infer(
-                name="TestStatefulTool.test_multiple_ask_user_calls_are_independent.Agent.get_profile"
-            )
+            @infer
             async def get_profile(self) -> Report:
                 """Ask for name, then age, then report."""
                 ...

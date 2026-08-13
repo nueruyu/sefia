@@ -24,6 +24,10 @@ from sefios._session_state import bind_session_storage
 from sefios.middleware import HistoryCompactor
 from sefios.tools import Input, InputRequest
 
+infer = domain(
+    "packages.sefios.tests.scenarios.test_history_compaction", version="1"
+).infer
+
 _SESSION_ID = "history-compaction-test"
 
 
@@ -48,9 +52,7 @@ class _Agent:
         self._notes = notes
         self._input = input_tool
 
-    @domain(
-        "packages.sefios.tests.scenarios.test_history_compaction", version="1"
-    ).infer(name="_Agent.chat")
+    @infer
     async def chat(self) -> str:
         """Take notes for the user and confirm before finishing."""
         ...

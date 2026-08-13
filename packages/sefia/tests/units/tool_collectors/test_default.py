@@ -9,6 +9,10 @@ from sefia.exceptions import ToolConflictError
 from sefia.inference import Capability
 from sefia.tool_collectors import DefaultToolCollector
 
+infer = sefia.Domain(
+    glyff.Domain("packages.sefia.tests.units.tool_collectors.test_default", version="1")
+).infer
+
 
 class WebToolkit:
     """A two-method toolkit; discovery only reads its names and docstrings."""
@@ -227,11 +231,7 @@ class SelfMethodAgent:
         """A public helper, but it belongs to the running instance."""
         return value
 
-    @sefia.Domain(
-        glyff.Domain(
-            "packages.sefia.tests.units.tool_collectors.test_default", version="1"
-        )
-    ).infer(name="SelfMethodAgent.run")
+    @infer
     async def run(self, task: str) -> str:
         """An inference entry point — also never a self-tool."""
         ...
@@ -245,11 +245,7 @@ def test_collect_never_exposes_the_instance_own_methods():
 class SubAgent:
     """A nested agent whose @infer method is a tool once granted as a field."""
 
-    @sefia.Domain(
-        glyff.Domain(
-            "packages.sefia.tests.units.tool_collectors.test_default", version="1"
-        )
-    ).infer(name="SubAgent.analyze")
+    @infer
     async def analyze(self, topic: str) -> str:
         """Analyze the topic."""
         ...

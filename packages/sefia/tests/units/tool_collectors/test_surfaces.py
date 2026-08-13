@@ -7,6 +7,12 @@ from sefia import Tools
 from sefia.inference import Capability
 from sefia.tool_collectors import DefaultToolCollector
 
+infer = sefia.Domain(
+    glyff.Domain(
+        "packages.sefia.tests.units.tool_collectors.test_surfaces", version="1"
+    )
+).infer
+
 
 class WebToolkit:
     """A two-method toolkit; discovery only reads its names and docstrings."""
@@ -74,11 +80,7 @@ class Researcher:
         """Score a URL."""
         return 1.0
 
-    @sefia.Domain(
-        glyff.Domain(
-            "packages.sefia.tests.units.tool_collectors.test_surfaces", version="1"
-        )
-    ).infer(name="Researcher.run")
+    @infer
     async def run(self, topic: str) -> str:
         """Research the topic."""
         ...

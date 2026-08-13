@@ -13,6 +13,10 @@ from sefia.event_system import EventHandler
 from sefia.llm import LLMResponse
 from sefia.testing import MockLLMClient, memory_session, result_response
 
+infer = sefia.Domain(
+    glyff.Domain("packages.sefia.tests.scenarios.test_profiles", version="1")
+).infer
+
 
 @dataclass
 class Report:
@@ -38,16 +42,12 @@ class _LabelPolicy(Policy):
 
 
 class _ProfileAgent:
-    @sefia.Domain(
-        glyff.Domain("packages.sefia.tests.scenarios.test_profiles", version="1")
-    ).infer(name="_ProfileAgent.with_default")
+    @infer
     async def with_default(self, topic: str) -> Report:
         """Run on the session default model."""
         ...
 
-    @sefia.Domain(
-        glyff.Domain("packages.sefia.tests.scenarios.test_profiles", version="1")
-    ).infer(name="_ProfileAgent.with_fast")
+    @infer
     @profile("fast")
     async def with_fast(self, topic: str) -> Report:
         """Run on the 'fast' profile."""
@@ -55,9 +55,7 @@ class _ProfileAgent:
 
 
 class _MissingProfileAgent:
-    @sefia.Domain(
-        glyff.Domain("packages.sefia.tests.scenarios.test_profiles", version="1")
-    ).infer(name="_MissingProfileAgent.step")
+    @infer
     @profile("missing")
     async def step(self, topic: str) -> Report:
         """Selects a profile that was never registered."""
@@ -68,18 +66,14 @@ def test_profile_attaches_key_metadata():
     """`@profile` records the profile key under the metadata "profile" slot, no
     matter where it sits relative to @infer."""
 
-    @sefia.Domain(
-        glyff.Domain("packages.sefia.tests.scenarios.test_profiles", version="1")
-    ).infer(name="test_profile_attaches_key_metadata.below")
+    @infer
     @profile("fast")
     async def below(value: int) -> int:
         """Profile selected below @infer."""
         ...
 
     @profile("smart")
-    @sefia.Domain(
-        glyff.Domain("packages.sefia.tests.scenarios.test_profiles", version="1")
-    ).infer(name="test_profile_attaches_key_metadata.above")
+    @infer
     async def above(value: int) -> int:
         """Profile selected above @infer."""
         ...
@@ -139,9 +133,7 @@ async def test_policy_layering_session_profile_function():
     log: list[str] = []
 
     class Agent:
-        @sefia.Domain(
-            glyff.Domain("packages.sefia.tests.scenarios.test_profiles", version="1")
-        ).infer(name="test_policy_layering_session_profile_function.Agent.step")
+        @infer
         @policy(_LabelPolicy(label="function", log=log))
         @profile("fast")
         async def step(self, topic: str) -> Report:
@@ -205,7 +197,7 @@ async def test_policy_layering_includes_domain_defaults():
         policies=[_LabelPolicy(label="domain", log=log)],
     )
 
-    @reports.infer(name="test_policy_layering_includes_domain_defaults.step")
+    @reports.infer
     @policy(_LabelPolicy(label="function", log=log))
     async def step(topic: str) -> Report: ...
 
@@ -272,9 +264,7 @@ async def test_enum_key_selects_profile():
     """A profile key can be any hashable, e.g. an Enum member."""
 
     class Agent:
-        @sefia.Domain(
-            glyff.Domain("packages.sefia.tests.scenarios.test_profiles", version="1")
-        ).infer(name="test_enum_key_selects_profile.Agent.step")
+        @infer
         @profile(_Models.SMART)
         async def step(self, topic: str) -> Report:
             """Runs on the profile keyed by an enum member."""
@@ -300,9 +290,7 @@ async def test_unknown_enum_key_lists_registered():
     arbitrary keys are not necessarily orderable)."""
 
     class Agent:
-        @sefia.Domain(
-            glyff.Domain("packages.sefia.tests.scenarios.test_profiles", version="1")
-        ).infer(name="test_unknown_enum_key_lists_registered.Agent.step")
+        @infer
         @profile(_Models.FAST)
         async def step(self, topic: str) -> Report:
             """Selects a profile keyed by an enum member that is not registered."""

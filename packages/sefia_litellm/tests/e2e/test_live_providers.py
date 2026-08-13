@@ -17,6 +17,10 @@ from dataclasses import dataclass
 import pytest
 from sefia import Tools
 
+infer = sefia.Domain(
+    glyff.Domain("packages.sefia_litellm.tests.e2e.test_live_providers", version="1")
+).infer
+
 pytestmark = pytest.mark.e2e
 
 # An arbitrary value no model can guess: if it shows up in the final answer,
@@ -24,9 +28,7 @@ pytestmark = pytest.mark.e2e
 _SENTINEL = "XK-7391-QZ"
 
 
-@sefia.Domain(
-    glyff.Domain("packages.sefia_litellm.tests.e2e.test_live_providers", version="1")
-).infer(name="echo_word")
+@infer
 async def echo_word(word: str) -> str:
     """Reply with exactly the given word, lowercase, and nothing else."""
     ...
@@ -38,9 +40,7 @@ class Capital:
     country: str
 
 
-@sefia.Domain(
-    glyff.Domain("packages.sefia_litellm.tests.e2e.test_live_providers", version="1")
-).infer(name="capital_of")
+@infer
 async def capital_of(country: str) -> Capital:
     """Return the capital city of the given country."""
     ...
@@ -65,11 +65,7 @@ class VaultAgent:
     def __init__(self, vault: VaultToolkit) -> None:
         self._vault = vault
 
-    @sefia.Domain(
-        glyff.Domain(
-            "packages.sefia_litellm.tests.e2e.test_live_providers", version="1"
-        )
-    ).infer(name="VaultAgent.fetch_launch_code")
+    @infer
     async def fetch_launch_code(self) -> str:
         """Read the vault value stored under the key 'launch-code' using the
         available tool, then answer with that exact value and nothing else."""

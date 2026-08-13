@@ -80,7 +80,9 @@ async def test_domain_engrave_uses_the_function_name():
         )
     ]
     assert len(executions) == 1
-    assert executions[0].id.name == glyff.ExecutionName("prepare")
+    assert executions[0].id.name.value.endswith(
+        "test_domain_engrave_uses_the_function_name.<locals>.prepare"
+    )
 
 
 async def test_domain_engrave_accepts_an_explicit_name():

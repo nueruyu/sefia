@@ -17,6 +17,12 @@ from sefia.testing import (
     tool_calls_response,
 )
 
+infer = sefia.Domain(
+    glyff.Domain(
+        "packages.sefia.tests.scenarios.test_concurrent_tool_calls", version="1"
+    )
+).infer
+
 
 @dataclass
 class Report:
@@ -50,11 +56,7 @@ class Researcher:
     def __init__(self, kit: HandshakeToolkit):
         self._kit = kit
 
-    @sefia.Domain(
-        glyff.Domain(
-            "packages.sefia.tests.scenarios.test_concurrent_tool_calls", version="1"
-        )
-    ).infer(name="Researcher.generate_report")
+    @infer
     async def generate_report(self, topic: str) -> Report:
         """Generate a report on the given topic."""
         ...
@@ -110,11 +112,7 @@ class Assistant:
     def __init__(self, kit: PausingToolkit):
         self._kit = kit
 
-    @sefia.Domain(
-        glyff.Domain(
-            "packages.sefia.tests.scenarios.test_concurrent_tool_calls", version="1"
-        )
-    ).infer(name="Assistant.prepare_report")
+    @infer
     async def prepare_report(self, topic: str) -> Report:
         """Prepare a report on the given topic."""
         ...

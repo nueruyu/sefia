@@ -10,6 +10,8 @@ from sefios import domain, MemorySessionStorage
 from sefios._session_state import bind_session_storage
 from sefios.tools import Output, OutputMessage
 
+infer = domain("packages.sefios.tests.scenarios.test_output_tool", version="1").infer
+
 
 class Agent:
     _output: Tools[Output]
@@ -17,9 +19,7 @@ class Agent:
     def __init__(self, output_tool: Output):
         self._output = output_tool
 
-    @domain("packages.sefios.tests.scenarios.test_output_tool", version="1").infer(
-        name="greet"
-    )
+    @infer
     async def greet(self) -> str:
         """Send a greeting to the user, then report that it was sent."""
         ...
