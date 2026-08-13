@@ -63,7 +63,7 @@ class Input:
         if self._on_prompt_delta is not None:
             await maybe_await(self._on_prompt_delta(interaction_id, text))
 
-    @GLYFF_DOMAIN.engrave(name="input")
+    @GLYFF_DOMAIN.engrave(name="tools.input.get_input")
     async def get_input(
         self,
         prompt: Annotated[str, Field(min_length=1)] | None = None,

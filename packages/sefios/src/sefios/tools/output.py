@@ -47,7 +47,7 @@ class Output:
         if self._on_message_delta is not None:
             await maybe_await(self._on_message_delta(interaction_id, text))
 
-    @GLYFF_DOMAIN.engrave(name="output")
+    @GLYFF_DOMAIN.engrave(name="tools.output.send_output")
     async def send_output(
         self,
         message: Annotated[str, Field(min_length=1)],
