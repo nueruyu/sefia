@@ -1,0 +1,57 @@
+from collections.abc import Hashable, Sequence
+from typing import Awaitable, Callable, ParamSpec, TypeVar
+
+import glyff
+
+from ._decorators import _infer
+from ._glyff import engrave as engrave_call
+from ._interfaces import Policy
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+class Domain:
+    """Sefia authoring defaults bound to a versioned Glyff ownership domain."""
+
+    def __init__(
+        self,
+        domain: glyff.Domain,
+        *,
+        default_profile: Hashable | None = None,
+        policies: Sequence[Policy] = (),
+    ) -> None:
+        self.glyff = domain
+        self.default_profile = default_profile
+        self.policies = tuple(policies)
+
+    def infer(self, *, name: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
+        """Decorate an inferred function with stable domain-owned identity."""
+
+        if not name:
+            raise ValueError("An inference execution name cannot be empty.")
+
+        def decorator(func: Callable[P, R]) -> Callable[P, R]:
+            return _infer(
+                func,
+                domain=self.glyff,
+                name=name,
+                domain_profile=self.default_profile,
+                domain_policies=self.policies,
+            )
+
+        return decorator
+
+    def engrave(
+        self, *, name: str
+    ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
+        """Decorate a non-inference function with stable domain-owned identity."""
+        if not name:
+            raise ValueError("An execution name cannot be empty.")
+
+        def decorator(
+            func: Callable[P, Awaitable[R]],
+        ) -> Callable[P, Awaitable[R]]:
+            return engrave_call(self.glyff, name, func)
+
+        return decorator

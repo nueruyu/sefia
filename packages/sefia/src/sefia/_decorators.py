@@ -13,7 +13,7 @@ from typing import (
     cast,
 )
 
-from glyff import engrave
+import glyff
 
 from . import _metadata
 from ._context import get_context
@@ -22,6 +22,7 @@ from ._interfaces import InferenceMiddleware, Policy, StepMiddleware
 from ._profiles import Profile
 from ._tool_system import set_concurrent, set_stream_handler
 from .event_system import EventPublisher
+from ._glyff import DEFAULT_APPLICATION_DOMAIN, engrave
 
 C = TypeVar("C", bound=Callable[..., object])
 P = ParamSpec("P")
@@ -204,6 +205,23 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
     ``__wrapped__`` chain (``functools.wraps``) for the policy to be found.
     """
 
+    return _infer(
+        func,
+        domain=DEFAULT_APPLICATION_DOMAIN,
+        name=func.__name__,
+        domain_profile=None,
+        domain_policies=(),
+    )
+
+
+def _infer(
+    func: Callable[P, R],
+    *,
+    domain: glyff.Domain,
+    name: str,
+    domain_profile: Hashable | None,
+    domain_policies: tuple[Policy, ...],
+) -> Callable[P, R]:
     # The decorator hierarchy is static after decoration, so resolve the
     # innermost function once here rather than on every invocation.
     unwrapped = inspect.unwrap(func)
@@ -215,11 +233,16 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
         metadata = _metadata.get_metadata(unwrapped)
         fn_policies = metadata.get(_metadata.KEY_POLICIES, [])
 
-        profile_key = metadata.get(_metadata.KEY_PROFILE_KEY)
+        profile_key = metadata.get(_metadata.KEY_PROFILE_KEY, domain_profile)
         inference_strategy, profile_policies = context.resolve_profile(profile_key)
 
         # Additive across layers, most-general first (session -> profile -> function).
-        all_policies = [*context.policies, *profile_policies, *fn_policies]
+        all_policies = [
+            *context.policies,
+            *domain_policies,
+            *profile_policies,
+            *fn_policies,
+        ]
         all_handlers = [
             handler for p in all_policies for handler in p.create_handlers()
         ]
@@ -235,7 +258,7 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
             kwargs=kwargs,
             inference_strategy=inference_strategy,
             tool_collector=context.tool_collector,
-            engrave=engrave,
+            engrave=None,
             publisher=publisher,
             inference_middlewares=inference_middlewares,
             step_middlewares=step_middlewares,
@@ -248,11 +271,11 @@ def infer(func: Callable[P, R]) -> Callable[P, R]:
         # an ordinary error instead of an engraved, replay-forever failure.
         # The engraved call takes the user's args so glyff keys the record on
         # them; the executor is captured by closure.
-        @engrave
         @functools.wraps(func)
         async def _engraved_run(*_args, **_kwargs):
             return await executor.run()
 
-        return await _engraved_run(*args, **kwargs)
+        engraved_run = engrave(domain, name, _engraved_run)
+        return await engraved_run(*args, **kwargs)
 
     return cast(Callable[P, R], _run)

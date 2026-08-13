@@ -29,9 +29,10 @@ T = TypeVar("T")
 def _execution_id_to_data(execution_id: ExecutionId) -> dict[str, object]:
     parent_id = execution_id.parent_id
     return {
-        "name": execution_id.name,
+        "domain_id": execution_id.domain_id.value,
+        "name": execution_id.name.value,
         "sequence": execution_id.sequence,
-        "args_hash": execution_id.args_hash,
+        "arguments_digest": execution_id.arguments_digest.value,
         "parent_id": _execution_id_to_data(parent_id) if parent_id else None,
     }
 

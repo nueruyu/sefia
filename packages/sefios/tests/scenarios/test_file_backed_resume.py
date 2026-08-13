@@ -9,9 +9,10 @@ human-in-the-loop flow.
 """
 
 import glyff
+from glyff.serialization import FallbackByTypeQualname
 import pytest
 from glyff_file_store import JsonFileBackend
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
+from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
 from sefia import Session, Tools, infer
 from sefia.testing import result_response, tool_calls_response
 
@@ -51,12 +52,12 @@ async def test_pause_resume_survives_process_restart(tmp_path, make_mock_llm):
     def make_glyff_session() -> glyff.Session:
         # A fresh backend instance per run, like a new process would create.
         return glyff.Session(
-            id=_SESSION_ID,
-            backend=JsonFileBackend(
-                base_dir=tmp_path / "glyff", session_id=_SESSION_ID
-            ),
+            id=glyff.SessionId(_SESSION_ID),
+            backend=JsonFileBackend(base_dir=tmp_path / "glyff"),
             serializer=PydanticSerializer(),
-            hasher=PydanticArgsHasher(),
+            argument_canonicalizer=PydanticArgumentCanonicalizer(
+                FallbackByTypeQualname()
+            ),
         )
 
     def make_state_storage() -> FileSessionStorage:

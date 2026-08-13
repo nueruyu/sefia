@@ -2,6 +2,7 @@ from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from . import events
 from ._history import StepHistory
+from ._glyff import RUNTIME_DOMAIN, engrave as engrave_call
 from ._interfaces import InferenceStrategy
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._interfaces.middleware import (
@@ -70,7 +71,7 @@ class InferenceExecutor:
         kwargs: dict,
         inference_strategy: InferenceStrategy,
         tool_collector: ToolCollector,
-        engrave: Callable[[Any], Any],
+        engrave: Callable[[Any], Any] | None,
         publisher: EventPublisher,
         history_storage: HistoryStorage,
         inference_middlewares: list[InferenceMiddleware] | None = None,
@@ -89,8 +90,16 @@ class InferenceExecutor:
             self.func_info.capabilities
         )
 
-        self._next_step_engraved = _wrap(self._next_step, engrave)
-        self._call_tools_engraved = _wrap(self._call_tools, engrave)
+        if engrave is None:
+            self._next_step_engraved = engrave_call(
+                RUNTIME_DOMAIN, "inference_step", self._next_step
+            )
+            self._call_tools_engraved = engrave_call(
+                RUNTIME_DOMAIN, "tool_batch", self._call_tools
+            )
+        else:
+            self._next_step_engraved = _wrap(self._next_step, engrave)
+            self._call_tools_engraved = _wrap(self._call_tools, engrave)
 
     async def _next_step(self, step: int) -> InferenceDecision:
         """One engraved inference-strategy call, keyed on the step index (not

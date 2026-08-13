@@ -30,17 +30,19 @@ At a high level:
 `infer()` returns a wrapper that, on each call (`_decorators.py`):
 
 1. **Resolves configuration** — gets the current `SessionContext` (a contextvar),
-   reads the function's `__sefia_metadata__` for any `@policy`/`@profile`, resolves
+   reads domain defaults and the function's `__sefia_metadata__` for any
+   `@policy`/`@profile`, resolves
    the profile to an inference strategy, and layers policies
-   **session → profile → function** (most specific last). Policies produce *handlers*
+   **session → domain → profile → function** (most specific last). Policies produce *handlers*
    (observation) and *middleware* (control), which are split into the two seams.
 2. **Builds an `InferenceExecutor`** with the function, the bound args, the strategy,
    and the tool collector.
 3. **Engraves the run.** The configuration above happens *outside* the engrave
    boundary on purpose — a misconfigured policy should surface as an ordinary error,
    not an engraved failure that replays forever. Only `executor.run()` is wrapped in
-   an inner `@engrave` that takes the user's args, so glyff keys the durable record
-   on the call and its arguments.
+   a domain-bound engraved function with an explicit stable name. Its user arguments
+   key the durable record; internal steps run under the independent `sefia.runtime`
+   domain as `inference_step` and `tool_batch`.
 
 The original function body is never executed — it exists only so its **signature,
 type hints, and docstring** can be read (`FunctionInfo.create` in `inference.py`).
@@ -218,7 +220,7 @@ side-effect ordering matters or they mutate shared state without locking.
 ## Durability and replay (glyff)
 
 Every engraved call (the `@infer` run, each model step, each tool batch) is keyed by
-glyff on its **call identity + arguments** (content-addressed). For method calls,
+glyff on its **domain + explicit name + arguments** (content-addressed). For method calls,
 those arguments include `self`: `self` is not prompt input, but it still contributes
 to the durable execution identity. On a later invocation of the same session:
 

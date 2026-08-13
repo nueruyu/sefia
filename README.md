@@ -9,7 +9,7 @@
 
 ```python
 from pydantic import BaseModel
-from sefios import infer
+from sefios import domain
 
 
 class Summary(BaseModel):
@@ -17,7 +17,10 @@ class Summary(BaseModel):
     uncertainty: str
 
 
-@infer
+reports = domain("com.example.reports", version="1")
+
+
+@reports.infer(name="summarize")
 async def summarize(article: str) -> Summary:
     """Summarize the article for a technical audience; note key uncertainty."""
     ...
@@ -75,8 +78,8 @@ The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is inst
 automatically.
 
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
-`infer` / `concurrent` / `preview` / `policy` / `profile` decorators, `Tools`,
-`AsRawText`, `Policy` / `Profile`, and `engrave` — alongside its own `SessionScope` and
+`domain` / `infer` / `concurrent` / `preview` / `policy` / `profile` decorators,
+`Tools`, `AsRawText`, and `Policy` / `Profile` — alongside its own `SessionScope` and
 batteries, so application code needs only `sefios`. Reach into `sefia` directly for the
 extension seams (a custom policy, strategy, client, or tool collector) and tool-call
 context helpers such as `current_tool_call_id_for`.

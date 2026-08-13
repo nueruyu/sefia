@@ -1,7 +1,7 @@
 import json
 
 import glyff
-from glyff import ArgsHasher, Serializer
+from glyff import ArgumentCanonicalizer, Serializer
 from glyff.store import MemoryBackend
 
 from sefia import Session, Tools, infer
@@ -44,7 +44,7 @@ def _responses() -> list[LLMResponse]:
 
 class TestOutput:
     async def test_send_output_emits_once_and_replays_without_re_emitting(
-        self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
+        self, serializer: Serializer, hasher: ArgumentCanonicalizer, make_mock_llm
     ):
         emitted: list[OutputMessage] = []
         agent = Agent(Output(on_output=emitted.append))
@@ -54,7 +54,10 @@ class TestOutput:
 
         mock_llm = make_mock_llm(_responses())
         async with glyff.Session(
-            id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+            id=glyff.SessionId(session_id),
+            backend=glyff_store,
+            serializer=serializer,
+            argument_canonicalizer=hasher,
         ) as gs:
             with bind_session_storage(sefia_store):
                 async with Session(llm_client=mock_llm, glyff_session=gs):
@@ -67,7 +70,10 @@ class TestOutput:
         # Re-invoking the same session must replay without re-emitting.
         replay_llm = make_mock_llm([])
         async with glyff.Session(
-            id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+            id=glyff.SessionId(session_id),
+            backend=glyff_store,
+            serializer=serializer,
+            argument_canonicalizer=hasher,
         ) as gs:
             with bind_session_storage(sefia_store):
                 async with Session(llm_client=replay_llm, glyff_session=gs):

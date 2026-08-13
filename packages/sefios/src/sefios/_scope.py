@@ -5,7 +5,8 @@ from pathlib import Path
 import glyff
 import glyff_file_store
 import sefia
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
+from glyff.serialization import FallbackByTypeQualname
+from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
 from sefia import HistoryStorage, Profile, Policy, ToolCollector
 from sefia.llm import LLMClient
 
@@ -95,13 +96,14 @@ class SessionScope:
 
         backend = glyff_file_store.JsonFileBackend(
             base_dir=self.session_dir / "glyff_sessions",
-            session_id=session_id,
         )
         gs = glyff.Session(
-            id=session_id,
+            id=glyff.SessionId(session_id),
             backend=backend,
             serializer=serializer,
-            hasher=PydanticArgsHasher(),
+            argument_canonicalizer=PydanticArgumentCanonicalizer(
+                FallbackByTypeQualname()
+            ),
         )
         if self.session_storage_factory is not None:
             session_storage = self.session_storage_factory(session_id)

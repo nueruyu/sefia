@@ -22,8 +22,9 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Callable, Coroutine
 
 import glyff
+from glyff.serialization import FallbackByTypeQualname
 from glyff.store import MemoryBackend
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
+from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
 
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._session import Session
@@ -131,10 +132,10 @@ async def memory_session(
     pause/resume across runs. Extra keyword arguments go to ``Session``.
     """
     async with glyff.Session(
-        id=session_id,
+        id=glyff.SessionId(session_id),
         backend=backend if backend is not None else MemoryBackend(),
         serializer=PydanticSerializer(),
-        hasher=PydanticArgsHasher(),
+        argument_canonicalizer=PydanticArgumentCanonicalizer(FallbackByTypeQualname()),
     ) as glyff_session:
         async with Session(
             llm_client=llm_client, glyff_session=glyff_session, **session_kwargs

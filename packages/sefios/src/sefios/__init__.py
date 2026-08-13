@@ -1,6 +1,5 @@
 """Opinionated stack for building applications with the Sefia framework."""
 
-from glyff import engrave
 from sefia import (
     AsRawText,
     Policy,
@@ -14,6 +13,7 @@ from sefia import (
 )
 
 from ._scope import SessionScope
+from ._domain import domain
 from ._session_state import get_call_state_store, get_session_storage
 from ._state_store import StateStore
 from .state import StateContainer, StateRegistry, get_state, state
@@ -30,7 +30,7 @@ __all__ = [
     "Profile",
     "Tools",
     "AsRawText",
-    "engrave",
+    "domain",
     # sefios' own front door and batteries.
     "SessionScope",
     "SessionStorage",

@@ -9,7 +9,11 @@ contract used to run an LLM-backed call.
 Use explicit parameters, an explicit return type, and a docstring instruction.
 
 ```python
-@infer
+from sefios import domain
+
+reports = domain("com.example.reports", version="1")
+
+@reports.infer(name="summarize")
 async def summarize(article: str) -> Summary:
     """Summarize the article and return a structured summary."""
     ...
@@ -110,8 +114,8 @@ write permissions.
 ### `self` and replay identity
 
 `self` participates in the engraved call identity even though it is not prompt
-data. With the default Glyff/Pydantic hasher a dataclass or Pydantic value is
-hashed by value, while an opaque object falls back to a qualified name. If an
+data. With the default Glyff/Pydantic canonicalizer a dataclass or Pydantic value is
+represented by value, while an opaque object falls back to its qualified type name. If an
 instance must be replay-distinct by tenant/user/store, include that identity in a
 stable field or argument rather than relying on object identity.
 
@@ -130,7 +134,20 @@ serializable data.
 A decorator applied to a tool method must return a function (use `functools.wraps`);
 one that returns a non-function callable — a class-based wrapper or a bare
 `functools.partial` — makes the method invisible to discovery, with no error.
-`@engrave` and similar `functools.wraps`-based decorators are fine.
+Domain-bound engrave decorators and similar `functools.wraps`-based decorators are fine.
+
+## Persistent execution identity
+
+Use `Domain.infer(name=...)` for persisted application boundaries. The domain id and
+explicit name are storage contracts: keep them stable across refactors. Increment the
+domain version when recorded execution shapes change, and use Glyff's domain migration
+API to remap existing sessions. Sefia's internal `inference_step` and `tool_batch`
+records belong to `sefia.runtime`, so application migrations do not need to know their
+shapes.
+
+An identity migration does not migrate completed result payloads or Sefia history
+metadata. Keep readers backward-compatible, discard and re-run incompatible records,
+or migrate those payloads separately.
 
 ## Practical rules
 

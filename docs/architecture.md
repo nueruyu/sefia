@@ -75,8 +75,10 @@ Modules with a leading underscore are internal; the public surface is whatever
 
 | Module | Responsibility | Key symbols |
 | --- | --- | --- |
+| `_domain.py` | Composes a versioned Glyff domain with Sefia profile and policy defaults. | `Domain` |
 | `_decorators.py` | The entry points. Calling `@infer` builds the executor and engraves the run. | `infer`, `concurrent`, `preview`, `policy`, `profile` |
 | `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
+| `_glyff.py` | Owns the default application/runtime Glyff domains and stable-name engraving adapter. | internal |
 | `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
 | `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallDecision`, `FinalAnswerDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
@@ -112,7 +114,9 @@ implementation noted in parentheses.
 
 | Path | Responsibility |
 | --- | --- |
-| `__init__.py` | Re-exports the everyday authoring surface (`infer`, `concurrent`, `preview`, `policy`, `profile`, `Tools`, `AsRawText`, `Policy`, `Profile` from `sefia`; `engrave` from `glyff`) so application code imports only from `sefios`. |
+| `__init__.py` | Re-exports the everyday authoring surface (`domain`, `infer`, `concurrent`, `preview`, `policy`, `profile`, `Tools`, `AsRawText`, `Policy`, `Profile`) so application code imports only from `sefios`. |
+| `_domain.py` | Convenience constructor for an application-owned `sefia.Domain`. |
+| `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `_input_channel.py` | Internal persisted routing between the `Input` tool and host-provided CLI/HTTP input. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
@@ -162,8 +166,8 @@ implementation noted in parentheses.
   package root. Ordinary application extension points and configuration types may
   remain at the root (for example, `Policy`).
 - **Import from `sefios`.** It re-exports the everyday authoring surface
-  (`infer` / `concurrent` / `preview` / `policy` / `profile`, `Tools`, `AsRawText`,
-  `Policy` / `Profile` from `sefia`; `engrave` from `glyff`), so application code
+  (`domain` / `infer` / `concurrent` / `preview` / `policy` / `profile`, `Tools`,
+  `AsRawText`, `Policy` / `Profile`), so application code
   touches one package. Low-level contracts intended mainly for extension-library
   authors come from their specialized `sefia` submodules instead.
 - **Interfaces live in `_interfaces/`** as ABCs; concrete defaults live in feature

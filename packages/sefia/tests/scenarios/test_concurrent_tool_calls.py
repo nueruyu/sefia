@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass
 
 import pytest
-from glyff import engrave
+from glyff import Domain
 from glyff.store import MemoryBackend
 
 from sefia import Tools, concurrent, infer
@@ -84,7 +84,7 @@ class PausingToolkit:
         self.answer: str | None = None
 
     @concurrent
-    @engrave
+    @Domain("sefia.tests", version="1").engrave
     async def fetch_data(self, key: str) -> str:
         """Fetch data for a key."""
         self.fetch_runs += 1

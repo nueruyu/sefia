@@ -1,4 +1,5 @@
 from ._decorators import concurrent, infer, policy, preview, profile
+from ._domain import Domain
 from ._interfaces import (
     HistorySnapshot,
     HistoryStorage,
@@ -25,6 +26,7 @@ from ._tool_system import (
 
 __all__ = [
     "infer",
+    "Domain",
     "concurrent",
     "preview",
     "policy",

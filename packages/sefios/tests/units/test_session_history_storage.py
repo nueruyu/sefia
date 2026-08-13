@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from glyff import ExecutionId
+from glyff import ArgumentsDigest, DomainId, ExecutionId, ExecutionName
 from sefia import HistorySnapshot
 from sefia.inference import ToolCallDecision, ToolCallRequest, ToolCallResult
 
@@ -12,7 +12,11 @@ from sefios._session_state import bind_session_storage
 
 def _execution_id(args_hash: str = "hash-a") -> ExecutionId:
     return ExecutionId(
-        parent_id=None, name="Agent.chat", sequence=0, args_hash=args_hash
+        parent_id=None,
+        domain_id=DomainId("sefios.tests"),
+        name=ExecutionName("Agent.chat"),
+        sequence=0,
+        arguments_digest=ArgumentsDigest(args_hash),
     )
 
 

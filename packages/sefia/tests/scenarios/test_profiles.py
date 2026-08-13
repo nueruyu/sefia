@@ -3,10 +3,10 @@ from enum import Enum, auto
 
 import glyff
 import pytest
-from glyff import ArgsHasher, Serializer
+from glyff import ArgumentCanonicalizer, Serializer
 from glyff.store import MemoryBackend
 
-from sefia import Policy, Profile, Session, infer, policy, profile
+from sefia import Domain, Policy, Profile, Session, infer, policy, profile
 from sefia._metadata import KEY_PROFILE_KEY, get_metadata
 from sefia.event_system import EventHandler
 from sefia.llm import LLMResponse
@@ -153,6 +153,63 @@ async def test_policy_layering_session_profile_function():
     assert log == ["session", "profile", "function"]
 
 
+async def test_domain_default_profile_and_function_override():
+    fast_llm = MockLLMClient(responses=[_result("from domain")])
+    smart_llm = MockLLMClient(responses=[_result("from function")])
+    reports = Domain(glyff.Domain("tests.reports", version="1"), default_profile="fast")
+
+    @reports.infer(name="with_domain_default")
+    async def with_domain_default(topic: str) -> Report: ...
+
+    @reports.infer(name="with_function_override")
+    @profile("smart")
+    async def with_function_override(topic: str) -> Report: ...
+
+    async with memory_session(
+        MockLLMClient(responses=[]),
+        session_id="domain-profiles",
+        profiles=[
+            Profile(key="fast", client=fast_llm),
+            Profile(key="smart", client=smart_llm),
+        ],
+    ):
+        domain_report = await with_domain_default(topic="t")
+        function_report = await with_function_override(topic="t")
+
+    assert domain_report.summary == "from domain"
+    assert function_report.summary == "from function"
+
+
+async def test_policy_layering_includes_domain_defaults():
+    log: list[str] = []
+    reports = Domain(
+        glyff.Domain("tests.reports", version="1"),
+        default_profile="fast",
+        policies=[_LabelPolicy(label="domain", log=log)],
+    )
+
+    @reports.infer(name="step")
+    @policy(_LabelPolicy(label="function", log=log))
+    async def step(topic: str) -> Report: ...
+
+    llm = MockLLMClient(responses=[_result("ok")])
+    async with memory_session(
+        llm,
+        session_id="domain-policy-layering",
+        policies=[_LabelPolicy(label="session", log=log)],
+        profiles=[
+            Profile(
+                key="fast",
+                client=llm,
+                policies=[_LabelPolicy(label="profile", log=log)],
+            )
+        ],
+    ):
+        await step(topic="t")
+
+    assert log == ["session", "domain", "profile", "function"]
+
+
 async def test_unknown_profile_raises():
     """Referencing a profile the session does not register fails fast at call
     time with the list of registered profiles."""
@@ -167,7 +224,9 @@ async def test_unknown_profile_raises():
             await _MissingProfileAgent().step(topic="t")
 
 
-def test_duplicate_profile_keys_rejected(serializer: Serializer, hasher: ArgsHasher):
+def test_duplicate_profile_keys_rejected(
+    serializer: Serializer, hasher: ArgumentCanonicalizer
+):
     """The Session rejects two profiles sharing a key up front."""
     a = MockLLMClient(responses=[])
     b = MockLLMClient(responses=[])
@@ -175,7 +234,10 @@ def test_duplicate_profile_keys_rejected(serializer: Serializer, hasher: ArgsHas
         Session(
             llm_client=a,
             glyff_session=glyff.Session(
-                id="dup", backend=MemoryBackend(), serializer=serializer, hasher=hasher
+                id=glyff.SessionId("dup"),
+                backend=MemoryBackend(),
+                serializer=serializer,
+                argument_canonicalizer=hasher,
             ),
             profiles=[
                 Profile(key="dup", client=a),

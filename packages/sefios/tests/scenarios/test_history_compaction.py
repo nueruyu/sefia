@@ -9,9 +9,10 @@ between runs is what was committed to disk before the pause.
 import json
 
 import glyff
+from glyff.serialization import FallbackByTypeQualname
 import pytest
 from glyff_file_store import JsonFileBackend
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
+from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
 from sefia import Policy, Session, Tools, infer
 from sefia.llm import LLMResponse
 from sefia.testing import result_response, tool_calls_response
@@ -72,12 +73,12 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
 
     def make_glyff_session() -> glyff.Session:
         return glyff.Session(
-            id=_SESSION_ID,
-            backend=JsonFileBackend(
-                base_dir=tmp_path / "glyff", session_id=_SESSION_ID
-            ),
+            id=glyff.SessionId(_SESSION_ID),
+            backend=JsonFileBackend(base_dir=tmp_path / "glyff"),
             serializer=PydanticSerializer(),
-            hasher=PydanticArgsHasher(),
+            argument_canonicalizer=PydanticArgumentCanonicalizer(
+                FallbackByTypeQualname()
+            ),
         )
 
     def make_state_storage() -> FileSessionStorage:

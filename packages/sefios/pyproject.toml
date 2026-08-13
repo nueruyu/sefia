@@ -7,9 +7,9 @@ authors = [{ name = "nueruyu" }]
 requires-python = ">=3.11"
 dependencies = [
     "sefia>=0.2.0",
-    "glyff>=0.13.0",
-    "glyff-file-store>=0.13.0",
-    "glyff-pydantic>=0.13.0",
+    "glyff>=0.14.0",
+    "glyff-file-store>=0.14.0",
+    "glyff-pydantic>=0.14.0",
 ]
 dynamic = ["version"]
 keywords = [
