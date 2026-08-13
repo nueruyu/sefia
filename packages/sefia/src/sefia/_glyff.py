@@ -22,5 +22,6 @@ def engrave(
     async def named(*args: P.args, **kwargs: P.kwargs) -> Any:
         return await func(*args, **kwargs)
 
-    named.__qualname__ = name if name is not None else func.__qualname__
+    if name is not None:
+        named.__qualname__ = name
     return cast(Callable[P, Awaitable[R]], domain.engrave(named))
