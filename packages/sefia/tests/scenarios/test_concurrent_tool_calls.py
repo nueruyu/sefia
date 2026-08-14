@@ -1,12 +1,14 @@
+import glyff
+import sefia
 import asyncio
 import json
 from dataclasses import dataclass
 
 import pytest
-from glyff import engrave
+from glyff import Domain
 from glyff.store import MemoryBackend
 
-from sefia import Tools, concurrent, infer
+from sefia import Tools, concurrent
 from sefia.exceptions import PauseException
 from sefia.testing import (
     MockLLMClient,
@@ -14,6 +16,12 @@ from sefia.testing import (
     result_response,
     tool_calls_response,
 )
+
+infer = sefia.Domain(
+    glyff.Domain(
+        "packages.sefia.tests.scenarios.test_concurrent_tool_calls", version="1"
+    )
+).infer
 
 
 @dataclass
@@ -84,7 +92,7 @@ class PausingToolkit:
         self.answer: str | None = None
 
     @concurrent
-    @engrave
+    @Domain("sefia.tests", version="1").engrave
     async def fetch_data(self, key: str) -> str:
         """Fetch data for a key."""
         self.fetch_runs += 1

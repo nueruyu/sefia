@@ -1,6 +1,8 @@
+import glyff
+import sefia
 from dataclasses import dataclass
 
-from sefia import JsonSchemaToolEntry, infer
+from sefia import JsonSchemaToolEntry
 from sefia.testing import (
     MockLLMClient,
     memory_session,
@@ -8,6 +10,10 @@ from sefia.testing import (
     tool_calls_response,
 )
 from sefia.tool_collectors import StaticToolCollector
+
+infer = sefia.Domain(
+    glyff.Domain("packages.sefia.tests.scenarios.test_json_schema_tool", version="1")
+).infer
 
 _SEARCH_SCHEMA = {
     "type": "object",

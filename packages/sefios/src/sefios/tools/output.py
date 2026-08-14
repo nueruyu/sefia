@@ -2,12 +2,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
-from glyff import engrave
 from pydantic import Field
 from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
 from .._async import MaybeAwaitable, maybe_await
+from .._glyff import GLYFF_DOMAIN
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ class Output:
         if self._on_message_delta is not None:
             await maybe_await(self._on_message_delta(interaction_id, text))
 
-    @engrave
+    @GLYFF_DOMAIN.engrave(name="tools.output.send_output")
     async def send_output(
         self,
         message: Annotated[str, Field(min_length=1)],

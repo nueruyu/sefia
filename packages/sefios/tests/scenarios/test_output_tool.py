@@ -1,14 +1,16 @@
 import json
 
 import glyff
-from glyff import ArgsHasher, Serializer
+from glyff import ArgumentCanonicalizer, Serializer
 from glyff.store import MemoryBackend
 
-from sefia import Session, Tools, infer
+from sefia import Session, Tools
 from sefia.llm import LLMResponse
-from sefios import MemorySessionStorage
+from sefios import domain, MemorySessionStorage
 from sefios._session_state import bind_session_storage
 from sefios.tools import Output, OutputMessage
+
+infer = domain("packages.sefios.tests.scenarios.test_output_tool", version="1").infer
 
 
 class Agent:
@@ -44,7 +46,7 @@ def _responses() -> list[LLMResponse]:
 
 class TestOutput:
     async def test_send_output_emits_once_and_replays_without_re_emitting(
-        self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
+        self, serializer: Serializer, hasher: ArgumentCanonicalizer, make_mock_llm
     ):
         emitted: list[OutputMessage] = []
         agent = Agent(Output(on_output=emitted.append))
@@ -54,7 +56,10 @@ class TestOutput:
 
         mock_llm = make_mock_llm(_responses())
         async with glyff.Session(
-            id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+            id=glyff.SessionId(session_id),
+            backend=glyff_store,
+            serializer=serializer,
+            argument_canonicalizer=hasher,
         ) as gs:
             with bind_session_storage(sefia_store):
                 async with Session(llm_client=mock_llm, glyff_session=gs):
@@ -67,7 +72,10 @@ class TestOutput:
         # Re-invoking the same session must replay without re-emitting.
         replay_llm = make_mock_llm([])
         async with glyff.Session(
-            id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+            id=glyff.SessionId(session_id),
+            backend=glyff_store,
+            serializer=serializer,
+            argument_canonicalizer=hasher,
         ) as gs:
             with bind_session_storage(sefia_store):
                 async with Session(llm_client=replay_llm, glyff_session=gs):

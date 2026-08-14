@@ -1,9 +1,11 @@
 from glyff_pydantic import PydanticSerializer
-from sefia import JsonSchemaToolEntry, infer
+from sefia import JsonSchemaToolEntry
 from sefia.tool_collectors import StaticToolCollector
 from sefia.testing import result_response, tool_calls_response
 
-from sefios import MemorySessionStorage, SessionScope, get_session_storage
+from sefios import domain, MemorySessionStorage, SessionScope, get_session_storage
+
+infer = domain("packages.sefios.tests.units.test_scope").infer
 
 
 class _Probe:

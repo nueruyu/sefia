@@ -9,12 +9,15 @@
 
 ```python
 from pydantic import BaseModel
-from sefios import infer
+from sefios import domain
 
 
 class Summary(BaseModel):
     key_points: list[str]
     uncertainty: str
+
+
+infer = domain("reports").infer
 
 
 @infer
@@ -75,8 +78,8 @@ The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is inst
 automatically.
 
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
-`infer` / `concurrent` / `preview` / `policy` / `profile` decorators, `Tools`,
-`AsRawText`, `Policy` / `Profile`, and `engrave` — alongside its own `SessionScope` and
+`domain` / `concurrent` / `preview` / `policy` / `profile` decorators,
+`Tools`, `AsRawText`, and `Policy` / `Profile` — alongside its own `SessionScope` and
 batteries, so application code needs only `sefios`. Reach into `sefia` directly for the
 extension seams (a custom policy, strategy, client, or tool collector) and tool-call
 context helpers such as `current_tool_call_id_for`.
@@ -89,7 +92,7 @@ run.
 ```python
 from pathlib import Path
 from pydantic import BaseModel
-from sefios import SessionScope, Tools, infer
+from sefios import SessionScope, Tools, domain
 from sefios.tools import WebSearch
 
 
@@ -98,6 +101,8 @@ class Report(BaseModel):
     summary: str
     sources: list[str]
 
+
+infer = domain("research").infer
 
 class ResearchService:
     _web: Tools[WebSearch]                # the field annotation grants the tools
@@ -134,11 +139,13 @@ your provider — `pip install 'sefios[litellm,fastapi]'`.
 
 ```python
 from pathlib import Path
-from sefios import Tools, infer
+from sefios import Tools, domain
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input, WebSearch
 
+
+infer = domain("research").infer
 
 class ResearchService:
     _web: Tools[WebSearch]

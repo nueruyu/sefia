@@ -35,13 +35,15 @@ import asyncio
 from pathlib import Path
 
 from pydantic import BaseModel
-from sefios import SessionScope, infer
+from sefios import SessionScope, domain
 
 
 class Summary(BaseModel):
     key_points: list[str]
     uncertainty: str
 
+
+infer = domain("quickstart").infer
 
 @infer
 async def summarize(article: str) -> Summary:
@@ -149,7 +151,7 @@ from pathlib import Path
 
 import typer
 from pydantic import BaseModel
-from sefios import Tools, infer
+from sefios import Tools, domain
 from sefios.cli import SefiaCLI
 from sefios.tools import Input, WebSearch
 
@@ -158,6 +160,8 @@ class Report(BaseModel):
     topic: str
     summary: str
 
+
+infer = domain("research").infer
 
 class ResearchService:
     _web: Tools[WebSearch]

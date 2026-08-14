@@ -1,9 +1,10 @@
 from pathlib import Path
 from typing import Annotated
 
-from sefios import AsRawText, Tools, infer
+from sefios import AsRawText, Tools
 from sefios.tools import Input
 
+from .authoring import infer
 from .models import (
     CodeIssue,
     ProjectScope,

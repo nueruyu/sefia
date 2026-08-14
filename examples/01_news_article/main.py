@@ -5,13 +5,13 @@ import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefios import engrave
 from sefios.cli import SefiaCLI
 from sefios.tools import WebSearch
 
 from .._common.policies import VerbosePolicy
 from .._common.typer_utils import add_session_commands, async_command
 from .agents import NewsWriter, RequirementsClarifier, Researcher
+from .authoring import engrave
 from .models import ArticleRequest, NewsArticle
 from .rendering import render_article_request, render_news_article
 

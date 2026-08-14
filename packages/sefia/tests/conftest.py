@@ -6,8 +6,9 @@ types) are defined locally in the test files that use them.
 """
 
 import pytest
-from glyff import ArgsHasher, Serializer
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
+from glyff import ArgumentCanonicalizer, Serializer
+from glyff.serialization import FallbackByTypeQualname
+from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
 
 
 @pytest.fixture
@@ -16,5 +17,5 @@ def serializer() -> Serializer:
 
 
 @pytest.fixture
-def hasher() -> ArgsHasher:
-    return PydanticArgsHasher()
+def hasher() -> ArgumentCanonicalizer:
+    return PydanticArgumentCanonicalizer(FallbackByTypeQualname())

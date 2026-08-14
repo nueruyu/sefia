@@ -5,14 +5,16 @@ from typing import Callable
 
 import glyff
 import pytest
-from glyff import ArgsHasher, Serializer, engrave
+from glyff import ArgumentCanonicalizer, Domain, Serializer
 from glyff.store import MemoryBackend
 
-from sefia import Session, Tools, infer
+from sefia import Session, Tools
 from sefia.exceptions import PauseException
 from sefia.testing import result_response, tool_calls_response
-from sefios import MemorySessionStorage, get_call_state_store
+from sefios import domain, MemorySessionStorage, get_call_state_store
 from sefios._session_state import bind_session_storage, get_state_store
+
+infer = domain("packages.sefios.tests.scenarios.test_stateful_tools", version="1").infer
 
 
 @dataclass
@@ -44,7 +46,7 @@ class Input:
     def __init__(self, on_interrupt: Callable[[str, str], None] | None = None):
         self._on_interrupt = on_interrupt
 
-    @engrave
+    @Domain("sefios.tests", version="1").engrave
     async def ask_user(self, prompt: str) -> str:
         call_store = get_call_state_store("internal_state", _InputCallState)
         call_state = await call_store.ensure()
@@ -75,7 +77,7 @@ class Input:
 
 class TestStatefulTool:
     async def test_ask_user_interrupts_and_resumes_correctly(
-        self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
+        self, serializer: Serializer, hasher: ArgumentCanonicalizer, make_mock_llm
     ):
         mock_responses = [
             tool_calls_response(("Input_ask_user", {"prompt": "What is your name?"})),
@@ -114,7 +116,10 @@ class TestStatefulTool:
         # --- First run: Should interrupt ---
         with pytest.raises(PauseException):
             async with glyff.Session(
-                id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+                id=glyff.SessionId(session_id),
+                backend=glyff_store,
+                serializer=serializer,
+                argument_canonicalizer=hasher,
             ) as gs:
                 with bind_session_storage(sefia_store):
                     async with Session(llm_client=mock_llm, glyff_session=gs):
@@ -125,7 +130,10 @@ class TestStatefulTool:
 
         # --- Second run (with answer): Should succeed ---
         async with glyff.Session(
-            id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+            id=glyff.SessionId(session_id),
+            backend=glyff_store,
+            serializer=serializer,
+            argument_canonicalizer=hasher,
         ) as gs:
             with bind_session_storage(sefia_store):
                 async with Session(llm_client=mock_llm, glyff_session=gs):
@@ -145,7 +153,7 @@ class TestStatefulTool:
         assert json.loads(final_messages[3]["content"]) == "Alice"
 
     async def test_multiple_ask_user_calls_are_independent(
-        self, serializer: Serializer, hasher: ArgsHasher, make_mock_llm
+        self, serializer: Serializer, hasher: ArgumentCanonicalizer, make_mock_llm
     ):
         mock_responses = [
             tool_calls_response(("Input_ask_user", {"prompt": "Name?"})),
@@ -180,7 +188,10 @@ class TestStatefulTool:
         # --- 1. Ask for name, should interrupt ---
         with pytest.raises(PauseException):
             async with glyff.Session(
-                id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+                id=glyff.SessionId(session_id),
+                backend=glyff_store,
+                serializer=serializer,
+                argument_canonicalizer=hasher,
             ) as gs:
                 with bind_session_storage(sefia_store):
                     async with Session(llm_client=mock_llm, glyff_session=gs):
@@ -190,7 +201,10 @@ class TestStatefulTool:
         # --- 2. Provide name, ask for age, should interrupt again ---
         with pytest.raises(PauseException):
             async with glyff.Session(
-                id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+                id=glyff.SessionId(session_id),
+                backend=glyff_store,
+                serializer=serializer,
+                argument_canonicalizer=hasher,
             ) as gs:
                 with bind_session_storage(sefia_store):
                     async with Session(llm_client=mock_llm, glyff_session=gs):
@@ -205,7 +219,10 @@ class TestStatefulTool:
 
         # --- 3. Provide age, should complete ---
         async with glyff.Session(
-            id=session_id, backend=glyff_store, serializer=serializer, hasher=hasher
+            id=glyff.SessionId(session_id),
+            backend=glyff_store,
+            serializer=serializer,
+            argument_canonicalizer=hasher,
         ) as gs:
             with bind_session_storage(sefia_store):
                 async with Session(llm_client=mock_llm, glyff_session=gs):

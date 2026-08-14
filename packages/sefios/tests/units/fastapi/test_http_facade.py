@@ -1,13 +1,18 @@
+from sefios import domain
 import asyncio
 import json
 
 import pytest
-from sefia import Tools, infer
+from sefia import Tools
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 from sefia.llm import LLMClient, LLMResponse
 from sefios.fastapi import SefiaHTTP
 from sefios.exceptions import InputRequired
 from sefios.tools import Input, Output, OutputMessage
+
+infer = domain(
+    "packages.sefios.tests.units.fastapi.test_http_facade", version="1"
+).infer
 
 
 class StreamingClient(LLMClient):

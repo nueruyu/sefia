@@ -1,6 +1,7 @@
-from sefios import Tools, infer
+from sefios import Tools
 from sefios.tools import Input, WebSearch
 
+from .authoring import infer
 from .models import ArticleRequest, NewsArticle
 
 

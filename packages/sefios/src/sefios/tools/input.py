@@ -2,12 +2,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
-from glyff import engrave
 from pydantic import Field
 from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
 from .._async import MaybeAwaitable, maybe_await
+from .._glyff import GLYFF_DOMAIN
 from ..exceptions import InputRequired
 
 
@@ -63,7 +63,7 @@ class Input:
         if self._on_prompt_delta is not None:
             await maybe_await(self._on_prompt_delta(interaction_id, text))
 
-    @engrave
+    @GLYFF_DOMAIN.engrave(name="tools.input.get_input")
     async def get_input(
         self,
         prompt: Annotated[str, Field(min_length=1)] | None = None,

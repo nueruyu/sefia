@@ -9,10 +9,17 @@ about the mechanics (types, tool dispatch, sentinel values).
 See ``conftest.py`` for how providers are selected and skipped.
 """
 
+import glyff
+import sefia
+
 from dataclasses import dataclass
 
 import pytest
-from sefia import Tools, infer
+from sefia import Tools
+
+infer = sefia.Domain(
+    glyff.Domain("packages.sefia_litellm.tests.e2e.test_live_providers", version="1")
+).infer
 
 pytestmark = pytest.mark.e2e
 

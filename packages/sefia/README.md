@@ -8,14 +8,17 @@ signature is the input contract, the return type is the validated output
 contract, the docstring is the instruction, and the body is `...`.
 
 ```python
+import glyff
 from pydantic import BaseModel
-from sefia import infer
+from sefia import Domain
 
 
 class Summary(BaseModel):
     key_points: list[str]
     uncertainty: str
 
+
+infer = Domain(glyff.Domain("com.example.summaries", version="1")).infer
 
 @infer
 async def summarize(article: str) -> Summary:

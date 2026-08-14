@@ -1,8 +1,13 @@
+from sefios import domain
 from dataclasses import dataclass
 
-from sefia import Policy, Tools, infer, policy
+from sefia import Policy, Tools, policy
 from sefia.testing import memory_session, result_response, tool_calls_response
 from sefios.middleware import StagnationDetector
+
+infer = domain(
+    "packages.sefios.tests.scenarios.test_stagnation_policy", version="1"
+).infer
 
 
 @dataclass

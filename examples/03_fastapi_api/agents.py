@@ -5,9 +5,10 @@ at most one clarifying question, which lets the API demonstrate pause/resume ove
 normal HTTP requests while lifecycle events stream over SSE.
 """
 
-from sefios import Tools, infer
+from sefios import Tools
 from sefios.tools import Input
 
+from .authoring import infer
 from .models import Brief
 
 
@@ -29,8 +30,7 @@ class Interviewer:
 
         This is a demo workflow, so keep the human-in-the-loop interaction short:
         ask at most one focused follow-up question. Only ask when the request is
-        so underspecified that a reasonable brief cannot be produced. Otherwise,
-        infer sensible defaults from the user's wording.
+        so underspecified that a reasonable brief cannot be produced. Otherwise sensible defaults from the user's wording.
 
         Produce the final Brief with:
         - topic: the content topic, inferred from the request when possible

@@ -9,6 +9,10 @@ contract used to run an LLM-backed call.
 Use explicit parameters, an explicit return type, and a docstring instruction.
 
 ```python
+from sefios import domain
+
+infer = domain("reports").infer
+
 @infer
 async def summarize(article: str) -> Summary:
     """Summarize the article and return a structured summary."""
@@ -110,8 +114,8 @@ write permissions.
 ### `self` and replay identity
 
 `self` participates in the engraved call identity even though it is not prompt
-data. With the default Glyff/Pydantic hasher a dataclass or Pydantic value is
-hashed by value, while an opaque object falls back to a qualified name. If an
+data. With the default Glyff/Pydantic canonicalizer a dataclass or Pydantic value is
+represented by value, while an opaque object falls back to its qualified type name. If an
 instance must be replay-distinct by tenant/user/store, include that identity in a
 stable field or argument rather than relying on object identity.
 
@@ -130,7 +134,22 @@ serializable data.
 A decorator applied to a tool method must return a function (use `functools.wraps`);
 one that returns a non-function callable — a class-based wrapper or a bare
 `functools.partial` — makes the method invisible to discovery, with no error.
-`@engrave` and similar `functools.wraps`-based decorators are fine.
+Domain-bound engrave decorators and similar `functools.wraps`-based decorators are fine.
+
+## Persistent execution identity
+
+Use a domain-bound `infer` decorator for persisted application boundaries. Without a
+`name`, it uses the function's module-qualified name; pass `name=...` when that
+derived name must not follow a refactor. The domain id and execution name are storage
+contracts. Keep them stable across refactors. Domains start at version `"1"`; pass
+`version=` when migrating an existing domain to a new contract, then use Glyff's
+domain migration API to remap existing sessions. Sefia's internal `inference.step`
+and `inference.tool_calls` records belong to `sefia`, so application migrations do
+not need to know their shapes.
+
+An identity migration does not migrate completed result payloads or Sefia history
+metadata. Keep readers backward-compatible, discard and re-run incompatible records,
+or migrate those payloads separately.
 
 ## Practical rules
 

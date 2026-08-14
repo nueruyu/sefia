@@ -1,9 +1,11 @@
+import glyff
+import sefia
 from dataclasses import dataclass
 
 import pytest
 
-from sefia import Policy, Tools, infer, policy
-from sefia._metadata import get_metadata
+from sefia import Policy, Tools, policy
+from sefia._authoring.metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.llm import LLMResponse
 from sefia.testing import (
@@ -12,6 +14,10 @@ from sefia.testing import (
     result_response,
     tool_calls_response,
 )
+
+infer = sefia.Domain(
+    glyff.Domain("packages.sefia.tests.scenarios.test_basic_inference", version="1")
+).infer
 
 
 @dataclass

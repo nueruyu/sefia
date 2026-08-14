@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefios import engrave, get_state
+from sefios import get_state
 from sefios.cli import SefiaCLI
 
 from .._common.policies import VerbosePolicy
@@ -21,6 +21,7 @@ from .agents import (
     ScopingAgent,
     UnderstandingAgent,
 )
+from .authoring import engrave
 from .models import (
     CodeIssue,
     ProjectScope,

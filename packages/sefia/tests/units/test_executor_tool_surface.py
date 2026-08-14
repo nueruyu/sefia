@@ -1,13 +1,18 @@
+import glyff
+import sefia
 import inspect
 from typing import Protocol
 
-from sefia import infer
 from sefia._executor import InferenceExecutor
 from sefia._interfaces import InferenceStrategy
 from sefia.event_system import EventPublisher
 from sefia.tool_collectors import DefaultToolCollector
 
 from sefia.testing import MemoryHistoryStorage
+
+infer = sefia.Domain(
+    glyff.Domain("packages.sefia.tests.units.test_executor_tool_surface", version="1")
+).infer
 
 
 class _StubStrategy(InferenceStrategy):
@@ -42,7 +47,7 @@ def _executor_for(bound_wrapper, *args) -> InferenceExecutor:
         kwargs={},
         inference_strategy=_StubStrategy(),
         tool_collector=DefaultToolCollector(),
-        engrave=lambda f: f,
+        engrave=lambda _name, f: f,
         publisher=EventPublisher([]),
         history_storage=MemoryHistoryStorage(),
     )

@@ -1,4 +1,4 @@
-from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
+from typing import Any, Awaitable, Callable
 
 from . import events
 from ._history import StepHistory
@@ -22,13 +22,6 @@ from .inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-
-_P = ParamSpec("_P")
-_R = TypeVar("_R")
-
-
-def _wrap(f: Callable[_P, _R], decorator) -> Callable[_P, _R]:
-    return decorator(f)
 
 
 def _compose(
@@ -70,7 +63,7 @@ class InferenceExecutor:
         kwargs: dict,
         inference_strategy: InferenceStrategy,
         tool_collector: ToolCollector,
-        engrave: Callable[[Any], Any],
+        engrave: Callable[[str, Callable[..., Any]], Callable[..., Any]],
         publisher: EventPublisher,
         history_storage: HistoryStorage,
         inference_middlewares: list[InferenceMiddleware] | None = None,
@@ -89,8 +82,8 @@ class InferenceExecutor:
             self.func_info.capabilities
         )
 
-        self._next_step_engraved = _wrap(self._next_step, engrave)
-        self._call_tools_engraved = _wrap(self._call_tools, engrave)
+        self._next_step_engraved = engrave("inference.step", self._next_step)
+        self._call_tools_engraved = engrave("inference.tool_calls", self._call_tools)
 
     async def _next_step(self, step: int) -> InferenceDecision:
         """One engraved inference-strategy call, keyed on the step index (not

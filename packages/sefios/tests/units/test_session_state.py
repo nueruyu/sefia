@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from unittest.mock import MagicMock
 
 import pytest
-from glyff import ExecutionId
+from glyff import ArgumentsDigest, DomainId, ExecutionId, ExecutionName
 
 from sefios._session_state import _SessionState
 
@@ -17,6 +17,18 @@ class StateB:
     count: int
 
 
+def _execution_id(
+    name: str, digest: str, parent_id: ExecutionId | None = None
+) -> ExecutionId:
+    return ExecutionId(
+        parent_id=parent_id,
+        domain_id=DomainId("sefios.tests"),
+        name=ExecutionName(name),
+        sequence=0,
+        arguments_digest=ArgumentsDigest(digest),
+    )
+
+
 @pytest.fixture
 def session_state():
     return _SessionState(storage=MagicMock())
@@ -25,12 +37,7 @@ def session_state():
 class TestSessionState:
     def test_get_call_state_store_creates_scoped_key(self, session_state, mocker):
         # Arrange
-        execution_id = ExecutionId(
-            parent_id=None,
-            name="Input.get_input",
-            sequence=0,
-            args_hash="prompt-a",
-        )
+        execution_id = _execution_id("Input.get_input", "prompt-a")
         mock_glyff_ctx = MagicMock()
         mock_glyff_ctx.current_execution_id = execution_id
         mocker.patch(
@@ -49,18 +56,8 @@ class TestSessionState:
         self, session_state, mocker
     ):
         # Arrange
-        first_execution_id = ExecutionId(
-            parent_id=None,
-            name="Input.get_input",
-            sequence=0,
-            args_hash="prompt-a",
-        )
-        second_execution_id = ExecutionId(
-            parent_id=None,
-            name="Input.get_input",
-            sequence=0,
-            args_hash="prompt-b",
-        )
+        first_execution_id = _execution_id("Input.get_input", "prompt-a")
+        second_execution_id = _execution_id("Input.get_input", "prompt-b")
         mock_glyff_ctx = MagicMock()
         mocker.patch(
             "sefios._session_state.get_glyff_context", return_value=mock_glyff_ctx
@@ -77,29 +74,15 @@ class TestSessionState:
 
     def test_get_call_state_store_includes_parent_scope(self, session_state, mocker):
         # Arrange
-        first_parent = ExecutionId(
-            parent_id=None,
-            name="RequirementsClarifier.clarify_request",
-            sequence=0,
-            args_hash="clarifier",
+        first_parent = _execution_id(
+            "RequirementsClarifier.clarify_request", "clarifier"
         )
-        second_parent = ExecutionId(
-            parent_id=None,
-            name="NewsWriter.write_article",
-            sequence=0,
-            args_hash="writer",
+        second_parent = _execution_id("NewsWriter.write_article", "writer")
+        first_execution_id = _execution_id(
+            "Input.get_input", "same-prompt", first_parent
         )
-        first_execution_id = ExecutionId(
-            parent_id=first_parent,
-            name="Input.get_input",
-            sequence=0,
-            args_hash="same-prompt",
-        )
-        second_execution_id = ExecutionId(
-            parent_id=second_parent,
-            name="Input.get_input",
-            sequence=0,
-            args_hash="same-prompt",
+        second_execution_id = _execution_id(
+            "Input.get_input", "same-prompt", second_parent
         )
         mock_glyff_ctx = MagicMock()
         mocker.patch(

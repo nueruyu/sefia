@@ -75,7 +75,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 
 | Module | Responsibility | Key symbols |
 | --- | --- | --- |
-| `_decorators.py` | The entry points. Calling `@infer` builds the executor and engraves the run. | `infer`, `concurrent`, `preview`, `policy`, `profile` |
+| `_authoring/` | Authoring API split by responsibility: domain ownership and runtime engraving, inference assembly, profile/policy selection, tool markers, and decorator metadata. | `Domain`, `concurrent`, `preview`, `policy`, `profile` |
 | `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
 | `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
 | `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallDecision`, `FinalAnswerDecision` |
@@ -83,7 +83,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |
 | `_history.py` | The run's conversation history as pure in-memory state (loading/persistence/step-count live on the executor). | `StepHistory` |
 | `history_storages/` | `HistoryStorage` implementations (default: history in the run's glyff metadata). | `GlyffHistoryStorage` |
-| `_profiles.py` / `_metadata.py` | Per-call model/policy selection; the `__sefia_metadata__` store. | `Profile` |
+| `_profiles.py` / `_authoring/metadata.py` | Per-call model selection and the decorator metadata store. | `Profile` |
 | `_tool_system/` | The tool system split by responsibility: `roles.py` owns `Tools[...]` and decorator metadata, `entries.py` owns definitions and executable entries, and `registry.py` owns registration and collection contracts. | `ToolEntry`, `SignatureToolEntry`, `JsonSchemaToolEntry`, `ToolDefinition`, `ToolRegistry`, `ToolCollector`, `Tools` |
 | `_tool_context.py` | The serving tool call's id and callable identity, bound around each `invoke` and read from a handler body. | `current_tool_call_id`, `current_tool_call_id_for` |
 | `_introspection.py` | Sefia-agnostic reflection: annotation unwrapping, method/field scanning for classes and `Protocol`s. | `unwrap_annotation`, `declared_methods`, `declared_fields`, `is_protocol` |
@@ -112,7 +112,9 @@ implementation noted in parentheses.
 
 | Path | Responsibility |
 | --- | --- |
-| `__init__.py` | Re-exports the everyday authoring surface (`infer`, `concurrent`, `preview`, `policy`, `profile`, `Tools`, `AsRawText`, `Policy`, `Profile` from `sefia`; `engrave` from `glyff`) so application code imports only from `sefios`. |
+| `__init__.py` | Re-exports the everyday authoring surface (`domain`, `concurrent`, `preview`, `policy`, `profile`, `Tools`, `AsRawText`, `Policy`, `Profile`) so application code imports only from `sefios`. |
+| `_domain.py` | Convenience constructor for an application-owned `sefia.Domain`. |
+| `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `_input_channel.py` | Internal persisted routing between the `Input` tool and host-provided CLI/HTTP input. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
@@ -162,8 +164,8 @@ implementation noted in parentheses.
   package root. Ordinary application extension points and configuration types may
   remain at the root (for example, `Policy`).
 - **Import from `sefios`.** It re-exports the everyday authoring surface
-  (`infer` / `concurrent` / `preview` / `policy` / `profile`, `Tools`, `AsRawText`,
-  `Policy` / `Profile` from `sefia`; `engrave` from `glyff`), so application code
+  (`domain` / `concurrent` / `preview` / `policy` / `profile`, `Tools`,
+  `AsRawText`, `Policy` / `Profile`), so application code
   touches one package. Low-level contracts intended mainly for extension-library
   authors come from their specialized `sefia` submodules instead.
 - **Interfaces live in `_interfaces/`** as ABCs; concrete defaults live in feature

@@ -8,8 +8,9 @@ the public ``sefia.testing`` module.
 from typing import Callable
 
 import pytest
-from glyff import ArgsHasher, Serializer
-from glyff_pydantic import PydanticArgsHasher, PydanticSerializer
+from glyff import ArgumentCanonicalizer, Serializer
+from glyff.serialization import FallbackByTypeQualname
+from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
 from sefia.llm import LLMResponse
 from sefia.testing import MockLLMClient
 
@@ -30,5 +31,5 @@ def serializer() -> Serializer:
 
 
 @pytest.fixture
-def hasher() -> ArgsHasher:
-    return PydanticArgsHasher()
+def hasher() -> ArgumentCanonicalizer:
+    return PydanticArgumentCanonicalizer(FallbackByTypeQualname())
