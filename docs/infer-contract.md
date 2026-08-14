@@ -143,9 +143,9 @@ Use a domain-bound `infer` decorator for persisted application boundaries. Witho
 derived name must not follow a refactor. The domain id and execution name are storage
 contracts. Keep them stable across refactors. Domains start at version `"1"`; pass
 `version=` when migrating an existing domain to a new contract, then use Glyff's
-domain migration API to remap existing sessions. Sefia's internal `inference_step`
-and `tool_batch` records belong to `sefia`, so application migrations do not need to
-know their shapes.
+domain migration API to remap existing sessions. Sefia's internal `inference.step`
+and `inference.tool_calls` records belong to `sefia`, so application migrations do
+not need to know their shapes.
 
 An identity migration does not migrate completed result payloads or Sefia history
 metadata. Keep readers backward-compatible, discard and re-run incompatible records,

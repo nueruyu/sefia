@@ -637,7 +637,9 @@ class TestInferenceExecutor:
         history = mock_strategy.decide_next_step.call_args.kwargs["history"]
         assert list(history) == [seeded[-1]]
 
-    async def test_step_is_engraved_on_the_step_index(self, executor_dependencies):
+    async def test_internal_calls_use_stable_names_and_step_index(
+        self, executor_dependencies
+    ):
         # The engraved step call is keyed on the step ordinal, not the history
         # contents — so the durable key stays O(1) and is stable under
         # compaction. The strategy still receives the full live history.
@@ -647,11 +649,14 @@ class TestInferenceExecutor:
             ResultDecision(result="done"),
         ]
 
+        engraved_names: list[str] = []
         engraved_step_args: list[tuple] = []
 
         def recording_engrave(name, f):
+            engraved_names.append(name)
+
             async def wrapper(*args, **kwargs):
-                if name == "inference_step":
+                if name == "inference.step":
                     engraved_step_args.append(args)
                 return await f(*args, **kwargs)
 
@@ -670,6 +675,7 @@ class TestInferenceExecutor:
         await executor.run()
 
         # Two steps, engraved on their indices (0, 1), not on a history list.
+        assert engraved_names == ["inference.step", "inference.tool_calls"]
         assert engraved_step_args == [(0,), (1,)]
 
     async def test_retry_middleware_publishes_attempt_start_per_attempt(

@@ -42,7 +42,7 @@ At a high level:
    not an engraved failure that replays forever. Only `executor.run()` is wrapped in
    a domain-bound engraved function with a stable module-qualified or explicit name.
    Its user arguments key the durable record; internal steps run under the independent
-   `sefia` domain as `inference_step` and `tool_batch`.
+   `sefia` domain as `inference.step` and `inference.tool_calls`.
 
 The original function body is never executed — it exists only so its **signature,
 type hints, and docstring** can be read (`FunctionInfo.create` in `inference.py`).

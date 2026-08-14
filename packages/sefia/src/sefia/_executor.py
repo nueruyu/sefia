@@ -82,8 +82,8 @@ class InferenceExecutor:
             self.func_info.capabilities
         )
 
-        self._next_step_engraved = engrave("inference_step", self._next_step)
-        self._call_tools_engraved = engrave("tool_batch", self._call_tools)
+        self._next_step_engraved = engrave("inference.step", self._next_step)
+        self._call_tools_engraved = engrave("inference.tool_calls", self._call_tools)
 
     async def _next_step(self, step: int) -> InferenceDecision:
         """One engraved inference-strategy call, keyed on the step index (not

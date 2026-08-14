@@ -28,7 +28,7 @@ async def test_domain_inference_records_stable_application_and_runtime_boundarie
     by_name = {execution.id.name.value: execution for execution in executions}
 
     outer = by_name["summarize"]
-    step = by_name["inference_step"]
+    step = by_name["inference.step"]
     assert outer.id.domain_id == glyff.DomainId("com.example.reports")
     assert step.id.domain_id == glyff.DomainId("sefia")
     assert step.id.parent_id == outer.id
