@@ -1,22 +1,22 @@
 import logging
+from collections.abc import AsyncIterator
+from types import SimpleNamespace
+from typing import Any, Never, Self
 from unittest.mock import AsyncMock
 
 import pytest
-from litellm import ModelResponse
+from litellm import (
+    ChatCompletionMessageToolCall,
+    Choices,
+    Message as LiteLLMMessage,
+    ModelResponse,
+    Usage,
+)
 from litellm.exceptions import (
     AuthenticationError,
     InternalServerError,
     RateLimitError,
     Timeout,
-)
-from litellm.types.utils import (
-    ChatCompletionMessageToolCall,
-    Choices,
-    Function,
-    Usage,
-)
-from litellm.types.utils import (
-    Message as LiteLLMMessage,
 )
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
@@ -34,16 +34,23 @@ from sefia_litellm.exceptions import (
 
 
 @pytest.fixture
-def mock_acompletion(mocker: MockerFixture):
+def mock_acompletion(mocker: MockerFixture) -> AsyncMock:
     return mocker.patch("litellm.acompletion", new_callable=AsyncMock)
 
 
 class TestLiteLLMClient:
-    async def test_complete_sends_correct_request_to_litellm(self, mock_acompletion):
+    async def test_complete_sends_correct_request_to_litellm(
+        self, mock_acompletion: AsyncMock
+    ):
         client = LiteLLMClient(model="gpt-4o", temperature=0.5)
         messages = [Message(role="user", content="Hello")]
-        tools = [{"type": "function", "function": {"name": "get_weather"}}]
-        output_schema = {"type": "object", "properties": {"city": {"type": "string"}}}
+        tools: list[dict[str, Any]] = [
+            {"type": "function", "function": {"name": "get_weather"}}
+        ]
+        output_schema: dict[str, Any] = {
+            "type": "object",
+            "properties": {"city": {"type": "string"}},
+        }
 
         mock_acompletion.return_value = ModelResponse(
             choices=[
@@ -67,7 +74,7 @@ class TestLiteLLMClient:
         assert call_args["temperature"] == 0.5
 
     async def test_complete_parses_litellm_response_and_calculates_cost(
-        self, mock_acompletion, mocker: MockerFixture
+        self, mock_acompletion: AsyncMock, mocker: MockerFixture
     ):
         mocker.patch("litellm.cost_per_token", return_value=(0.001, 0.002))
         mock_response = ModelResponse(
@@ -84,9 +91,10 @@ class TestLiteLLMClient:
                         tool_calls=[
                             ChatCompletionMessageToolCall(
                                 id="call_abc",
-                                function=Function(
-                                    name="get_weather", arguments='{"city": "Tokyo"}'
-                                ),
+                                function={
+                                    "name": "get_weather",
+                                    "arguments": '{"city": "Tokyo"}',
+                                },
                                 type="function",
                             )
                         ],
@@ -107,7 +115,9 @@ class TestLiteLLMClient:
         assert response.usage["prompt_tokens"] == 10
         assert len(response.tool_calls) == 1
 
-    async def test_complete_captures_reasoning_content(self, mock_acompletion):
+    async def test_complete_captures_reasoning_content(
+        self, mock_acompletion: AsyncMock
+    ):
         message = LiteLLMMessage(role="assistant", content='{"decision":...}')
         message.reasoning_content = "The user wants the weather."
         mock_acompletion.return_value = ModelResponse(
@@ -121,7 +131,7 @@ class TestLiteLLMClient:
         assert response.reasoning_content == "The user wants the weather."
 
     async def test_cost_is_none_if_calculation_fails(
-        self, mock_acompletion, mocker: MockerFixture
+        self, mock_acompletion: AsyncMock, mocker: MockerFixture
     ):
         mocker.patch("litellm.cost_per_token", side_effect=Exception("API error"))
         mock_response = ModelResponse(
@@ -136,7 +146,7 @@ class TestLiteLLMClient:
 
         assert response.cost is None
 
-    async def test_raises_error_on_empty_choices(self, mock_acompletion):
+    async def test_raises_error_on_empty_choices(self, mock_acompletion: AsyncMock):
         mock_acompletion.return_value = ModelResponse(choices=[])
         client = LiteLLMClient(model="gpt-4o")
 
@@ -165,15 +175,20 @@ class TestLiteLLMClient:
         ],
     )
     async def test_provider_errors_map_to_inference_errors(
-        self, mock_acompletion, provider_error, expected_error
-    ):
+        self,
+        mock_acompletion: AsyncMock,
+        provider_error: Exception,
+        expected_error: type[Exception],
+    ) -> None:
         mock_acompletion.side_effect = provider_error
         client = LiteLLMClient(model="gpt-4o")
 
         with pytest.raises(expected_error):
             await client.complete([])
 
-    async def test_unmapped_provider_error_propagates_unchanged(self, mock_acompletion):
+    async def test_unmapped_provider_error_propagates_unchanged(
+        self, mock_acompletion: AsyncMock
+    ):
         mock_acompletion.side_effect = AuthenticationError(
             message="bad key", llm_provider="openai", model="gpt-4o"
         )
@@ -183,7 +198,7 @@ class TestLiteLLMClient:
             await client.complete([])
 
     async def test_complete_suppresses_litellm_logging_by_default(
-        self, mock_acompletion, monkeypatch
+        self, mock_acompletion: AsyncMock, monkeypatch: pytest.MonkeyPatch
     ):
         import litellm
 
@@ -206,7 +221,7 @@ class TestLiteLLMClient:
         assert logging.getLogger("LiteLLM").level == _SILENCE_LEVEL
 
     async def test_complete_restores_litellm_logging_when_disabled(
-        self, mock_acompletion, monkeypatch
+        self, mock_acompletion: AsyncMock, monkeypatch: pytest.MonkeyPatch
     ):
         import litellm
 
@@ -228,7 +243,7 @@ class TestLiteLLMClient:
         assert litellm.suppress_debug_info is False
         assert logging.getLogger("LiteLLM").level == logging.NOTSET
 
-    def test_env_suppress_logs_default(self, monkeypatch):
+    def test_env_suppress_logs_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SEFIA_LITELLM_SUPPRESS_LOGS", raising=False)
         assert _env_suppress_logs_default() is True
 
@@ -245,19 +260,21 @@ class TestLiteLLMClient:
         _apply_litellm_log_level(False)
         assert lg.level == logging.NOTSET
 
-    def test_explicit_suppress_logs_overrides_env(self, monkeypatch):
+    def test_explicit_suppress_logs_overrides_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("SEFIA_LITELLM_SUPPRESS_LOGS", "false")
         assert LiteLLMClient(model="gpt-4o", suppress_logs=True)._suppress_logs is True
         assert LiteLLMClient(model="gpt-4o")._suppress_logs is False
 
     async def test_complete_uses_streaming_when_callback_is_provided(
-        self, mock_acompletion, mocker
+        self, mock_acompletion: AsyncMock, mocker: MockerFixture
     ):
         class FakeStream:
-            def __aiter__(self):
+            def __aiter__(self) -> Self:
                 return self
 
-            async def __anext__(self):
+            async def __anext__(self) -> Never:
                 raise StopAsyncIteration
 
         stream = FakeStream()
@@ -287,13 +304,13 @@ class TestLiteLLMClient:
         )
 
     async def test_complete_streams_when_only_reasoning_callback_is_provided(
-        self, mock_acompletion, mocker
+        self, mock_acompletion: AsyncMock, mocker: MockerFixture
     ):
         class FakeStream:
-            def __aiter__(self):
+            def __aiter__(self) -> Self:
                 return self
 
-            async def __anext__(self):
+            async def __anext__(self) -> Never:
                 raise StopAsyncIteration
 
         stream = FakeStream()
@@ -319,14 +336,16 @@ class TestLiteLLMClient:
             [{"role": "user", "content": "Hello"}],
         )
 
-    async def test_handle_stream_routes_reasoning_and_content_separately(self, mocker):
-        from types import SimpleNamespace
-
-        def chunk(*, content=None, reasoning=None):
+    async def test_handle_stream_routes_reasoning_and_content_separately(
+        self, mocker: MockerFixture
+    ) -> None:
+        def chunk(
+            *, content: str | None = None, reasoning: str | None = None
+        ) -> SimpleNamespace:
             delta = SimpleNamespace(content=content, reasoning_content=reasoning)
             return SimpleNamespace(choices=[SimpleNamespace(delta=delta)])
 
-        async def fake_stream():
+        async def fake_stream() -> AsyncIterator[SimpleNamespace]:
             yield chunk(reasoning="Let me ")
             yield chunk(reasoning="think.")
             yield chunk(content='{"decision"')
@@ -352,10 +371,10 @@ class TestLiteLLMClient:
         content_tokens: list[str] = []
         reasoning_tokens: list[str] = []
 
-        async def on_content(token: str):
+        async def on_content(token: str) -> None:
             content_tokens.append(token)
 
-        async def on_reasoning(token: str):
+        async def on_reasoning(token: str) -> None:
             reasoning_tokens.append(token)
 
         response = await client._handle_stream(
