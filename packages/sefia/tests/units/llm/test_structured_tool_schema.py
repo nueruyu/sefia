@@ -50,7 +50,8 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tool_calls_array(schema: dict[str, Any]) -> dict[str, Any]:
-    tool_calls = schema["properties"]["tool_calls"]
+    payload = _resolve(schema["properties"]["payload"], schema)
+    tool_calls = payload["properties"]["tool_calls"]
     if "anyOf" in tool_calls:
         return next(
             candidate

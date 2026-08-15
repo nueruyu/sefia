@@ -39,7 +39,7 @@ so `-m e2e` runs whichever subset your environment is configured for:
 | --- | --- | --- | --- |
 | OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` | `SEFIA_E2E_OPENAI_MODEL` |
 | Anthropic | `ANTHROPIC_API_KEY` | `anthropic/claude-haiku-4-5` | `SEFIA_E2E_ANTHROPIC_MODEL` |
-| Gemini | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` | `SEFIA_E2E_GEMINI_MODEL` |
+| Gemini | `GOOGLE_API_KEY` or `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` | `SEFIA_E2E_GEMINI_MODEL` |
 | xAI (Grok) | `XAI_API_KEY` | `xai/grok-3-mini` | `SEFIA_E2E_XAI_MODEL` |
 | Mistral | `MISTRAL_API_KEY` | `mistral/mistral-small-latest` | `SEFIA_E2E_MISTRAL_MODEL` |
 | Groq | `GROQ_API_KEY` | `groq/llama-3.3-70b-versatile` | `SEFIA_E2E_GROQ_MODEL` |
