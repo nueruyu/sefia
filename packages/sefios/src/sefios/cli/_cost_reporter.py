@@ -1,6 +1,6 @@
 import typer
 from sefia.exceptions import InferenceError
-from sefia_typer import CLIReporter, DefaultCLIReporter
+from sefia_typer import CLIReporter, DefaultCLIReporter, InputRequest, OutputMessage
 from sefia_typer import ResolvedSession as CLIResolvedSession
 from typing_extensions import final, override
 
@@ -21,7 +21,7 @@ class CostReportingCLIReporter(CLIReporter):
         return self._inner.on_session_resolved(session)
 
     @override
-    def on_input_request(self, request) -> MaybeAwaitable[None]:
+    def on_input_request(self, request: InputRequest) -> MaybeAwaitable[None]:
         return self._inner.on_input_request(request)
 
     @override
@@ -31,7 +31,7 @@ class CostReportingCLIReporter(CLIReporter):
         return self._inner.on_input_prompt_delta(interaction_id, text)
 
     @override
-    def on_output(self, message) -> MaybeAwaitable[None]:
+    def on_output(self, message: OutputMessage) -> MaybeAwaitable[None]:
         return self._inner.on_output(message)
 
     @override

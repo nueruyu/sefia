@@ -18,9 +18,10 @@ container is built on.
 
 from __future__ import annotations
 
-from typing import Type, TypeVar
+from collections.abc import Callable
+from typing import Any, Type, TypeVar
 
-from ._session_state import _get_session_state, get_state_store
+from ._session_state import get_session_state, get_state_store
 from ._state_store import StateStore
 
 T = TypeVar("T")
@@ -34,9 +35,9 @@ class StateRegistry:
     """
 
     def __init__(self) -> None:
-        self._keys: dict[type, str] = {}
+        self._keys: dict[type[Any], str] = {}
 
-    def register(self, state_type: type, key: str) -> None:
+    def register(self, state_type: type[Any], key: str) -> None:
         """Registers ``state_type`` under ``key``.
 
         A given type may only be registered once; re-registering it raises
@@ -58,7 +59,7 @@ class StateRegistry:
                 )
         self._keys[state_type] = key
 
-    def key_for(self, state_type: type) -> str:
+    def key_for(self, state_type: type[Any]) -> str:
         """Returns the registered key for ``state_type``.
 
         Raises ``KeyError`` if the type was never registered with ``@state``.
@@ -76,7 +77,7 @@ class StateRegistry:
 _default_registry = StateRegistry()
 
 
-def state(key: str):
+def state(key: str) -> Callable[[type[T]], type[T]]:
     """Class decorator registering a state type under a persistence ``key``.
 
     Apply it outside ``@dataclass`` so the already-built type is registered::
@@ -87,7 +88,7 @@ def state(key: str):
             cost: float = 0.0
     """
 
-    def decorator(cls: type) -> type:
+    def decorator(cls: type[T]) -> type[T]:
         _default_registry.register(cls, key)
         return cls
 
@@ -113,7 +114,7 @@ class StateContainer:
 
 def get_state() -> StateContainer:
     """Returns a :class:`StateContainer` for the current session's state."""
-    _get_session_state()  # fail fast when called outside an active session
+    get_session_state()  # fail fast when called outside an active session
     return StateContainer()
 
 

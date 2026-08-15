@@ -28,7 +28,7 @@ class FileSessionStorage(SessionStorage):
 
     def _key_to_path(self, key: str) -> Path:
         parts = key.split("/")
-        safe_parts = []
+        safe_parts: list[str] = []
         for p in parts:
             if not p or p in (".", ".."):
                 raise ValueError(f"Invalid key part: {p!r}")

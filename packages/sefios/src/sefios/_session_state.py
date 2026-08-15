@@ -39,7 +39,7 @@ def _execution_id_to_data(execution_id: ExecutionId) -> dict[str, object]:
     }
 
 
-def _execution_id_scope_key(execution_id: ExecutionId) -> str:
+def execution_id_scope_key(execution_id: ExecutionId) -> str:
     data = _execution_id_to_data(execution_id)
     stable_repr = json.dumps(data, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(stable_repr.encode("utf-8")).hexdigest()
@@ -78,7 +78,7 @@ class _SessionState:
                 "get_call_state_store can only be used inside an engraved function."
             )
 
-        scope_key = _execution_id_scope_key(current_execution_id)
+        scope_key = execution_id_scope_key(current_execution_id)
         scoped_key = f"call_state/{scope_key}/{key_suffix}"
         return self.get_state_store(scoped_key, state_type)
 
@@ -100,7 +100,7 @@ class _SessionState:
 _session_state_var = contextvars.ContextVar[_SessionState]("sefios_session_state")
 
 
-def _get_session_state() -> _SessionState:
+def get_session_state() -> _SessionState:
     try:
         return _session_state_var.get()
     except LookupError:
@@ -117,7 +117,7 @@ def get_session_storage() -> SessionStorage:
     its own keys. Raises ``RuntimeError`` if called outside an active session
     (for example, outside ``SessionScope.session()``).
     """
-    return _get_session_state().storage
+    return get_session_state().storage
 
 
 def get_call_state_store(key_suffix: str, state_type: Type[T]) -> StateStore[T]:
@@ -128,7 +128,7 @@ def get_call_state_store(key_suffix: str, state_type: Type[T]) -> StateStore[T]:
     it stored before pausing. Raises ``RuntimeError`` outside an engraved
     function or an active session.
     """
-    return _get_session_state().get_call_state_store(key_suffix, state_type)
+    return get_session_state().get_call_state_store(key_suffix, state_type)
 
 
 def get_state_store(key: str, state_type: Type[T]) -> StateStore[T]:
@@ -137,7 +137,7 @@ def get_state_store(key: str, state_type: Type[T]) -> StateStore[T]:
     Prefer the type-keyed :func:`sefios.get_state` container in application
     code; this exists for callers that must manage string keys themselves.
     """
-    return _get_session_state().get_state_store(key, state_type)
+    return get_session_state().get_state_store(key, state_type)
 
 
 @contextmanager

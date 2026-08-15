@@ -1,4 +1,8 @@
 import asyncio
+import importlib
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager
+from typing import Any, Protocol, cast
 
 from pydantic import BaseModel, Field
 
@@ -13,6 +17,10 @@ class WebSearchResult(BaseModel):
     )
 
 
+class _DDGS(Protocol):
+    def text(self, query: str, *, max_results: int) -> Iterator[dict[str, Any]]: ...
+
+
 class WebSearch:
     """A toolkit for performing web searches using DuckDuckGo."""
 
@@ -22,16 +30,20 @@ class WebSearch:
         and returns a list of search results.
         """
 
-        def _sync_search():
+        def _sync_search() -> list[dict[str, Any]]:
             try:
-                from ddgs import DDGS
+                module = importlib.import_module("ddgs")
             except ImportError as e:
                 raise ImportError(
                     "The 'web' extra is required to use WebSearch. "
                     "Please install it with: pip install 'sefios[web]'"
                 ) from e
 
-            with DDGS() as ddgs:
+            factory = cast(
+                Callable[[], AbstractContextManager[_DDGS]],
+                getattr(module, "DDGS"),
+            )
+            with factory() as ddgs:
                 return list(ddgs.text(query, max_results=max_results))
 
         results = await asyncio.to_thread(_sync_search)

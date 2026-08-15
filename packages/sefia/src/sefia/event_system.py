@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from functools import lru_cache
 from types import UnionType
-from typing import Any, Generic, Type, TypeVar, Union, get_args, get_origin
+from typing import Any, Generic, Type, TypeVar, Union, cast, get_args, get_origin
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +34,14 @@ def _substitute_typevars(annotation: object, typevars: dict[TypeVar, object]) ->
 
 def _event_types_from_annotation(annotation: object) -> tuple[Type[Event], ...] | None:
     if isinstance(annotation, tuple):
-        args = annotation
+        args = cast(tuple[object, ...], annotation)
     else:
         origin = get_origin(annotation)
-        args = get_args(annotation) if origin in (Union, UnionType) else (annotation,)
+        args = (
+            cast(tuple[object, ...], get_args(annotation))
+            if origin in (Union, UnionType)
+            else (annotation,)
+        )
 
     event_types: list[Type[Event]] = []
     for arg in args:
@@ -51,7 +55,9 @@ def _event_types_from_annotation(annotation: object) -> tuple[Type[Event], ...] 
 def _infer_event_types_from_bases(
     handler_cls: type[EventHandler[Any]], typevars: dict[TypeVar, object]
 ) -> tuple[Type[Event], ...] | None:
-    for base in getattr(handler_cls, "__orig_bases__", ()):
+    for base in cast(
+        tuple[object, ...], getattr(cast(object, handler_cls), "__orig_bases__", ())
+    ):
         origin = get_origin(base)
         if origin is None:
             continue
@@ -63,10 +69,15 @@ def _infer_event_types_from_bases(
             return _event_types_from_annotation(args[0])
 
         if isinstance(origin, type) and issubclass(origin, EventHandler):
-            parameters = getattr(origin, "__parameters__", ())
+            parameters = cast(
+                tuple[TypeVar, ...],
+                getattr(cast(object, origin), "__parameters__", ()),
+            )
             next_typevars = dict(typevars)
             next_typevars.update(dict(zip(parameters, args)))
-            event_types = _infer_event_types_from_bases(origin, next_typevars)
+            event_types = _infer_event_types_from_bases(
+                cast(type[EventHandler[Any]], origin), next_typevars
+            )
             if event_types is not None:
                 return event_types
 
