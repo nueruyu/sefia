@@ -44,7 +44,7 @@ async def test_json_schema_tool_reaches_the_llm_and_is_dispatched():
     to the model and, when called, dispatched to its handler with the decoded
     arguments — issue #38 end to end."""
 
-    calls: list[dict] = []
+    calls: list[dict[str, str]] = []
 
     async def search_handler(query: str) -> str:
         calls.append({"query": query})

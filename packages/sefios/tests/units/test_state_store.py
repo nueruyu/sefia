@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from pytest_mock import MockerFixture
 
 from sefios import SessionStorage, StateStore
 
@@ -85,8 +86,8 @@ class TestStateStore:
         assert "my_key" not in mock_store.data
 
     async def test_cache_is_used_on_subsequent_calls(
-        self, mock_store: MockSessionStorage, mocker
-    ):
+        self, mock_store: MockSessionStorage, mocker: MockerFixture
+    ) -> None:
         store = StateStore(mock_store, "my_key", MyState)
         spy = mocker.spy(mock_store, "get")
 

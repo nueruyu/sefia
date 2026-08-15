@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 
 import glyff
 from glyff import ArgumentCanonicalizer, Serializer
@@ -6,6 +7,7 @@ from glyff.store import MemoryBackend
 
 from sefia import Session, Tools
 from sefia.llm import LLMResponse
+from sefia.testing import MockLLMClient
 from sefios import domain, MemorySessionStorage
 from sefios._session_state import bind_session_storage
 from sefios.tools import Output, OutputMessage
@@ -46,8 +48,11 @@ def _responses() -> list[LLMResponse]:
 
 class TestOutput:
     async def test_send_output_emits_once_and_replays_without_re_emitting(
-        self, serializer: Serializer, hasher: ArgumentCanonicalizer, make_mock_llm
-    ):
+        self,
+        serializer: Serializer,
+        hasher: ArgumentCanonicalizer,
+        make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    ) -> None:
         emitted: list[OutputMessage] = []
         agent = Agent(Output(on_output=emitted.append))
         session_id = "output-tool-test-1"

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from sefia import Policy
+from sefia._interfaces import InferenceMiddleware, StepMiddleware
 from sefia.event_system import Event, EventHandler
 
 
@@ -19,7 +20,7 @@ def test_policy_contributes_nothing_by_default():
 def test_policy_calls_factories_once_per_create():
     built: list[_Handler] = []
 
-    def make_handlers() -> list[EventHandler]:
+    def make_handlers() -> list[EventHandler[Event]]:
         handler = _Handler()
         built.append(handler)
         return [handler]
@@ -39,7 +40,7 @@ def test_dataclass_subclass_need_not_call_init():
     class _MiddlewareOnly(Policy):
         label: str
 
-        def create_middleware(self):
+        def create_middleware(self) -> list[InferenceMiddleware | StepMiddleware]:
             return []
 
     p = _MiddlewareOnly(label="x")

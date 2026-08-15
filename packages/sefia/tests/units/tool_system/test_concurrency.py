@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Any, Protocol
 
 from sefia import ToolEntry, ToolRegistry, Tools, concurrent
 from sefia.inference import Capability
@@ -90,7 +90,7 @@ def test_concurrent_marker_is_read_from_the_implementation_under_protocol_narrow
 
 
 def test_registry_tools_default_to_serial():
-    async def handler(**kwargs) -> str:
+    async def handler(**kwargs: Any) -> str:
         return "ok"
 
     registry = ToolRegistry()
