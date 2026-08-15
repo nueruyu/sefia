@@ -76,7 +76,8 @@ full rules on arguments, service members, tools, and return types, see
 SQLite is the durable local default: glyff execution records and Sefia's
 session-scoped state share one database while using separate tables. For an ephemeral
 process-local session, pass `persistence=MemoryPersistenceProvider()`. JSON files remain
-available for debugging with `FilePersistenceProvider` from the `sefios[file]` extra.
+available for debugging with `FilePersistenceProvider` from the
+`sefios[file-store]` extra.
 
 ## 2. Give it a tool
 

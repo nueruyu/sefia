@@ -57,7 +57,7 @@ class MemoryPersistenceProvider:
 
 @final
 class FilePersistenceProvider:
-    """Debug-oriented JSON file persistence provided by ``sefios[file]``."""
+    """Debug-oriented JSON file persistence provided by ``sefios[file-store]``."""
 
     def __init__(self, session_dir: str | Path) -> None:
         self.session_dir = Path(session_dir)
@@ -67,8 +67,8 @@ class FilePersistenceProvider:
             from glyff_file_store import JsonFileBackend
         except ImportError as error:
             raise ImportError(
-                "The 'file' extra is required for FilePersistenceProvider. "
-                "Install it with: pip install 'sefios[file]'"
+                "The 'file-store' extra is required for FilePersistenceProvider. "
+                "Install it with: pip install 'sefios[file-store]'"
             ) from error
         return JsonFileBackend(base_dir=self.session_dir / "glyff_sessions")
 

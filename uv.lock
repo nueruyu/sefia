@@ -2445,7 +2445,7 @@ cli = [
 fastapi = [
     { name = "sefia-fastapi" },
 ]
-file = [
+file-store = [
     { name = "glyff-file-store" },
 ]
 litellm = [
@@ -2461,7 +2461,7 @@ requires-dist = [
     { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.0" },
     { name = "glyff", specifier = ">=0.16.0" },
     { name = "glyff-file-store", marker = "extra == 'all'", specifier = ">=0.16.0" },
-    { name = "glyff-file-store", marker = "extra == 'file'", specifier = ">=0.16.0" },
+    { name = "glyff-file-store", marker = "extra == 'file-store'", specifier = ">=0.16.0" },
     { name = "glyff-pydantic", specifier = ">=0.16.0" },
     { name = "glyff-sqlite", specifier = ">=0.16.0" },
     { name = "sefia", editable = "packages/sefia" },
@@ -2473,7 +2473,7 @@ requires-dist = [
     { name = "sefia-typer", marker = "extra == 'cli'", editable = "packages/sefia_typer" },
     { name = "typing-extensions", specifier = ">=4.6" },
 ]
-provides-extras = ["all", "cli", "fastapi", "file", "litellm", "web"]
+provides-extras = ["all", "cli", "fastapi", "file-store", "litellm", "web"]
 
 [[package]]
 name = "shellingham"

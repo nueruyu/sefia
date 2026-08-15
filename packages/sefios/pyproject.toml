@@ -36,7 +36,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-file = ["glyff-file-store>=0.16.0"]
+file-store = ["glyff-file-store>=0.16.0"]
 litellm = ["sefia-litellm>=0.1.0"]
 web = ["ddgs>=9.0"]
 cli = ["sefia-typer>=0.2.0"]
@@ -46,7 +46,7 @@ all = [
     "sefios[web]",
     "sefios[cli]",
     "sefios[fastapi]",
-    "sefios[file]",
+    "sefios[file-store]",
 ]
 
 [project.urls]
