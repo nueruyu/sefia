@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from glyff import ArgumentsDigest, DomainId, ExecutionId, ExecutionName
+from pytest_mock import MockerFixture
 
 from sefios._session_state import _SessionState
 
@@ -30,12 +31,14 @@ def _execution_id(
 
 
 @pytest.fixture
-def session_state():
+def session_state() -> _SessionState:
     return _SessionState(storage=MagicMock())
 
 
 class TestSessionState:
-    def test_get_call_state_store_creates_scoped_key(self, session_state, mocker):
+    def test_get_call_state_store_creates_scoped_key(
+        self, session_state: _SessionState, mocker: MockerFixture
+    ):
         # Arrange
         execution_id = _execution_id("Input.get_input", "prompt-a")
         mock_glyff_ctx = MagicMock()
@@ -53,7 +56,7 @@ class TestSessionState:
         assert str(execution_id) not in store._key
 
     def test_get_call_state_store_includes_args_hash_in_scope(
-        self, session_state, mocker
+        self, session_state: _SessionState, mocker: MockerFixture
     ):
         # Arrange
         first_execution_id = _execution_id("Input.get_input", "prompt-a")
@@ -72,7 +75,9 @@ class TestSessionState:
         # Assert
         assert first_store._key != second_store._key
 
-    def test_get_call_state_store_includes_parent_scope(self, session_state, mocker):
+    def test_get_call_state_store_includes_parent_scope(
+        self, session_state: _SessionState, mocker: MockerFixture
+    ):
         # Arrange
         first_parent = _execution_id(
             "RequirementsClarifier.clarify_request", "clarifier"
@@ -99,7 +104,7 @@ class TestSessionState:
         assert first_store._key != second_store._key
 
     def test_get_call_state_store_raises_error_outside_engrave(
-        self, session_state, mocker
+        self, session_state: _SessionState, mocker: MockerFixture
     ):
         # Arrange: simulate being outside an engraved call (no current execution).
         mock_glyff_ctx = MagicMock()
@@ -112,13 +117,17 @@ class TestSessionState:
         with pytest.raises(RuntimeError, match="can only be used inside"):
             session_state.get_call_state_store("my_state", StateA)
 
-    def test_get_state_store_returns_same_instance_for_same_key(self, session_state):
+    def test_get_state_store_returns_same_instance_for_same_key(
+        self, session_state: _SessionState
+    ):
         store1 = session_state.get_state_store("shared_key", StateA)
         store2 = session_state.get_state_store("shared_key", StateA)
 
         assert store1 is store2
 
-    def test_get_state_store_raises_type_error_on_mismatch(self, session_state):
+    def test_get_state_store_raises_type_error_on_mismatch(
+        self, session_state: _SessionState
+    ):
         session_state.get_state_store("shared_key", StateA)
 
         with pytest.raises(
