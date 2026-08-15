@@ -9,7 +9,7 @@ dependencies = [
     "sefia>=0.3.0",
     "typing-extensions>=4.6",
     "glyff>=0.16.0",
-    "glyff-file-store>=0.16.0",
+    "glyff-sqlite>=0.16.0",
     "glyff-pydantic>=0.16.0",
 ]
 dynamic = ["version"]
@@ -36,6 +36,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+file = ["glyff-file-store>=0.16.0"]
 litellm = ["sefia-litellm>=0.1.0"]
 web = ["ddgs>=9.0"]
 cli = ["sefia-typer>=0.2.0"]
@@ -45,6 +46,7 @@ all = [
     "sefios[web]",
     "sefios[cli]",
     "sefios[fastapi]",
+    "sefios[file]",
 ]
 
 [project.urls]

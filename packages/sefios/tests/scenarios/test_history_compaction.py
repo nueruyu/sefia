@@ -13,13 +13,13 @@ from pathlib import Path
 import glyff
 from glyff.serialization import FallbackByTypeQualname
 import pytest
-from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
+from glyff_sqlite import SQLiteBackend
 from sefia import HistoryStorage, Policy, Session, Tools
 from sefia.llm import LLMResponse
 from sefia.testing import MockLLMClient, result_response, tool_calls_response
 
-from sefios import domain, FileSessionStorage
+from sefios import SQLiteSessionStorage, domain
 from sefios.exceptions import InputRequired
 from sefios.history_storages import SessionHistoryStorage
 from sefios._session_state import bind_session_storage
@@ -86,16 +86,16 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
     def make_glyff_session() -> glyff.Session:
         return glyff.Session(
             id=glyff.SessionId(_SESSION_ID),
-            backend=JsonFileBackend(base_dir=tmp_path / "glyff"),
+            backend=SQLiteBackend(tmp_path / "sessions.sqlite3"),
             serializer=PydanticSerializer(),
             argument_canonicalizer=PydanticArgumentCanonicalizer(
                 FallbackByTypeQualname()
             ),
         )
 
-    def make_state_storage() -> FileSessionStorage:
-        return FileSessionStorage(
-            base_dir=tmp_path / "state", serializer=PydanticSerializer()
+    def make_state_storage() -> SQLiteSessionStorage:
+        return SQLiteSessionStorage(
+            tmp_path / "sessions.sqlite3", _SESSION_ID, PydanticSerializer()
         )
 
     history_storage = make_history_storage() if make_history_storage else None

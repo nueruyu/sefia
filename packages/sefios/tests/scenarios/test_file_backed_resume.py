@@ -1,7 +1,7 @@
 """File-backed pause/resume across simulated process restarts.
 
-Exercises the real ``Input`` with glyff's ``JsonFileBackend`` and the
-sefios ``FileSessionStorage``: every object (backend, store, tool, LLM client) is
+Exercises the real ``Input`` with glyff and Sefia state sharing SQLite: every
+object (backend, store, tool, LLM client) is
 constructed fresh for the second run, so the only thing connecting the two runs
 is what was committed to disk before the pause. The resumed run must read back
 the *same* interaction id the paused run stored — the idempotency hinge of the
@@ -14,13 +14,13 @@ from pathlib import Path
 import glyff
 from glyff.serialization import FallbackByTypeQualname
 import pytest
-from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
+from glyff_sqlite import SQLiteBackend
 from sefia import Session, Tools
 from sefia.llm import LLMResponse
 from sefia.testing import MockLLMClient, result_response, tool_calls_response
 
-from sefios import domain, FileSessionStorage
+from sefios import SQLiteSessionStorage, domain
 from sefios.exceptions import InputRequired
 from sefios._session_state import bind_session_storage
 from sefios.tools import Input, InputRequest
@@ -64,16 +64,16 @@ async def test_pause_resume_survives_process_restart(
         # A fresh backend instance per run, like a new process would create.
         return glyff.Session(
             id=glyff.SessionId(_SESSION_ID),
-            backend=JsonFileBackend(base_dir=tmp_path / "glyff"),
+            backend=SQLiteBackend(tmp_path / "sessions.sqlite3"),
             serializer=PydanticSerializer(),
             argument_canonicalizer=PydanticArgumentCanonicalizer(
                 FallbackByTypeQualname()
             ),
         )
 
-    def make_state_storage() -> FileSessionStorage:
-        return FileSessionStorage(
-            base_dir=tmp_path / "state", serializer=PydanticSerializer()
+    def make_state_storage() -> SQLiteSessionStorage:
+        return SQLiteSessionStorage(
+            tmp_path / "sessions.sqlite3", _SESSION_ID, PydanticSerializer()
         )
 
     # --- First run: no answer available, the run pauses. ---
