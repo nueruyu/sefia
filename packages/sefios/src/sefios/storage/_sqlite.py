@@ -1,5 +1,7 @@
 import asyncio
 import sqlite3
+from collections.abc import Generator
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +26,14 @@ class SQLiteSessionStorage(SessionStorage):
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._database)
 
+    @contextmanager
+    def _connection(self) -> Generator[sqlite3.Connection]:
+        with closing(self._connect()) as connection:
+            yield connection
+
     def _initialize(self) -> None:
         self._database.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as connection:
+        with self._connection() as connection, connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute(
                 """
@@ -40,7 +47,7 @@ class SQLiteSessionStorage(SessionStorage):
             )
 
     def _read(self, key: str) -> bytes | None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 """
                 SELECT value FROM sefia_session_state
@@ -51,7 +58,7 @@ class SQLiteSessionStorage(SessionStorage):
         return bytes(row[0]) if row is not None else None
 
     def _write(self, key: str, value: bytes) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection, connection:
             connection.execute(
                 """
                 INSERT INTO sefia_session_state (session_id, key, value)
@@ -62,7 +69,7 @@ class SQLiteSessionStorage(SessionStorage):
             )
 
     def _delete(self, key: str) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection, connection:
             connection.execute(
                 """
                 DELETE FROM sefia_session_state

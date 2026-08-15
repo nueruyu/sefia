@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from typing import cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from glyff import Serializer
 from glyff_pydantic import PydanticSerializer
+from pytest_mock import MockerFixture
 
 from sefios.storage import (
     FileSessionStorage,
@@ -131,3 +133,20 @@ async def test_sqlite_store_isolates_sessions(tmp_path: Path) -> None:
 
     assert await first.get("state", dict) == {"value": "first"}
     assert await second.get("state", dict) == {"value": "second"}
+
+
+async def test_sqlite_store_closes_every_connection(
+    tmp_path: Path, mocker: MockerFixture
+) -> None:
+    connection = MagicMock(spec=sqlite3.Connection)
+    connection.execute.return_value.fetchone.return_value = None
+    mocker.patch.object(SQLiteSessionStorage, "_connect", return_value=connection)
+    store = SQLiteSessionStorage(
+        tmp_path / "sessions.sqlite3", "session", PydanticSerializer()
+    )
+
+    await store.get("state", dict)
+    await store.set("state", {"value": "kept"}, dict)
+    await store.delete("state")
+
+    assert connection.close.call_count == 4
