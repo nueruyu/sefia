@@ -3,6 +3,16 @@ from typing import Any, cast
 
 from pydantic import ConfigDict, TypeAdapter, create_model
 
+_UNSUPPORTED_COMPOSITION_KEYWORDS = (
+    "allOf",
+    "not",
+    "dependentRequired",
+    "dependentSchemas",
+    "if",
+    "then",
+    "else",
+)
+
 
 def build_llm_schema(
     model: Any,
@@ -107,6 +117,9 @@ def _validate_provider_schema(schema: dict[str, Any]) -> None:
 
         if "oneOf" in node_dict:
             _unsupported(path, "oneOf is not supported; use a disjoint anyOf")
+        for keyword in _UNSUPPORTED_COMPOSITION_KEYWORDS:
+            if keyword in node_dict:
+                _unsupported(path, f"{keyword} is not supported")
 
         if node_dict.get("type") == "object":
             if node_dict.get("additionalProperties") is not False:

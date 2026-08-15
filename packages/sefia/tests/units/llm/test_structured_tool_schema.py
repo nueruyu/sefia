@@ -168,6 +168,35 @@ def test_incompatible_raw_tool_schema_is_rejected_without_rewriting(
         director.build_decision_schema()
 
 
+_UNSUPPORTED_COMPOSITIONS: list[tuple[str, Any]] = [
+    ("allOf", [{}]),
+    ("not", {}),
+    ("dependentRequired", {"query": ["other"]}),
+    ("dependentSchemas", {"query": {}}),
+    ("if", {}),
+    ("then", {}),
+    ("else", {}),
+]
+
+
+@pytest.mark.parametrize(
+    ("keyword", "value"),
+    _UNSUPPORTED_COMPOSITIONS,
+)
+def test_unsupported_composition_keyword_is_rejected(keyword: str, value: Any) -> None:
+    raw_schema = {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+        "additionalProperties": False,
+        keyword: value,
+    }
+    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+
+    with pytest.raises(ValueError, match=rf"{keyword} is not supported"):
+        director.build_decision_schema()
+
+
 def test_mapping_result_is_rejected_as_incompatible_with_strict_output() -> None:
     director = OutputOnlyDirector(PydanticModelBackend(), dict[str, str], [])
 

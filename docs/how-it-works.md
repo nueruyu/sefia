@@ -187,9 +187,10 @@ signature to introspect) and passes that schema through verbatim. Because that
 schema is also used for local argument validation, Sefia does not rewrite it for
 provider compatibility. It must already use the strict structured-output subset
 supported by the verified providers: object properties are required, objects set
-`additionalProperties` to `false`, and unions use `anyOf` rather than `oneOf`.
-Incompatible schemas fail when the provider-facing decision schema is built,
-before an LLM request is made.
+`additionalProperties` to `false`, unions use `anyOf` rather than `oneOf`, and
+unsupported composition keywords such as `allOf` and conditional schemas are
+omitted. Incompatible schemas fail when the provider-facing decision schema is
+built, before an LLM request is made.
 
 **Execution** (`_tool_execution.py`, engraved through
 `InferenceExecutor._call_tools`): each requested call is matched
