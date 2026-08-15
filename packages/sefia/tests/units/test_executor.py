@@ -102,6 +102,30 @@ def executor_dependencies(mocker: MockerFixture):
 
 
 class TestInferenceExecutor:
+    async def test_rejects_unknown_decision_from_custom_strategy(
+        self, executor_dependencies
+    ):
+        (
+            mock_strategy,
+            mock_collector,
+            mock_publisher,
+            non_engrave,
+        ) = executor_dependencies
+        mock_strategy.decide_next_step.return_value = object()
+
+        executor = _make_executor(
+            sample_func,
+            ("value",),
+            {},
+            mock_strategy,
+            mock_collector,
+            non_engrave,
+            mock_publisher,
+        )
+
+        with pytest.raises(TypeError, match="Unknown decision type"):
+            await executor.run()
+
     async def test_run_loop_with_tool_call_and_result(self, executor_dependencies):
         # Arrange
         (

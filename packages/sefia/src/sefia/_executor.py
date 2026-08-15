@@ -19,6 +19,7 @@ from .inference import (
     ResultDecision,
     FunctionInfo,
     InferenceDecision,
+    ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
 )
@@ -73,6 +74,12 @@ def _layer(
         raise TypeError("Middleware and context types do not match.")
 
     return call
+
+
+def _require_tool_call_decision(decision: object) -> ToolCallDecision:
+    if isinstance(decision, ToolCallDecision):
+        return decision
+    raise TypeError(f"Unknown decision type: {type(decision)}")
 
 
 class InferenceExecutor:
@@ -221,6 +228,7 @@ class InferenceExecutor:
             if isinstance(decision, ResultDecision):
                 return decision.result
 
+            decision = _require_tool_call_decision(decision)
             if decision.calls:
                 tool_results = await self._call_tools_engraved(decision.calls)
             else:

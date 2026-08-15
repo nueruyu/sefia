@@ -14,6 +14,9 @@ async def _standalone_stream(tool_call_id: str, events: ArgStream) -> None:
         pass
 
 
+_ = _standalone_stream
+
+
 class Toolkit:
     async def ask(self, question: str) -> str:
         return question

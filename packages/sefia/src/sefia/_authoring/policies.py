@@ -12,13 +12,18 @@ class PolicyDecorator(Protocol):
     def __call__(self, func: C) -> C: ...
 
 
-def policy(value: object) -> PolicyDecorator:
+def _require_policy(value: object) -> Policy:
+    if isinstance(value, Policy):
+        return value
+    raise TypeError(
+        "@policy must be called with a Policy instance, "
+        "e.g. @policy(Policy(middleware=lambda: [Retrier(max_retries=5)]))."
+    )
+
+
+def policy(value: Policy) -> PolicyDecorator:
     """Attach an inference policy to a function."""
-    if not isinstance(value, Policy):
-        raise TypeError(
-            "@policy must be called with a Policy instance, "
-            "e.g. @policy(Policy(middleware=lambda: [Retrier(max_retries=5)]))."
-        )
+    value = _require_policy(value)
 
     def decorator(func: C) -> C:
         function_metadata = metadata.ensure_metadata(func)

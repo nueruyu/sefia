@@ -57,6 +57,7 @@ line-length = 88
 [tool.pyright]
 include = [
     "packages/sefia/src",
+    "packages/sefia/tests/typing",
     "packages/sefia_litellm/src",
     "packages/sefia_typer/src",
     "packages/sefia_fastapi/src",
@@ -67,3 +68,4 @@ venvPath = "."
 venv = ".venv"
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
+reportUnnecessaryTypeIgnoreComment = true

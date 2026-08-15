@@ -54,10 +54,12 @@ class Domain:
         self._policies = tuple(policies)
 
     @overload
-    def infer(self, func: Callable[P, R]) -> Callable[P, R]: ...
+    def infer(self, func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]: ...
 
     @overload
-    def infer(self, *, name: str) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
+    def infer(
+        self, *, name: str
+    ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]: ...
 
     def infer(
         self,
@@ -68,8 +70,8 @@ class Domain:
         """Decorate an inferred function using its qualified or explicit name."""
 
         def decorator(
-            func: Callable[P, R], execution_name: str | None
-        ) -> Callable[P, R]:
+            func: Callable[P, Awaitable[R]], execution_name: str | None
+        ) -> Callable[P, Awaitable[R]]:
             return self._decorate_inference(func, execution_name)
 
         if func is not None:
@@ -77,18 +79,20 @@ class Domain:
         if not name:
             raise ValueError("An inference execution name cannot be empty.")
 
-        def named_decorator(func: Callable[P, R]) -> Callable[P, R]:
+        def named_decorator(
+            func: Callable[P, Awaitable[R]],
+        ) -> Callable[P, Awaitable[R]]:
             return decorator(func, name)
 
         return named_decorator
 
     def _decorate_inference(
-        self, func: Callable[P, R], execution_name: str | None
-    ) -> Callable[P, R]:
+        self, func: Callable[P, Awaitable[R]], execution_name: str | None
+    ) -> Callable[P, Awaitable[R]]:
         unwrapped = inspect.unwrap(func)
 
         @functools.wraps(func)
-        async def run(*args: P.args, **kwargs: P.kwargs) -> Any:
+        async def run(*args: P.args, **kwargs: P.kwargs) -> R:
             context = get_context()
             function_metadata = metadata.get_metadata(unwrapped)
             function_policies = cast(
@@ -127,14 +131,14 @@ class Domain:
             )
 
             @functools.wraps(func)
-            async def engraved_run(*_args: P.args, **_kwargs: P.kwargs) -> Any:
+            async def engraved_run(*_args: P.args, **_kwargs: P.kwargs) -> R:
                 return await executor.run()
 
             return await self._glyff.engrave(engraved_run, name=execution_name)(
                 *args, **kwargs
             )
 
-        return cast(Callable[P, R], run)
+        return cast(Callable[P, Awaitable[R]], run)
 
     @overload
     def engrave(self, func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]: ...
