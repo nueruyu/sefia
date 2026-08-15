@@ -144,9 +144,12 @@ single runs.
 
 ### Do I need Postgres?
 
-No. The store is pluggable — memory and file stores ship; a Postgres or other backend
-is an option, not a requirement. Your application database stays yours; sefia's store
-holds only enough to bring a paused or crashed run back to where it was.
+No. `sefios.SessionScope` uses SQLite by default, with no database service or
+third-party runtime dependency. `MemoryPersistence` provides ephemeral process-local
+execution, while the optional `FilePersistence` is intended for inspecting JSON during
+debugging. A Postgres or other backend can implement the typed `SessionPersistence`
+seam. Your application database stays yours; Sefia stores only enough to bring a
+paused or crashed run back to where it was.
 
 ### Is it production-ready?
 

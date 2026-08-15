@@ -22,7 +22,15 @@ Extras:
 | `cli`       | [`sefia-typer`](https://pypi.org/project/sefia-typer/)     | Typer (CLI) integration          |
 | `fastapi`   | [`sefia-fastapi`](https://pypi.org/project/sefia-fastapi/) | FastAPI (HTTP) integration       |
 | `web`       | `ddgs`                              | Built-in web search tool         |
+| `file`      | `glyff-file-store`                  | Inspectable JSON debug storage   |
 | `all`       | all of the above                    |                                  |
+
+## Persistence
+
+`SessionScope` stores glyff executions and Sefia session state in one SQLite
+database by default. Pass `MemoryPersistence()` for ephemeral process-local runs.
+`FilePersistence` is an optional, debug-oriented JSON representation and requires
+the `file` extra.
 
 ## Documentation
 

@@ -124,7 +124,8 @@ async def main(topic: str) -> Report:
         return await service.run(topic)       # the engraved run can pause and resume
 ```
 
-`SessionScope` wires the LLM client, the glyff session, and the store for you; drop to
+`SessionScope` wires the LLM client, the glyff session, and a shared SQLite database
+for durable execution and session state; drop to
 `sefia.Session` directly when you want full control. The **[tutorial](./docs/tutorial.md)**
 builds this into a human-in-the-loop service that resumes over HTTP.
 

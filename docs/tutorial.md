@@ -69,9 +69,14 @@ python quickstart.py
 
 The body never runs. sefia sends the signature, docstring, and arguments to the
 model, then validates the response into a `Summary`. `SessionScope` wired the LLM
-client, the durability session, and a file store under `.sessions/` for you. For the
+client, the durability session, and a SQLite database under `.sessions/` for you. For the
 full rules on arguments, service members, tools, and return types, see
 [The `@infer` contract](./infer-contract.md).
+
+SQLite is the durable local default: glyff execution records and Sefia's
+session-scoped state share one database while using separate tables. For an ephemeral
+process-local session, pass `persistence=MemoryPersistence()`. JSON files remain
+available for debugging with `FilePersistence` from the `sefios[file]` extra.
 
 ## 2. Give it a tool
 
@@ -300,7 +305,7 @@ between the two requests changes nothing.
 
 ## Next steps
 
-- Swap the file store for your own backend, or drop to `sefia.Session` for full
+- Select another `SessionPersistence`, or drop to `sefia.Session` for full
   control over the LLM client, policies, and middleware.
 - Read [The `@infer` contract](./infer-contract.md) for the rules on arguments,
   service members, tool methods, and return types.

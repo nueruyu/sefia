@@ -116,13 +116,14 @@ implementation noted in parentheses.
 | `_domain.py` | Convenience constructor for an application-owned `sefia.Domain`. |
 | `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
+| `persistence.py` | Paired execution/state persistence profiles; SQLite is the durable default, with memory and optional JSON-file alternatives. |
 | `_input_channel.py` | Internal persisted routing between the `Input` tool and host-provided CLI/HTTP input. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |
 | `history_storages/` | `SessionHistoryStorage` — an alternative `HistoryStorage` that keeps run history in the session storage (keyed by the run's `ExecutionId`) instead of glyff metadata. |
 | `handlers/` | `_cost` — an observation-seam handler (cost accounting). |
 | `tools/` | `input.py` (external input, pause-by-raise), `output.py` (agent-authored, non-blocking output), `web.py` (DuckDuckGo search). |
-| `storage/` | Session-scoped persistence: the `SessionStorage` interface + `MemorySessionStorage` / `FileSessionStorage`. |
+| `storage/` | Session-scoped persistence: the `SessionStorage` interface + memory, SQLite, and JSON-file implementations. |
 | `sessions/` | `SessionManager` — the file-backed registry of known sessions and the active one. |
 | `cli/` | Gated on `sefios[cli]`: `_app.py` owns the `SefiaCLI` session facade, `_reporting.py` bridges tool/session events to reporter DTOs, and `_cost_reporter.py` adds cost output; the package re-exports the `sefia_typer` reporter surface. |
 | `fastapi/` | Gated on `sefios[fastapi]`: the `SefiaHTTP` facade composing `sefia_fastapi` with `SessionScope`, `Input`, `Output`, and SSE lifecycle/delta streaming; integration exceptions live in `sefios.fastapi.exceptions`. |
@@ -138,7 +139,7 @@ implementation noted in parentheses.
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
-| Add a session-state persistence backend | implement `sefios` `SessionStorage` and pass a `session_storage_factory` to `SessionScope`; reference `sefios/storage/_file.py` |
+| Add a persistence backend | implement `SessionPersistence` so the glyff execution backend and `SessionStorage` are selected together; reference `persistence.py` |
 | Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); to change where history lives, pass `history_storage=` to `SessionScope`/`Session` (seam: `HistoryStorage`) |
 | Change shared input routing / persistence rules | `sefios/_input_channel.py` |
 | Change CLI rendering / input callbacks | `packages/sefia_typer` |
