@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from pathlib import Path
 
 from fastapi.responses import StreamingResponse
 from sefia import Policy
@@ -11,12 +10,13 @@ from sefia_fastapi.events import SessionEvents, SSEEvent
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 from typing_extensions import final
 
-from .._scope import SessionScope
 from .._input_channel import InputChannel
+from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..exceptions import InputRequired
 from ..handlers import CostCalculator
-from ..sessions import SessionManager
+from ..persistence import MemoryPersistence, PersistenceProvider
+from ..sessions import SessionRegistry
 from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
 
 
@@ -52,13 +52,14 @@ class SefiaHTTP:
     def __init__(
         self,
         *,
-        session_dir: Path,
         model: str | None = None,
         max_steps: int | None = 25,
         policies: list[Policy] | None = None,
+        persistence: PersistenceProvider | None = None,
     ):
+        persistence = persistence or MemoryPersistence()
         self._events = SessionEvents()
-        self._session_manager = SessionManager(session_dir)
+        self._session_registry: SessionRegistry = persistence.create_session_registry()
         self._input = InputChannel(namespace="http/input_channel")
         self._active_session_id: ContextVar[str | None] = ContextVar(
             "http_active_session_id", default=None
@@ -79,11 +80,11 @@ class SefiaHTTP:
             scope_policies.extend(policies)
 
         self._session_scope = SessionScope(
-            session_dir=session_dir,
             model=model,
             stream=True,
             max_steps=max_steps,
             policies=scope_policies,
+            persistence=persistence,
         )
 
     @property
@@ -95,10 +96,10 @@ class SefiaHTTP:
         return self._output_tool
 
     def create_session(self) -> str:
-        return self._session_manager.create_new_active_session()
+        return self._session_registry.create_session()
 
     def ensure_session(self, session_id: str) -> None:
-        if not self._session_manager.session_exists(session_id):
+        if not self._session_registry.session_exists(session_id):
             raise HTTPUnknownSessionError(session_id)
 
     @asynccontextmanager

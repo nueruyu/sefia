@@ -1,17 +1,16 @@
-from sefios import domain
 import asyncio
 import json
 from collections.abc import Callable, Coroutine
-from pathlib import Path
 from typing import Any
 
 import pytest
 from sefia import Tools
-from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
-from sefia_fastapi.events import _SessionEvent
 from sefia.llm import LLMClient, LLMResponse, Message
-from sefios.fastapi import SefiaHTTP
+from sefia_fastapi.events import _SessionEvent
+from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
+from sefios import MemoryPersistence, domain
 from sefios.exceptions import InputRequired
+from sefios.fastapi import SefiaHTTP
 from sefios.tools import Input, Output, OutputMessage
 
 infer = domain(
@@ -72,8 +71,8 @@ def _tool_response(name: str, arguments: dict[str, Any]) -> str:
 
 
 @pytest.fixture
-def http(tmp_path: Path) -> SefiaHTTP:
-    return SefiaHTTP(session_dir=tmp_path / "sessions", model="gpt-4o-mini")
+def http() -> SefiaHTTP:
+    return SefiaHTTP(model="gpt-4o-mini")
 
 
 def _drain(queue: asyncio.Queue[_SessionEvent]) -> list[_SessionEvent]:
@@ -94,6 +93,24 @@ class TestSefiaHTTPSessionManagement:
         session_id = http.create_session()
 
         http.ensure_session(session_id)
+
+    def test_created_session_is_known_to_another_instance(self) -> None:
+        persistence = MemoryPersistence()
+        first = SefiaHTTP(model="gpt-4o-mini", persistence=persistence)
+        second = SefiaHTTP(model="gpt-4o-mini", persistence=persistence)
+
+        session_id = first.create_session()
+
+        second.ensure_session(session_id)
+
+    def test_default_persistence_is_process_local(self) -> None:
+        first = SefiaHTTP(model="gpt-4o-mini")
+        second = SefiaHTTP(model="gpt-4o-mini")
+
+        session_id = first.create_session()
+
+        with pytest.raises(HTTPUnknownSessionError):
+            second.ensure_session(session_id)
 
     def test_unknown_session_raises_http_error(self, http: SefiaHTTP):
         # The facade raises the sefia_fastapi exception that applications map

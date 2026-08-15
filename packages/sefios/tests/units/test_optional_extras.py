@@ -8,6 +8,7 @@ from importlib.machinery import ModuleSpec
 from typing import Any
 
 import pytest
+from sefios import SQLitePersistence
 
 
 def _unload_package(monkeypatch: pytest.MonkeyPatch, module: str) -> None:
@@ -96,3 +97,25 @@ def test_adapter_import_errors_are_not_reported_as_missing_extra(
 
     with pytest.raises(ImportError, match="adapter dependency exploded"):
         importlib.import_module(module)
+
+
+def test_sqlite_persistence_requires_the_sqlite_extra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import = builtins.__import__
+
+    def fake_import(
+        name: str,
+        globals: dict[str, Any] | None = None,
+        locals: dict[str, Any] | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> Any:
+        if name == "glyff_sqlite":
+            raise ModuleNotFoundError("No module named 'glyff_sqlite'")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with pytest.raises(ImportError, match=r"pip install 'sefios\[sqlite\]'"):
+        SQLitePersistence("sessions.sqlite3")

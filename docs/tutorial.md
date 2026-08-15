@@ -14,7 +14,7 @@ The tutorial builds up to the CLI and HTTP integrations, so install their extras
 alongside the provider:
 
 ```bash
-pip install 'sefios[litellm,cli,fastapi]'
+pip install 'sefios[litellm,cli,fastapi,sqlite]'
 ```
 
 Set whatever credentials your model needs (LiteLLM reads provider env vars):
@@ -32,10 +32,9 @@ is `...`. You run it inside a **session**, which gives it durability and a store
 ```python
 # quickstart.py
 import asyncio
-from pathlib import Path
 
 from pydantic import BaseModel
-from sefios import SessionScope, domain
+from sefios import SQLitePersistence, SessionScope, domain
 
 
 class Summary(BaseModel):
@@ -51,7 +50,10 @@ async def summarize(article: str) -> Summary:
     ...
 
 
-scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
+scope = SessionScope(
+    model="gpt-4o",
+    persistence=SQLitePersistence(),
+)
 
 
 async def main() -> None:
@@ -69,9 +71,14 @@ python quickstart.py
 
 The body never runs. sefia sends the signature, docstring, and arguments to the
 model, then validates the response into a `Summary`. `SessionScope` wired the LLM
-client, the durability session, and a file store under `.sessions/` for you. For the
+client, the durability session, and a SQLite database under `.sefios/` for you. For the
 full rules on arguments, service members, tools, and return types, see
 [The `@infer` contract](./infer-contract.md).
+
+Memory is the process-local default. This tutorial opts into SQLite so glyff execution
+records, Sefia session state, and the session registry survive restarts in one database.
+JSON files remain available for debugging with `FilePersistence` from the
+`sefios[file-store]` extra.
 
 ## 2. Give it a tool
 
@@ -151,8 +158,9 @@ from pathlib import Path
 
 import typer
 from pydantic import BaseModel
-from sefios import Tools, domain
+from sefios import SQLitePersistence, Tools, domain
 from sefios.cli import SefiaCLI
+from sefios.sessions import FileActiveSessionStore
 from sefios.tools import Input, WebSearch
 
 
@@ -161,7 +169,7 @@ class Report(BaseModel):
     summary: str
 
 
-infer = domain("research").infer
+infer = domain("myapp").infer
 
 class ResearchService:
     _web: Tools[WebSearch]
@@ -178,7 +186,12 @@ class ResearchService:
 
 
 app = typer.Typer()
-cli = SefiaCLI(session_dir=Path(".sessions"), model="gpt-4o")
+SESSION_DIR = Path(".sefios")
+cli = SefiaCLI(
+    model="gpt-4o",
+    persistence=SQLitePersistence(),
+    active_session_store=FileActiveSessionStore(SESSION_DIR / "active_session.txt"),
+)
 service = ResearchService(web=WebSearch(), input_tool=cli.input_tool)
 
 
@@ -196,6 +209,10 @@ def run(answer: str | None = None) -> None:
 if __name__ == "__main__":
     app()
 ```
+
+The SQLite provider makes session resources durable. `FileActiveSessionStore`
+separately remembers which session this CLI workspace selected; both concerns default
+to memory when omitted.
 
 Run it once with no answer; it researches, drafts, then pauses:
 
@@ -225,10 +242,9 @@ run resumes. Nothing runs in the background between the two requests.
 
 ```python
 # server.py
-from pathlib import Path
-
 from fastapi import FastAPI
 from pydantic import BaseModel
+from sefios import SQLitePersistence
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import WebSearch
@@ -236,7 +252,10 @@ from sefios.tools import WebSearch
 # (ResearchService, Report from hitl_cli.py)
 
 app = FastAPI()
-api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
+api = SefiaHTTP(
+    model="gpt-4o",
+    persistence=SQLitePersistence(),
+)
 research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
 
 
@@ -285,7 +304,7 @@ curl -X POST localhost:8000/sessions/$SID/turn \
 ```
 
 The handler is an ordinary stateless endpoint. The durable run lives in the store
-under `.sessions/`, not in the process, so killing and restarting the server
+under `.sefios/`, not in the process, so killing and restarting the server
 between the two requests changes nothing.
 
 ## What just happened
@@ -300,7 +319,7 @@ between the two requests changes nothing.
 
 ## Next steps
 
-- Swap the file store for your own backend, or drop to `sefia.Session` for full
+- Select another `PersistenceProvider`, or drop to `sefia.Session` for full
   control over the LLM client, policies, and middleware.
 - Read [The `@infer` contract](./infer-contract.md) for the rules on arguments,
   service members, tool methods, and return types.

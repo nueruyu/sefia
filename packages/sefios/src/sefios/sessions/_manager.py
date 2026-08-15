@@ -1,15 +1,16 @@
-import uuid
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
 from typing_extensions import final
+
+from ._active import ActiveSessionStore
+from ._registry import SessionRegistry
 
 SessionSource = Literal["explicit", "active", "created"]
 
 
 class UnknownSessionError(Exception):
-    """Raised when a requested session is not known to the workspace."""
+    """Raised when a requested session is not registered."""
 
     def __init__(self, session_id: str):
         super().__init__(f"Unknown session: {session_id}")
@@ -29,33 +30,27 @@ class ResolvedSession:
 class SessionManager:
     """Manages the lifecycle of application sessions, including the active one.
 
-    Registered session ids and the active session id are persisted as plain
-    files under ``session_dir``, so they survive across process invocations.
+    The registry is provided by the persistence layer. Active selection is
+    workspace-local state supplied separately by the CLI integration.
     """
 
-    def __init__(self, session_dir: Path):
-        self._active_session_file = session_dir / "active_session.txt"
-        self._sessions_file = session_dir / "sessions.txt"
-        session_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(
+        self, registry: SessionRegistry, active_session_store: ActiveSessionStore
+    ) -> None:
+        self._registry = registry
+        self._active_session_store = active_session_store
 
     def get_active_session_id(self) -> str | None:
         """Gets the ID of the currently active session, if one exists."""
-        if self._active_session_file.exists():
-            session_id = self._active_session_file.read_text(encoding="utf-8").strip()
-            return session_id or None
-        return None
+        return self._active_session_store.get_active_session_id()
 
     def set_active_session_id(self, session_id: str) -> None:
         """Sets the active session ID."""
-        self._active_session_file.write_text(session_id, encoding="utf-8")
-
-    def create_new_session_id(self) -> str:
-        """Generates a new unique session ID."""
-        return str(uuid.uuid4())
+        self._active_session_store.set_active_session_id(session_id)
 
     def session_exists(self, session_id: str) -> bool:
-        """Returns whether the session is known to this workspace."""
-        return session_id in self._read_registered_session_ids()
+        """Returns whether the session is registered."""
+        return self._registry.session_exists(session_id)
 
     def switch_active_session(self, session_id: str) -> str:
         """Switches the active session and returns its ID."""
@@ -67,12 +62,7 @@ class SessionManager:
 
     def create_new_active_session(self) -> str:
         """Creates a new session, makes it active, and returns its ID."""
-        while True:
-            session_id = self.create_new_session_id()
-            if not self.session_exists(session_id):
-                break
-
-        self._register_session(session_id)
+        session_id = self._registry.create_session()
         self.set_active_session_id(session_id)
         return session_id
 
@@ -101,25 +91,4 @@ class SessionManager:
             session_id=self.create_new_active_session(),
             is_new=True,
             source="created",
-        )
-
-    def _read_registered_session_ids(self) -> set[str]:
-        if not self._sessions_file.exists():
-            return set()
-
-        return {
-            line.strip()
-            for line in self._sessions_file.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        }
-
-    def _register_session(self, session_id: str) -> None:
-        session_ids = self._read_registered_session_ids()
-        if session_id in session_ids:
-            return
-
-        session_ids.add(session_id)
-        self._sessions_file.write_text(
-            "".join(f"{registered_id}\n" for registered_id in sorted(session_ids)),
-            encoding="utf-8",
         )

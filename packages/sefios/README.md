@@ -22,7 +22,17 @@ Extras:
 | `cli`       | [`sefia-typer`](https://pypi.org/project/sefia-typer/)     | Typer (CLI) integration          |
 | `fastapi`   | [`sefia-fastapi`](https://pypi.org/project/sefia-fastapi/) | FastAPI (HTTP) integration       |
 | `web`       | `ddgs`                              | Built-in web search tool         |
+| `sqlite`    | `glyff-sqlite`                      | Restart-safe local persistence   |
+| `file-store` | `glyff-file-store`                 | Inspectable JSON debug storage   |
 | `all`       | all of the above                    |                                  |
+
+## Persistence
+
+The default `MemoryPersistence` keeps execution, session state, and the
+session registry process-local. Install the `sqlite` extra and explicitly select
+`SQLitePersistence` for restart-safe local persistence.
+`FilePersistence` is an optional, debug-oriented JSON representation and
+requires the `file-store` extra.
 
 ## Documentation
 

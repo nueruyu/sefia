@@ -799,6 +799,18 @@ wheels = [
 ]
 
 [[package]]
+name = "glyff-sqlite"
+version = "0.16.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "glyff" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/db/4f/c608313099d1562466b6c3407d9be17aae777d185d73c2fe78924ec26f31/glyff_sqlite-0.16.0.tar.gz", hash = "sha256:bc0c291cb9f8480ba4e3e1ae2539c35173cdd9662d287c8fb91d9cc61d7b2079", size = 16643, upload-time = "2026-08-15T06:43:55.099Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7f/32/72c3087b8e988ce392bf0df61354ed3a061b95c1d52e35ccfe072905ab37/glyff_sqlite-0.16.0-py3-none-any.whl", hash = "sha256:5f74f8f05638dcfa468d17aeaa4d384ca082454d604ab8962a7886bf19780c95", size = 13471, upload-time = "2026-08-15T06:43:53.614Z" },
+]
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2413,7 +2425,6 @@ name = "sefios"
 source = { editable = "packages/sefios" }
 dependencies = [
     { name = "glyff" },
-    { name = "glyff-file-store" },
     { name = "glyff-pydantic" },
     { name = "sefia" },
     { name = "typing-extensions" },
@@ -2422,6 +2433,8 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "ddgs" },
+    { name = "glyff-file-store" },
+    { name = "glyff-sqlite" },
     { name = "sefia-fastapi" },
     { name = "sefia-litellm" },
     { name = "sefia-typer" },
@@ -2432,8 +2445,14 @@ cli = [
 fastapi = [
     { name = "sefia-fastapi" },
 ]
+file-store = [
+    { name = "glyff-file-store" },
+]
 litellm = [
     { name = "sefia-litellm" },
+]
+sqlite = [
+    { name = "glyff-sqlite" },
 ]
 web = [
     { name = "ddgs" },
@@ -2444,8 +2463,11 @@ requires-dist = [
     { name = "ddgs", marker = "extra == 'all'", specifier = ">=9.0" },
     { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.0" },
     { name = "glyff", specifier = ">=0.16.0" },
-    { name = "glyff-file-store", specifier = ">=0.16.0" },
+    { name = "glyff-file-store", marker = "extra == 'all'", specifier = ">=0.16.0" },
+    { name = "glyff-file-store", marker = "extra == 'file-store'", specifier = ">=0.16.0" },
     { name = "glyff-pydantic", specifier = ">=0.16.0" },
+    { name = "glyff-sqlite", marker = "extra == 'all'", specifier = ">=0.16.0" },
+    { name = "glyff-sqlite", marker = "extra == 'sqlite'", specifier = ">=0.16.0" },
     { name = "sefia", editable = "packages/sefia" },
     { name = "sefia-fastapi", marker = "extra == 'all'", editable = "packages/sefia_fastapi" },
     { name = "sefia-fastapi", marker = "extra == 'fastapi'", editable = "packages/sefia_fastapi" },
@@ -2455,7 +2477,7 @@ requires-dist = [
     { name = "sefia-typer", marker = "extra == 'cli'", editable = "packages/sefia_typer" },
     { name = "typing-extensions", specifier = ">=4.6" },
 ]
-provides-extras = ["all", "cli", "fastapi", "litellm", "web"]
+provides-extras = ["all", "cli", "fastapi", "file-store", "litellm", "sqlite", "web"]
 
 [[package]]
 name = "shellingham"

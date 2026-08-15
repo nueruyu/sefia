@@ -11,7 +11,7 @@ Use explicit parameters, an explicit return type, and a docstring instruction.
 ```python
 from sefios import domain
 
-infer = domain("reports").infer
+infer = domain("myapp").infer
 
 @infer
 async def summarize(article: str) -> Summary:

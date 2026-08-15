@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Annotated, Never
 
 import typer
-from sefios import Tools
+from sefios import SQLitePersistence, Tools
 from sefios.cli import SefiaCLI
+from sefios.sessions import FileActiveSessionStore
 from sefios.tools import Input, Output
 
 from .._common.typer_utils import add_session_commands, async_command
@@ -43,9 +44,11 @@ class ChatAgent:
         ...
 
 
+SESSION_DIR = Path(__file__).parent / ".local"
 sefia_cli = SefiaCLI(
-    session_dir=Path(__file__).parent / ".local",
     stream=True,
+    persistence=SQLitePersistence(SESSION_DIR / "sessions.sqlite3"),
+    active_session_store=FileActiveSessionStore(SESSION_DIR / "active_session.txt"),
 )
 
 agent = ChatAgent(sefia_cli.input_tool, sefia_cli.output_tool)

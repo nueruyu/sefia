@@ -1,12 +1,20 @@
 from pathlib import Path
 
 import pytest
-from sefios.sessions import SessionManager, UnknownSessionError
+from sefios.sessions import (
+    FileActiveSessionStore,
+    MemorySessionRegistry,
+    SessionManager,
+    UnknownSessionError,
+)
 
 
 @pytest.fixture
 def manager(tmp_path: Path) -> SessionManager:
-    return SessionManager(tmp_path / "sessions")
+    return SessionManager(
+        MemorySessionRegistry(),
+        FileActiveSessionStore(tmp_path / "sessions" / "active_session.txt"),
+    )
 
 
 class TestSessionManager:
@@ -14,7 +22,7 @@ class TestSessionManager:
         session_dir = tmp_path / "sessions"
         assert not session_dir.exists()
 
-        SessionManager(session_dir)
+        FileActiveSessionStore(session_dir / "active_session.txt")
 
         assert session_dir.is_dir()
 
@@ -22,7 +30,7 @@ class TestSessionManager:
         session_dir = tmp_path / "var" / "sefia" / "sessions"
         assert not session_dir.parent.exists()
 
-        SessionManager(session_dir)
+        FileActiveSessionStore(session_dir / "active_session.txt")
 
         assert session_dir.is_dir()
 
@@ -47,16 +55,24 @@ class TestSessionManager:
 
     def test_active_session_persists_across_instances(self, tmp_path: Path) -> None:
         session_dir = tmp_path / "sessions"
-        session_id = SessionManager(session_dir).create_new_active_session()
+        registry = MemorySessionRegistry()
+        session_id = SessionManager(
+            registry, FileActiveSessionStore(session_dir / "active_session.txt")
+        ).create_new_active_session()
 
-        reopened = SessionManager(session_dir)
+        reopened = SessionManager(
+            registry, FileActiveSessionStore(session_dir / "active_session.txt")
+        )
 
         assert reopened.get_active_session_id() == session_id
         assert reopened.session_exists(session_id)
 
     def test_blank_active_session_file_reads_as_none(self, tmp_path: Path) -> None:
         session_dir = tmp_path / "sessions"
-        manager = SessionManager(session_dir)
+        manager = SessionManager(
+            MemorySessionRegistry(),
+            FileActiveSessionStore(session_dir / "active_session.txt"),
+        )
         (session_dir / "active_session.txt").write_text("   ", encoding="utf-8")
 
         assert manager.get_active_session_id() is None
@@ -111,7 +127,10 @@ class TestResolveSession:
 
     def test_dangling_active_session_raises(self, tmp_path: Path) -> None:
         session_dir = tmp_path / "sessions"
-        manager = SessionManager(session_dir)
+        manager = SessionManager(
+            MemorySessionRegistry(),
+            FileActiveSessionStore(session_dir / "active_session.txt"),
+        )
         # Point the active session file at an unregistered id.
         manager.set_active_session_id("ghost")
 

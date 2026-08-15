@@ -10,6 +10,8 @@ jobs:
   test:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
 
     strategy:
       matrix:
@@ -28,7 +30,12 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Sync dependencies
-        run: uv sync --all-packages --dev
+        run: uv sync --all-packages --dev --python ${{ matrix.python-version }}
+
+      - name: Verify Python version
+        run: >
+          uv run python -c
+          "import platform; assert platform.python_version().startswith('${{ matrix.python-version }}.')"
 
       - name: Ruff check
         run: uv run ruff check .

@@ -17,7 +17,7 @@ class Summary(BaseModel):
     uncertainty: str
 
 
-infer = domain("reports").infer
+infer = domain("myapp").infer
 
 
 @infer
@@ -62,7 +62,7 @@ and **[the positioning argument](./docs/tradeoffs.md)**. For a
 ## Install
 
 ```bash
-pip install 'sefios[litellm]'
+pip install 'sefios[litellm,sqlite]'
 ```
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
@@ -77,6 +77,9 @@ pip install 'sefios[litellm]'
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
 
+Persistence is process-local by default. The quickstart installs the `sqlite` extra
+and selects `SQLitePersistence` explicitly so its sessions survive restarts.
+
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
 `domain` / `concurrent` / `preview` / `policy` / `profile` decorators,
 `Tools`, `AsRawText`, and `Policy` / `Profile` — alongside its own `SessionScope` and
@@ -90,9 +93,8 @@ A plain Python class that holds a dependency, runs an inferred step, and persist
 run.
 
 ```python
-from pathlib import Path
 from pydantic import BaseModel
-from sefios import SessionScope, Tools, domain
+from sefios import SQLitePersistence, SessionScope, Tools, domain
 from sefios.tools import WebSearch
 
 
@@ -102,7 +104,7 @@ class Report(BaseModel):
     sources: list[str]
 
 
-infer = domain("research").infer
+infer = domain("myapp").infer
 
 class ResearchService:
     _web: Tools[WebSearch]                # the field annotation grants the tools
@@ -116,7 +118,10 @@ class ResearchService:
         ...
 
 
-scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
+scope = SessionScope(
+    model="gpt-4o",
+    persistence=SQLitePersistence(),
+)
 
 async def main(topic: str) -> Report:
     service = ResearchService(web=WebSearch())
@@ -124,7 +129,8 @@ async def main(topic: str) -> Report:
         return await service.run(topic)       # the engraved run can pause and resume
 ```
 
-`SessionScope` wires the LLM client, the glyff session, and the store for you; drop to
+`SessionScope` wires the LLM client, the glyff session, and a shared SQLite database
+for durable execution and session state; drop to
 `sefia.Session` directly when you want full control. The **[tutorial](./docs/tutorial.md)**
 builds this into a human-in-the-loop service that resumes over HTTP.
 
@@ -134,18 +140,17 @@ A turn that pauses for a human and resumes after a restart, served on an ordinar
 request/response handler: the pause is a tool that **raises**, and resume is calling
 the endpoint again.
 
-This example uses the FastAPI integration, so install the `[fastapi]` extra alongside
-your provider — `pip install 'sefios[litellm,fastapi]'`.
+This example uses the FastAPI integration with SQLite persistence, so install both
+extras — `pip install 'sefios[litellm,fastapi,sqlite]'`.
 
 ```python
-from pathlib import Path
-from sefios import Tools, domain
+from sefios import SQLitePersistence, Tools, domain
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input, WebSearch
 
 
-infer = domain("research").infer
+infer = domain("myapp").infer
 
 class ResearchService:
     _web: Tools[WebSearch]
@@ -161,7 +166,10 @@ class ResearchService:
         ...
 
 
-api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
+api = SefiaHTTP(
+    model="gpt-4o",
+    persistence=SQLitePersistence(),
+)
 research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
 
 

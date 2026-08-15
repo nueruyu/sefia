@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import cast
 
 import typer
@@ -10,11 +9,17 @@ from sefia_typer import CLIReporter
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 from typing_extensions import final
 
-from .._scope import SessionScope
 from .._input_channel import InputChannel
+from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..handlers import CostCalculator
-from ..sessions import SessionManager, UnknownSessionError
+from ..persistence import MemoryPersistence, PersistenceProvider
+from ..sessions import (
+    ActiveSessionStore,
+    MemoryActiveSessionStore,
+    SessionManager,
+    UnknownSessionError,
+)
 from ..tools import Input, InputRequest, InputResult, Output
 from ._cost_reporter import CostReportingCLIReporter
 from ._reporting import CLIReporting
@@ -53,16 +58,22 @@ class SefiaCLI:
     def __init__(
         self,
         *,
-        session_dir: Path,
         reporter: CLIReporter | None | object = _USE_DEFAULT_REPORTER,
         model: str | None = None,
         stream: bool = True,
         max_steps: int | None = 25,
         policies: list[Policy] | None = None,
+        persistence: PersistenceProvider | None = None,
+        active_session_store: ActiveSessionStore | None = None,
     ):
+        persistence = persistence or MemoryPersistence()
+        active_session_store = active_session_store or MemoryActiveSessionStore()
         self._reporter = self._resolve_reporter(reporter)
         self._reporting = CLIReporting(self._reporter)
-        self._session_manager = SessionManager(session_dir)
+        self._session_manager = SessionManager(
+            persistence.create_session_registry(),
+            active_session_store,
+        )
         self._input = InputChannel(
             on_request=self._reporting.input_request,
             on_prompt_delta=self._reporting.input_prompt_delta,
@@ -83,11 +94,11 @@ class SefiaCLI:
         if policies is not None:
             scope_policies.extend(policies)
         self._session_scope = SessionScope(
-            session_dir=session_dir,
             model=model,
             stream=stream,
             max_steps=max_steps,
             policies=scope_policies,
+            persistence=persistence,
         )
 
     @property

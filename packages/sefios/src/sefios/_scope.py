@@ -1,9 +1,8 @@
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
+from typing import final
 
 import glyff
-import glyff_file_store
 import sefia
 from glyff.serialization import (
     FallbackByTypeQualname,
@@ -12,13 +11,12 @@ from glyff_pydantic import (
     PydanticArgumentCanonicalizer,
     PydanticSerializer,
 )
-from sefia import HistoryStorage, Profile, Policy, ToolCollector
+from sefia import HistoryStorage, Policy, Profile, ToolCollector
 from sefia.llm import LLMClient
-from typing_extensions import final
 
 from ._session_state import bind_session_storage
+from .persistence import MemoryPersistence, PersistenceProvider
 from .policies import DefaultPolicy
-from .storage import FileSessionStorage, SessionStorage
 
 
 @final
@@ -27,10 +25,9 @@ class SessionScope:
     Manages shared configuration for Sefia sessions and provides helpers to run
     code within a configured session context.
 
-    ``session_storage_factory`` is the seam for a custom session-state
-    persistence backend: it receives the session id and returns the
-    :class:`SessionStorage` to bind for that session. By default a
-    :class:`FileSessionStorage` under ``session_dir`` is used.
+    ``persistence`` provides the resources for Sefia sessions. This scope uses
+    its glyff execution backend and session-state storage; facades also use its
+    session registry. The default is process-local memory.
 
     ``history_storage`` selects where run history is persisted; defaults to the
     run's glyff metadata (:class:`~sefia.history_storages.GlyffHistoryStorage`).
@@ -44,7 +41,6 @@ class SessionScope:
     def __init__(
         self,
         *,
-        session_dir: Path,
         model: str | None = None,
         llm_client: LLMClient | None = None,
         policies: list[Policy] | None = None,
@@ -52,11 +48,10 @@ class SessionScope:
         stream: bool = False,
         max_steps: int | None = 25,
         max_repair_attempts: int = 2,
-        session_storage_factory: Callable[[str], SessionStorage] | None = None,
+        persistence: PersistenceProvider | None = None,
         history_storage: HistoryStorage | None = None,
         tool_collector: ToolCollector | None = None,
     ):
-        self.session_dir = session_dir
         self.model = model
         self.llm_client = llm_client
         self.policies = list(policies or [])
@@ -64,7 +59,7 @@ class SessionScope:
         self.stream = stream
         self.max_steps = max_steps
         self.max_repair_attempts = max_repair_attempts
-        self.session_storage_factory = session_storage_factory
+        self.persistence = persistence or MemoryPersistence()
         self.history_storage = history_storage
         self.tool_collector = tool_collector
 
@@ -101,9 +96,7 @@ class SessionScope:
 
         serializer = PydanticSerializer()
 
-        backend = glyff_file_store.JsonFileBackend(
-            base_dir=self.session_dir / "glyff_sessions",
-        )
+        backend = self.persistence.create_execution_backend()
         gs = glyff.Session(
             id=glyff.SessionId(session_id),
             backend=backend,
@@ -112,13 +105,7 @@ class SessionScope:
                 FallbackByTypeQualname()
             ),
         )
-        if self.session_storage_factory is not None:
-            session_storage = self.session_storage_factory(session_id)
-        else:
-            session_storage = FileSessionStorage(
-                base_dir=self.session_dir / "sefia_metadata" / session_id,
-                serializer=serializer,
-            )
+        session_storage = self.persistence.create_session_storage(session_id)
 
         final_policies: list[Policy] = list(self.policies)
         if policies is not None:

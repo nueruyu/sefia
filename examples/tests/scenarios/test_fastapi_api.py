@@ -10,7 +10,6 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 from sefia.testing import MockLLMClient, result_response, tool_calls_response
-
 from sefios.fastapi import SefiaHTTP
 
 app_module = import_module("examples.03_fastapi_api.app")
@@ -21,8 +20,8 @@ Brief = domain_module.Brief
 
 
 @pytest.fixture
-def api(tmp_path):
-    service = SefiaHTTP(session_dir=tmp_path / "sessions", model="gpt-4o-mini")
+def api():
+    service = SefiaHTTP(model="gpt-4o-mini")
     app = app_module.create_app(service)
     client = TestClient(app)
     return SimpleNamespace(client=client, service=service, app=app)

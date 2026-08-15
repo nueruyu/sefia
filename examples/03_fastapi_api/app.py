@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
+from sefios import SQLitePersistence
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import (
     AmbiguousInputError,
@@ -21,7 +22,6 @@ from .models import (
     TurnRequest,
 )
 
-
 EXAMPLE_DIR = Path(__file__).parent
 
 
@@ -30,8 +30,8 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
 
     load_dotenv()
     api = sefia_http or SefiaHTTP(
-        session_dir=EXAMPLE_DIR / ".local",
         model=os.environ.get("EXAMPLE_DEFAULT_MODEL", "gpt-4o-mini"),
+        persistence=SQLitePersistence(EXAMPLE_DIR / ".local" / "sessions.sqlite3"),
     )
     interviewer = Interviewer(api.input_tool)
     app = FastAPI(title="Sefia FastAPI Example")
