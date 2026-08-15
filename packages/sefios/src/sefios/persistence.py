@@ -17,7 +17,7 @@ from .storage import (
 class PersistenceProvider(Protocol):
     """Creates the execution and state stores for one session."""
 
-    def create_execution_backend(self, session_id: str) -> Backend: ...
+    def create_execution_backend(self) -> Backend: ...
 
     def create_session_storage(self, session_id: str) -> SessionStorage: ...
 
@@ -29,7 +29,7 @@ class SQLitePersistenceProvider:
     def __init__(self, database: str | Path) -> None:
         self.database = Path(database)
 
-    def create_execution_backend(self, session_id: str) -> Backend:
+    def create_execution_backend(self) -> Backend:
         return SQLiteBackend(self.database)
 
     def create_session_storage(self, session_id: str) -> SessionStorage:
@@ -44,7 +44,7 @@ class MemoryPersistenceProvider:
         self._backend = MemoryBackend()
         self._session_storages: dict[str, MemorySessionStorage] = {}
 
-    def create_execution_backend(self, session_id: str) -> Backend:
+    def create_execution_backend(self) -> Backend:
         return self._backend
 
     def create_session_storage(self, session_id: str) -> SessionStorage:
@@ -62,7 +62,7 @@ class FilePersistenceProvider:
     def __init__(self, session_dir: str | Path) -> None:
         self.session_dir = Path(session_dir)
 
-    def create_execution_backend(self, session_id: str) -> Backend:
+    def create_execution_backend(self) -> Backend:
         try:
             from glyff_file_store import JsonFileBackend
         except ImportError as error:

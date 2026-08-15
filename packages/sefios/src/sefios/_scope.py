@@ -98,7 +98,7 @@ class SessionScope:
 
         serializer = PydanticSerializer()
 
-        backend = self.persistence.create_execution_backend(session_id)
+        backend = self.persistence.create_execution_backend()
         gs = glyff.Session(
             id=glyff.SessionId(session_id),
             backend=backend,
