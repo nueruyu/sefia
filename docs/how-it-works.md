@@ -91,8 +91,11 @@ A `create_model`-built decision model is the schema, picked by an
 
 The outer object keeps the provider-facing schema portable: unions are nested under
 `payload`, rendered as `anyOf`, and generated object schemas are closed with
-`additionalProperties: false`. The original Pydantic decision model remains the
-local validation authority after `payload` is unwrapped.
+`additionalProperties: false`. Before the schema reaches the provider,
+`pydantic/_provider_schema.py` also composes typed tool `$defs` into the envelope and
+encodes typed mappings as arrays of `{key, value}` entries. The matching decoder
+restores those entries to Python mappings before the unchanged Pydantic decision
+model performs final validation and `payload` is unwrapped.
 
 The system prompt is `docstring + response-instructions + the tool definitions (as
 JSON) + the decision JSON Schema`. The user message is the call's arguments rendered
@@ -183,9 +186,11 @@ keyword arguments, so a `Protocol` and the implementation it narrows must agree 
 parameter names, not just behavior — nothing checks this at runtime, so a mismatch
 surfaces as a tool-execution error on the first call rather than at discovery time.
 A `JsonSchemaToolEntry` instead carries its parameters as a raw JSON Schema (no
-signature to introspect) and passes that schema through verbatim. Because that
-schema is also used for local argument validation, Sefia does not rewrite it for
-provider compatibility. It must already use the strict structured-output subset
+signature to introspect) and passes that schema through verbatim. Provider encoding
+is applied only to schemas derived from Python types, where Sefia retains the
+original Pydantic validation model and can decode the representation safely. A raw
+schema has no equivalent typed contract, so Sefia does not rewrite it for provider
+compatibility. It must already use the strict structured-output subset
 supported by the verified providers: object properties are required, objects set
 `additionalProperties` to `false`, unions use `anyOf` rather than `oneOf`, and
 unsupported composition keywords such as `allOf` and conditional schemas are

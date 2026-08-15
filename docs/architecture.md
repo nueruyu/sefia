@@ -91,7 +91,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
 | `llm/` | The **default** `InferenceStrategy`: `_strategy.py` orchestrates calls and repair, `_execution_directors.py` owns execution modes and decision conversion, `_message_builder.py` serializes calls/history, and `_tool_call_ids.py` keeps streamed and final tool-call identities stable. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
-| `pydantic/` | The **default** `ToolFunctionInspector` + `DecisionModelBuilder`: schema gen & validation via Pydantic. | `PydanticModelBackend` |
+| `pydantic/` | The **default** `ToolFunctionInspector` + `DecisionModelBuilder`: Pydantic validation plus reversible provider-schema encoding for typed contracts. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
 
 ### The seams (`_interfaces/`) — the extension ports
@@ -135,7 +135,7 @@ implementation noted in parentheses.
 | Goal | Where |
 | --- | --- |
 | Add an LLM provider | implement `LLMClient`; mirror `packages/sefia_litellm/src/sefia_litellm/_client.py` |
-| Change how the prompt / decision schema is built | `llm/_strategy.py` (the `_ExecutionDirector`s), `llm/_xml_prompt_formatter.py` |
+| Change how the prompt / decision schema is built | `llm/_strategy.py` (the `_ExecutionDirector`s), `pydantic/_llm_schema.py`, `pydantic/_provider_schema.py`, `llm/_xml_prompt_formatter.py` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
