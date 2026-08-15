@@ -6,14 +6,14 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from sefia._tool_system import SignatureToolEntry, ToolEntry, ToolRegistry
-from sefia.event_system import EventPublisher
+from sefia.event_system import Event, EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
     FunctionInfo,
     ResultDecision,
     ToolCallDecision,
 )
-from sefia.llm import LLMInferenceStrategy, LLMResponse
+from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm._execution_directors import (
     OutputOnlyDirector,
     ToolEnabledDirector,
@@ -25,11 +25,11 @@ from sefia.pydantic._json_utils import pydantic_json_default
 
 
 class MockEventPublisher(EventPublisher):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(handlers=[])
-        self.events = []
+        self.events: list[Event] = []
 
-    async def publish(self, event):
+    async def publish(self, event: Event) -> None:
         self.events.append(event)
 
 
@@ -79,16 +79,14 @@ def _tool_registry(*funcs: Callable[..., Any]) -> ToolRegistry:
     return registry
 
 
-@pytest.fixture
-def mock_llm_client():
-    return AsyncMock()
-
-
-DUMMY_SCHEMA: dict = {}
+DUMMY_SCHEMA: dict[str, Any] = {}
 
 
 def _make_strategy(
-    llm_client=None, *, stream: bool = False, max_repair_attempts: int = 2
+    llm_client: LLMClient | None = None,
+    *,
+    stream: bool = False,
+    max_repair_attempts: int = 2,
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
@@ -103,14 +101,14 @@ def _make_strategy(
     )
 
 
-def _resolve(schema: dict, root: dict) -> dict:
+def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
     if "$ref" in schema:
         key = schema["$ref"].split("/")[-1]
         return root["$defs"][key]
     return schema
 
 
-def _decision_branch(schema: dict, decision: str) -> dict:
+def _decision_branch(schema: dict[str, Any], decision: str) -> dict[str, Any]:
     if schema.get("properties", {}).get("decision", {}).get("const") == decision:
         return schema
 
@@ -230,7 +228,7 @@ class TestToolOnlyDirector:
 class TestToolEnabledDirector:
     """Tests for _ToolEnabledDirector — tools and result are both allowed."""
 
-    def _director(self, output_type: Any = str):
+    def _director(self, output_type: Any = str) -> ToolEnabledDirector:
         return ToolEnabledDirector(PydanticModelBackend(), output_type, [_tool(search)])
 
     def test_build_decision_schema_has_decision_branches(self):
@@ -312,7 +310,7 @@ class TestToolEnabledDirector:
 class TestOutputOnlyDirector:
     """Tests for _OutputOnlyDirector — no tools, result required."""
 
-    def _director(self, output_type: Any = str):
+    def _director(self, output_type: Any = str) -> OutputOnlyDirector:
         return OutputOnlyDirector(PydanticModelBackend(), output_type, [])
 
     def test_build_decision_schema_has_only_result(self):

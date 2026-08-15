@@ -4,27 +4,25 @@ from dataclasses import dataclass
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
-import pytest
-
-from sefia._tool_system import SignatureToolEntry, ToolEntry, ToolRegistry
-from sefia.event_system import EventPublisher
+from sefia._tool_system import SignatureToolEntry, ToolEntry
+from sefia.event_system import Event, EventPublisher
 from sefia.inference import (
     FunctionInfo,
     ToolCallDecision,
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMInferenceStrategy
+from sefia.llm import LLMClient, LLMInferenceStrategy
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
 
 class MockEventPublisher(EventPublisher):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(handlers=[])
-        self.events = []
+        self.events: list[Event] = []
 
-    async def publish(self, event):
+    async def publish(self, event: Event) -> None:
         self.events.append(event)
 
 
@@ -67,23 +65,14 @@ def _tool(func: Callable[..., Any]) -> ToolEntry:
     )
 
 
-def _tool_registry(*funcs: Callable[..., Any]) -> ToolRegistry:
-    registry = ToolRegistry()
-    for func in funcs:
-        registry.add(func, name=_BACKEND.tool_name(func))
-    return registry
-
-
-@pytest.fixture
-def mock_llm_client():
-    return AsyncMock()
-
-
-DUMMY_SCHEMA: dict = {}
+DUMMY_SCHEMA: dict[str, Any] = {}
 
 
 def _make_strategy(
-    llm_client=None, *, stream: bool = False, max_repair_attempts: int = 2
+    llm_client: LLMClient | None = None,
+    *,
+    stream: bool = False,
+    max_repair_attempts: int = 2,
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
@@ -98,14 +87,14 @@ def _make_strategy(
     )
 
 
-def _resolve(schema: dict, root: dict) -> dict:
+def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
     if "$ref" in schema:
         key = schema["$ref"].split("/")[-1]
         return root["$defs"][key]
     return schema
 
 
-def _decision_branch(schema: dict, decision: str) -> dict:
+def _decision_branch(schema: dict[str, Any], decision: str) -> dict[str, Any]:
     if schema.get("properties", {}).get("decision", {}).get("const") == decision:
         return schema
 
