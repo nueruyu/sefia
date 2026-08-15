@@ -107,7 +107,7 @@ def declared_fields(cls: type) -> dict[str, Any]:
             continue
         globalns = getattr(sys.modules.get(base.__module__, None), "__dict__", {})
         localns = dict(vars(base))
-        raw = base.__dict__.get("__annotations__", {})
+        raw = inspect.get_annotations(base, eval_str=False)
         for name, annotation in raw.items():
             if name in fields:
                 continue
