@@ -11,8 +11,7 @@ async def async_inference(question: str) -> str:
     return question
 
 
-result: Awaitable[str] = async_inference("question")
-assert_type(result, Awaitable[str])
+_ = assert_type(async_inference("question"), Awaitable[str])
 
 
 def sync_inference(question: str) -> str:
