@@ -101,7 +101,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         messages: list[Message],
         director: ExecutionDirector,
-        output_schema: dict,
+        output_schema: dict[str, Any],
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
@@ -176,7 +176,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         function_info: FunctionInfo,
         history: Sequence[HistoryItem],
-        output_schema: dict,
+        output_schema: dict[str, Any],
         director: ExecutionDirector,
     ) -> list[Message]:
         return build_messages(

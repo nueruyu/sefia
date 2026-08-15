@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from typing_extensions import final, override
 
@@ -138,5 +138,8 @@ def _resolve_stream_handler(bound: Callable[..., Any]) -> StreamHandler | None:
     if handler is None:
         return None
     if target_self is not None:
-        return handler.__get__(target_self, type(target_self))
+        return cast(
+            StreamHandler,
+            handler.__get__(target_self, cast(type[Any], type(target_self))),
+        )
     return handler

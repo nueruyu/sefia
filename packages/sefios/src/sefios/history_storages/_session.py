@@ -1,11 +1,13 @@
 """A :class:`~sefia.HistoryStorage` backed by the session's storage."""
 
-from glyff import get_context as get_glyff_context
+from glyff import (
+    get_context as get_glyff_context,
+)
 from glyff.exceptions import ContextNotSetError
 from sefia import HistorySnapshot, HistoryStorage
 from typing_extensions import final, override
 
-from .._session_state import _execution_id_scope_key, get_session_storage
+from .._session_state import execution_id_scope_key, get_session_storage
 
 
 @final
@@ -29,7 +31,7 @@ class SessionHistoryStorage(HistoryStorage):
                 "SessionHistoryStorage can only be used inside an engraved "
                 "inference run."
             )
-        return f"{self._KEY_PREFIX}/{_execution_id_scope_key(execution_id)}"
+        return f"{self._KEY_PREFIX}/{execution_id_scope_key(execution_id)}"
 
     @override
     async def load(self) -> HistorySnapshot:

@@ -55,9 +55,17 @@ target-version = "py311"
 line-length = 88
 
 [tool.pyright]
-include = ["packages", "examples"]
+include = [
+    "packages/sefia/src",
+    "packages/sefia/tests/typing",
+    "packages/sefia_litellm/src",
+    "packages/sefia_typer/src",
+    "packages/sefia_fastapi/src",
+    "packages/sefios/src",
+]
 exclude = [".venv", ".uv-cache", "**/__pycache__"]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.11"
-typeCheckingMode = "basic"
+typeCheckingMode = "strict"
+reportUnnecessaryTypeIgnoreComment = true

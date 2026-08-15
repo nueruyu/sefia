@@ -19,12 +19,17 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable, Coroutine
+from typing import Any, AsyncGenerator, Callable, Coroutine
 
 import glyff
-from glyff.serialization import FallbackByTypeQualname
+from glyff.serialization import (
+    FallbackByTypeQualname,
+)
 from glyff.store import MemoryBackend
-from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
+from glyff_pydantic import (
+    PydanticArgumentCanonicalizer,
+    PydanticSerializer,
+)
 from typing_extensions import final, override
 
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
@@ -47,8 +52,8 @@ class MockLLMClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict] | None = None,
-        output_schema: dict | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        output_schema: dict[str, Any] | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         reasoning_callback: (
             Callable[[str], Coroutine[None, None, None]] | None
@@ -131,7 +136,7 @@ async def memory_session(
     session_id: str = "test-session",
     backend: Any | None = None,
     **session_kwargs: Any,
-) -> AsyncIterator[Session]:
+) -> AsyncGenerator[Session]:
     """A ready-to-use sefia ``Session`` over an in-memory glyff backend.
 
     Pass a shared ``backend`` with a stable ``session_id`` to simulate

@@ -60,11 +60,11 @@ class ExecutionDirector(ABC):
         raise NotImplementedError
 
     @final
-    def build_decision_schema(self) -> dict:
+    def build_decision_schema(self) -> dict[str, Any]:
         return self.decision_model.schema()
 
     @abstractmethod
-    def build_system_prompt_addition(self, output_schema: dict) -> str:
+    def build_system_prompt_addition(self, output_schema: dict[str, Any]) -> str:
         raise NotImplementedError
 
     @final
@@ -82,7 +82,7 @@ class ExecutionDirector(ABC):
     ) -> InferenceDecision:
         raise NotImplementedError
 
-    def _tool_definitions(self) -> list[dict]:
+    def _tool_definitions(self) -> list[dict[str, Any]]:
         return [tool.definition().to_dict() for tool in self.tools]
 
     def _tool_call_decision(
@@ -113,7 +113,7 @@ class ToolOnlyDirector(ExecutionDirector):
         )
 
     @override
-    def build_system_prompt_addition(self, output_schema: dict) -> str:
+    def build_system_prompt_addition(self, output_schema: dict[str, Any]) -> str:
         core_instruction = (
             "Your task is to call tools. You MUST set `decision` to `tool_calls` "
             "and populate the `tool_calls` field. There is no `result` — "
@@ -149,7 +149,7 @@ class ToolEnabledDirector(ExecutionDirector):
         )
 
     @override
-    def build_system_prompt_addition(self, output_schema: dict) -> str:
+    def build_system_prompt_addition(self, output_schema: dict[str, Any]) -> str:
         core_instruction = (
             "Your task is to decide the next step. You have two options:\n"
             "1. Call one or more tools by setting `decision` to `tool_calls` "
@@ -176,8 +176,7 @@ class ToolEnabledDirector(ExecutionDirector):
             if tool_call_ids is None:
                 raise RuntimeError("Tool call ids are required for a tool decision.")
             return self._tool_call_decision(decision.tool_calls, tool_call_ids)
-        if isinstance(decision, ResultLLMDecision):
-            return ResultDecision(result=decision.result)
+        return ResultDecision(result=decision.result)
 
 
 @final
@@ -191,7 +190,7 @@ class OutputOnlyDirector(ExecutionDirector):
         )
 
     @override
-    def build_system_prompt_addition(self, output_schema: dict) -> str:
+    def build_system_prompt_addition(self, output_schema: dict[str, Any]) -> str:
         core_instruction = (
             "Your task is to provide a non-null result by setting `decision` "
             "to `result` and populating the `result` field. No tools are "

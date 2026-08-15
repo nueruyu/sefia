@@ -1,9 +1,9 @@
 """Persisted routing between sefios input tools and host integrations."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol, TypeAlias, TypedDict, TypeVar, cast
 
 from ._async import MaybeAwaitable, maybe_await
 from .exceptions import AmbiguousInputError, UnknownInputError
@@ -16,12 +16,20 @@ InputRequestHandler = Callable[["InputRequest"], MaybeAwaitable[None]]
 InputPromptDeltaHandler = Callable[[str, str], MaybeAwaitable[None]]
 
 
+class _PendingRequest(TypedDict):
+    id: str
+    prompt: str
+
+
+_PendingMap: TypeAlias = dict[str, _PendingRequest]
+
+
 class KeyValueStore(Protocol):
     """Async persistence required by an input channel."""
 
     async def get(self, key: str, type_hint: type[T]) -> T | None: ...
 
-    async def set(self, key: str, value: Any, type_hint: type) -> None: ...
+    async def set(self, key: str, value: Any, type_hint: type[Any]) -> None: ...
 
     async def delete(self, key: str) -> None: ...
 
@@ -52,7 +60,7 @@ class InputChannel:
         self._on_prompt_delta = on_prompt_delta
 
     @contextmanager
-    def use_store(self, store: KeyValueStore):
+    def use_store(self, store: KeyValueStore) -> Generator[None]:
         """Bind the persistence backing this channel for the enclosed block."""
         token = self._active_store.set(store)
         try:
@@ -130,13 +138,13 @@ class InputChannel:
         if self._on_prompt_delta is not None:
             await maybe_await(self._on_prompt_delta(interaction_id, text))
 
-    async def _pending_map(self) -> dict[str, dict]:
+    async def _pending_map(self) -> _PendingMap:
         store = self._store()
-        pending = await store.get(self._pending_key, dict) or {}
+        pending = cast(_PendingMap | None, await store.get(self._pending_key, dict))
         if not pending:
             return {}
 
-        unresolved = {}
+        unresolved: _PendingMap = {}
         for interaction_id, request in pending.items():
             provided = await self._stored_input(interaction_id)
             if provided is None:
@@ -145,7 +153,7 @@ class InputChannel:
         await self._save_pending(unresolved)
         return dict(unresolved)
 
-    async def _save_pending(self, pending: dict[str, dict]) -> None:
+    async def _save_pending(self, pending: _PendingMap) -> None:
         store = self._store()
         if pending:
             await store.set(self._pending_key, pending, dict)
@@ -160,13 +168,13 @@ class InputChannel:
 
     async def _queue_input(self, input_text: str) -> None:
         store = self._store()
-        queue = await store.get(self._queued_key, list) or []
+        queue = cast(list[str] | None, await store.get(self._queued_key, list)) or []
         queue.append(input_text)
         await store.set(self._queued_key, queue, list)
 
     async def _pop_queued_input(self) -> str | None:
         store = self._store()
-        queue = await store.get(self._queued_key, list)
+        queue = cast(list[str] | None, await store.get(self._queued_key, list))
         if not queue:
             return None
 

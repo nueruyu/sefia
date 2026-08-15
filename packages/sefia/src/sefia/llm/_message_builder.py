@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from typing import Any, Callable
 
 from ..exceptions import InvalidInferenceResponseError
-from ..inference import FunctionInfo, HistoryItem, ToolCallDecision, ToolCallResult
+from ..inference import FunctionInfo, HistoryItem, ToolCallDecision
 from ._execution_directors import ExecutionDirector
 from ._messages import Message
 from ._prompt_formatter import PromptFormatter
@@ -14,7 +14,7 @@ JsonDefault = Callable[[Any], Any]
 def build_messages(
     function_info: FunctionInfo,
     history: Sequence[HistoryItem],
-    output_schema: dict,
+    output_schema: dict[str, Any],
     director: ExecutionDirector,
     prompt_formatter: PromptFormatter,
     json_default: JsonDefault | None,
@@ -62,7 +62,7 @@ def build_messages(
                     ],
                 )
             )
-        elif isinstance(item, ToolCallResult):
+        else:
             messages.append(
                 Message(
                     role="tool",

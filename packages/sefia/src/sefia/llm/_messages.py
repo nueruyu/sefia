@@ -1,5 +1,5 @@
 from dataclasses import asdict, dataclass, field, is_dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 
 def _to_serializable(value: Any, exclude_none: bool) -> Any:
@@ -7,14 +7,17 @@ def _to_serializable(value: Any, exclude_none: bool) -> Any:
         return _to_serializable(asdict(value), exclude_none=exclude_none)
     if isinstance(value, dict):
         result: dict[str, Any] = {}
-        for key, item in value.items():
+        for key, item in cast(dict[str, Any], value).items():
             converted = _to_serializable(item, exclude_none=exclude_none)
             if exclude_none and converted is None:
                 continue
             result[key] = converted
         return result
     if isinstance(value, list):
-        return [_to_serializable(item, exclude_none=exclude_none) for item in value]
+        return [
+            _to_serializable(item, exclude_none=exclude_none)
+            for item in cast(list[Any], value)
+        ]
     return value
 
 
@@ -48,7 +51,7 @@ class LLMResponse:
     model: str | None = None
     content: str | None = None
     reasoning_content: str | None = None
-    tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_calls: list[ToolCall] = field(default_factory=list[ToolCall])
     usage: dict[str, Any] | None = None
     stop_reason: str | None = None
     cost: float | None = None

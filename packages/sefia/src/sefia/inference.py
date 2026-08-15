@@ -64,11 +64,16 @@ class FunctionInfo:
     bound_arguments: dict[str, Any]
     type_hints: dict[str, Any]
     return_type: Any
-    args: tuple
-    kwargs: dict
+    args: tuple[Any, ...]
+    kwargs: dict[str, Any]
 
     @classmethod
-    def create(cls, func: Callable, args: tuple, kwargs: dict) -> "FunctionInfo":
+    def create(
+        cls,
+        func: Callable[..., Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> "FunctionInfo":
         """Create a FunctionInfo instance from a function and its arguments."""
         type_hints = inspect.get_annotations(func, eval_str=True)
         instructions = inspect.getdoc(func) or "Execute the requested task."

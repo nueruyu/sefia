@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import cast
@@ -121,7 +121,7 @@ class SefiaCLI:
         model: str | None = None,
         stream: bool | None = None,
         policies: list[Policy] | None = None,
-    ) -> AsyncIterator[SefiaCLISession]:
+    ) -> AsyncGenerator[SefiaCLISession]:
         """Run code within a resolved Sefia CLI session context."""
         try:
             resolved_session = self._session_manager.resolve_session(session_id)

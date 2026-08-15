@@ -119,15 +119,16 @@ class LiteLLMClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict] | None = None,
-        output_schema: dict | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        output_schema: dict[str, Any] | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         reasoning_callback: (
             Callable[[str], Coroutine[None, None, None]] | None
         ) = None,
     ) -> LLMResponse:
         """Sends a completion request using LiteLLM."""
-        from litellm import ModelResponse, acompletion
+        import litellm
+        from litellm import ModelResponse
 
         _configure_litellm_logging(self._suppress_logs)
 
@@ -150,7 +151,11 @@ class LiteLLMClient(LLMClient):
             kwargs["stream"] = True
 
         try:
-            response = await acompletion(
+            complete = cast(
+                Callable[..., Coroutine[Any, Any, Any]],
+                getattr(cast(object, litellm), "acompletion"),
+            )
+            response = await complete(
                 model=self.model,
                 messages=raw_messages,
                 **kwargs,
@@ -181,9 +186,10 @@ class LiteLLMClient(LLMClient):
         raw_messages: list[dict[str, Any]],
     ) -> LLMResponse:
         """Processes a streaming response."""
-        from litellm import ModelResponse, stream_chunk_builder
+        import litellm
+        from litellm import ModelResponse
 
-        chunks = []
+        chunks: list[Any] = []
         # ``stream_chunk_builder`` does not reliably reassemble reasoning content,
         # so we accumulate reasoning deltas ourselves and attach them to the final
         # response below.
@@ -203,7 +209,11 @@ class LiteLLMClient(LLMClient):
             if content and callback:
                 await callback(content)
 
-        response = stream_chunk_builder(chunks=chunks, messages=raw_messages)
+        build_stream_response = cast(
+            Callable[..., ModelResponse | None],
+            getattr(cast(object, litellm), "stream_chunk_builder"),
+        )
+        response = build_stream_response(chunks=chunks, messages=raw_messages)
         if not isinstance(response, ModelResponse):
             raise RuntimeError("Invalid model response")
 
@@ -216,7 +226,7 @@ class LiteLLMClient(LLMClient):
         """Calculates the cost of a response, if usage data is available."""
         from litellm import cost_per_token
 
-        usage: Usage | None = response.get("usage")
+        usage = cast("Usage | None", cast(dict[str, Any], response).get("usage"))
         model = response.model
 
         if not (usage and model):
@@ -257,7 +267,7 @@ class LiteLLMClient(LLMClient):
             for tc in (message.tool_calls or [])
         ]
 
-        usage: Usage | None = response.get("usage")
+        usage = cast("Usage | None", cast(dict[str, Any], response).get("usage"))
         cost = self._calculate_cost(response)
 
         return LLMResponse(

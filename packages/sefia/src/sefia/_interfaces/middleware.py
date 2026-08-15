@@ -15,8 +15,8 @@ class InferenceContext:
     """
 
     func_name: str
-    args: tuple
-    kwargs: dict
+    args: tuple[Any, ...]
+    kwargs: dict[str, Any]
 
 
 @dataclass

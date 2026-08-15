@@ -93,7 +93,12 @@ class Session:
         self._context_token = context_var.set(self._context)
         return self
 
-    async def __aexit__(self, _exc_type, _exc_val, _exc_tb):
+    async def __aexit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: object | None,
+    ) -> None:
         if self._context_token is not None:
             context_var.reset(self._context_token)
             self._context_token = None

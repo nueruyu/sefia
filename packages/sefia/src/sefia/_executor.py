@@ -1,4 +1,5 @@
-from typing import Any, Awaitable, Callable
+from collections.abc import Sequence
+from typing import Any, Awaitable, Callable, cast, overload
 
 from . import events
 from ._history import StepHistory
@@ -24,8 +25,26 @@ from .inference import (
 )
 
 
+@overload
 def _compose(
-    middlewares: list, ctx: Any, core: Callable[[], Awaitable[Any]]
+    middlewares: Sequence[InferenceMiddleware],
+    ctx: InferenceContext,
+    core: Callable[[], Awaitable[Any]],
+) -> Callable[[], Awaitable[Any]]: ...
+
+
+@overload
+def _compose(
+    middlewares: Sequence[StepMiddleware],
+    ctx: StepContext,
+    core: Callable[[], Awaitable[InferenceDecision]],
+) -> Callable[[], Awaitable[InferenceDecision]]: ...
+
+
+def _compose(
+    middlewares: Sequence[InferenceMiddleware | StepMiddleware],
+    ctx: InferenceContext | StepContext,
+    core: Callable[[], Awaitable[Any]],
 ) -> Callable[[], Awaitable[Any]]:
     """
     Compose ``middlewares`` into an onion around ``core``.
@@ -40,11 +59,27 @@ def _compose(
     return nxt
 
 
-def _layer(middleware, ctx, nxt: Callable[[], Awaitable[Any]]):
+def _layer(
+    middleware: InferenceMiddleware | StepMiddleware,
+    ctx: InferenceContext | StepContext,
+    nxt: Callable[[], Awaitable[Any]],
+) -> Callable[[], Awaitable[Any]]:
     async def call() -> Any:
-        return await middleware.wrap(ctx, nxt)
+        if isinstance(middleware, InferenceMiddleware) and isinstance(
+            ctx, InferenceContext
+        ):
+            return await middleware.wrap(ctx, nxt)
+        if isinstance(middleware, StepMiddleware) and isinstance(ctx, StepContext):
+            return await middleware.wrap(ctx, nxt)
+        raise TypeError("Middleware and context types do not match.")
 
     return call
+
+
+def _require_tool_call_decision(decision: object) -> ToolCallDecision:
+    if isinstance(decision, ToolCallDecision):
+        return decision
+    raise TypeError(f"Unknown decision type: {type(decision)}")
 
 
 class InferenceExecutor:
@@ -58,9 +93,9 @@ class InferenceExecutor:
 
     def __init__(
         self,
-        func: Callable,
-        args: tuple,
-        kwargs: dict,
+        func: Callable[..., Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
         inference_strategy: InferenceStrategy,
         tool_collector: ToolCollector,
         engrave: Callable[[str, Callable[..., Any]], Callable[..., Any]],
@@ -82,8 +117,14 @@ class InferenceExecutor:
             self.func_info.capabilities
         )
 
-        self._next_step_engraved = engrave("inference.step", self._next_step)
-        self._call_tools_engraved = engrave("inference.tool_calls", self._call_tools)
+        self._next_step_engraved = cast(
+            Callable[[int], Awaitable[InferenceDecision]],
+            engrave("inference.step", self._next_step),
+        )
+        self._call_tools_engraved = cast(
+            Callable[[list[ToolCallRequest]], Awaitable[list[ToolCallResult]]],
+            engrave("inference.tool_calls", self._call_tools),
+        )
 
     async def _next_step(self, step: int) -> InferenceDecision:
         """One engraved inference-strategy call, keyed on the step index (not
@@ -187,18 +228,16 @@ class InferenceExecutor:
             if isinstance(decision, ResultDecision):
                 return decision.result
 
-            if isinstance(decision, ToolCallDecision):
-                if decision.calls:
-                    tool_results = await self._call_tools_engraved(decision.calls)
-                else:
-                    tool_results = []
-                # Persist only after the engraved calls commit, so a crash
-                # resumes from the previous snapshot and replays the step.
-                self._history.extend([decision, *tool_results])
-                self._completed_steps += 1
-                await self._save_history()
+            decision = _require_tool_call_decision(decision)
+            if decision.calls:
+                tool_results = await self._call_tools_engraved(decision.calls)
             else:
-                raise TypeError(f"Unknown decision type: {type(decision)}")
+                tool_results = []
+            # Persist only after the engraved calls commit, so a crash
+            # resumes from the previous snapshot and replays the step.
+            self._history.extend([decision, *tool_results])
+            self._completed_steps += 1
+            await self._save_history()
 
     async def _save_history(self) -> None:
         if not self._history.dirty:

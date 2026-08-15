@@ -1,12 +1,17 @@
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import glyff
 import glyff_file_store
 import sefia
-from glyff.serialization import FallbackByTypeQualname
-from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
+from glyff.serialization import (
+    FallbackByTypeQualname,
+)
+from glyff_pydantic import (
+    PydanticArgumentCanonicalizer,
+    PydanticSerializer,
+)
 from sefia import HistoryStorage, Profile, Policy, ToolCollector
 from sefia.llm import LLMClient
 from typing_extensions import final
@@ -73,7 +78,7 @@ class SessionScope:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
-    ) -> AsyncIterator[sefia.Session]:
+    ) -> AsyncGenerator[sefia.Session]:
         """Run code within a configured Sefia session context."""
         llm_client = self.llm_client
         resolved_model = model or self.model
