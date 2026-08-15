@@ -12,7 +12,7 @@ from pydantic import (
 )
 from typing_extensions import final, override
 
-from .._interfaces.decision_model import (
+from ..llm.decision import (
     DecisionMode,
     DecisionModel,
     DecisionModelBuilder,

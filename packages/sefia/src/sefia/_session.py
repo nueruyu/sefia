@@ -5,7 +5,8 @@ import glyff
 from typing_extensions import final
 
 from ._context import ProfileBinding, SessionContext, context_var
-from ._interfaces import DecisionModelBuilder, Policy
+from ._interfaces import Policy
+from .llm.decision import DecisionModelBuilder
 from ._interfaces.history_storage import HistoryStorage
 from ._profiles import Profile
 from ._tool_system import ToolCollector, ToolFunctionInspector

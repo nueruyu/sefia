@@ -6,7 +6,7 @@ from typing import Any, Callable, Never
 
 from typing_extensions import final, override
 
-from .._interfaces import DecisionModelBuilder, InferenceStrategy
+from .._interfaces import InferenceStrategy
 from .._tool_system import ToolEntry, ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
@@ -25,6 +25,7 @@ from ._message_builder import build_messages, build_repair_messages
 from ._messages import Message
 from ._prompt_formatter import PromptFormatter
 from ._tool_call_ids import ToolCallIdRegistry
+from .decision import DecisionModelBuilder
 from .schema import PreparedLLMSchema
 
 JsonDefault = Callable[[Any], Any]

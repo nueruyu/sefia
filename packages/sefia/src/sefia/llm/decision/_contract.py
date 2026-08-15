@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from .._tool_system import ToolEntry
-from .llm_schema import LLMSchema
+from ..._tool_system import ToolEntry
+from ..schema import LLMSchema
 
 
 class DecisionMode(Enum):

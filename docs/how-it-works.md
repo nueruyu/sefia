@@ -106,6 +106,8 @@ dictionary. Custom `LLMClient` implementations may use the default identity
 preparation when they accept that logical schema directly, or override
 `prepare_output_schema` and return a `PreparedLLMSchema` with matching response and
 stream-path transformations.
+The decision contracts live in `sefia.llm.decision`; schema preparation contracts
+live in `sefia.llm.schema`.
 
 The system prompt is `docstring + response-instructions + the tool definitions (as
 JSON) + the decision JSON Schema`. The user message is the call's arguments rendered

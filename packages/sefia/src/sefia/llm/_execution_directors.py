@@ -4,7 +4,7 @@ from typing import Any
 
 from typing_extensions import final, override
 
-from .._interfaces import (
+from .decision import (
     DecisionModel,
     DecisionModelBuilder,
     DecisionModelSpec,

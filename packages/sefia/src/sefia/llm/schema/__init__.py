@@ -1,4 +1,4 @@
-from ..._interfaces.llm_schema import (
+from ._contract import (
     IdentityPreparedLLMSchema,
     LLMSchema,
     PreparedLLMSchema,

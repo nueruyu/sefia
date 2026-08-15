@@ -6,7 +6,6 @@ from unittest.mock import Mock
 import pytest
 from pydantic import Field, TypeAdapter, ValidationError
 
-from sefia._interfaces import DecisionModelSpec
 from sefia._tool_system import (
     JsonSchemaToolEntry,
     SignatureToolEntry,
@@ -18,6 +17,7 @@ from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionE
 from sefia.inference import FunctionInfo, InferenceDecision, ToolCallDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
+from sefia.llm.decision import DecisionModelSpec
 from sefia.llm._execution_directors import (
     OutputOnlyDirector,
     ToolEnabledDirector,
