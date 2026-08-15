@@ -169,7 +169,7 @@ class Report(BaseModel):
     summary: str
 
 
-infer = domain("research").infer
+infer = domain("myapp").infer
 
 class ResearchService:
     _web: Tools[WebSearch]

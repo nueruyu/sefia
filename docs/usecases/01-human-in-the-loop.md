@@ -99,7 +99,7 @@ from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input
 
-infer = domain("research").infer
+infer = domain("myapp").infer
 
 
 class Research:
