@@ -74,6 +74,10 @@ pip install 'sefios[litellm,sqlite]'
   `sefios.fastapi` integrations — Typer and FastAPI apps with persisted sessions
   and human-in-the-loop pause/resume.
 
+Live end-to-end compatibility is currently verified against OpenAI, Anthropic, and
+Gemini. Other LiteLLM providers may work but are not yet covered by the live
+compatibility suite.
+
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
 
