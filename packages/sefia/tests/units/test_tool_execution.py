@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any, cast
 
 import pytest
 from pytest_mock import MockerFixture
@@ -11,11 +12,11 @@ from sefia.inference import ToolCallRequest
 
 
 @pytest.fixture
-def publisher(mocker: MockerFixture):
-    return mocker.AsyncMock(spec=EventPublisher)
+def publisher(mocker: MockerFixture) -> EventPublisher:
+    return cast(EventPublisher, mocker.AsyncMock(spec=EventPublisher))
 
 
-async def test_concurrent_calls_overlap(publisher):
+async def test_concurrent_calls_overlap(publisher: EventPublisher) -> None:
     # The first tool blocks until the second one has run, which can only
     # complete if the batch is not serialized.
     peer_ran = asyncio.Event()
@@ -49,7 +50,7 @@ async def test_concurrent_calls_overlap(publisher):
     ]
 
 
-async def test_unmarked_tools_stay_strictly_serial(publisher):
+async def test_unmarked_tools_stay_strictly_serial(publisher: EventPublisher) -> None:
     timeline: list[str] = []
 
     def make_tool(label: str):
@@ -77,7 +78,9 @@ async def test_unmarked_tools_stay_strictly_serial(publisher):
     assert timeline == ["a:start", "a:end", "b:start", "b:end"]
 
 
-async def test_serial_call_is_a_barrier_between_concurrent_calls(publisher):
+async def test_serial_call_is_a_barrier_between_concurrent_calls(
+    publisher: EventPublisher,
+) -> None:
     timeline: list[str] = []
 
     def make_tool(label: str):
@@ -114,7 +117,9 @@ async def test_serial_call_is_a_barrier_between_concurrent_calls(publisher):
     ]
 
 
-async def test_pause_lets_concurrent_siblings_finish(publisher):
+async def test_pause_lets_concurrent_siblings_finish(
+    publisher: EventPublisher,
+) -> None:
     sibling_finished = False
 
     async def pausing() -> str:
@@ -143,7 +148,9 @@ async def test_pause_lets_concurrent_siblings_finish(publisher):
     assert sibling_finished
 
 
-async def test_earliest_pause_in_request_order_wins(publisher):
+async def test_earliest_pause_in_request_order_wins(
+    publisher: EventPublisher,
+) -> None:
     # When several overlapped calls pause, the one earliest in request
     # order propagates, even if it was raised last in wall-clock time.
     second_paused = asyncio.Event()
@@ -171,7 +178,9 @@ async def test_earliest_pause_in_request_order_wins(publisher):
         )
 
 
-async def test_tool_failure_in_concurrent_batch_stays_isolated(publisher):
+async def test_tool_failure_in_concurrent_batch_stays_isolated(
+    publisher: EventPublisher,
+) -> None:
     # An ordinary failure is stringified into its own slot; siblings are
     # unaffected.
     async def boom() -> str:
@@ -197,7 +206,9 @@ async def test_tool_failure_in_concurrent_batch_stays_isolated(publisher):
     assert results[1].result == "ok"
 
 
-async def test_identical_concurrent_calls_run_serially(publisher):
+async def test_identical_concurrent_calls_run_serially(
+    publisher: EventPublisher,
+) -> None:
     # Identical calls (same tool and arguments) never overlap — glyff
     # sequences one content key by arrival order — while a call with
     # different arguments still does.
@@ -239,7 +250,7 @@ async def test_identical_concurrent_calls_run_serially(publisher):
     assert saw_other_during_same
 
 
-async def test_handler_reads_its_own_call_id(publisher):
+async def test_handler_reads_its_own_call_id(publisher: EventPublisher) -> None:
     # Each handler sees the id of the call it is serving, for a signature-based
     # tool and a JSON-schema tool alike, and distinct calls see distinct ids.
     seen: dict[str, str] = {}
@@ -248,7 +259,7 @@ async def test_handler_reads_its_own_call_id(publisher):
         seen[label] = current_tool_call_id()
         return "ok"
 
-    def note_json(**arguments) -> str:
+    def note_json(**arguments: Any) -> str:
         seen[arguments["label"]] = current_tool_call_id()
         return "ok"
 
@@ -275,7 +286,9 @@ async def test_handler_reads_its_own_call_id(publisher):
     assert seen == {"a": "sig-call", "b": "json-call"}
 
 
-async def test_call_id_is_unbound_in_the_caller_after_the_call_returns(publisher):
+async def test_call_id_is_unbound_in_the_caller_after_the_call_returns(
+    publisher: EventPublisher,
+) -> None:
     registry = ToolRegistry()
     registry.add(lambda: "ok", name="noop")
 
@@ -289,10 +302,12 @@ async def test_call_id_is_unbound_in_the_caller_after_the_call_returns(publisher
         current_tool_call_id()
 
 
-async def test_call_id_is_inherited_by_a_task_spawned_during_the_call(publisher):
+async def test_call_id_is_inherited_by_a_task_spawned_during_the_call(
+    publisher: EventPublisher,
+) -> None:
     # A spawned task copies the context, so it reads the id past the handler's
     # return — the inheritance the accessor's contract documents.
-    seen = asyncio.get_running_loop().create_future()
+    seen: asyncio.Future[str] = asyncio.get_running_loop().create_future()
 
     async def background() -> None:
         await asyncio.sleep(0)

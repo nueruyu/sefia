@@ -1,6 +1,11 @@
 from sefia import StepContext, ToolRegistry
 from sefia._history import StepHistory
-from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
+from sefia.inference import (
+    InferenceDecision,
+    ResultDecision,
+    ToolCallDecision,
+    ToolCallRequest,
+)
 from sefios.middleware import InputCallComposer
 from sefios.tools import Input
 
@@ -32,8 +37,10 @@ def _tool_call(id_: str, name: str = "search") -> ToolCallRequest:
     return ToolCallRequest(id=id_, name=name, arguments={"query": "sefia"})
 
 
-async def _run(middleware: InputCallComposer, decision, step: int = 0):
-    async def nxt():
+async def _run(
+    middleware: InputCallComposer, decision: InferenceDecision, step: int = 0
+) -> InferenceDecision:
+    async def nxt() -> InferenceDecision:
         return decision
 
     return await middleware.wrap(

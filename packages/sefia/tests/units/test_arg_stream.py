@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable, Coroutine
 from typing import Any
 from unittest.mock import Mock
 
@@ -7,7 +8,7 @@ import pytest
 from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.inference import FunctionInfo, ToolCallDecision
-from sefia.llm import LLMInferenceStrategy, LLMResponse
+from sefia.llm import LLMInferenceStrategy, LLMResponse, Message
 from sefia.llm._arg_stream import (
     ToolArgStreamer,
     _ArgStreamChannel,
@@ -138,11 +139,13 @@ def test_malformed_tool_call_index_is_ignored():
     assert parse_tool_call_path(("tool_calls", "0", "name")) is None
 
 
-async def test_logs_token_processing_exception_and_closes_channels(caplog):
+async def test_logs_token_processing_exception_and_closes_channels(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     channel = _ArgStreamChannel()
     streamer = ToolArgStreamer({}, _tool_call_id)
     streamer._channels[0] = channel
-    streamer._dispatch = Mock(side_effect=RuntimeError("boom"))  # type: ignore[method-assign]
+    streamer._dispatch = Mock(side_effect=RuntimeError("boom"))
 
     with caplog.at_level(logging.ERROR, logger="sefia.llm._arg_stream"):
         streamer.on_token('{"tool_calls":[]}')
@@ -231,11 +234,11 @@ class StreamingClient(LLMClient):
 
     async def complete(
         self,
-        messages,
-        tools=None,
-        output_schema=None,
-        stream_callback=None,
-        reasoning_callback=None,
+        messages: list[Message],
+        tools: list[dict[str, Any]] | None = None,
+        output_schema: dict[str, Any] | None = None,
+        stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
+        reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMResponse:
         if stream_callback is not None:
             for char in self.content:

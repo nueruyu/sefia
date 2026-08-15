@@ -57,11 +57,15 @@ line-length = 88
 [tool.pyright]
 include = [
     "packages/sefia/src",
-    "packages/sefia/tests/typing",
+    "packages/sefia/tests",
     "packages/sefia_litellm/src",
+    "packages/sefia_litellm/tests",
     "packages/sefia_typer/src",
+    "packages/sefia_typer/tests",
     "packages/sefia_fastapi/src",
+    "packages/sefia_fastapi/tests",
     "packages/sefios/src",
+    "packages/sefios/tests",
 ]
 exclude = [".venv", ".uv-cache", "**/__pycache__"]
 venvPath = "."
@@ -69,3 +73,12 @@ venv = ".venv"
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
 reportUnnecessaryTypeIgnoreComment = true
+executionEnvironments = [
+    { root = "packages/sefia/tests/typing" },
+    { root = "packages/sefia/tests", reportPrivateUsage = false },
+    { root = "packages/sefia_litellm/tests", reportPrivateUsage = false },
+    { root = "packages/sefia_typer/tests", reportPrivateUsage = false },
+    { root = "packages/sefia_fastapi/tests", reportPrivateUsage = false },
+    { root = "packages/sefios/tests", reportPrivateUsage = false },
+    { root = "." },
+]

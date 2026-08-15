@@ -18,7 +18,7 @@ uv run pytest packages/sefia  # run one package's tests
 uv run pytest -m e2e          # live-provider e2e tests (needs API keys, see below)
 uv run ruff check .           # lint
 uv run ruff format --check .  # formatting (CI enforces this; drop --check to fix)
-uv run pyright                # type-check
+uv run pyright                # type-check packages and tests
 ```
 
 Tests mirror the source under each package's `tests/units/` (per-module) and

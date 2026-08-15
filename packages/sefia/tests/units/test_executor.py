@@ -1,4 +1,6 @@
-from unittest.mock import AsyncMock
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeAlias
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sefia.exceptions import PauseException
@@ -6,6 +8,7 @@ from pytest_mock import MockerFixture
 
 from sefia import (
     HistorySnapshot,
+    HistoryStorage,
     InferenceContext,
     InferenceMiddleware,
     InferenceStrategy,
@@ -28,8 +31,19 @@ from sefia.inference import (
 
 from sefia.testing import MemoryHistoryStorage
 
+ExecutorDependencies: TypeAlias = tuple[
+    AsyncMock,
+    MagicMock,
+    AsyncMock,
+    Callable[[str, Callable[..., Any]], Callable[..., Any]],
+]
 
-def _make_executor(*args, history_storage=None, **kwargs) -> InferenceExecutor:
+
+def _make_executor(
+    *args: Any,
+    history_storage: HistoryStorage | None = None,
+    **kwargs: Any,
+) -> InferenceExecutor:
     """Build an executor, defaulting the required storage to an in-memory one."""
     return InferenceExecutor(
         *args, history_storage=history_storage or MemoryHistoryStorage(), **kwargs
@@ -48,7 +62,11 @@ class _StepLimiter(StepMiddleware):
     def __init__(self, max_steps: int):
         self.max_steps = max_steps
 
-    async def wrap(self, ctx: StepContext, nxt) -> InferenceDecision:
+    async def wrap(
+        self,
+        ctx: StepContext,
+        nxt: Callable[[], Awaitable[InferenceDecision]],
+    ) -> InferenceDecision:
         if ctx.step >= self.max_steps:
             raise _MaxStepsExceededError()
         return await nxt()
@@ -59,7 +77,11 @@ class _Retrier(InferenceMiddleware):
         self.max_retries = max_retries
         self._retries_used = 0
 
-    async def wrap(self, ctx: InferenceContext, nxt):
+    async def wrap(
+        self,
+        ctx: InferenceContext,
+        nxt: Callable[[], Awaitable[Any]],
+    ) -> Any:
         while True:
             try:
                 return await nxt()
@@ -76,13 +98,13 @@ def sample_func(arg1: str) -> str:
     return "implemented"
 
 
-def sample_func_with_self(self, arg1: str) -> str:
+def sample_func_with_self(self: object, arg1: str) -> str:
     """Sample docstring."""
     return "implemented"
 
 
 @pytest.fixture
-def executor_dependencies(mocker: MockerFixture):
+def executor_dependencies(mocker: MockerFixture) -> ExecutorDependencies:
     """Provides a tuple of mocked dependencies for InferenceExecutor."""
     mock_strategy = mocker.AsyncMock(spec=InferenceStrategy)
     mock_collector = mocker.MagicMock(spec=ToolCollector)
@@ -90,7 +112,7 @@ def executor_dependencies(mocker: MockerFixture):
 
     mock_collector.collect.return_value = ToolRegistry()
 
-    def non_engrave(_name, f):
+    def non_engrave(_name: str, f: Callable[..., Any]) -> Callable[..., Any]:
         return f
 
     return (
@@ -103,7 +125,7 @@ def executor_dependencies(mocker: MockerFixture):
 
 class TestInferenceExecutor:
     async def test_rejects_unknown_decision_from_custom_strategy(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         (
             mock_strategy,
@@ -126,7 +148,9 @@ class TestInferenceExecutor:
         with pytest.raises(TypeError, match="Unknown decision type"):
             await executor.run()
 
-    async def test_run_loop_with_tool_call_and_result(self, executor_dependencies):
+    async def test_run_loop_with_tool_call_and_result(
+        self, executor_dependencies: ExecutorDependencies
+    ):
         # Arrange
         (
             mock_strategy,
@@ -165,7 +189,9 @@ class TestInferenceExecutor:
         assert mock_strategy.decide_next_step.call_count == 2
         mock_tool_func.assert_called_once_with(a=1)
 
-    async def test_handles_nonexistent_tool_call(self, executor_dependencies):
+    async def test_handles_nonexistent_tool_call(
+        self, executor_dependencies: ExecutorDependencies
+    ):
         # Arrange
         (
             mock_strategy,
@@ -201,7 +227,9 @@ class TestInferenceExecutor:
         assert isinstance(history[1], ToolCallResult)
         assert "Error: Tool 'nonexistent_tool' not found" in history[1].result
 
-    async def test_fires_step_started_for_every_step(self, executor_dependencies):
+    async def test_fires_step_started_for_every_step(
+        self, executor_dependencies: ExecutorDependencies
+    ):
         # The executor fires StepStarted (1-based) at the start of each step,
         # including the first, so a handler can observe the step count.
         (
@@ -234,7 +262,9 @@ class TestInferenceExecutor:
         ]
         assert [event.step for event in step_events] == [0, 1]
 
-    async def test_step_middleware_can_stop_the_loop(self, executor_dependencies):
+    async def test_step_middleware_can_stop_the_loop(
+        self, executor_dependencies: ExecutorDependencies
+    ):
         # A step middleware that raises an exception stops the loop. Here
         # StepLimiter refuses to start a fourth step (0-based index 3).
         (
@@ -262,7 +292,7 @@ class TestInferenceExecutor:
         assert mock_strategy.decide_next_step.call_count == 3
 
     async def test_step_middlewares_compose_in_declared_order(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         # Multiple step middlewares wrap each step as an onion: the first in the
         # list is the outermost layer. They run once per step, not multiplied by
@@ -284,7 +314,11 @@ class TestInferenceExecutor:
             def __init__(self, label: str):
                 self.label = label
 
-            async def wrap(self, ctx: StepContext, nxt) -> InferenceDecision:
+            async def wrap(
+                self,
+                ctx: StepContext,
+                nxt: Callable[[], Awaitable[InferenceDecision]],
+            ) -> InferenceDecision:
                 calls.append(f"{self.label}:enter:{ctx.step}")
                 decision = await nxt()
                 calls.append(f"{self.label}:exit:{ctx.step}")
@@ -317,7 +351,7 @@ class TestInferenceExecutor:
         ]
 
     async def test_tool_failure_is_not_retried_but_fed_back(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         # A failing tool must not trigger a retry of the whole inference. The
         # error is stringified into the history and fed back to the model, which
@@ -363,7 +397,7 @@ class TestInferenceExecutor:
         assert "ValueError(kaboom)" in history[-1].result
 
     async def test_inference_middleware_retries_inference_failure(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         # An inference-call failure is retried by Retrier. The first
         # attempt fails inside decide_next_step; the second succeeds.
@@ -395,7 +429,7 @@ class TestInferenceExecutor:
         assert mock_strategy.decide_next_step.call_count == 2
 
     async def test_inference_middleware_raises_after_exhausting_retries(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         (
             mock_strategy,
@@ -423,7 +457,7 @@ class TestInferenceExecutor:
         assert mock_strategy.decide_next_step.call_count == 3
 
     async def test_failed_step_publishes_event_and_reraises_by_default(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         # When a step fails and no handler interrupts, the original exception
         # must propagate (so glyff engraves the genuine failure), but only after
@@ -458,7 +492,7 @@ class TestInferenceExecutor:
         assert step_failures[0].error is error
 
     async def test_recoverable_inference_error_yields_without_failing_run(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         # A recoverable InferenceError is also a PauseException, so it must
         # propagate as a graceful interrupt: the step's failure is still
@@ -500,7 +534,7 @@ class TestInferenceExecutor:
         assert not any(isinstance(e, events.InferenceFailed) for e in published)
 
     async def test_handler_yield_on_failed_step_is_isolated(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         # An observation handler cannot steer control flow: if it reacts to
         # InferenceStepFailed by raising PauseException, the publisher isolates
@@ -511,7 +545,7 @@ class TestInferenceExecutor:
         mock_strategy.decide_next_step.side_effect = ValueError("transient")
 
         class InterruptOnFailure(EventHandler[events.InferenceStepFailed]):
-            async def handle(self, event):
+            async def handle(self, event: events.InferenceStepFailed) -> None:
                 raise PauseException("interrupted for resume")
 
         publisher = EventPublisher([InterruptOnFailure()])
@@ -528,7 +562,9 @@ class TestInferenceExecutor:
         with pytest.raises(ValueError, match="transient"):
             await executor.run()
 
-    async def test_resumes_loop_from_stored_snapshot(self, executor_dependencies):
+    async def test_resumes_loop_from_stored_snapshot(
+        self, executor_dependencies: ExecutorDependencies
+    ):
         # The loop resumes from the snapshot's completed_steps, not the item
         # count — so compaction can't skew it.
         (
@@ -571,7 +607,7 @@ class TestInferenceExecutor:
         assert [event.step for event in step_events] == [4]
 
     async def test_saves_snapshot_after_each_completed_step(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         # A snapshot is saved after each completed step (empty-calls included),
         # advancing completed_steps by one.
@@ -616,7 +652,7 @@ class TestInferenceExecutor:
         ]
 
     async def test_compaction_is_persisted_before_the_model_call(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         # A mid-step rewrite is persisted before the model call. The run ends on
         # the same step (Result, no post-step save), so that is the only save.
@@ -633,7 +669,11 @@ class TestInferenceExecutor:
         storage = MemoryHistoryStorage(HistorySnapshot(items=seeded, completed_steps=2))
 
         class _KeepLast(StepMiddleware):
-            async def wrap(self, ctx: StepContext, nxt) -> InferenceDecision:
+            async def wrap(
+                self,
+                ctx: StepContext,
+                nxt: Callable[[], Awaitable[InferenceDecision]],
+            ) -> InferenceDecision:
                 ctx.history.rewrite([ctx.history.items[-1]])
                 return await nxt()
 
@@ -662,7 +702,7 @@ class TestInferenceExecutor:
         assert list(history) == [seeded[-1]]
 
     async def test_internal_calls_use_stable_names_and_step_index(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         # The engraved step call is keyed on the step ordinal, not the history
         # contents — so the durable key stays O(1) and is stable under
@@ -674,12 +714,14 @@ class TestInferenceExecutor:
         ]
 
         engraved_names: list[str] = []
-        engraved_step_args: list[tuple] = []
+        engraved_step_args: list[tuple[Any, ...]] = []
 
-        def recording_engrave(name, f):
+        def recording_engrave(
+            name: str, f: Callable[..., Awaitable[Any]]
+        ) -> Callable[..., Awaitable[Any]]:
             engraved_names.append(name)
 
-            async def wrapper(*args, **kwargs):
+            async def wrapper(*args: Any, **kwargs: Any) -> Any:
                 if name == "inference.step":
                     engraved_step_args.append(args)
                 return await f(*args, **kwargs)
@@ -703,7 +745,7 @@ class TestInferenceExecutor:
         assert engraved_step_args == [(0,), (1,)]
 
     async def test_retry_middleware_publishes_attempt_start_per_attempt(
-        self, executor_dependencies
+        self, executor_dependencies: ExecutorDependencies
     ):
         (
             mock_strategy,

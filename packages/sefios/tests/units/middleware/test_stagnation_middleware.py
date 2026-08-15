@@ -1,9 +1,15 @@
 from datetime import datetime
+from typing import Any
 
 import pytest
 from sefia import StepContext
 from sefia._history import StepHistory
-from sefia.inference import ResultDecision, ToolCallDecision, ToolCallRequest
+from sefia.inference import (
+    InferenceDecision,
+    ResultDecision,
+    ToolCallDecision,
+    ToolCallRequest,
+)
 from sefios.middleware import StagnationDetector, StagnationError
 
 
@@ -11,13 +17,18 @@ def _empty_history() -> StepHistory:
     return StepHistory()
 
 
-async def _step(middleware: StagnationDetector, name: str, args: dict, step: int = 0):
+async def _step(
+    middleware: StagnationDetector,
+    name: str,
+    args: dict[str, Any],
+    step: int = 0,
+) -> InferenceDecision:
     """Drives one step whose decision calls a single tool."""
     decision = ToolCallDecision(
         calls=[ToolCallRequest(id="1", name=name, arguments=args)]
     )
 
-    async def nxt():
+    async def nxt() -> ToolCallDecision:
         return decision
 
     return await middleware.wrap(StepContext(step=step, history=_empty_history()), nxt)

@@ -8,7 +8,7 @@ from sefia.llm._arg_stream import _ArgStreamChannel
 from sefia.streaming import StringDelta
 from sefia.testing import MockLLMClient, memory_session
 from sefia.tool_collectors import DefaultToolCollector
-from sefios.tools import Output
+from sefios.tools import Output, OutputMessage
 
 
 class Agent:
@@ -47,7 +47,7 @@ async def test_output_fails_fast_outside_tool_dispatch():
 
 
 async def test_nested_output_fails_instead_of_reusing_parent_call_id():
-    seen = []
+    seen: list[OutputMessage] = []
     output = Output(on_output=seen.append)
 
     async def parent() -> str:

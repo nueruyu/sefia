@@ -1,6 +1,4 @@
-from sefia.inference import Capability
 from sefia.pydantic import PydanticModelBackend
-from sefia.tool_collectors import DefaultToolCollector
 
 
 class WebToolkit:
@@ -13,13 +11,6 @@ class WebToolkit:
     async def fetch_content(self, url: str) -> str:
         """Fetch content from a URL."""
         raise NotImplementedError
-
-
-def _collect_self(instance: object, declared: object | None = None):
-    """Collect tools with ``instance`` as an @infer method's receiver."""
-    return DefaultToolCollector().collect(
-        [Capability(value=instance, declared=declared)]
-    )
 
 
 # --------------------------------------------------------------------------- #

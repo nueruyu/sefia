@@ -7,9 +7,9 @@ from pydantic import Field, TypeAdapter, ValidationError
 
 from sefia._interfaces import DecisionModelSpec
 from sefia._tool_system import SignatureToolEntry, ToolEntry, ToolRegistry
-from sefia.event_system import EventPublisher
+from sefia.event_system import Event, EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
-from sefia.inference import FunctionInfo, ToolCallDecision
+from sefia.inference import FunctionInfo, InferenceDecision, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._execution_directors import ToolOnlyDirector
 from sefia.pydantic import PydanticModelBackend
@@ -22,10 +22,10 @@ async def ask_user(question: Annotated[str, Field(min_length=1)]) -> str:
 
 
 class _MockPublisher(EventPublisher):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(handlers=[])
 
-    async def publish(self, event):
+    async def publish(self, event: Event) -> None:
         pass
 
 
@@ -40,7 +40,7 @@ def _tool() -> ToolEntry:
     )
 
 
-def _resolve(schema: dict, root: dict) -> dict:
+def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
     """Follow a top-level ``$ref`` into ``$defs`` so assertions can inspect the
     embedded per-tool schemas regardless of how Pydantic hoists definitions."""
     if "$ref" in schema:
@@ -49,7 +49,7 @@ def _resolve(schema: dict, root: dict) -> dict:
     return schema
 
 
-def _tool_calls_array(schema: dict) -> dict:
+def _tool_calls_array(schema: dict[str, Any]) -> dict[str, Any]:
     tool_calls = schema["properties"]["tool_calls"]
     if "anyOf" in tool_calls:
         return next(
@@ -60,11 +60,11 @@ def _tool_calls_array(schema: dict) -> dict:
     return tool_calls
 
 
-def _tool_call_item(schema: dict) -> dict:
+def _tool_call_item(schema: dict[str, Any]) -> dict[str, Any]:
     return _resolve(_tool_calls_array(schema)["items"], schema)
 
 
-def _name_constraint(name_schema: dict) -> Any:
+def _name_constraint(name_schema: dict[str, Any]) -> Any:
     # A single Literal renders as `const`; multiple values render as `enum`.
     if "const" in name_schema:
         return name_schema["const"]
@@ -127,7 +127,7 @@ class TestToolCallValidation:
         registry.add(ask_user, name="ask_user")
         return registry
 
-    async def _decide(self, payload: dict):
+    async def _decide(self, payload: dict[str, Any]) -> InferenceDecision:
         strategy = self._strategy(json.dumps(payload))
         return await strategy.decide_next_step(
             FunctionInfo(

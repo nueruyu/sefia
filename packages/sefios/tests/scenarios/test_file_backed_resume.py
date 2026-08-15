@@ -8,13 +8,17 @@ the *same* interaction id the paused run stored — the idempotency hinge of the
 human-in-the-loop flow.
 """
 
+from collections.abc import Callable
+from pathlib import Path
+
 import glyff
 from glyff.serialization import FallbackByTypeQualname
 import pytest
 from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
 from sefia import Session, Tools
-from sefia.testing import result_response, tool_calls_response
+from sefia.llm import LLMResponse
+from sefia.testing import MockLLMClient, result_response, tool_calls_response
 
 from sefios import domain, FileSessionStorage
 from sefios.exceptions import InputRequired
@@ -45,7 +49,10 @@ class _Agent:
         ...
 
 
-async def test_pause_resume_survives_process_restart(tmp_path, make_mock_llm):
+async def test_pause_resume_survives_process_restart(
+    tmp_path: Path,
+    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+) -> None:
     seen: list[InputRequest] = []
     answers: dict[str, str] = {}
 

@@ -12,10 +12,28 @@ See ``conftest.py`` for how providers are selected and skipped.
 import glyff
 import sefia
 
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
+from typing import Any, Protocol
 
 import pytest
 from sefia import Tools
+
+from sefia_litellm import LiteLLMClient
+
+
+class Provider(Protocol):
+    id: str
+
+    @property
+    def model(self) -> str: ...
+
+
+class LiveSessionFactory(Protocol):
+    def __call__(
+        self, provider: Provider, **session_kwargs: Any
+    ) -> AbstractAsyncContextManager[LiteLLMClient]: ...
+
 
 infer = sefia.Domain(
     glyff.Domain("packages.sefia_litellm.tests.e2e.test_live_providers", version="1")
@@ -72,7 +90,9 @@ class VaultAgent:
         ...
 
 
-async def test_plain_string_result(provider, live_session):
+async def test_plain_string_result(
+    provider: Provider, live_session: LiveSessionFactory
+) -> None:
     async with live_session(provider):
         answer = await echo_word(word="pong")
 
@@ -80,7 +100,9 @@ async def test_plain_string_result(provider, live_session):
     assert "pong" in answer.lower()
 
 
-async def test_structured_output(provider, live_session):
+async def test_structured_output(
+    provider: Provider, live_session: LiveSessionFactory
+) -> None:
     async with live_session(provider):
         capital = await capital_of(country="Japan")
 
@@ -89,7 +111,9 @@ async def test_structured_output(provider, live_session):
     assert capital.country.strip()
 
 
-async def test_tool_call_round_trip(provider, live_session):
+async def test_tool_call_round_trip(
+    provider: Provider, live_session: LiveSessionFactory
+) -> None:
     vault = VaultToolkit()
 
     async with live_session(provider):

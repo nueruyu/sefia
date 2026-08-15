@@ -9,7 +9,7 @@ from glyff.store import MemoryBackend
 
 from sefia import Domain, Policy, Profile, Session, policy, profile
 from sefia._authoring.metadata import KEY_PROFILE_KEY, get_metadata
-from sefia.event_system import EventHandler
+from sefia.event_system import Event, EventHandler
 from sefia.llm import LLMResponse
 from sefia.testing import MockLLMClient, memory_session, result_response
 
@@ -36,7 +36,7 @@ class _LabelPolicy(Policy):
     label: str
     log: list[str]
 
-    def create_handlers(self) -> list[EventHandler]:
+    def create_handlers(self) -> list[EventHandler[Event]]:
         self.log.append(self.label)
         return []
 
@@ -85,7 +85,7 @@ def test_profile_attaches_key_metadata():
 def test_profile_rejects_unhashable_and_none_keys():
     """@profile keys must be hashable and not the None sentinel."""
     with pytest.raises(TypeError, match="hashable"):
-        profile(["not", "hashable"])  # type: ignore
+        profile(["not", "hashable"])  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="must not be None"):
         profile(None)
 
@@ -93,7 +93,7 @@ def test_profile_rejects_unhashable_and_none_keys():
 def test_profile_rejects_profile_instance_as_key():
     """@profile rejects a Profile instance passed where its key is expected."""
     with pytest.raises(TypeError, match="not the Profile instance itself"):
-        profile(Profile(key="fast", client=MockLLMClient(responses=[])))  # type: ignore
+        profile(Profile(key="fast", client=MockLLMClient(responses=[])))
 
 
 def test_profile_accepts_policy_sequence():

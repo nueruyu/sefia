@@ -1,7 +1,11 @@
+from collections.abc import Callable
+from pathlib import Path
+
 from glyff_pydantic import PydanticSerializer
 from sefia import JsonSchemaToolEntry
 from sefia.tool_collectors import StaticToolCollector
-from sefia.testing import result_response, tool_calls_response
+from sefia.llm import LLMResponse
+from sefia.testing import MockLLMClient, result_response, tool_calls_response
 
 from sefios import domain, MemorySessionStorage, SessionScope, get_session_storage
 
@@ -34,7 +38,10 @@ def _static_collector(name: str, calls: list[str]) -> StaticToolCollector:
     )
 
 
-async def test_tool_collector_default_is_used(tmp_path, make_mock_llm):
+async def test_tool_collector_default_is_used(
+    tmp_path: Path,
+    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+) -> None:
     calls: list[str] = []
     llm = make_mock_llm([tool_calls_response(("init_tool", {})), result_response("ok")])
     scope = SessionScope(
@@ -49,7 +56,10 @@ async def test_tool_collector_default_is_used(tmp_path, make_mock_llm):
     assert calls == ["init_tool"]
 
 
-async def test_session_tool_collector_overrides_init_default(tmp_path, make_mock_llm):
+async def test_session_tool_collector_overrides_init_default(
+    tmp_path: Path,
+    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+) -> None:
     calls: list[str] = []
     llm = make_mock_llm([tool_calls_response(("call_tool", {})), result_response("ok")])
     scope = SessionScope(
@@ -66,7 +76,10 @@ async def test_session_tool_collector_overrides_init_default(tmp_path, make_mock
     assert calls == ["call_tool"]
 
 
-async def test_session_storage_factory_overrides_default(tmp_path, make_mock_llm):
+async def test_session_storage_factory_overrides_default(
+    tmp_path: Path,
+    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+) -> None:
     captured: dict[str, MemorySessionStorage] = {}
 
     def factory(session_id: str) -> MemorySessionStorage:

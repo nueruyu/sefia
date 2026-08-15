@@ -1,8 +1,15 @@
-from sefios import domain
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sefia import Policy, Tools, policy
-from sefia.testing import memory_session, result_response, tool_calls_response
+from sefia.llm import LLMResponse
+from sefia.testing import (
+    MockLLMClient,
+    memory_session,
+    result_response,
+    tool_calls_response,
+)
+from sefios import domain
 from sefios.middleware import StagnationDetector
 
 infer = domain(
@@ -49,7 +56,9 @@ class Researcher:
         ...
 
 
-async def test_stagnation_state_is_isolated_between_infer_calls(make_mock_llm):
+async def test_stagnation_state_is_isolated_between_infer_calls(
+    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+) -> None:
     repeated_call_response = tool_calls_response(
         ("WebToolkit_search", {"query": "sefia"})
     )

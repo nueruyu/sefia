@@ -53,7 +53,7 @@ class ToolExecutionFailedHandler(EventHandler[ToolExecutionFailed]):
 
 
 async def _handle_multi_inherited_event(
-    self, event: AfterToolCall | ToolExecutionFailed
+    self: object, event: AfterToolCall | ToolExecutionFailed
 ) -> None:
     pass
 

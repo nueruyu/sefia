@@ -12,8 +12,9 @@ key, or the server address for Ollama), and its model can be overridden via
 
 import os
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
+from typing import Any, Protocol
 
 import pytest
 from sefia.testing import memory_session
@@ -37,6 +38,12 @@ class Provider:
     @property
     def model(self) -> str:
         return os.environ.get(self.model_env) or self.default_model
+
+
+class LiveSessionFactory(Protocol):
+    def __call__(
+        self, provider: Provider, **session_kwargs: Any
+    ) -> AbstractAsyncContextManager[LiteLLMClient]: ...
 
 
 PROVIDERS = [
@@ -112,14 +119,14 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 @pytest.fixture
-def live_session():
+def live_session() -> LiveSessionFactory:
     """Async-context factory: a sefia Session backed by the provider's real API.
 
     A unique session id per use, so nothing is replayed between tests.
     """
 
     @asynccontextmanager
-    async def factory(provider: Provider, **session_kwargs):
+    async def factory(provider: Provider, **session_kwargs: Any):
         client = LiteLLMClient(model=provider.model)
         async with memory_session(
             client, session_id=f"e2e-{provider.id}-{uuid.uuid4()}", **session_kwargs

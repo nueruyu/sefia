@@ -5,11 +5,12 @@ import importlib
 import importlib.util as importlib_util
 import sys
 from importlib.machinery import ModuleSpec
+from typing import Any
 
 import pytest
 
 
-def _unload_package(monkeypatch, module):
+def _unload_package(monkeypatch: pytest.MonkeyPatch, module: str) -> None:
     owner, module_name = module.rsplit(".", 1)
     package = importlib.import_module(owner)
     monkeypatch.delattr(package, module_name, raising=False)
@@ -25,18 +26,29 @@ def _unload_package(monkeypatch, module):
         ("sefios.fastapi", "sefia_fastapi", "fastapi"),
     ],
 )
-def test_missing_adapter_raises_install_hint(monkeypatch, module, adapter, extra):
+def test_missing_adapter_raises_install_hint(
+    monkeypatch: pytest.MonkeyPatch,
+    module: str,
+    adapter: str,
+    extra: str,
+) -> None:
     _unload_package(monkeypatch, module)
 
     real_find_spec = importlib_util.find_spec
     real_import = builtins.__import__
 
-    def fake_find_spec(name, *args, **kwargs):
+    def fake_find_spec(name: str, package: str | None = None) -> ModuleSpec | None:
         if name == adapter:
             return None
-        return real_find_spec(name, *args, **kwargs)
+        return real_find_spec(name, package)
 
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def fake_import(
+        name: str,
+        globals: dict[str, Any] | None = None,
+        locals: dict[str, Any] | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> Any:
         if (name == adapter or name.startswith(f"{adapter}.")) and fromlist:
             raise ModuleNotFoundError(f"No module named '{adapter}'")
         return real_import(name, globals, locals, fromlist, level)
@@ -56,19 +68,25 @@ def test_missing_adapter_raises_install_hint(monkeypatch, module, adapter, extra
     ],
 )
 def test_adapter_import_errors_are_not_reported_as_missing_extra(
-    monkeypatch, module, adapter
-):
+    monkeypatch: pytest.MonkeyPatch, module: str, adapter: str
+) -> None:
     _unload_package(monkeypatch, module)
 
     real_find_spec = importlib_util.find_spec
     real_import = builtins.__import__
 
-    def fake_find_spec(name, *args, **kwargs):
+    def fake_find_spec(name: str, package: str | None = None) -> ModuleSpec | None:
         if name == adapter:
             return ModuleSpec(name, loader=None)
-        return real_find_spec(name, *args, **kwargs)
+        return real_find_spec(name, package)
 
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def fake_import(
+        name: str,
+        globals: dict[str, Any] | None = None,
+        locals: dict[str, Any] | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> Any:
         if (name == adapter or name.startswith(f"{adapter}.")) and fromlist:
             raise ImportError("adapter dependency exploded")
         return real_import(name, globals, locals, fromlist, level)

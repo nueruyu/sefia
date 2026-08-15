@@ -69,7 +69,7 @@ def test_format_arguments_handles_cdata_delimiters_in_annotated_text():
 
 
 def test_format_arguments_falls_back_to_string_when_json_default_rejects_value():
-    def json_default(_value):
+    def json_default(_value: object) -> object:
         raise TypeError
 
     prompt = XmlPromptFormatter(json_default=json_default).format_arguments(

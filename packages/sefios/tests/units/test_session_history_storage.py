@@ -1,7 +1,8 @@
 from unittest.mock import MagicMock
 
 import pytest
-from glyff import ArgumentsDigest, DomainId, ExecutionId, ExecutionName
+from glyff import ArgumentsDigest, DomainId, ExecutionId, ExecutionName, Serializer
+from pytest_mock import MockerFixture
 from sefia import HistorySnapshot
 from sefia.inference import ToolCallDecision, ToolCallRequest, ToolCallResult
 
@@ -21,12 +22,12 @@ def _execution_id(args_hash: str = "hash-a") -> ExecutionId:
 
 
 @pytest.fixture
-def storage(serializer) -> MemorySessionStorage:
+def storage(serializer: Serializer) -> MemorySessionStorage:
     return MemorySessionStorage(serializer=serializer)
 
 
 @pytest.fixture
-def glyff_ctx(mocker) -> MagicMock:
+def glyff_ctx(mocker: MockerFixture) -> MagicMock:
     ctx = MagicMock()
     ctx.current_execution_id = _execution_id()
     mocker.patch("sefios.history_storages._session.get_glyff_context", return_value=ctx)
@@ -34,7 +35,9 @@ def glyff_ctx(mocker) -> MagicMock:
 
 
 class TestSessionHistoryStorage:
-    async def test_round_trips_a_snapshot(self, storage, glyff_ctx):
+    async def test_round_trips_a_snapshot(
+        self, storage: MemorySessionStorage, glyff_ctx: MagicMock
+    ) -> None:
         history_storage = SessionHistoryStorage()
         snapshot = HistorySnapshot(
             items=(
@@ -53,12 +56,14 @@ class TestSessionHistoryStorage:
         assert loaded == snapshot
 
     async def test_load_returns_empty_snapshot_when_nothing_stored(
-        self, storage, glyff_ctx
-    ):
+        self, storage: MemorySessionStorage, glyff_ctx: MagicMock
+    ) -> None:
         with bind_session_storage(storage):
             assert await SessionHistoryStorage().load() == HistorySnapshot()
 
-    async def test_histories_are_scoped_per_run_execution(self, storage, glyff_ctx):
+    async def test_histories_are_scoped_per_run_execution(
+        self, storage: MemorySessionStorage, glyff_ctx: MagicMock
+    ) -> None:
         history_storage = SessionHistoryStorage()
         first = HistorySnapshot(
             items=(ToolCallResult(tool_call_id="1", result="first"),),
@@ -73,7 +78,9 @@ class TestSessionHistoryStorage:
             glyff_ctx.current_execution_id = _execution_id("run-a")
             assert await history_storage.load() == first
 
-    async def test_raises_outside_an_engraved_run(self, storage, glyff_ctx):
+    async def test_raises_outside_an_engraved_run(
+        self, storage: MemorySessionStorage, glyff_ctx: MagicMock
+    ) -> None:
         glyff_ctx.current_execution_id = None
         with bind_session_storage(storage):
             with pytest.raises(RuntimeError, match="engraved"):

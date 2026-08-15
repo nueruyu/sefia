@@ -7,15 +7,17 @@ between runs is what was committed to disk before the pause.
 """
 
 import json
+from collections.abc import Callable
+from pathlib import Path
 
 import glyff
 from glyff.serialization import FallbackByTypeQualname
 import pytest
 from glyff_file_store import JsonFileBackend
 from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
-from sefia import Policy, Session, Tools
+from sefia import HistoryStorage, Policy, Session, Tools
 from sefia.llm import LLMResponse
-from sefia.testing import result_response, tool_calls_response
+from sefia.testing import MockLLMClient, result_response, tool_calls_response
 
 from sefios import domain, FileSessionStorage
 from sefios.exceptions import InputRequired
@@ -37,6 +39,10 @@ def _note_response(text: str) -> LLMResponse:
 
 _ASK_RESPONSE = tool_calls_response(("Input_get_input", {"prompt": "Anything else?"}))
 _RESULT_RESPONSE = result_response("All done.")
+
+
+def _session_history_storage() -> HistoryStorage:
+    return SessionHistoryStorage()
 
 
 class Notes:
@@ -62,12 +68,14 @@ class _Agent:
 # exercises the sefios SessionStorage-backed alternative.
 @pytest.mark.parametrize(
     "make_history_storage",
-    [None, lambda: SessionHistoryStorage()],
+    [None, _session_history_storage],
     ids=["glyff-metadata", "session-storage"],
 )
 async def test_compacted_history_survives_restart_without_replaying_old_steps(
-    tmp_path, make_mock_llm, make_history_storage
-):
+    tmp_path: Path,
+    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    make_history_storage: Callable[[], HistoryStorage] | None,
+) -> None:
     seen: list[InputRequest] = []
     answers: dict[str, str] = {}
 

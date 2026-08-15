@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -11,10 +12,10 @@ class InMemoryKeyValueStore:
     def __init__(self):
         self._data: dict[str, Any] = {}
 
-    async def get(self, key: str, type_hint: type) -> Any | None:
+    async def get(self, key: str, type_hint: type[Any]) -> Any | None:
         return self._data.get(key)
 
-    async def set(self, key: str, value: Any, type_hint: type) -> None:
+    async def set(self, key: str, value: Any, type_hint: type[Any]) -> None:
         self._data[key] = value
 
     async def delete(self, key: str) -> None:
@@ -41,7 +42,7 @@ class TestToInputText:
 
 
 @pytest.fixture
-def channel(kv_store):
+def channel(kv_store: InMemoryKeyValueStore) -> Iterator[InputChannel]:
     channel = InputChannel()
     with channel.use_store(kv_store):
         yield channel
@@ -58,7 +59,9 @@ class TestBinding:
         with pytest.raises(ValueError, match="namespace"):
             InputChannel(namespace="/")
 
-    async def test_namespace_scopes_persisted_keys(self, kv_store):
+    async def test_namespace_scopes_persisted_keys(
+        self, kv_store: InMemoryKeyValueStore
+    ):
         channel = InputChannel(namespace="custom/input")
 
         with channel.use_store(kv_store):
@@ -71,17 +74,17 @@ class TestBinding:
 
 
 class TestPending:
-    async def test_empty_by_default(self, channel):
+    async def test_empty_by_default(self, channel: InputChannel):
         assert await channel.pending() == []
 
-    async def test_recorded_request_is_pending(self, channel):
+    async def test_recorded_request_is_pending(self, channel: InputChannel):
         await channel.record_request("a", "prompt a?")
 
         assert await channel.pending() == [
             InputRequest(interaction_id="a", prompt="prompt a?")
         ]
 
-    async def test_pending_is_ordered_by_interaction_id(self, channel):
+    async def test_pending_is_ordered_by_interaction_id(self, channel: InputChannel):
         await channel.record_request("b", "prompt b?")
         await channel.record_request("a", "prompt a?")
 
@@ -89,7 +92,9 @@ class TestPending:
 
         assert [request.interaction_id for request in pending] == ["a", "b"]
 
-    async def test_resolved_requests_are_dropped_from_pending(self, channel):
+    async def test_resolved_requests_are_dropped_from_pending(
+        self, channel: InputChannel
+    ):
         await channel.record_request("a", "prompt a?")
         await channel.record_request("b", "prompt b?")
 
@@ -98,14 +103,14 @@ class TestPending:
         pending = await channel.pending()
         assert [request.interaction_id for request in pending] == ["b"]
 
-    async def test_complete_request_removes_pending(self, channel):
+    async def test_complete_request_removes_pending(self, channel: InputChannel):
         await channel.record_request("x", "why?")
 
         await channel.complete_request("x")
 
         assert await channel.pending() == []
 
-    async def test_record_request_notifies(self, kv_store):
+    async def test_record_request_notifies(self, kv_store: InMemoryKeyValueStore):
         seen: list[InputRequest] = []
         channel = InputChannel(on_request=seen.append)
 
@@ -114,7 +119,7 @@ class TestPending:
 
         assert seen == [InputRequest(interaction_id="x", prompt="why?")]
 
-    async def test_prompt_delta_notifies(self, kv_store):
+    async def test_prompt_delta_notifies(self, kv_store: InMemoryKeyValueStore):
         seen: list[tuple[str, str]] = []
         channel = InputChannel(
             on_prompt_delta=lambda call_id, text: seen.append((call_id, text))
@@ -128,34 +133,34 @@ class TestPending:
 
 
 class TestReceiveInput:
-    async def test_none_input_is_ignored(self, channel):
+    async def test_none_input_is_ignored(self, channel: InputChannel):
         await channel.receive_input(None)
 
         assert await channel.provide_input("any") is None
 
-    async def test_blank_input_is_ignored(self, channel):
+    async def test_blank_input_is_ignored(self, channel: InputChannel):
         await channel.receive_input("   ")
 
         assert await channel.provide_input("any") is None
 
-    async def test_list_input_is_joined(self, channel):
+    async def test_list_input_is_joined(self, channel: InputChannel):
         await channel.receive_input(["hello", "world"])
 
         assert await channel.provide_input("any") == "hello world"
 
-    async def test_input_is_queued_when_nothing_pending(self, channel):
+    async def test_input_is_queued_when_nothing_pending(self, channel: InputChannel):
         await channel.receive_input("hello")
 
         assert await channel.provide_input("any") == "hello"
 
-    async def test_single_pending_request_is_resolved(self, channel):
+    async def test_single_pending_request_is_resolved(self, channel: InputChannel):
         await channel.record_request("only", "prompt?")
 
         await channel.receive_input("the input")
 
         assert await channel.provide_input("only") == "the input"
 
-    async def test_multiple_pending_requires_reply_to(self, channel):
+    async def test_multiple_pending_requires_reply_to(self, channel: InputChannel):
         await channel.record_request("a", "prompt a?")
         await channel.record_request("b", "prompt b?")
 
@@ -164,7 +169,7 @@ class TestReceiveInput:
 
         assert sorted(exc_info.value.interaction_ids) == ["a", "b"]
 
-    async def test_reply_to_targets_specific_request(self, channel):
+    async def test_reply_to_targets_specific_request(self, channel: InputChannel):
         await channel.record_request("a", "prompt a?")
         await channel.record_request("b", "prompt b?")
 
@@ -172,7 +177,7 @@ class TestReceiveInput:
 
         assert await channel.provide_input("b") == "for b"
 
-    async def test_reply_to_unknown_request_raises(self, channel):
+    async def test_reply_to_unknown_request_raises(self, channel: InputChannel):
         await channel.record_request("a", "prompt a?")
 
         with pytest.raises(UnknownInputError) as exc_info:
@@ -182,10 +187,10 @@ class TestReceiveInput:
 
 
 class TestProvideInput:
-    async def test_returns_none_when_nothing_available(self, channel):
+    async def test_returns_none_when_nothing_available(self, channel: InputChannel):
         assert await channel.provide_input("x") is None
 
-    async def test_queued_inputs_are_claimed_in_order(self, channel):
+    async def test_queued_inputs_are_claimed_in_order(self, channel: InputChannel):
         await channel.receive_input("first")
         await channel.receive_input("second")
 
@@ -193,7 +198,7 @@ class TestProvideInput:
         assert await channel.provide_input("i2") == "second"
         assert await channel.provide_input("i3") is None
 
-    async def test_does_not_claim_queue_with_other_pending(self, channel):
+    async def test_does_not_claim_queue_with_other_pending(self, channel: InputChannel):
         await channel.receive_input("queued")
         await channel.record_request("other", "other prompt?")
 
