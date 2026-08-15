@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Union, cast
 
-from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, create_model
+from pydantic import (
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    WithJsonSchema,
+    create_model,
+)
 from typing_extensions import final, override
 
 from .._interfaces.decision_model import (
@@ -19,7 +26,11 @@ from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..llm.schema import LLMSchema
 from ._decision_schema import build_decision_schema
-from ._tool_arguments import ToolArgumentContract, ToolSchemaKind
+from ._tool_arguments import (
+    TOOL_ARGUMENT_MARKER,
+    ToolArgumentContract,
+    ToolSchemaKind,
+)
 
 
 @final
@@ -28,12 +39,10 @@ class PydanticDecisionModel(DecisionModel):
         self,
         *,
         model: Any,
-        name: str,
         tools: dict[str, ToolArgumentContract],
     ):
         self._adapter = TypeAdapter(model)
         self._model = model
-        self._name = name
         self._tools = tools
         self._schema: LLMSchema | None = None
 
@@ -112,7 +121,6 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
         }
         return PydanticDecisionModel(
             model=self._model(spec, tools),
-            name=spec.name,
             tools=tools,
         )
 
@@ -127,7 +135,10 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
                 __config__=ConfigDict(extra="forbid"),
                 name=(Literal[tool.name], ...),
                 arguments=(
-                    contracts[tool.name].validation_type(),
+                    Annotated[
+                        contracts[tool.name].validation_type(),
+                        WithJsonSchema({TOOL_ARGUMENT_MARKER: tool.name}),
+                    ],
                     ...,
                 ),
             )

@@ -18,10 +18,16 @@ from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionE
 from sefia.inference import FunctionInfo, InferenceDecision, ToolCallDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
-from sefia.llm._execution_directors import OutputOnlyDirector, ToolOnlyDirector
+from sefia.llm._execution_directors import (
+    OutputOnlyDirector,
+    ToolEnabledDirector,
+    ToolOnlyDirector,
+)
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
+from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._decision_model import _unknown_tool_name_from_error
+from sefia.streaming import ArgStream, StringEnd
 from sefia_litellm._schema import LiteLLMSchemaAdapter
 
 
@@ -40,6 +46,28 @@ def test_prepared_schema_removes_payload_from_stream_paths() -> None:
     assert prepared.normalize_stream_path(
         ("payload", "tool_calls", 0, "arguments", "question")
     ) == ("tool_calls", 0, "arguments", "question")
+
+
+async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
+    prepared = _prepare(ToolOnlyDirector(PydanticModelBackend(), Never, [_tool()]))
+    events: list[object] = []
+
+    async def collect(_tool_call_id: str, stream: ArgStream) -> None:
+        async for event in stream:
+            events.append(event)
+
+    streamer = ToolArgStreamer(
+        {"ask_user": collect},
+        lambda index: f"call-{index}",
+        prepared.normalize_stream_path,
+    )
+    streamer.on_token(
+        '{"payload":{"decision":"tool_calls","tool_calls":['
+        '{"name":"ask_user","arguments":{"question":"Hello"}}]}}'
+    )
+    await streamer.close()
+
+    assert StringEnd(name="question", value="Hello") in events
 
 
 async def ask_user(question: Annotated[str, Field(min_length=1)]) -> str:
@@ -157,6 +185,48 @@ def test_typed_tool_schema_hoists_nested_definitions() -> None:
     assert request_schema["additionalProperties"] is False
     audience_schema = _resolve(request_schema["properties"]["audience"], schema)
     assert audience_schema["required"] == ["role"]
+
+
+def test_result_shape_cannot_be_mistaken_for_a_tool_call() -> None:
+    @dataclass
+    class Output:
+        name: Literal["ask_user"]
+        arguments: dict[str, int]
+
+    director = ToolEnabledDirector(PydanticModelBackend(), Output, [_tool()])
+
+    schema = director.build_decision_schema().schema
+
+    assert schema["$defs"]["Output"]["properties"]["arguments"] == {
+        "additionalProperties": {"type": "integer"},
+        "title": "Arguments",
+        "type": "object",
+    }
+
+
+def test_raw_tool_schema_hoists_local_definitions() -> None:
+    raw_schema = {
+        "type": "object",
+        "properties": {"item": {"$ref": "#/$defs/Item"}},
+        "required": ["item"],
+        "additionalProperties": False,
+        "$defs": {
+            "Item": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+                "additionalProperties": False,
+            }
+        },
+    }
+    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+
+    schema = _prepare(director).schema
+    arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
+
+    assert "$defs" not in arguments
+    assert arguments["properties"]["item"]["$ref"] == "#/$defs/Item"
+    assert schema["$defs"]["Item"]["properties"]["name"]["type"] == "string"
 
 
 def test_conflicting_tool_definition_names_are_renamed() -> None:

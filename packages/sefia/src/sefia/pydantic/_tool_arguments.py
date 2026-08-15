@@ -7,6 +7,8 @@ import jsonschema.validators
 from pydantic import BeforeValidator, WithJsonSchema
 from typing_extensions import final
 
+TOOL_ARGUMENT_MARKER = "x-sefia-tool-arguments"
+
 
 class ToolSchemaKind(Enum):
     TYPED = "typed"

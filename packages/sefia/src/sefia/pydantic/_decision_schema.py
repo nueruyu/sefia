@@ -7,7 +7,11 @@ from typing import Any, cast
 from pydantic import TypeAdapter
 
 from ..llm.schema import LLMSchema, SchemaPath
-from ._tool_arguments import ToolArgumentContract, ToolSchemaKind
+from ._tool_arguments import (
+    TOOL_ARGUMENT_MARKER,
+    ToolArgumentContract,
+    ToolSchemaKind,
+)
 
 
 def build_decision_schema(
@@ -21,41 +25,25 @@ def build_decision_schema(
     raw_nodes: set[int] = set()
 
     for node in list(_walk(schema)):
-        match = _tool_call(node, tools)
-        if match is None:
+        tool_name = node.pop(TOOL_ARGUMENT_MARKER, None)
+        if not isinstance(tool_name, str):
             continue
-        tool_name, properties = match
+        if tool_name not in tools:
+            raise ValueError(f"Unknown tool argument marker: {tool_name!r}")
         contract = tools[tool_name]
-        arguments = deepcopy(contract.schema)
+        arguments = _compose_definitions(
+            root_definitions, tool_name, deepcopy(contract.schema)
+        )
+        node.clear()
+        node.update(arguments)
         if contract.kind is ToolSchemaKind.RAW:
-            raw_nodes.add(id(arguments))
-        else:
-            arguments = _compose_definitions(root_definitions, tool_name, arguments)
-        properties["arguments"] = arguments
+            raw_nodes.add(id(node))
 
     raw_paths = frozenset(
         path for path, node in _walk_with_paths(schema) if id(node) in raw_nodes
     )
     schema["description"] = "The model for the LLM's decision on the next action."
     return LLMSchema(schema=schema, raw_schema_paths=raw_paths)
-
-
-def _tool_call(
-    node: dict[str, Any], tools: dict[str, ToolArgumentContract]
-) -> tuple[str, dict[str, Any]] | None:
-    properties = node.get("properties")
-    if not isinstance(properties, dict):
-        return None
-    property_map = cast(dict[str, Any], properties)
-    name_schema = property_map.get("name")
-    if not isinstance(name_schema, dict):
-        return None
-    tool_name = cast(dict[str, Any], name_schema).get("const")
-    if not isinstance(tool_name, str) or tool_name not in tools:
-        return None
-    if not isinstance(property_map.get("arguments"), dict):
-        return None
-    return tool_name, property_map
 
 
 def _compose_definitions(
