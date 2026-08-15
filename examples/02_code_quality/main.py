@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from sefios import SQLitePersistenceProvider, get_state
+from sefios import SQLitePersistence, get_state
 from sefios.cli import SefiaCLI
 from sefios.sessions import FileActiveSessionStore
 
@@ -37,7 +37,7 @@ console = Console()
 SESSION_DIR = Path(__file__).parent / ".local"
 sefia_cli = SefiaCLI(
     stream=True,
-    persistence=SQLitePersistenceProvider(SESSION_DIR / "sessions.sqlite3"),
+    persistence=SQLitePersistence(SESSION_DIR / "sessions.sqlite3"),
     active_session_store=FileActiveSessionStore(SESSION_DIR / "active_session.txt"),
 )
 input_tool = sefia_cli.input_tool

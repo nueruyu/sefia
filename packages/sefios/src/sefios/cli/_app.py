@@ -13,7 +13,7 @@ from .._input_channel import InputChannel
 from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..handlers import CostCalculator
-from ..persistence import MemoryPersistenceProvider, PersistenceProvider
+from ..persistence import MemoryPersistence, PersistenceProvider
 from ..sessions import (
     ActiveSessionStore,
     MemoryActiveSessionStore,
@@ -66,7 +66,7 @@ class SefiaCLI:
         persistence: PersistenceProvider | None = None,
         active_session_store: ActiveSessionStore | None = None,
     ):
-        persistence = persistence or MemoryPersistenceProvider()
+        persistence = persistence or MemoryPersistence()
         active_session_store = active_session_store or MemoryActiveSessionStore()
         self._reporter = self._resolve_reporter(reporter)
         self._reporting = CLIReporting(self._reporter)

@@ -28,10 +28,10 @@ Extras:
 
 ## Persistence
 
-The default `MemoryPersistenceProvider` keeps execution, session state, and the
+The default `MemoryPersistence` keeps execution, session state, and the
 session registry process-local. Install the `sqlite` extra and explicitly select
-`SQLitePersistenceProvider` for restart-safe local persistence.
-`FilePersistenceProvider` is an optional, debug-oriented JSON representation and
+`SQLitePersistence` for restart-safe local persistence.
+`FilePersistence` is an optional, debug-oriented JSON representation and
 requires the `file-store` extra.
 
 ## Documentation

@@ -146,8 +146,8 @@ single runs.
 
 No. `sefios.SessionScope` uses process-local memory by default, with no database
 service or durable-backend dependency. Install `sefios[sqlite]` and select
-`SQLitePersistenceProvider` for restart-safe local persistence. The optional
-`FilePersistenceProvider` is intended for inspecting JSON during debugging. A
+`SQLitePersistence` for restart-safe local persistence. The optional
+`FilePersistence` is intended for inspecting JSON during debugging. A
 Postgres or other backend can implement the typed `PersistenceProvider` seam,
 including a shared session registry. CLI active-session selection remains local
 workspace state. Your application database stays yours; Sefia stores only enough to

@@ -78,7 +78,7 @@ The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is inst
 automatically.
 
 Persistence is process-local by default. The quickstart installs the `sqlite` extra
-and selects `SQLitePersistenceProvider` explicitly so its sessions survive restarts.
+and selects `SQLitePersistence` explicitly so its sessions survive restarts.
 
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
 `domain` / `concurrent` / `preview` / `policy` / `profile` decorators,
@@ -93,9 +93,8 @@ A plain Python class that holds a dependency, runs an inferred step, and persist
 run.
 
 ```python
-from pathlib import Path
 from pydantic import BaseModel
-from sefios import SQLitePersistenceProvider, SessionScope, Tools, domain
+from sefios import SQLitePersistence, SessionScope, Tools, domain
 from sefios.tools import WebSearch
 
 
@@ -121,7 +120,7 @@ class ResearchService:
 
 scope = SessionScope(
     model="gpt-4o",
-    persistence=SQLitePersistenceProvider(Path(".sessions/sessions.sqlite3")),
+    persistence=SQLitePersistence(),
 )
 
 async def main(topic: str) -> Report:
@@ -145,8 +144,7 @@ This example uses the FastAPI integration, so install the `[fastapi]` extra alon
 your provider — `pip install 'sefios[litellm,fastapi]'`.
 
 ```python
-from pathlib import Path
-from sefios import SQLitePersistenceProvider, Tools, domain
+from sefios import SQLitePersistence, Tools, domain
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input, WebSearch
@@ -170,7 +168,7 @@ class ResearchService:
 
 api = SefiaHTTP(
     model="gpt-4o",
-    persistence=SQLitePersistenceProvider(Path(".sessions/sessions.sqlite3")),
+    persistence=SQLitePersistence(),
 )
 research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
 

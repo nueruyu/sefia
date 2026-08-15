@@ -8,7 +8,7 @@ from sefia import Tools
 from sefia.llm import LLMClient, LLMResponse, Message
 from sefia_fastapi.events import _SessionEvent
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
-from sefios import MemoryPersistenceProvider, domain
+from sefios import MemoryPersistence, domain
 from sefios.exceptions import InputRequired
 from sefios.fastapi import SefiaHTTP
 from sefios.tools import Input, Output, OutputMessage
@@ -95,7 +95,7 @@ class TestSefiaHTTPSessionManagement:
         http.ensure_session(session_id)
 
     def test_created_session_is_known_to_another_instance(self) -> None:
-        persistence = MemoryPersistenceProvider()
+        persistence = MemoryPersistence()
         first = SefiaHTTP(model="gpt-4o-mini", persistence=persistence)
         second = SefiaHTTP(model="gpt-4o-mini", persistence=persistence)
 

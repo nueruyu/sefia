@@ -15,7 +15,7 @@ from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..exceptions import InputRequired
 from ..handlers import CostCalculator
-from ..persistence import MemoryPersistenceProvider, PersistenceProvider
+from ..persistence import MemoryPersistence, PersistenceProvider
 from ..sessions import SessionRegistry
 from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
 
@@ -57,7 +57,7 @@ class SefiaHTTP:
         policies: list[Policy] | None = None,
         persistence: PersistenceProvider | None = None,
     ):
-        persistence = persistence or MemoryPersistenceProvider()
+        persistence = persistence or MemoryPersistence()
         self._events = SessionEvents()
         self._session_registry: SessionRegistry = persistence.create_session_registry()
         self._input = InputChannel(namespace="http/input_channel")

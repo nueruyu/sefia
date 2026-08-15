@@ -3,7 +3,7 @@ from collections.abc import Iterator
 import pytest
 from glyff_pydantic import PydanticSerializer
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
-from sefios import MemoryPersistenceProvider
+from sefios import MemoryPersistence
 from sefios._input_channel import InputChannel
 from sefios.cli import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
 from sefios.cli._app import _USE_DEFAULT_REPORTER
@@ -111,16 +111,16 @@ class TestSefiaCLISessionManagement:
     def test_explicit_memory_persistence_keeps_active_selection_in_memory(
         self,
     ) -> None:
-        first = SefiaCLI(model="gpt-4o", persistence=MemoryPersistenceProvider())
+        first = SefiaCLI(model="gpt-4o", persistence=MemoryPersistence())
         session_id = first.create_session()
 
-        second = SefiaCLI(model="gpt-4o", persistence=MemoryPersistenceProvider())
+        second = SefiaCLI(model="gpt-4o", persistence=MemoryPersistence())
 
         assert first.get_active_session() == session_id
         assert second.get_active_session() is None
 
     def test_registry_is_shared_but_active_selection_is_local(self) -> None:
-        persistence = MemoryPersistenceProvider()
+        persistence = MemoryPersistence()
         first = SefiaCLI(model="gpt-4o", persistence=persistence)
         second = SefiaCLI(model="gpt-4o", persistence=persistence)
 

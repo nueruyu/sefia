@@ -15,7 +15,7 @@ from sefia import HistoryStorage, Policy, Profile, ToolCollector
 from sefia.llm import LLMClient
 
 from ._session_state import bind_session_storage
-from .persistence import MemoryPersistenceProvider, PersistenceProvider
+from .persistence import MemoryPersistence, PersistenceProvider
 from .policies import DefaultPolicy
 
 
@@ -59,7 +59,7 @@ class SessionScope:
         self.stream = stream
         self.max_steps = max_steps
         self.max_repair_attempts = max_repair_attempts
-        self.persistence = persistence or MemoryPersistenceProvider()
+        self.persistence = persistence or MemoryPersistence()
         self.history_storage = history_storage
         self.tool_collector = tool_collector
 

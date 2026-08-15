@@ -6,16 +6,28 @@ from sefia.llm import LLMResponse
 from sefia.testing import MockLLMClient, result_response, tool_calls_response
 from sefia.tool_collectors import StaticToolCollector
 from sefios import (
-    MemoryPersistenceProvider,
+    FilePersistence,
+    MemoryPersistence,
     MemorySessionStorage,
+    PersistenceProvider,
     SessionScope,
-    SQLitePersistenceProvider,
+    SQLitePersistence,
     SQLiteSessionStorage,
     domain,
     get_session_storage,
 )
 
 infer = domain("packages.sefios.tests.units.test_scope").infer
+
+
+def test_builtin_persistence_types_implement_the_provider() -> None:
+    assert isinstance(MemoryPersistence(), PersistenceProvider)
+    assert isinstance(SQLitePersistence(), PersistenceProvider)
+    assert isinstance(FilePersistence(".sefios"), PersistenceProvider)
+
+
+def test_sqlite_persistence_has_a_project_local_default() -> None:
+    assert SQLitePersistence().database == Path(".sefios/sessions.sqlite3")
 
 
 class _Probe:
@@ -52,7 +64,7 @@ async def test_tool_collector_default_is_used(
     scope = SessionScope(
         llm_client=llm,
         tool_collector=_static_collector("init_tool", calls),
-        persistence=MemoryPersistenceProvider(),
+        persistence=MemoryPersistence(),
     )
 
     async with scope.session(session_id="s"):
@@ -69,7 +81,7 @@ async def test_session_tool_collector_overrides_init_default(
     scope = SessionScope(
         llm_client=llm,
         tool_collector=_static_collector("init_tool", calls),
-        persistence=MemoryPersistenceProvider(),
+        persistence=MemoryPersistence(),
     )
 
     async with scope.session(
@@ -96,7 +108,7 @@ async def test_sqlite_persistence_can_be_selected(
     database = tmp_path / "sessions.sqlite3"
     scope = SessionScope(
         llm_client=make_mock_llm([]),
-        persistence=SQLitePersistenceProvider(database),
+        persistence=SQLitePersistence(database),
     )
 
     async with scope.session(session_id="durable"):

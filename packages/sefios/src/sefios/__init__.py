@@ -16,10 +16,10 @@ from ._scope import SessionScope
 from ._session_state import get_call_state_store, get_session_storage
 from ._state_store import StateStore
 from .persistence import (
-    FilePersistenceProvider,
-    MemoryPersistenceProvider,
+    FilePersistence,
+    MemoryPersistence,
     PersistenceProvider,
-    SQLitePersistenceProvider,
+    SQLitePersistence,
 )
 from .sessions import (
     FileSessionRegistry,
@@ -49,9 +49,9 @@ __all__ = [
     # sefios' own front door and batteries.
     "SessionScope",
     "PersistenceProvider",
-    "SQLitePersistenceProvider",
-    "MemoryPersistenceProvider",
-    "FilePersistenceProvider",
+    "SQLitePersistence",
+    "MemoryPersistence",
+    "FilePersistence",
     "SessionRegistry",
     "SQLiteSessionRegistry",
     "MemorySessionRegistry",
