@@ -11,7 +11,6 @@ from sefios.sessions import FileActiveSessionStore
 from sefios.tools import WebSearch
 
 from .._common.policies import VerbosePolicy
-from .._common.typer_params import argument, option
 from .._common.typer_utils import add_session_commands, async_command
 from .agents import NewsWriter, RequirementsClarifier, Researcher
 from .authoring import engrave
@@ -65,27 +64,27 @@ async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArt
 async def chat(
     message: Annotated[
         list[str],
-        argument(
+        typer.Argument(
             help="The input for a new session, or an answer to resume an existing one.",
         ),
     ],
     reply_to: Annotated[
         str | None,
-        option(
+        typer.Option(
             "--reply-to",
             help="The input interaction ID to answer.",
         ),
     ] = None,
     session_id: Annotated[
         str | None,
-        option(
+        typer.Option(
             "--session-id",
             help="The session ID to use. If not provided, uses the active session.",
         ),
     ] = None,
     model: Annotated[
         str,
-        option(
+        typer.Option(
             "--model",
             help="The LLM model to use. Can also be set via EXAMPLE_DEFAULT_MODEL env var.",
             envvar="EXAMPLE_DEFAULT_MODEL",
@@ -93,7 +92,7 @@ async def chat(
     ] = "gpt-4o",
     verbose: Annotated[
         bool,
-        option(
+        typer.Option(
             "--verbose",
             help="Enable verbose output for debugging, including LLM prompts.",
         ),

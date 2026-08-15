@@ -82,5 +82,6 @@ executionEnvironments = [
     { root = "packages/sefia_fastapi/tests", reportPrivateUsage = false },
     { root = "packages/sefios/tests", reportPrivateUsage = false },
     { root = "examples/tests", extraPaths = ["."], reportPrivateUsage = false },
+    { root = "examples", reportUnknownMemberType = false },
     { root = "." },
 ]

@@ -9,8 +9,6 @@ from rich.console import Console
 from sefios.cli.exceptions import UnknownSessionError
 from typing_extensions import ParamSpec
 
-from .typer_params import argument
-
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
 
@@ -57,7 +55,7 @@ def add_session_commands(app: typer.Typer, sessions: SessionCommands) -> None:
     def switch_session(
         session_id: Annotated[
             str,
-            argument(help="The ID of the session to switch to."),
+            typer.Argument(help="The ID of the session to switch to."),
         ],
     ) -> None:
         """Switch the active session."""

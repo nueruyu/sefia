@@ -14,7 +14,6 @@ from sefios.cli import SefiaCLI
 from sefios.sessions import FileActiveSessionStore
 from sefios.tools import Input, Output
 
-from .._common.typer_params import argument, option
 from .._common.typer_utils import add_session_commands, async_command
 from .authoring import infer
 
@@ -61,11 +60,11 @@ app = typer.Typer(help="Simple one-agent chat loop.")
 async def chat(
     message: Annotated[
         list[str],
-        argument(help="Your message, or an answer to resume the session."),
+        typer.Argument(help="Your message, or an answer to resume the session."),
     ],
     model: Annotated[
         str,
-        option(
+        typer.Option(
             "--model",
             envvar="EXAMPLE_DEFAULT_MODEL",
             help="LLM model to use.",
