@@ -1,0 +1,16 @@
+{
+  "include": [
+    "packages/sefia/tests",
+    "packages/sefia_litellm/tests",
+    "packages/sefia_typer/tests",
+    "packages/sefia_fastapi/tests",
+    "packages/sefios/tests"
+  ],
+  "exclude": [".venv", ".uv-cache", "**/__pycache__"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "strict",
+  "reportPrivateUsage": false,
+  "reportUnnecessaryTypeIgnoreComment": true
+}
