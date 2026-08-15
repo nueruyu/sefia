@@ -5,7 +5,7 @@
 > sefia turns typed Python functions into durable, replayable LLM-backed calls.
 > Because model and tool steps replay on re-invocation, a call can pause, resume after
 > a restart, and drive human-in-the-loop flows over ordinary request/response handlers
-> — with no workflow engine or graph DSL.
+> without a workflow engine or graph DSL.
 
 ```python
 from pydantic import BaseModel
