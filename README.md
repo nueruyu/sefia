@@ -5,7 +5,7 @@
 > sefia turns typed Python functions into durable, replayable LLM-backed calls.
 > Because model and tool steps replay on re-invocation, a call can pause, resume after
 > a restart, and drive human-in-the-loop flows over ordinary request/response handlers
-> — with no workflow engine or graph DSL.
+> without a workflow engine or graph DSL.
 
 ```python
 from pydantic import BaseModel
@@ -73,6 +73,10 @@ pip install 'sefios[litellm,sqlite]'
   pull in **`sefia_typer`** / **`sefia_fastapi`** and unlock the `sefios.cli` /
   `sefios.fastapi` integrations — Typer and FastAPI apps with persisted sessions
   and human-in-the-loop pause/resume.
+
+Live end-to-end compatibility is currently verified against OpenAI, Anthropic, and
+Gemini. Other LiteLLM providers may work but are not yet covered by the live
+compatibility suite.
 
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.

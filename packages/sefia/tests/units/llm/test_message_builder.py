@@ -95,10 +95,11 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decision_branch(schema: dict[str, Any], decision: str) -> dict[str, Any]:
-    if schema.get("properties", {}).get("decision", {}).get("const") == decision:
-        return schema
+    payload = _resolve(schema["properties"]["payload"], schema)
+    if payload.get("properties", {}).get("decision", {}).get("const") == decision:
+        return payload
 
-    for candidate in schema["oneOf"]:
+    for candidate in payload["anyOf"]:
         branch = _resolve(candidate, schema)
         if branch["properties"]["decision"]["const"] == decision:
             return branch
@@ -169,6 +170,7 @@ class TestLLMInferenceStrategy:
         schema = director.build_decision_schema()
 
         assert "MyIssue" in schema["$defs"]
+        assert schema["$defs"]["MyIssue"]["additionalProperties"] is False
         result_branch = _decision_branch(schema, "result")
         result_schema = result_branch["properties"]["result"]
         assert "$defs" not in result_schema
@@ -186,10 +188,12 @@ class TestLLMInferenceStrategy:
 
         director = strategy._create_director(list[MyIssue], [])
         schema = director.build_decision_schema()
+        result_branch = _decision_branch(schema, "result")
 
-        assert schema["required"] == ["decision", "result"]
-        assert schema["properties"]["decision"]["const"] == "result"
-        result_schema = schema["properties"]["result"]
+        assert schema["required"] == ["payload"]
+        assert result_branch["required"] == ["decision", "result"]
+        assert result_branch["properties"]["decision"]["const"] == "result"
+        result_schema = result_branch["properties"]["result"]
         assert result_schema["type"] == "array"
         assert "oneOf" not in result_schema
 
@@ -198,12 +202,15 @@ class TestLLMInferenceStrategy:
 
         director = strategy._create_director(list[MyIssue], [_tool(search)])
         schema = director.build_decision_schema()
+        payload = schema["properties"]["payload"]
 
-        assert schema["discriminator"]["propertyName"] == "decision"
-        assert set(schema["discriminator"]["mapping"]) == {
+        assert payload["discriminator"]["propertyName"] == "decision"
+        assert set(payload["discriminator"]["mapping"]) == {
             "tool_calls",
             "result",
         }
+        assert "oneOf" not in payload
+        assert len(payload["anyOf"]) == 2
         assert _decision_branch(schema, "tool_calls")["required"] == [
             "decision",
             "tool_calls",

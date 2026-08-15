@@ -6,12 +6,17 @@ import pytest
 from pydantic import Field, TypeAdapter, ValidationError
 
 from sefia._interfaces import DecisionModelSpec
-from sefia._tool_system import SignatureToolEntry, ToolEntry, ToolRegistry
+from sefia._tool_system import (
+    JsonSchemaToolEntry,
+    SignatureToolEntry,
+    ToolEntry,
+    ToolRegistry,
+)
 from sefia.event_system import Event, EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.inference import FunctionInfo, InferenceDecision, ToolCallDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
-from sefia.llm._execution_directors import ToolOnlyDirector
+from sefia.llm._execution_directors import OutputOnlyDirector, ToolOnlyDirector
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._decision_model import _unknown_tool_name_from_error
 
@@ -40,6 +45,13 @@ def _tool() -> ToolEntry:
     )
 
 
+def _raw_tool(schema: dict[str, Any]) -> ToolEntry:
+    async def handler(**kwargs: Any) -> str:
+        return str(kwargs)
+
+    return JsonSchemaToolEntry(handler, name="raw_tool", parameters=schema)
+
+
 def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
     """Follow a top-level ``$ref`` into ``$defs`` so assertions can inspect the
     embedded per-tool schemas regardless of how Pydantic hoists definitions."""
@@ -50,7 +62,8 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tool_calls_array(schema: dict[str, Any]) -> dict[str, Any]:
-    tool_calls = schema["properties"]["tool_calls"]
+    payload = _resolve(schema["properties"]["payload"], schema)
+    tool_calls = payload["properties"]["tool_calls"]
     if "anyOf" in tool_calls:
         return next(
             candidate
@@ -83,6 +96,140 @@ def test_tool_only_schema_embeds_tool_argument_schema() -> None:
     assert arguments["required"] == ["question"]
     assert arguments["additionalProperties"] is False
     assert arguments["properties"]["question"]["minLength"] == 1
+
+
+def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
+    raw_schema = {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+        "additionalProperties": False,
+    }
+    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+
+    schema = director.build_decision_schema()
+
+    arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
+    assert arguments == raw_schema
+
+
+@pytest.mark.parametrize(
+    ("raw_schema", "message"),
+    [
+        (
+            {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "additionalProperties": False,
+            },
+            "all object properties must be required",
+        ),
+        (
+            {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            "additionalProperties to false",
+        ),
+        (
+            {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+                "additionalProperties": True,
+            },
+            "additionalProperties to false",
+        ),
+        (
+            {
+                "type": "object",
+                "additionalProperties": {"type": "string"},
+            },
+            "additionalProperties to false",
+        ),
+        (
+            {
+                "oneOf": [
+                    {"type": "object", "additionalProperties": False},
+                    {"type": "object", "additionalProperties": False},
+                ]
+            },
+            "oneOf is not supported",
+        ),
+    ],
+)
+def test_incompatible_raw_tool_schema_is_rejected_without_rewriting(
+    raw_schema: dict[str, Any], message: str
+) -> None:
+    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+
+    with pytest.raises(ValueError, match=message):
+        director.build_decision_schema()
+
+
+_UNSUPPORTED_COMPOSITIONS: list[tuple[str, Any]] = [
+    ("allOf", [{}]),
+    ("not", {}),
+    ("dependentRequired", {"query": ["other"]}),
+    ("dependentSchemas", {"query": {}}),
+    ("if", {}),
+    ("then", {}),
+    ("else", {}),
+]
+
+
+@pytest.mark.parametrize(
+    ("keyword", "value"),
+    _UNSUPPORTED_COMPOSITIONS,
+)
+def test_unsupported_composition_keyword_is_rejected(keyword: str, value: Any) -> None:
+    raw_schema = {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+        "additionalProperties": False,
+        keyword: value,
+    }
+    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+
+    with pytest.raises(ValueError, match=rf"{keyword} is not supported"):
+        director.build_decision_schema()
+
+
+@pytest.mark.parametrize(
+    "property_name",
+    [
+        "allOf",
+        "not",
+        "dependentRequired",
+        "dependentSchemas",
+        "if",
+        "then",
+        "else",
+        "oneOf",
+    ],
+)
+def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
+    raw_schema = {
+        "type": "object",
+        "properties": {property_name: {"type": "string"}},
+        "required": [property_name],
+        "additionalProperties": False,
+    }
+    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+
+    schema = director.build_decision_schema()
+
+    arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
+    assert arguments == raw_schema
+
+
+def test_mapping_result_is_rejected_as_incompatible_with_strict_output() -> None:
+    director = OutputOnlyDirector(PydanticModelBackend(), dict[str, str], [])
+
+    with pytest.raises(ValueError, match="additionalProperties to false"):
+        director.build_decision_schema()
 
 
 def test_unknown_tool_name_ignores_root_literal_errors() -> None:

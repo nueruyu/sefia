@@ -26,18 +26,22 @@ from sefia_litellm import LiteLLMClient
 class Provider:
     """One live provider the e2e suite can run against.
 
-    ``required_env`` is the environment variable whose presence enables the
-    provider — its API key, except for Ollama where it is the server address.
+    ``required_envs`` lists the environment variables whose presence enables
+    the provider — API keys, except for Ollama where it is the server address.
     """
 
     id: str
-    required_env: str
+    required_envs: tuple[str, ...]
     default_model: str
     model_env: str
 
     @property
     def model(self) -> str:
         return os.environ.get(self.model_env) or self.default_model
+
+    @property
+    def enabled(self) -> bool:
+        return any(os.environ.get(name) for name in self.required_envs)
 
 
 class LiveSessionFactory(Protocol):
@@ -49,49 +53,49 @@ class LiveSessionFactory(Protocol):
 PROVIDERS = [
     Provider(
         id="openai",
-        required_env="OPENAI_API_KEY",
+        required_envs=("OPENAI_API_KEY",),
         default_model="gpt-4o-mini",
         model_env="SEFIA_E2E_OPENAI_MODEL",
     ),
     Provider(
         id="anthropic",
-        required_env="ANTHROPIC_API_KEY",
+        required_envs=("ANTHROPIC_API_KEY",),
         default_model="anthropic/claude-haiku-4-5",
         model_env="SEFIA_E2E_ANTHROPIC_MODEL",
     ),
     Provider(
         id="gemini",
-        required_env="GEMINI_API_KEY",
+        required_envs=("GOOGLE_API_KEY", "GEMINI_API_KEY"),
         default_model="gemini/gemini-2.5-flash",
         model_env="SEFIA_E2E_GEMINI_MODEL",
     ),
     Provider(
         id="xai",
-        required_env="XAI_API_KEY",
+        required_envs=("XAI_API_KEY",),
         default_model="xai/grok-3-mini",
         model_env="SEFIA_E2E_XAI_MODEL",
     ),
     Provider(
         id="mistral",
-        required_env="MISTRAL_API_KEY",
+        required_envs=("MISTRAL_API_KEY",),
         default_model="mistral/mistral-small-latest",
         model_env="SEFIA_E2E_MISTRAL_MODEL",
     ),
     Provider(
         id="groq",
-        required_env="GROQ_API_KEY",
+        required_envs=("GROQ_API_KEY",),
         default_model="groq/llama-3.3-70b-versatile",
         model_env="SEFIA_E2E_GROQ_MODEL",
     ),
     Provider(
         id="deepseek",
-        required_env="DEEPSEEK_API_KEY",
+        required_envs=("DEEPSEEK_API_KEY",),
         default_model="deepseek/deepseek-chat",
         model_env="SEFIA_E2E_DEEPSEEK_MODEL",
     ),
     Provider(
         id="ollama",
-        required_env="OLLAMA_API_BASE",
+        required_envs=("OLLAMA_API_BASE",),
         default_model="ollama/llama3.1",
         model_env="SEFIA_E2E_OLLAMA_MODEL",
     ),
@@ -109,8 +113,8 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
                     provider,
                     id=provider.id,
                     marks=pytest.mark.skipif(
-                        not os.environ.get(provider.required_env),
-                        reason=f"{provider.required_env} is not set",
+                        not provider.enabled,
+                        reason=f"{' or '.join(provider.required_envs)} is not set",
                     ),
                 )
                 for provider in PROVIDERS

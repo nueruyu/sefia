@@ -109,10 +109,11 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decision_branch(schema: dict[str, Any], decision: str) -> dict[str, Any]:
-    if schema.get("properties", {}).get("decision", {}).get("const") == decision:
-        return schema
+    payload = _resolve(schema["properties"]["payload"], schema)
+    if payload.get("properties", {}).get("decision", {}).get("const") == decision:
+        return payload
 
-    for candidate in schema["oneOf"]:
+    for candidate in payload["anyOf"]:
         branch = _resolve(candidate, schema)
         if branch["properties"]["decision"]["const"] == decision:
             return branch
@@ -154,11 +155,14 @@ class TestToolOnlyDirector:
         strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
         schema = director.build_decision_schema()
+        branch = _decision_branch(schema, "tool_calls")
 
-        assert "result" not in schema.get("properties", {})
-        assert schema["properties"]["decision"]["const"] == "tool_calls"
-        assert "tool_calls" in schema["properties"]
-        assert schema["required"] == ["decision", "tool_calls"]
+        assert schema["required"] == ["payload"]
+        assert schema["additionalProperties"] is False
+        assert "result" not in branch["properties"]
+        assert branch["properties"]["decision"]["const"] == "tool_calls"
+        assert "tool_calls" in branch["properties"]
+        assert branch["required"] == ["decision", "tool_calls"]
 
     def test_build_system_prompt_instructs_tool_only(self):
         strategy = _make_strategy()
@@ -233,8 +237,11 @@ class TestToolEnabledDirector:
 
     def test_build_decision_schema_has_decision_branches(self):
         schema = self._director().build_decision_schema()
+        payload = schema["properties"]["payload"]
 
-        assert schema["discriminator"]["propertyName"] == "decision"
+        assert payload["discriminator"]["propertyName"] == "decision"
+        assert "oneOf" not in payload
+        assert len(payload["anyOf"]) == 2
         assert _decision_branch(schema, "tool_calls")["required"] == [
             "decision",
             "tool_calls",
@@ -269,6 +276,16 @@ class TestToolEnabledDirector:
         director = self._director(output_type=str)
         result = director.process_response_data(
             {"decision": "result", "result": "done"}
+        )
+
+        assert isinstance(result, ResultDecision)
+        assert result.result == "done"
+
+    def test_process_decision_accepts_provider_envelope(self):
+        director = self._director(output_type=str)
+
+        result = director.process_response_data(
+            {"payload": {"decision": "result", "result": "done"}}
         )
 
         assert isinstance(result, ResultDecision)
@@ -315,11 +332,13 @@ class TestOutputOnlyDirector:
 
     def test_build_decision_schema_has_only_result(self):
         schema = self._director().build_decision_schema()
+        branch = _decision_branch(schema, "result")
 
-        assert "tool_calls" not in schema.get("properties", {})
-        assert "result" in schema["properties"]
-        assert schema["properties"]["decision"]["const"] == "result"
-        assert schema["required"] == ["decision", "result"]
+        assert schema["required"] == ["payload"]
+        assert "tool_calls" not in branch["properties"]
+        assert "result" in branch["properties"]
+        assert branch["properties"]["decision"]["const"] == "result"
+        assert branch["required"] == ["decision", "result"]
 
     def test_build_system_prompt_mentions_no_tools(self):
         director = self._director()

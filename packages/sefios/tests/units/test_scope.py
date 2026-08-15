@@ -49,7 +49,11 @@ def _static_collector(name: str, calls: list[str]) -> StaticToolCollector:
             JsonSchemaToolEntry(
                 handler,
                 name=name,
-                parameters={"type": "object", "properties": {}},
+                parameters={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
                 description=f"the {name} tool",
             )
         ]

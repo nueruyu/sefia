@@ -85,9 +85,14 @@ A `create_model`-built decision model is the schema, picked by an
 
 | Return type | Director | Decision schema |
 | --- | --- | --- |
-| `Never` | `_ToolOnlyDirector` | `{ tool_calls }` only — must keep calling tools, no final answer |
-| has tools | `_ToolEnabledDirector` | `{ final_answer: T \| null, tool_calls: [...] \| null }`, exactly one non-null |
-| no tools | `_OutputOnlyDirector` | `{ final_answer: T }` only |
+| `Never` | `_ToolOnlyDirector` | `{ payload: { decision: "tool_calls", tool_calls: [...] } }` only |
+| has tools | `_ToolEnabledDirector` | `{ payload: anyOf(tool_calls decision, result decision) }` |
+| no tools | `_OutputOnlyDirector` | `{ payload: { decision: "result", result: T } }` only |
+
+The outer object keeps the provider-facing schema portable: unions are nested under
+`payload`, rendered as `anyOf`, and generated object schemas are closed with
+`additionalProperties: false`. The original Pydantic decision model remains the
+local validation authority after `payload` is unwrapped.
 
 The system prompt is `docstring + response-instructions + the tool definitions (as
 JSON) + the decision JSON Schema`. The user message is the call's arguments rendered
@@ -95,7 +100,7 @@ as XML (`_build_messages`); prior steps are replayed as ordinary
 assistant/tool messages. The client is always called with `tools=None` and the
 unified `output_schema` — provider native tool-calling is never used. The reply is
 stripped of any ``` fence, `json.loads`-ed, validated into the decision model, and
-`process_decision` validates `final_answer` against the declared return type
+`process_decision` validates `result` against the declared return type
 (`InvalidInferenceResponseError` if it doesn't conform).
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
@@ -178,7 +183,14 @@ keyword arguments, so a `Protocol` and the implementation it narrows must agree 
 parameter names, not just behavior — nothing checks this at runtime, so a mismatch
 surfaces as a tool-execution error on the first call rather than at discovery time.
 A `JsonSchemaToolEntry` instead carries its parameters as a raw JSON Schema (no
-signature to introspect) and passes that schema through verbatim.
+signature to introspect) and passes that schema through verbatim. Because that
+schema is also used for local argument validation, Sefia does not rewrite it for
+provider compatibility. It must already use the strict structured-output subset
+supported by the verified providers: object properties are required, objects set
+`additionalProperties` to `false`, unions use `anyOf` rather than `oneOf`, and
+unsupported composition keywords such as `allOf` and conditional schemas are
+omitted. Incompatible schemas fail when the provider-facing decision schema is
+built, before an LLM request is made.
 
 **Execution** (`_tool_execution.py`, engraved through
 `InferenceExecutor._call_tools`): each requested call is matched
