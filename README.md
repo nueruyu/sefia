@@ -140,8 +140,8 @@ A turn that pauses for a human and resumes after a restart, served on an ordinar
 request/response handler: the pause is a tool that **raises**, and resume is calling
 the endpoint again.
 
-This example uses the FastAPI integration, so install the `[fastapi]` extra alongside
-your provider — `pip install 'sefios[litellm,fastapi]'`.
+This example uses the FastAPI integration with SQLite persistence, so install both
+extras — `pip install 'sefios[litellm,fastapi,sqlite]'`.
 
 ```python
 from sefios import SQLitePersistence, Tools, domain
