@@ -15,7 +15,7 @@ from .._interfaces.decision_model import (
     ResultLLMDecision,
     ToolCallsLLMDecision,
 )
-from .._tool_system import ToolEntry
+from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ._function_models import json_schema_argument_type
 from ._llm_schema import build_llm_schema
@@ -28,14 +28,20 @@ class PydanticDecisionModel(DecisionModel):
         *,
         model: Any,
         name: str,
+        raw_tool_schemas: dict[str, dict[str, Any]],
     ):
         self._adapter = TypeAdapter(model)
         self._model = model
         self._name = name
+        self._raw_tool_schemas = raw_tool_schemas
 
     @override
     def schema(self) -> dict[str, Any]:
-        return build_llm_schema(self._model, name=self._name)
+        return build_llm_schema(
+            self._model,
+            name=self._name,
+            raw_tool_schemas=self._raw_tool_schemas,
+        )
 
     @override
     def validate(self, data: Any) -> LLMDecision:
@@ -100,6 +106,11 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
         return PydanticDecisionModel(
             model=self._model(spec),
             name=spec.name,
+            raw_tool_schemas={
+                tool.name: tool.definition().parameters
+                for tool in spec.tools
+                if isinstance(tool, JsonSchemaToolEntry)
+            },
         )
 
     def _tool_calls_type(self, tools: list[ToolEntry]) -> Any:
