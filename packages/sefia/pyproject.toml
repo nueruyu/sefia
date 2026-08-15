@@ -8,9 +8,9 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0",
     "typing-extensions>=4.6",
-    "glyff>=0.15.0",
-    "glyff-file-store>=0.15.0",
-    "glyff-pydantic>=0.15.0",
+    "glyff>=0.16.0",
+    "glyff-file-store>=0.16.0",
+    "glyff-pydantic>=0.16.0",
     "jsonschema>=4.18",
     "jsonweir>=0.1.0",
 ]

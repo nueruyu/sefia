@@ -1,6 +1,6 @@
 from collections.abc import Hashable, Sequence
 
-import glyff  # pyright: ignore[reportMissingTypeStubs]
+import glyff
 import sefia
 
 

@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from glyff import Serializer  # pyright: ignore[reportMissingTypeStubs]
+from glyff import Serializer
 from typing_extensions import final, override
 
 from ._base import SessionStorage
