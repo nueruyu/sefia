@@ -1,11 +1,15 @@
 from sefios import domain
 import asyncio
 import json
+from collections.abc import Callable, Coroutine
+from pathlib import Path
+from typing import Any
 
 import pytest
 from sefia import Tools
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
-from sefia.llm import LLMClient, LLMResponse
+from sefia_fastapi.events import _SessionEvent
+from sefia.llm import LLMClient, LLMResponse, Message
 from sefios.fastapi import SefiaHTTP
 from sefios.exceptions import InputRequired
 from sefios.tools import Input, Output, OutputMessage
@@ -21,11 +25,11 @@ class StreamingClient(LLMClient):
 
     async def complete(
         self,
-        messages,
-        tools=None,
-        output_schema=None,
-        stream_callback=None,
-        reasoning_callback=None,
+        messages: list[Message],
+        tools: list[dict[str, Any]] | None = None,
+        output_schema: dict[str, Any] | None = None,
+        stream_callback: Callable[[str], Coroutine[Any, Any, None]] | None = None,
+        reasoning_callback: (Callable[[str], Coroutine[Any, Any, None]] | None) = None,
     ) -> LLMResponse:
         content = self.responses.pop(0)
         if stream_callback is not None:
@@ -58,7 +62,7 @@ class InputAgent:
         ...
 
 
-def _tool_response(name: str, arguments: dict) -> str:
+def _tool_response(name: str, arguments: dict[str, Any]) -> str:
     return json.dumps(
         {
             "decision": "tool_calls",
@@ -68,12 +72,12 @@ def _tool_response(name: str, arguments: dict) -> str:
 
 
 @pytest.fixture
-def http(tmp_path) -> SefiaHTTP:
+def http(tmp_path: Path) -> SefiaHTTP:
     return SefiaHTTP(session_dir=tmp_path / "sessions", model="gpt-4o-mini")
 
 
-def _drain(queue: asyncio.Queue) -> list:
-    events = []
+def _drain(queue: asyncio.Queue[_SessionEvent]) -> list[_SessionEvent]:
+    events: list[_SessionEvent] = []
     while not queue.empty():
         events.append(queue.get_nowait())
     return events
