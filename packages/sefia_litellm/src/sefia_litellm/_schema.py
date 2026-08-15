@@ -5,10 +5,9 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
-from pydantic import ConfigDict, TypeAdapter, create_model
-from typing_extensions import final
+from typing_extensions import final, override
 
-from ._tool_arguments import ToolArgumentContract, ToolSchemaKind
+from sefia.llm.schema import LLMSchema, PreparedLLMSchema, SchemaPath
 
 _MAP_CHILDREN = ("$defs", "definitions", "properties", "patternProperties")
 _VALUE_CHILDREN = (
@@ -46,139 +45,71 @@ class _Decoder(Protocol):
 
 @final
 @dataclass
-class ProviderSchema:
-    schema: dict[str, Any]
+class LiteLLMPreparedSchema(PreparedLLMSchema):
+    _schema: dict[str, Any]
     _decoder: _Decoder
 
+    @property
+    @override
+    def schema(self) -> dict[str, Any]:
+        return deepcopy(self._schema)
+
+    @override
     def decode(self, data: Any) -> Any:
-        return self._decoder.decode(data)
+        decoded = self._decoder.decode(data)
+        if not isinstance(decoded, dict):
+            return decoded
+        decoded_map = cast(dict[str, Any], decoded)
+        if set(decoded_map) == {"payload"}:
+            return decoded_map["payload"]
+        return decoded_map
+
+    @override
+    def normalize_stream_path(self, path: SchemaPath) -> SchemaPath | None:
+        if path and path[0] == "payload":
+            return path[1:]
+        return path
 
 
 @final
-class ProviderSchemaBuilder:
+class LiteLLMSchemaAdapter:
     """Build a provider schema and the inverse response decoder as one contract."""
 
     def build(
         self,
-        model: Any,
-        *,
-        name: str,
-        tools: dict[str, ToolArgumentContract],
-    ) -> ProviderSchema:
-        schema, preserved = _EnvelopeComposer(name, tools).compose(model)
+        logical: LLMSchema,
+    ) -> LiteLLMPreparedSchema:
+        schema, preserved = _EnvelopeComposer().compose(logical)
         _SchemaNormalizer(preserved).normalize(schema)
         mapping_ids = _MappingLowerer(preserved).lower(schema)
         _CompatibilityValidator().validate(schema)
         schema["description"] = "The model for the LLM's decision on the next action."
-        return ProviderSchema(
+        return LiteLLMPreparedSchema(
             schema, _DecoderFactory(schema, mapping_ids).build(schema)
         )
 
 
 @final
 class _EnvelopeComposer:
-    """Compose Pydantic's envelope with the original per-tool schemas."""
+    """Wrap a logical decision schema for strict structured output."""
 
-    def __init__(self, name: str, tools: dict[str, ToolArgumentContract]):
-        self._name = name
-        self._tools = tools
-
-    def compose(self, model: Any) -> tuple[dict[str, Any], set[int]]:
-        envelope = create_model(
-            f"{self._name}Envelope",
-            __config__=ConfigDict(extra="forbid"),
-            payload=(model, ...),
-        )
-        schema = TypeAdapter(envelope).json_schema()
-        definitions = schema.setdefault("$defs", {})
-        if not isinstance(definitions, dict):
-            raise ValueError("LLM schema $defs must be an object")
-        root_defs = cast(dict[str, Any], definitions)
-        preserved: set[int] = set()
-
-        for node in list(_walk(schema)):
-            match = self._tool_call(node)
-            if match is None:
-                continue
-            tool_name, properties = match
-            contract = self._tools[tool_name]
-            arguments = deepcopy(contract.schema)
-            if contract.kind is ToolSchemaKind.RAW:
-                preserved.add(id(arguments))
-            else:
-                arguments = _DefinitionComposer(root_defs, tool_name).compose(arguments)
-            properties["arguments"] = arguments
-
-        return schema, preserved
-
-    def _tool_call(self, node: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
-        properties = node.get("properties")
-        if not isinstance(properties, dict):
-            return None
-        property_map = cast(dict[str, Any], properties)
-        name_schema = property_map.get("name")
-        if not isinstance(name_schema, dict):
-            return None
-        tool_name = cast(dict[str, Any], name_schema).get("const")
-        if not isinstance(tool_name, str) or tool_name not in self._tools:
-            return None
-        if not isinstance(property_map.get("arguments"), dict):
-            return None
-        return tool_name, property_map
-
-
-@final
-class _DefinitionComposer:
-    """Hoist local definitions and rewrite colliding references."""
-
-    def __init__(self, root_definitions: dict[str, Any], namespace: str):
-        self._root = root_definitions
-        self._namespace = namespace
-
-    def compose(self, schema: dict[str, Any]) -> dict[str, Any]:
-        local: dict[str, Any] = {}
-        for keyword in ("$defs", "definitions"):
-            definitions = schema.pop(keyword, None)
-            if isinstance(definitions, dict):
-                local.update(cast(dict[str, Any], definitions))
-
-        names = {
-            name: self._target_name(name, definition)
-            for name, definition in local.items()
+    def compose(self, logical: LLMSchema) -> tuple[dict[str, Any], set[int]]:
+        payload = deepcopy(logical.schema)
+        preserved = {
+            id(node)
+            for path, node in _walk_with_paths(payload)
+            if path in logical.raw_schema_paths
         }
-        self._rewrite_references(schema, names)
-        for name, definition in local.items():
-            target = names[name]
-            if target in self._root:
-                continue
-            rewritten = deepcopy(definition)
-            self._rewrite_references(rewritten, names)
-            self._root[target] = rewritten
-        return schema
-
-    def _target_name(self, name: str, definition: Any) -> str:
-        if name not in self._root or self._root[name] == definition:
-            return name
-        base = f"{self._namespace}__{name}"
-        candidate = base
-        suffix = 2
-        while candidate in self._root:
-            candidate = f"{base}_{suffix}"
-            suffix += 1
-        return candidate
-
-    @staticmethod
-    def _rewrite_references(node: Any, names: dict[str, str]) -> None:
-        for schema_node in _walk(node):
-            reference = schema_node.get("$ref")
-            if not isinstance(reference, str):
-                continue
-            for prefix in ("#/$defs/", "#/definitions/"):
-                if reference.startswith(prefix):
-                    name = reference.removeprefix(prefix)
-                    if name in names:
-                        schema_node["$ref"] = f"#/$defs/{names[name]}"
-                    break
+        definitions = payload.pop("$defs", None)
+        schema: dict[str, Any] = {
+            "type": "object",
+            "properties": {"payload": payload},
+            "required": ["payload"],
+            "additionalProperties": False,
+        }
+        if isinstance(definitions, dict):
+            schema["$defs"] = definitions
+        return schema, preserved
 
 
 @final
@@ -254,7 +185,7 @@ class _CompatibilityValidator:
             if node.get("type") == "object":
                 self._validate_object(path, node)
 
-    def _validate_object(self, path: tuple[str, ...], node: dict[str, Any]) -> None:
+    def _validate_object(self, path: SchemaPath, node: dict[str, Any]) -> None:
         if node.get("additionalProperties") is not False:
             self._unsupported(
                 path, "object schemas must set additionalProperties to false"
@@ -274,8 +205,8 @@ class _CompatibilityValidator:
             )
 
     @staticmethod
-    def _unsupported(path: tuple[str, ...], detail: str) -> None:
-        location = "/".join(path) or "<root>"
+    def _unsupported(path: SchemaPath, detail: str) -> None:
+        location = "/".join(map(str, path)) or "<root>"
         raise ValueError(
             f"LLM schema is not compatible with strict structured output at "
             f"{location}: {detail}"
@@ -431,11 +362,11 @@ def _walk(node: Any, *, skip: set[int] | None = None) -> Iterator[dict[str, Any]
 
 
 def _walk_with_paths(
-    node: Any, path: tuple[str, ...] = ()
-) -> Iterator[tuple[tuple[str, ...], dict[str, Any]]]:
+    node: Any, path: SchemaPath = ()
+) -> Iterator[tuple[SchemaPath, dict[str, Any]]]:
     if isinstance(node, list):
         for index, item in enumerate(cast(list[Any], node)):
-            yield from _walk_with_paths(item, (*path, str(index)))
+            yield from _walk_with_paths(item, (*path, index))
         return
     if not isinstance(node, dict):
         return

@@ -130,7 +130,9 @@ class LLMInferenceStrategy(InferenceStrategy):
         tool_call_ids = ToolCallIdRegistry()
         if self._stream and tool_stream_handlers:
             tool_arg_streamer = ToolArgStreamer(
-                tool_stream_handlers, tool_call_ids.get_or_create
+                tool_stream_handlers,
+                tool_call_ids.get_or_create,
+                prepared_schema.normalize_stream_path,
             )
         if self._stream:
 

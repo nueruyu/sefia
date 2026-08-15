@@ -34,12 +34,12 @@ _RESPONSE_FORMAT_HEADER = (
     "prose, markdown, or code fences.\n"
 )
 _TOOL_CALLS_RESPONSE_FORMAT = (
-    'Use this shape to call tools: {"payload":{"decision":"tool_calls",'
-    '"tool_calls":[{"name":"<tool name>","arguments":{...}}]}}.'
+    "To call tools, select the `tool_calls` decision and provide each tool's "
+    "name and arguments according to the response schema."
 )
 _RESULT_RESPONSE_FORMAT = (
-    "Use this shape to complete the task: "
-    '{"payload":{"decision":"result","result":...}}.'
+    "To complete the task, select the `result` decision and provide the result "
+    "according to the response schema."
 )
 
 

@@ -13,6 +13,7 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import LLMClient, LLMInferenceStrategy
+from sefia.llm.schema import IdentityPreparedLLMSchema
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -77,8 +78,10 @@ def _make_strategy(
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
     formatter.format_arguments.return_value = "<arguments/>"
+    client = llm_client if llm_client is not None else AsyncMock()
+    client.prepare_output_schema = Mock(side_effect=IdentityPreparedLLMSchema)
     return LLMInferenceStrategy(
-        llm_client=llm_client if llm_client is not None else AsyncMock(),
+        llm_client=client,
         decision_builder=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
@@ -95,11 +98,10 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decision_branch(schema: dict[str, Any], decision: str) -> dict[str, Any]:
-    payload = _resolve(schema["properties"]["payload"], schema)
-    if payload.get("properties", {}).get("decision", {}).get("const") == decision:
-        return payload
+    if schema.get("properties", {}).get("decision", {}).get("const") == decision:
+        return schema
 
-    for candidate in payload["anyOf"]:
+    for candidate in schema["oneOf"]:
         branch = _resolve(candidate, schema)
         if branch["properties"]["decision"]["const"] == decision:
             return branch
@@ -167,10 +169,9 @@ class TestLLMInferenceStrategy:
         strategy = _make_strategy()
 
         director = strategy._create_director(list[MyIssue], [_tool(search)])
-        schema = director.build_decision_schema()
+        schema = director.build_decision_schema().schema
 
         assert "MyIssue" in schema["$defs"]
-        assert schema["$defs"]["MyIssue"]["additionalProperties"] is False
         result_branch = _decision_branch(schema, "result")
         result_schema = result_branch["properties"]["result"]
         assert "$defs" not in result_schema
@@ -187,10 +188,10 @@ class TestLLMInferenceStrategy:
         strategy = _make_strategy()
 
         director = strategy._create_director(list[MyIssue], [])
-        schema = director.build_decision_schema()
+        schema = director.build_decision_schema().schema
         result_branch = _decision_branch(schema, "result")
 
-        assert schema["required"] == ["payload"]
+        assert schema["required"] == ["decision", "result"]
         assert result_branch["required"] == ["decision", "result"]
         assert result_branch["properties"]["decision"]["const"] == "result"
         result_schema = result_branch["properties"]["result"]
@@ -201,16 +202,15 @@ class TestLLMInferenceStrategy:
         strategy = _make_strategy()
 
         director = strategy._create_director(list[MyIssue], [_tool(search)])
-        schema = director.build_decision_schema()
-        payload = schema["properties"]["payload"]
+        schema = director.build_decision_schema().schema
+        payload = schema
 
         assert payload["discriminator"]["propertyName"] == "decision"
         assert set(payload["discriminator"]["mapping"]) == {
             "tool_calls",
             "result",
         }
-        assert "oneOf" not in payload
-        assert len(payload["anyOf"]) == 2
+        assert len(payload["oneOf"]) == 2
         assert _decision_branch(schema, "tool_calls")["required"] == [
             "decision",
             "tool_calls",

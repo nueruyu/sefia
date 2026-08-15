@@ -22,6 +22,7 @@ from sefia.llm.events import (
     LLMResponseRepairAttempt,
     LLMTokenReceived,
 )
+from sefia.llm.schema import IdentityPreparedLLMSchema
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -85,8 +86,10 @@ def _make_strategy(
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
     formatter.format_arguments.return_value = "<arguments/>"
+    client = llm_client if llm_client is not None else AsyncMock()
+    client.prepare_output_schema = Mock(side_effect=IdentityPreparedLLMSchema)
     return LLMInferenceStrategy(
-        llm_client=llm_client if llm_client is not None else AsyncMock(),
+        llm_client=client,
         decision_builder=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,

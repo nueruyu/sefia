@@ -3,6 +3,7 @@ from importlib import import_module
 from sefia._tool_system import SignatureToolEntry
 from sefia.llm._execution_directors import OutputOnlyDirector, ToolEnabledDirector
 from sefia.pydantic import PydanticModelBackend
+from sefia_litellm._schema import LiteLLMSchemaAdapter
 from sefios.tools import WebSearch
 
 news_agents = import_module("examples.01_news_article.agents")
@@ -21,17 +22,19 @@ def test_news_writer_schema_composes_nested_research_tool_types() -> None:
         inspector=backend,
     )
 
-    schema = ToolEnabledDirector(
+    logical = ToolEnabledDirector(
         backend, news_models.NewsArticle, [tool]
     ).build_decision_schema()
+    schema = LiteLLMSchemaAdapter().build(logical).schema
 
     assert schema["additionalProperties"] is False
 
 
 def test_code_quality_report_schema_lowers_perspective_mapping() -> None:
-    schema = OutputOnlyDirector(
+    logical = OutputOnlyDirector(
         PydanticModelBackend(), quality_models.QualityReport, []
     ).build_decision_schema()
+    schema = LiteLLMSchemaAdapter().build(logical).schema
 
     report = schema["$defs"]["QualityReport"]
     perspective_issues = report["properties"]["issues_by_perspective"]

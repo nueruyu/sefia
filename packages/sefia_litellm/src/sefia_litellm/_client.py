@@ -9,6 +9,7 @@ from typing_extensions import final, override
 
 from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
+from sefia.llm.schema import LLMSchema, PreparedLLMSchema
 
 from .exceptions import (
     InferenceConnectionError,
@@ -16,6 +17,7 @@ from .exceptions import (
     InferenceTemporarilyUnavailableError,
     InferenceTimeoutError,
 )
+from ._schema import LiteLLMSchemaAdapter
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage
@@ -114,6 +116,10 @@ class LiteLLMClient(LLMClient):
         self._suppress_logs = (
             _env_suppress_logs_default() if suppress_logs is None else suppress_logs
         )
+
+    @override
+    def prepare_output_schema(self, schema: LLMSchema) -> PreparedLLMSchema:
+        return LiteLLMSchemaAdapter().build(schema)
 
     @override
     async def complete(

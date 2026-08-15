@@ -20,6 +20,7 @@ from sefia.llm._execution_directors import (
     ToolOnlyDirector,
 )
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
+from sefia.llm.schema import IdentityPreparedLLMSchema
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -91,8 +92,10 @@ def _make_strategy(
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
     formatter.format_arguments.return_value = "<arguments/>"
+    client = llm_client if llm_client is not None else AsyncMock()
+    client.prepare_output_schema = Mock(side_effect=IdentityPreparedLLMSchema)
     return LLMInferenceStrategy(
-        llm_client=llm_client if llm_client is not None else AsyncMock(),
+        llm_client=client,
         decision_builder=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
@@ -109,11 +112,10 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decision_branch(schema: dict[str, Any], decision: str) -> dict[str, Any]:
-    payload = _resolve(schema["properties"]["payload"], schema)
-    if payload.get("properties", {}).get("decision", {}).get("const") == decision:
-        return payload
+    if schema.get("properties", {}).get("decision", {}).get("const") == decision:
+        return schema
 
-    for candidate in payload["anyOf"]:
+    for candidate in schema["oneOf"]:
         branch = _resolve(candidate, schema)
         if branch["properties"]["decision"]["const"] == decision:
             return branch
@@ -154,10 +156,10 @@ class TestToolOnlyDirector:
     def test_build_decision_schema_has_no_result_field(self):
         strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
-        schema = director.build_decision_schema()
+        schema = director.build_decision_schema().schema
         branch = _decision_branch(schema, "tool_calls")
 
-        assert schema["required"] == ["payload"]
+        assert schema["required"] == ["decision", "tool_calls"]
         assert schema["additionalProperties"] is False
         assert "result" not in branch["properties"]
         assert branch["properties"]["decision"]["const"] == "tool_calls"
@@ -167,7 +169,7 @@ class TestToolOnlyDirector:
     def test_build_system_prompt_instructs_tool_only(self):
         strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
-        schema = director.build_decision_schema()
+        schema = director.build_decision_schema().schema
         prompt = director.build_system_prompt_addition(schema)
 
         assert "result" not in prompt or "There is no `result`" in prompt
@@ -236,12 +238,11 @@ class TestToolEnabledDirector:
         return ToolEnabledDirector(PydanticModelBackend(), output_type, [_tool(search)])
 
     def test_build_decision_schema_has_decision_branches(self):
-        schema = self._director().build_decision_schema()
-        payload = schema["properties"]["payload"]
+        schema = self._director().build_decision_schema().schema
+        payload = schema
 
         assert payload["discriminator"]["propertyName"] == "decision"
-        assert "oneOf" not in payload
-        assert len(payload["anyOf"]) == 2
+        assert len(payload["oneOf"]) == 2
         assert _decision_branch(schema, "tool_calls")["required"] == [
             "decision",
             "tool_calls",
@@ -253,7 +254,9 @@ class TestToolEnabledDirector:
 
     def test_build_system_prompt_mentions_both_options(self):
         director = self._director()
-        prompt = director.build_system_prompt_addition(director.build_decision_schema())
+        prompt = director.build_system_prompt_addition(
+            director.build_decision_schema().schema
+        )
 
         assert "tool_calls" in prompt
         assert "result" in prompt
@@ -281,11 +284,11 @@ class TestToolEnabledDirector:
         assert isinstance(result, ResultDecision)
         assert result.result == "done"
 
-    def test_process_decision_accepts_provider_envelope(self):
+    def test_process_decision_accepts_logical_decision(self):
         director = self._director(output_type=str)
 
         result = director.process_response_data(
-            {"payload": {"decision": "result", "result": "done"}}
+            {"decision": "result", "result": "done"}
         )
 
         assert isinstance(result, ResultDecision)
@@ -331,10 +334,10 @@ class TestOutputOnlyDirector:
         return OutputOnlyDirector(PydanticModelBackend(), output_type, [])
 
     def test_build_decision_schema_has_only_result(self):
-        schema = self._director().build_decision_schema()
+        schema = self._director().build_decision_schema().schema
         branch = _decision_branch(schema, "result")
 
-        assert schema["required"] == ["payload"]
+        assert schema["required"] == ["decision", "result"]
         assert "tool_calls" not in branch["properties"]
         assert "result" in branch["properties"]
         assert branch["properties"]["decision"]["const"] == "result"
@@ -342,7 +345,9 @@ class TestOutputOnlyDirector:
 
     def test_build_system_prompt_mentions_no_tools(self):
         director = self._director()
-        prompt = director.build_system_prompt_addition(director.build_decision_schema())
+        prompt = director.build_system_prompt_addition(
+            director.build_decision_schema().schema
+        )
 
         assert "No tools are available" in prompt
 

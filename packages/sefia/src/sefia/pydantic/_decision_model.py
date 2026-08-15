@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Annotated, Any, Literal, Union, cast
 
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, create_model
@@ -19,7 +18,7 @@ from .._interfaces.decision_model import (
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..llm.schema import LLMSchema
-from ._provider_schema import ProviderSchema, ProviderSchemaBuilder
+from ._decision_schema import build_decision_schema
 from ._tool_arguments import ToolArgumentContract, ToolSchemaKind
 
 
@@ -36,20 +35,17 @@ class PydanticDecisionModel(DecisionModel):
         self._model = model
         self._name = name
         self._tools = tools
-        self._provider_schema: ProviderSchema | None = None
+        self._schema: LLMSchema | None = None
 
     @override
     def schema(self) -> LLMSchema:
-        return LLMSchema(deepcopy(self._get_provider_schema().schema))
+        if self._schema is None:
+            self._schema = build_decision_schema(self._model, self._tools)
+        return self._schema
 
     @override
     def validate(self, data: Any) -> LLMDecision:
         try:
-            data = self._get_provider_schema().decode(data)
-            if isinstance(data, dict):
-                data_dict = cast(dict[str, Any], data)
-                if set(data_dict) == {"payload"}:
-                    data = data_dict["payload"]
             decision = self._adapter.validate_python(data)
             if decision.decision == "tool_calls":
                 return ToolCallsLLMDecision(
@@ -63,15 +59,6 @@ class PydanticDecisionModel(DecisionModel):
             if unknown_tool_name is not None:
                 raise UnknownToolDecisionError(unknown_tool_name) from e
             raise ValueError(f"Decision validation failed: {e}") from e
-
-    def _get_provider_schema(self) -> ProviderSchema:
-        if self._provider_schema is None:
-            self._provider_schema = ProviderSchemaBuilder().build(
-                self._model,
-                name=self._name,
-                tools=self._tools,
-            )
-        return self._provider_schema
 
     def _extract_tool_calls(self, tool_calls: list[Any]) -> list[DecisionToolCall]:
         calls: list[DecisionToolCall] = []

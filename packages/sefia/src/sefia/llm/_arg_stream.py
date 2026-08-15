@@ -12,6 +12,7 @@ from jsonweir import IncrementalJsonParser
 from jsonweir import events as js
 
 from sefia.streaming import ArgStream
+from sefia.llm.schema import SchemaPath
 
 from ..streaming import (
     ArgEvent,
@@ -24,6 +25,10 @@ from ..streaming import (
 logger = logging.getLogger(__name__)
 
 _HANDLER_DRAIN_TIMEOUT = 1.0
+
+
+def _identity_path(path: SchemaPath) -> SchemaPath:
+    return path
 
 
 @dataclass(frozen=True)
@@ -108,9 +113,11 @@ class ToolArgStreamer:
         self,
         tool_stream_handlers: Mapping[str, StreamHandler],
         get_tool_call_id: Callable[[int], str],
+        normalize_path: Callable[[SchemaPath], SchemaPath | None] | None = None,
     ) -> None:
         self._tool_stream_handlers = tool_stream_handlers
         self._get_tool_call_id = get_tool_call_id
+        self._normalize_path = normalize_path or _identity_path
         self._reset()
 
     def _reset(self) -> None:
@@ -160,7 +167,10 @@ class ToolArgStreamer:
         if path is None:
             return
 
-        tool_path = parse_tool_call_path(path)
+        normalized_path = self._normalize_path(path)
+        if normalized_path is None:
+            return
+        tool_path = parse_tool_call_path(normalized_path)
         if tool_path is None:
             return
 

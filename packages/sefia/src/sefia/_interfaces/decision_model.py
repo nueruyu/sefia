@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any
 
 from .._tool_system import ToolEntry
-from ..llm.schema import LLMSchema
+from .llm_schema import LLMSchema
 
 
 class DecisionMode(Enum):
