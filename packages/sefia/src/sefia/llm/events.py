@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from ..event_system import Event
 from ..exceptions import InvalidInferenceResponseError
@@ -12,8 +13,8 @@ class BeforeLLMCall(Event):
     """Event fired just before a call to the LLM."""
 
     messages: list[Message]
-    tools: list[dict] | None
-    output_schema: dict | None
+    tools: list[dict[str, Any]] | None
+    output_schema: dict[str, Any] | None
 
 
 @dataclass(frozen=True)

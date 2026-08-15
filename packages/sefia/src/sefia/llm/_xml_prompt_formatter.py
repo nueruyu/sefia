@@ -1,6 +1,6 @@
 import typing
 import xml.dom.minidom as minidom
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from typing_extensions import final, override
 
@@ -92,7 +92,7 @@ class XmlPromptFormatter(PromptFormatter):
         if isinstance(value, dict):
             object_element = document.createElement("object")
             item_type_hint = self._get_mapping_value_type_hint(type_hint)
-            for key, item in value.items():
+            for key, item in cast(dict[Any, Any], value).items():
                 entry_element = document.createElement("entry")
                 entry_element.setAttribute("key", str(key))
                 self._append_value(document, entry_element, item, item_type_hint)
@@ -102,7 +102,7 @@ class XmlPromptFormatter(PromptFormatter):
         if isinstance(value, (list, tuple)):
             array_element = document.createElement("array")
             item_type_hint = self._get_sequence_item_type_hint(type_hint)
-            for item in value:
+            for item in cast(list[Any] | tuple[Any, ...], value):
                 item_element = document.createElement("item")
                 self._append_value(document, item_element, item, item_type_hint)
                 array_element.appendChild(item_element)
