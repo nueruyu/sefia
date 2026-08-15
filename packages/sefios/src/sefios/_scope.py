@@ -15,7 +15,7 @@ from sefia import HistoryStorage, Policy, Profile, ToolCollector
 from sefia.llm import LLMClient
 
 from ._session_state import bind_session_storage
-from .persistence import PersistenceProvider, SQLitePersistenceProvider
+from .persistence import MemoryPersistenceProvider, PersistenceProvider
 from .policies import DefaultPolicy
 
 
@@ -25,10 +25,9 @@ class SessionScope:
     Manages shared configuration for Sefia sessions and provides helpers to run
     code within a configured session context.
 
-    ``persistence`` provides the durable resources for Sefia sessions. This
-    scope uses its glyff execution backend and session-state storage; facades
-    also use its session registry. SQLite at ``.sessions/sessions.sqlite3`` is
-    the default.
+    ``persistence`` provides the resources for Sefia sessions. This scope uses
+    its glyff execution backend and session-state storage; facades also use its
+    session registry. The default is process-local memory.
 
     ``history_storage`` selects where run history is persisted; defaults to the
     run's glyff metadata (:class:`~sefia.history_storages.GlyffHistoryStorage`).
@@ -60,9 +59,7 @@ class SessionScope:
         self.stream = stream
         self.max_steps = max_steps
         self.max_repair_attempts = max_repair_attempts
-        self.persistence = persistence or SQLitePersistenceProvider(
-            ".sessions/sessions.sqlite3"
-        )
+        self.persistence = persistence or MemoryPersistenceProvider()
         self.history_storage = history_storage
         self.tool_collector = tool_collector
 

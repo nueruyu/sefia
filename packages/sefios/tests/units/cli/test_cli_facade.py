@@ -100,6 +100,16 @@ class TestSefiaCLISessionManagement:
     def test_no_active_session_initially(self, cli: SefiaCLI):
         assert cli.get_active_session() is None
 
+    def test_default_active_selection_is_process_local(self, tmp_path: Path) -> None:
+        session_dir = tmp_path / "sessions"
+        first = SefiaCLI(session_dir=session_dir, model="gpt-4o")
+        session_id = first.create_session()
+
+        second = SefiaCLI(session_dir=session_dir, model="gpt-4o")
+
+        assert first.get_active_session() == session_id
+        assert second.get_active_session() is None
+
     def test_registry_is_shared_but_active_selection_is_local(
         self, tmp_path: Path
     ) -> None:

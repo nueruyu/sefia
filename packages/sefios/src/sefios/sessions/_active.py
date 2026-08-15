@@ -16,6 +16,20 @@ class ActiveSessionStore(ABC):
 
 
 @final
+class MemoryActiveSessionStore(ActiveSessionStore):
+    def __init__(self) -> None:
+        self._session_id: str | None = None
+
+    @override
+    def get_active_session_id(self) -> str | None:
+        return self._session_id
+
+    @override
+    def set_active_session_id(self, session_id: str) -> None:
+        self._session_id = session_id
+
+
+@final
 class FileActiveSessionStore(ActiveSessionStore):
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)

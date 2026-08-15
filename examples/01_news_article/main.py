@@ -5,6 +5,7 @@ import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from sefios import SQLitePersistenceProvider
 from sefios.cli import SefiaCLI
 from sefios.tools import WebSearch
 
@@ -17,7 +18,11 @@ from .rendering import render_article_request, render_news_article
 
 console = Console()
 SESSION_DIR = Path(__file__).parent / ".local"
-sefia_cli = SefiaCLI(session_dir=SESSION_DIR, stream=True)
+sefia_cli = SefiaCLI(
+    session_dir=SESSION_DIR,
+    stream=True,
+    persistence=SQLitePersistenceProvider(SESSION_DIR / "sessions.sqlite3"),
+)
 input_tool = sefia_cli.input_tool
 
 clarifier = RequirementsClarifier(input_tool)

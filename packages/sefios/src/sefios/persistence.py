@@ -4,7 +4,6 @@ from typing import Protocol, final
 from glyff import Backend
 from glyff.store import MemoryBackend
 from glyff_pydantic import PydanticSerializer
-from glyff_sqlite import SQLiteBackend
 
 from .sessions import (
     FileSessionRegistry,
@@ -35,10 +34,18 @@ class SQLitePersistenceProvider:
     """Durable local persistence backed by one SQLite database."""
 
     def __init__(self, database: str | Path) -> None:
+        try:
+            from glyff_sqlite import SQLiteBackend
+        except ImportError as error:
+            raise ImportError(
+                "The 'sqlite' extra is required for SQLitePersistenceProvider. "
+                "Install it with: pip install 'sefios[sqlite]'"
+            ) from error
         self.database = Path(database)
+        self._backend_type = SQLiteBackend
 
     def create_execution_backend(self) -> Backend:
-        return SQLiteBackend(self.database)
+        return self._backend_type(self.database)
 
     def create_session_storage(self, session_id: str) -> SessionStorage:
         return SQLiteSessionStorage(self.database, session_id, PydanticSerializer())

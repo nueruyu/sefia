@@ -116,7 +116,7 @@ implementation noted in parentheses.
 | `_domain.py` | Convenience constructor for an application-owned `sefia.Domain`. |
 | `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
-| `persistence.py` | Persistence providers for execution, session state, and the session registry; SQLite is the durable default, with memory and optional JSON-file alternatives. |
+| `persistence.py` | Persistence providers for execution, session state, and the session registry; memory is the default, with optional SQLite and JSON-file alternatives. |
 | `_input_channel.py` | Internal persisted routing between the `Input` tool and host-provided CLI/HTTP input. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |

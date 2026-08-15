@@ -95,7 +95,7 @@ The turn is an ordinary typed function; the pause is a tool that raises:
 
 ```python
 from pathlib import Path
-from sefios import domain
+from sefios import SQLitePersistenceProvider, domain
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input
@@ -115,7 +115,10 @@ class Research:
         ...
 
 
-api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
+api = SefiaHTTP(
+    model="gpt-4o",
+    persistence=SQLitePersistenceProvider(Path(".sessions/sessions.sqlite3")),
+)
 service = Research(web=WebToolkit(), input_tool=api.input_tool)
 
 

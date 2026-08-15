@@ -62,7 +62,7 @@ and **[the positioning argument](./docs/tradeoffs.md)**. For a
 ## Install
 
 ```bash
-pip install 'sefios[litellm]'
+pip install 'sefios[litellm,sqlite]'
 ```
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
@@ -76,6 +76,9 @@ pip install 'sefios[litellm]'
 
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
+
+Persistence is process-local by default. The quickstart installs the `sqlite` extra
+and selects `SQLitePersistenceProvider` explicitly so its sessions survive restarts.
 
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
 `domain` / `concurrent` / `preview` / `policy` / `profile` decorators,
@@ -92,7 +95,7 @@ run.
 ```python
 from pathlib import Path
 from pydantic import BaseModel
-from sefios import SessionScope, Tools, domain
+from sefios import SQLitePersistenceProvider, SessionScope, Tools, domain
 from sefios.tools import WebSearch
 
 
@@ -116,7 +119,10 @@ class ResearchService:
         ...
 
 
-scope = SessionScope(model="gpt-4o")
+scope = SessionScope(
+    model="gpt-4o",
+    persistence=SQLitePersistenceProvider(Path(".sessions/sessions.sqlite3")),
+)
 
 async def main(topic: str) -> Report:
     service = ResearchService(web=WebSearch())
@@ -140,7 +146,7 @@ your provider — `pip install 'sefios[litellm,fastapi]'`.
 
 ```python
 from pathlib import Path
-from sefios import Tools, domain
+from sefios import SQLitePersistenceProvider, Tools, domain
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input, WebSearch
@@ -162,7 +168,10 @@ class ResearchService:
         ...
 
 
-api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
+api = SefiaHTTP(
+    model="gpt-4o",
+    persistence=SQLitePersistenceProvider(Path(".sessions/sessions.sqlite3")),
+)
 research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
 
 

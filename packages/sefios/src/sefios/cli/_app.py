@@ -14,8 +14,13 @@ from .._input_channel import InputChannel
 from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..handlers import CostCalculator
-from ..persistence import PersistenceProvider, SQLitePersistenceProvider
-from ..sessions import FileActiveSessionStore, SessionManager, UnknownSessionError
+from ..persistence import MemoryPersistenceProvider, PersistenceProvider
+from ..sessions import (
+    FileActiveSessionStore,
+    MemoryActiveSessionStore,
+    SessionManager,
+    UnknownSessionError,
+)
 from ..tools import Input, InputRequest, InputResult, Output
 from ._cost_reporter import CostReportingCLIReporter
 from ._reporting import CLIReporting
@@ -62,14 +67,18 @@ class SefiaCLI:
         policies: list[Policy] | None = None,
         persistence: PersistenceProvider | None = None,
     ):
-        persistence = persistence or SQLitePersistenceProvider(
-            session_dir / "sessions.sqlite3"
-        )
+        if persistence is None:
+            persistence = MemoryPersistenceProvider()
+            active_session_store = MemoryActiveSessionStore()
+        else:
+            active_session_store = FileActiveSessionStore(
+                session_dir / "active_session.txt"
+            )
         self._reporter = self._resolve_reporter(reporter)
         self._reporting = CLIReporting(self._reporter)
         self._session_manager = SessionManager(
             persistence.create_session_registry(),
-            FileActiveSessionStore(session_dir / "active_session.txt"),
+            active_session_store,
         )
         self._input = InputChannel(
             on_request=self._reporting.input_request,

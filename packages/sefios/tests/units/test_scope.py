@@ -1,7 +1,6 @@
 from collections.abc import Callable
 from pathlib import Path
 
-import pytest
 from sefia import JsonSchemaToolEntry
 from sefia.llm import LLMResponse
 from sefia.testing import MockLLMClient, result_response, tool_calls_response
@@ -10,6 +9,7 @@ from sefios import (
     MemoryPersistenceProvider,
     MemorySessionStorage,
     SessionScope,
+    SQLitePersistenceProvider,
     SQLiteSessionStorage,
     domain,
     get_session_storage,
@@ -80,28 +80,26 @@ async def test_session_tool_collector_overrides_init_default(
     assert calls == ["call_tool"]
 
 
-async def test_memory_persistence_overrides_sqlite_default(
+async def test_memory_persistence_is_default(
     make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
 ) -> None:
-    persistence = MemoryPersistenceProvider()
-    scope = SessionScope(
-        llm_client=make_mock_llm([]),
-        persistence=persistence,
-    )
+    scope = SessionScope(llm_client=make_mock_llm([]))
 
     async with scope.session(session_id="custom-store"):
         assert isinstance(get_session_storage(), MemorySessionStorage)
 
 
-async def test_sqlite_persistence_is_default(
+async def test_sqlite_persistence_can_be_selected(
     tmp_path: Path,
     make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-    scope = SessionScope(llm_client=make_mock_llm([]))
+    database = tmp_path / "sessions.sqlite3"
+    scope = SessionScope(
+        llm_client=make_mock_llm([]),
+        persistence=SQLitePersistenceProvider(database),
+    )
 
     async with scope.session(session_id="durable"):
         assert isinstance(get_session_storage(), SQLiteSessionStorage)
 
-    assert (tmp_path / ".sessions" / "sessions.sqlite3").is_file()
+    assert database.is_file()

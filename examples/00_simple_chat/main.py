@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Annotated, Never
 
 import typer
-from sefios import Tools
+from sefios import SQLitePersistenceProvider, Tools
 from sefios.cli import SefiaCLI
 from sefios.tools import Input, Output
 
@@ -43,9 +43,11 @@ class ChatAgent:
         ...
 
 
+SESSION_DIR = Path(__file__).parent / ".local"
 sefia_cli = SefiaCLI(
-    session_dir=Path(__file__).parent / ".local",
+    session_dir=SESSION_DIR,
     stream=True,
+    persistence=SQLitePersistenceProvider(SESSION_DIR / "sessions.sqlite3"),
 )
 
 agent = ChatAgent(sefia_cli.input_tool, sefia_cli.output_tool)

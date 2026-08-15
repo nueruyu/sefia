@@ -14,7 +14,7 @@ The tutorial builds up to the CLI and HTTP integrations, so install their extras
 alongside the provider:
 
 ```bash
-pip install 'sefios[litellm,cli,fastapi]'
+pip install 'sefios[litellm,cli,fastapi,sqlite]'
 ```
 
 Set whatever credentials your model needs (LiteLLM reads provider env vars):
@@ -35,7 +35,7 @@ import asyncio
 from pathlib import Path
 
 from pydantic import BaseModel
-from sefios import SessionScope, domain
+from sefios import SQLitePersistenceProvider, SessionScope, domain
 
 
 class Summary(BaseModel):
@@ -51,7 +51,10 @@ async def summarize(article: str) -> Summary:
     ...
 
 
-scope = SessionScope(model="gpt-4o")
+scope = SessionScope(
+    model="gpt-4o",
+    persistence=SQLitePersistenceProvider(Path(".sessions/sessions.sqlite3")),
+)
 
 
 async def main() -> None:
@@ -73,10 +76,9 @@ client, the durability session, and a SQLite database under `.sessions/` for you
 full rules on arguments, service members, tools, and return types, see
 [The `@infer` contract](./infer-contract.md).
 
-SQLite is the durable local default: glyff execution records and Sefia's
-session-scoped state share one database while using separate tables. For an ephemeral
-process-local session, pass `persistence=MemoryPersistenceProvider()`. JSON files remain
-available for debugging with `FilePersistenceProvider` from the
+Memory is the process-local default. This tutorial opts into SQLite so glyff execution
+records, Sefia session state, and the session registry survive restarts in one database.
+JSON files remain available for debugging with `FilePersistenceProvider` from the
 `sefios[file-store]` extra.
 
 ## 2. Give it a tool
@@ -157,7 +159,7 @@ from pathlib import Path
 
 import typer
 from pydantic import BaseModel
-from sefios import Tools, domain
+from sefios import SQLitePersistenceProvider, Tools, domain
 from sefios.cli import SefiaCLI
 from sefios.tools import Input, WebSearch
 
@@ -184,7 +186,12 @@ class ResearchService:
 
 
 app = typer.Typer()
-cli = SefiaCLI(session_dir=Path(".sessions"), model="gpt-4o")
+SESSION_DIR = Path(".sessions")
+cli = SefiaCLI(
+    session_dir=SESSION_DIR,
+    model="gpt-4o",
+    persistence=SQLitePersistenceProvider(SESSION_DIR / "sessions.sqlite3"),
+)
 service = ResearchService(web=WebSearch(), input_tool=cli.input_tool)
 
 
@@ -235,6 +242,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from pydantic import BaseModel
+from sefios import SQLitePersistenceProvider
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import WebSearch
@@ -242,7 +250,10 @@ from sefios.tools import WebSearch
 # (ResearchService, Report from hitl_cli.py)
 
 app = FastAPI()
-api = SefiaHTTP(session_dir=Path(".sessions"), model="gpt-4o")
+api = SefiaHTTP(
+    model="gpt-4o",
+    persistence=SQLitePersistenceProvider(Path(".sessions/sessions.sqlite3")),
+)
 research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
 
 

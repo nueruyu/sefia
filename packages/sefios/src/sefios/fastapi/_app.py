@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from pathlib import Path
 
 from fastapi.responses import StreamingResponse
 from sefia import Policy
@@ -16,7 +15,7 @@ from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..exceptions import InputRequired
 from ..handlers import CostCalculator
-from ..persistence import PersistenceProvider, SQLitePersistenceProvider
+from ..persistence import MemoryPersistenceProvider, PersistenceProvider
 from ..sessions import SessionRegistry
 from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
 
@@ -53,15 +52,12 @@ class SefiaHTTP:
     def __init__(
         self,
         *,
-        session_dir: Path,
         model: str | None = None,
         max_steps: int | None = 25,
         policies: list[Policy] | None = None,
         persistence: PersistenceProvider | None = None,
     ):
-        persistence = persistence or SQLitePersistenceProvider(
-            session_dir / "sessions.sqlite3"
-        )
+        persistence = persistence or MemoryPersistenceProvider()
         self._events = SessionEvents()
         self._session_registry: SessionRegistry = persistence.create_session_registry()
         self._input = InputChannel(namespace="http/input_channel")

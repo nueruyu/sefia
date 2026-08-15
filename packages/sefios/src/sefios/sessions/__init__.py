@@ -1,4 +1,8 @@
-from ._active import ActiveSessionStore, FileActiveSessionStore
+from ._active import (
+    ActiveSessionStore,
+    FileActiveSessionStore,
+    MemoryActiveSessionStore,
+)
 from ._manager import (
     ResolvedSession,
     SessionManager,
@@ -15,6 +19,7 @@ from ._registry import (
 __all__ = [
     "ActiveSessionStore",
     "FileActiveSessionStore",
+    "MemoryActiveSessionStore",
     "SessionRegistry",
     "MemorySessionRegistry",
     "SQLiteSessionRegistry",
