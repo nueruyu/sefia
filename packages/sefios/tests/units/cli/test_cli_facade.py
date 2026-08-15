@@ -1,3 +1,6 @@
+from collections.abc import Iterator
+from pathlib import Path
+
 import pytest
 from glyff_pydantic import PydanticSerializer
 from sefios._input_channel import InputChannel
@@ -19,27 +22,39 @@ class TestSefiaCLISession:
         return InputChannel()
 
     @pytest.fixture
-    def session(self, channel, session_storage):
+    def session(
+        self,
+        channel: InputChannel,
+        session_storage: MemorySessionStorage,
+    ) -> Iterator[SefiaCLISession]:
         # A bound SessionStorage satisfies the input channel's store protocol.
         with channel.use_store(session_storage):
             yield SefiaCLISession(channel=channel)
 
-    async def test_none_input_is_ignored(self, session, channel):
+    async def test_none_input_is_ignored(
+        self, session: SefiaCLISession, channel: InputChannel
+    ) -> None:
         await session.accept_input(None)
 
         assert await channel.provide_input("any") is None
 
-    async def test_string_input_is_stored(self, session, channel):
+    async def test_string_input_is_stored(
+        self, session: SefiaCLISession, channel: InputChannel
+    ) -> None:
         await session.accept_input("hello")
 
         assert await channel.provide_input("any") == "hello"
 
-    async def test_list_input_is_joined_and_stored(self, session, channel):
+    async def test_list_input_is_joined_and_stored(
+        self, session: SefiaCLISession, channel: InputChannel
+    ) -> None:
         await session.accept_input(["hello", "world"])
 
         assert await channel.provide_input("any") == "hello world"
 
-    async def test_reply_to_resolves_pending_request(self, session, channel):
+    async def test_reply_to_resolves_pending_request(
+        self, session: SefiaCLISession, channel: InputChannel
+    ) -> None:
         await channel.record_request("a", "q?")
 
         await session.accept_input("answer", reply_to="a")
@@ -49,7 +64,7 @@ class TestSefiaCLISession:
 
 class TestSefiaCLISessionManagement:
     @pytest.fixture
-    def cli(self, tmp_path) -> SefiaCLI:
+    def cli(self, tmp_path: Path) -> SefiaCLI:
         return SefiaCLI(session_dir=tmp_path / "sessions", model="gpt-4o")
 
     def test_input_tool_is_exposed(self, cli: SefiaCLI):
@@ -86,7 +101,9 @@ class TestSefiaCLISessionManagement:
 
 
 class TestReporterResolution:
-    def test_default_sentinel_resolves_to_cost_reporting_reporter(self, tmp_path):
+    def test_default_sentinel_resolves_to_cost_reporting_reporter(
+        self, tmp_path: Path
+    ) -> None:
         cli = SefiaCLI(
             session_dir=tmp_path / "sessions",
             model="gpt-4o",
@@ -95,7 +112,7 @@ class TestReporterResolution:
 
         assert isinstance(cli._reporter, CostReportingCLIReporter)
 
-    def test_explicit_none_disables_reporting(self, tmp_path):
+    def test_explicit_none_disables_reporting(self, tmp_path: Path) -> None:
         cli = SefiaCLI(
             session_dir=tmp_path / "sessions",
             model="gpt-4o",
