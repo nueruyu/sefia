@@ -13,6 +13,7 @@ from sefios import SQLitePersistence, Tools
 from sefios.cli import SefiaCLI
 from sefios.sessions import FileActiveSessionStore
 from sefios.tools import Input, Output
+from typer.models import ArgumentInfo, OptionInfo
 
 from .._common.typer_utils import add_session_commands, async_command
 from .authoring import infer
@@ -60,12 +61,15 @@ app = typer.Typer(help="Simple one-agent chat loop.")
 async def chat(
     message: Annotated[
         list[str],
-        typer.Argument(help="Your message, or an answer to resume the session."),
+        ArgumentInfo(
+            default=..., help="Your message, or an answer to resume the session."
+        ),
     ],
     model: Annotated[
         str,
-        typer.Option(
-            "--model",
+        OptionInfo(
+            default=...,
+            param_decls=("--model",),
             envvar="EXAMPLE_DEFAULT_MODEL",
             help="LLM model to use.",
         ),
