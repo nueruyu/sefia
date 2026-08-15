@@ -21,10 +21,15 @@ import json
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Callable, Coroutine
 
-import glyff
-from glyff.serialization import FallbackByTypeQualname
-from glyff.store import MemoryBackend
-from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
+import glyff  # pyright: ignore[reportMissingTypeStubs]
+from glyff.serialization import (  # pyright: ignore[reportMissingTypeStubs]
+    FallbackByTypeQualname,
+)
+from glyff.store import MemoryBackend  # pyright: ignore[reportMissingTypeStubs]
+from glyff_pydantic import (  # pyright: ignore[reportMissingTypeStubs]
+    PydanticArgumentCanonicalizer,
+    PydanticSerializer,
+)
 from typing_extensions import final, override
 
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage

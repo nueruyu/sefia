@@ -3,7 +3,7 @@ import inspect
 from collections.abc import Hashable, Sequence
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar, cast, overload
 
-import glyff
+import glyff  # pyright: ignore[reportMissingTypeStubs]
 from typing_extensions import final
 
 from .._context import get_context

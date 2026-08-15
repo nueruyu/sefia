@@ -1,4 +1,4 @@
-import glyff
+import glyff  # pyright: ignore[reportMissingTypeStubs]
 from typing_extensions import final, override
 
 from .._interfaces.history_storage import HistorySnapshot, HistoryStorage

@@ -1,6 +1,6 @@
 from typing import Any
 
-from glyff import Serializer
+from glyff import Serializer  # pyright: ignore[reportMissingTypeStubs]
 from typing_extensions import final, override
 
 from ._base import SessionStorage

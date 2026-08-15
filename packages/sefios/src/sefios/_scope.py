@@ -2,11 +2,16 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import glyff
-import glyff_file_store
+import glyff  # pyright: ignore[reportMissingTypeStubs]
+import glyff_file_store  # pyright: ignore[reportMissingTypeStubs]
 import sefia
-from glyff.serialization import FallbackByTypeQualname
-from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
+from glyff.serialization import (  # pyright: ignore[reportMissingTypeStubs]
+    FallbackByTypeQualname,
+)
+from glyff_pydantic import (  # pyright: ignore[reportMissingTypeStubs]
+    PydanticArgumentCanonicalizer,
+    PydanticSerializer,
+)
 from sefia import HistoryStorage, Profile, Policy, ToolCollector
 from sefia.llm import LLMClient
 from typing_extensions import final

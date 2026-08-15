@@ -1,7 +1,9 @@
 """A :class:`~sefia.HistoryStorage` backed by the session's storage."""
 
-from glyff import get_context as get_glyff_context
-from glyff.exceptions import ContextNotSetError
+from glyff import (  # pyright: ignore[reportMissingTypeStubs]
+    get_context as get_glyff_context,
+)
+from glyff.exceptions import ContextNotSetError  # pyright: ignore[reportMissingTypeStubs]
 from sefia import HistorySnapshot, HistoryStorage
 from typing_extensions import final, override
 

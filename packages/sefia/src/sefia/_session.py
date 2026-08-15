@@ -1,7 +1,7 @@
 from collections.abc import Hashable
 from typing import Self
 
-import glyff
+import glyff  # pyright: ignore[reportMissingTypeStubs]
 from typing_extensions import final
 
 from ._context import ProfileBinding, SessionContext, context_var

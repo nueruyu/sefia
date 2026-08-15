@@ -2,7 +2,7 @@ import contextvars
 from collections.abc import Hashable
 from dataclasses import dataclass, field
 
-from glyff import Session as GlyffSession
+from glyff import Session as GlyffSession  # pyright: ignore[reportMissingTypeStubs]
 
 from ._interfaces import InferenceStrategy, Policy
 from ._interfaces.history_storage import HistoryStorage
