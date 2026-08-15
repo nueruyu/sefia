@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import final
 
 import glyff
 import sefia
@@ -11,9 +12,8 @@ from glyff_pydantic import (
     PydanticArgumentCanonicalizer,
     PydanticSerializer,
 )
-from sefia import HistoryStorage, Profile, Policy, ToolCollector
+from sefia import HistoryStorage, Policy, Profile, ToolCollector
 from sefia.llm import LLMClient
-from typing_extensions import final
 
 from ._session_state import bind_session_storage
 from .persistence import SessionPersistence, SQLitePersistence

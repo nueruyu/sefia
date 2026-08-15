@@ -3,10 +3,10 @@ import sqlite3
 from collections.abc import Generator
 from contextlib import closing, contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, final
 
 from glyff import Serializer
-from typing_extensions import final, override
+from typing_extensions import override
 
 from ._base import SessionStorage
 

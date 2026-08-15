@@ -11,7 +11,8 @@ import inspect
 import logging
 import sys
 import types
-from typing import Annotated, Any, Callable, Union, cast, get_args, get_origin
+from collections.abc import Callable
+from typing import Annotated, Any, Union, cast, get_args, get_origin
 
 _log = logging.getLogger(__name__)
 

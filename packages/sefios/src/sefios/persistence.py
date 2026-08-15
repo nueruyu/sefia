@@ -1,10 +1,9 @@
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, final
 
 from glyff import Backend, Serializer
 from glyff.store import MemoryBackend
 from glyff_sqlite import SQLiteBackend
-from typing_extensions import final
 
 from .storage import (
     FileSessionStorage,
