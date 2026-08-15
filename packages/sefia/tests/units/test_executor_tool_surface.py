@@ -1,11 +1,13 @@
 import glyff
 import sefia
 import inspect
-from typing import Protocol
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Any, Protocol
 
 from sefia._executor import InferenceExecutor
 from sefia._interfaces import InferenceStrategy
 from sefia.event_system import EventPublisher
+from sefia.inference import FunctionInfo, HistoryItem, InferenceDecision
 from sefia.tool_collectors import DefaultToolCollector
 
 from sefia.testing import MemoryHistoryStorage
@@ -16,16 +18,22 @@ infer = sefia.Domain(
 
 
 class _StubStrategy(InferenceStrategy):
-    async def decide_next_step(self, function_info, history, tools, publisher):
+    async def decide_next_step(
+        self,
+        function_info: FunctionInfo,
+        history: Sequence[HistoryItem],
+        tools: sefia.ToolRegistry,
+        publisher: EventPublisher,
+    ) -> InferenceDecision:
         raise AssertionError("not driven in this test")
 
 
 class BothSurface(Protocol):
     """A surface shared by two @infer methods, declaring both."""
 
-    async def run(self, topic: str) -> str: ...
+    def run(self, topic: str) -> Awaitable[str]: ...
 
-    async def analyze(self, topic: str) -> str: ...
+    def analyze(self, topic: str) -> Awaitable[str]: ...
 
 
 class Service:
@@ -40,7 +48,7 @@ class Service:
         ...
 
 
-def _executor_for(bound_wrapper, *args) -> InferenceExecutor:
+def _executor_for(bound_wrapper: Callable[..., Any], *args: Any) -> InferenceExecutor:
     return InferenceExecutor(
         func=inspect.unwrap(bound_wrapper),
         args=args,

@@ -1,12 +1,14 @@
 import jsonschema
 import pytest
 from pydantic import TypeAdapter, ValidationError
+from collections.abc import Callable
+from typing import Any
 
 from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import ToolConflictError
 from sefia.pydantic._function_models import json_schema_argument_type
 
-_SEARCH_SCHEMA = {
+_SEARCH_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "query": {"type": "string"},
@@ -17,7 +19,7 @@ _SEARCH_SCHEMA = {
 }
 
 
-def _search_tool(handler) -> JsonSchemaToolEntry:
+def _search_tool(handler: Callable[..., Any]) -> JsonSchemaToolEntry:
     return JsonSchemaToolEntry(
         handler,
         name="search",
@@ -26,8 +28,16 @@ def _search_tool(handler) -> JsonSchemaToolEntry:
     )
 
 
+def _noop(**kwargs: Any) -> None:
+    pass
+
+
+def _argument_names(**kwargs: Any) -> list[str]:
+    return list(kwargs)
+
+
 def test_definition_is_the_raw_json_schema_verbatim():
-    tool = _search_tool(lambda **kwargs: None)
+    tool = _search_tool(_noop)
 
     definition = tool.definition()
 
@@ -43,9 +53,9 @@ def test_definition_is_the_raw_json_schema_verbatim():
 
 
 async def test_invoke_dispatches_decoded_arguments_to_the_handler():
-    received: dict = {}
+    received: dict[str, Any] = {}
 
-    async def handler(**kwargs):
+    async def handler(**kwargs: Any) -> str:
         received.update(kwargs)
         return "hits"
 
@@ -58,7 +68,7 @@ async def test_invoke_dispatches_decoded_arguments_to_the_handler():
 
 
 async def test_invoke_supports_a_synchronous_handler():
-    tool = _search_tool(lambda **kwargs: list(kwargs))
+    tool = _search_tool(_argument_names)
 
     assert await tool.invoke({"query": "x"}) == ["query"]
 
@@ -73,7 +83,7 @@ def test_registration_shares_the_namespace_with_introspected_tools():
 
     with pytest.raises(ToolConflictError):
         registry.add_json_tool(
-            lambda **kwargs: None,
+            _noop,
             name="search",
             description="dup",
             parameters=_SEARCH_SCHEMA,
