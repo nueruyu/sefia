@@ -10,7 +10,8 @@ from glyff.store import MemoryBackend
 
 from sefia import Session, Tools
 from sefia.exceptions import PauseException
-from sefia.testing import result_response, tool_calls_response
+from sefia.llm import LLMResponse
+from sefia.testing import MockLLMClient, result_response, tool_calls_response
 from sefios import domain, MemorySessionStorage, get_call_state_store
 from sefios._session_state import bind_session_storage, get_state_store
 
@@ -37,7 +38,7 @@ class Answer:
 
 @dataclass
 class InteractionState:
-    answers: dict[str, Answer] = field(default_factory=dict)
+    answers: dict[str, Answer] = field(default_factory=lambda: {})
 
 
 # --- Test tool with internal state management ---
@@ -77,8 +78,11 @@ class Input:
 
 class TestStatefulTool:
     async def test_ask_user_interrupts_and_resumes_correctly(
-        self, serializer: Serializer, hasher: ArgumentCanonicalizer, make_mock_llm
-    ):
+        self,
+        serializer: Serializer,
+        hasher: ArgumentCanonicalizer,
+        make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    ) -> None:
         mock_responses = [
             tool_calls_response(("Input_ask_user", {"prompt": "What is your name?"})),
             result_response(
@@ -90,9 +94,9 @@ class TestStatefulTool:
             ),
         ]
         mock_llm = make_mock_llm(mock_responses)
-        interrupt_details = {}
+        interrupt_details: dict[str, str] = {}
 
-        def on_interrupt(interaction_id, prompt):
+        def on_interrupt(interaction_id: str, prompt: str) -> None:
             interrupt_details["id"] = interaction_id
             interrupt_details["prompt"] = prompt
 
@@ -153,8 +157,11 @@ class TestStatefulTool:
         assert json.loads(final_messages[3]["content"]) == "Alice"
 
     async def test_multiple_ask_user_calls_are_independent(
-        self, serializer: Serializer, hasher: ArgumentCanonicalizer, make_mock_llm
-    ):
+        self,
+        serializer: Serializer,
+        hasher: ArgumentCanonicalizer,
+        make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    ) -> None:
         mock_responses = [
             tool_calls_response(("Input_ask_user", {"prompt": "Name?"})),
             tool_calls_response(("Input_ask_user", {"prompt": "Age?"})),
@@ -163,9 +170,9 @@ class TestStatefulTool:
             ),
         ]
         mock_llm = make_mock_llm(mock_responses)
-        interrupts = {}
+        interrupts: dict[str, str] = {}
 
-        def on_interrupt(interaction_id, prompt):
+        def on_interrupt(interaction_id: str, prompt: str) -> None:
             interrupts[prompt] = interaction_id
 
         @dataclass
