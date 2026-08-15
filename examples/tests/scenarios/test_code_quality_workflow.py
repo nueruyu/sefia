@@ -31,8 +31,8 @@ def project(tmp_path):
 
 
 @pytest.fixture
-def workflow(monkeypatch, tmp_path):
-    cli = SefiaCLI(session_dir=tmp_path / "sessions", model="gpt-4o", stream=False)
+def workflow(monkeypatch):
+    cli = SefiaCLI(model="gpt-4o", stream=False)
     monkeypatch.setattr(main, "sefia_cli", cli)
     return main
 

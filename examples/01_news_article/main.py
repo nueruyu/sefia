@@ -7,6 +7,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from sefios import SQLitePersistenceProvider
 from sefios.cli import SefiaCLI
+from sefios.sessions import FileActiveSessionStore
 from sefios.tools import WebSearch
 
 from .._common.policies import VerbosePolicy
@@ -19,9 +20,9 @@ from .rendering import render_article_request, render_news_article
 console = Console()
 SESSION_DIR = Path(__file__).parent / ".local"
 sefia_cli = SefiaCLI(
-    session_dir=SESSION_DIR,
     stream=True,
     persistence=SQLitePersistenceProvider(SESSION_DIR / "sessions.sqlite3"),
+    active_session_store=FileActiveSessionStore(SESSION_DIR / "active_session.txt"),
 )
 input_tool = sefia_cli.input_tool
 

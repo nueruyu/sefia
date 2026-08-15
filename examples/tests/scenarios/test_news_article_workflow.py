@@ -12,9 +12,8 @@ models = import_module("examples.01_news_article.models")
 
 
 @pytest.fixture
-def workflow(monkeypatch, tmp_path):
-    """Point the example's module-level CLI at a throwaway session directory."""
-    cli = SefiaCLI(session_dir=tmp_path / "sessions", model="gpt-4o", stream=False)
+def workflow(monkeypatch):
+    cli = SefiaCLI(model="gpt-4o", stream=False)
     monkeypatch.setattr(main, "sefia_cli", cli)
     return main
 

@@ -2,16 +2,14 @@ import pytest
 import typer
 from pytest_mock import MockerFixture
 from sefia.exceptions import InvalidInferenceResponseError
-from sefios.exceptions import InputRequired
-
 from sefios.cli import SefiaCLI
+from sefios.exceptions import InputRequired
 
 
 class TestCostReporting:
-    async def test_reports_on_normal_completion(self, tmp_path, mocker: MockerFixture):
+    async def test_reports_on_normal_completion(self, mocker: MockerFixture):
         reporter = mocker.Mock()
         cli = SefiaCLI(
-            session_dir=tmp_path / "s",
             model="gpt-4o",
             stream=False,
             reporter=reporter,
@@ -22,12 +20,11 @@ class TestCostReporting:
 
         reporter.on_session_finished.assert_called_once()
 
-    async def test_reports_on_yield(self, tmp_path, mocker: MockerFixture):
+    async def test_reports_on_yield(self, mocker: MockerFixture):
         # A input interrupt (chat-style loop) raises InputRequired from
         # inside the session block; cost should still be reported at that point.
         reporter = mocker.Mock()
         cli = SefiaCLI(
-            session_dir=tmp_path / "s",
             model="gpt-4o",
             stream=False,
             reporter=reporter,
@@ -43,11 +40,10 @@ class TestCostReporting:
         reporter.on_session_finished.assert_not_called()
 
     async def test_inference_error_is_not_reported_as_input_wait(
-        self, tmp_path, mocker: MockerFixture
+        self, mocker: MockerFixture
     ):
         reporter = mocker.Mock()
         cli = SefiaCLI(
-            session_dir=tmp_path / "s",
             model="gpt-4o",
             stream=False,
             reporter=reporter,

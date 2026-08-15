@@ -161,6 +161,7 @@ import typer
 from pydantic import BaseModel
 from sefios import SQLitePersistenceProvider, Tools, domain
 from sefios.cli import SefiaCLI
+from sefios.sessions import FileActiveSessionStore
 from sefios.tools import Input, WebSearch
 
 
@@ -188,9 +189,9 @@ class ResearchService:
 app = typer.Typer()
 SESSION_DIR = Path(".sessions")
 cli = SefiaCLI(
-    session_dir=SESSION_DIR,
     model="gpt-4o",
     persistence=SQLitePersistenceProvider(SESSION_DIR / "sessions.sqlite3"),
+    active_session_store=FileActiveSessionStore(SESSION_DIR / "active_session.txt"),
 )
 service = ResearchService(web=WebSearch(), input_tool=cli.input_tool)
 
@@ -209,6 +210,10 @@ def run(answer: str | None = None) -> None:
 if __name__ == "__main__":
     app()
 ```
+
+The SQLite provider makes session resources durable. `FileActiveSessionStore`
+separately remembers which session this CLI workspace selected; both concerns default
+to memory when omitted.
 
 Run it once with no answer; it researches, drafts, then pauses:
 

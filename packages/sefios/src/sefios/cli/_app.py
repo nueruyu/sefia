@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import cast
 
 import typer
@@ -16,7 +15,7 @@ from .._session_state import get_session_storage
 from ..handlers import CostCalculator
 from ..persistence import MemoryPersistenceProvider, PersistenceProvider
 from ..sessions import (
-    FileActiveSessionStore,
+    ActiveSessionStore,
     MemoryActiveSessionStore,
     SessionManager,
     UnknownSessionError,
@@ -59,21 +58,16 @@ class SefiaCLI:
     def __init__(
         self,
         *,
-        session_dir: Path,
         reporter: CLIReporter | None | object = _USE_DEFAULT_REPORTER,
         model: str | None = None,
         stream: bool = True,
         max_steps: int | None = 25,
         policies: list[Policy] | None = None,
         persistence: PersistenceProvider | None = None,
+        active_session_store: ActiveSessionStore | None = None,
     ):
-        if persistence is None:
-            persistence = MemoryPersistenceProvider()
-            active_session_store = MemoryActiveSessionStore()
-        else:
-            active_session_store = FileActiveSessionStore(
-                session_dir / "active_session.txt"
-            )
+        persistence = persistence or MemoryPersistenceProvider()
+        active_session_store = active_session_store or MemoryActiveSessionStore()
         self._reporter = self._resolve_reporter(reporter)
         self._reporting = CLIReporting(self._reporter)
         self._session_manager = SessionManager(

@@ -1,5 +1,4 @@
 from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 from glyff_pydantic import PydanticSerializer
@@ -65,8 +64,8 @@ class TestSefiaCLISession:
 
 class TestSefiaCLISessionManagement:
     @pytest.fixture
-    def cli(self, tmp_path: Path) -> SefiaCLI:
-        return SefiaCLI(session_dir=tmp_path / "sessions", model="gpt-4o")
+    def cli(self) -> SefiaCLI:
+        return SefiaCLI(model="gpt-4o")
 
     def test_input_tool_is_exposed(self, cli: SefiaCLI):
         assert isinstance(cli.input_tool, Input)
@@ -100,26 +99,30 @@ class TestSefiaCLISessionManagement:
     def test_no_active_session_initially(self, cli: SefiaCLI):
         assert cli.get_active_session() is None
 
-    def test_default_active_selection_is_process_local(self, tmp_path: Path) -> None:
-        session_dir = tmp_path / "sessions"
-        first = SefiaCLI(session_dir=session_dir, model="gpt-4o")
+    def test_default_active_selection_is_process_local(self) -> None:
+        first = SefiaCLI(model="gpt-4o")
         session_id = first.create_session()
 
-        second = SefiaCLI(session_dir=session_dir, model="gpt-4o")
+        second = SefiaCLI(model="gpt-4o")
 
         assert first.get_active_session() == session_id
         assert second.get_active_session() is None
 
-    def test_registry_is_shared_but_active_selection_is_local(
-        self, tmp_path: Path
+    def test_explicit_memory_persistence_keeps_active_selection_in_memory(
+        self,
     ) -> None:
+        first = SefiaCLI(model="gpt-4o", persistence=MemoryPersistenceProvider())
+        session_id = first.create_session()
+
+        second = SefiaCLI(model="gpt-4o", persistence=MemoryPersistenceProvider())
+
+        assert first.get_active_session() == session_id
+        assert second.get_active_session() is None
+
+    def test_registry_is_shared_but_active_selection_is_local(self) -> None:
         persistence = MemoryPersistenceProvider()
-        first = SefiaCLI(
-            session_dir=tmp_path / "first", model="gpt-4o", persistence=persistence
-        )
-        second = SefiaCLI(
-            session_dir=tmp_path / "second", model="gpt-4o", persistence=persistence
-        )
+        first = SefiaCLI(model="gpt-4o", persistence=persistence)
+        second = SefiaCLI(model="gpt-4o", persistence=persistence)
 
         session_id = first.create_session()
 
@@ -128,20 +131,16 @@ class TestSefiaCLISessionManagement:
 
 
 class TestReporterResolution:
-    def test_default_sentinel_resolves_to_cost_reporting_reporter(
-        self, tmp_path: Path
-    ) -> None:
+    def test_default_sentinel_resolves_to_cost_reporting_reporter(self) -> None:
         cli = SefiaCLI(
-            session_dir=tmp_path / "sessions",
             model="gpt-4o",
             reporter=_USE_DEFAULT_REPORTER,
         )
 
         assert isinstance(cli._reporter, CostReportingCLIReporter)
 
-    def test_explicit_none_disables_reporting(self, tmp_path: Path) -> None:
+    def test_explicit_none_disables_reporting(self) -> None:
         cli = SefiaCLI(
-            session_dir=tmp_path / "sessions",
             model="gpt-4o",
             reporter=None,
         )
