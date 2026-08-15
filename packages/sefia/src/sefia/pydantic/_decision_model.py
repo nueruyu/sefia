@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Annotated, Any, Literal, Union, cast
 
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, create_model
@@ -19,6 +18,7 @@ from .._interfaces.decision_model import (
 from .._tool_system import ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ._function_models import json_schema_argument_type
+from ._llm_schema import build_llm_schema
 
 
 @final
@@ -30,18 +30,12 @@ class PydanticDecisionModel(DecisionModel):
         name: str,
     ):
         self._adapter = TypeAdapter(model)
-        wrapper = create_model(
-            f"{name}Envelope",
-            __config__=ConfigDict(extra="forbid"),
-            payload=(model, ...),
-        )
-        self._schema_adapter = TypeAdapter(wrapper)
+        self._model = model
+        self._name = name
 
     @override
     def schema(self) -> dict[str, Any]:
-        schema = _strict_provider_schema(self._schema_adapter.json_schema())
-        schema["description"] = "The model for the LLM's decision on the next action."
-        return schema
+        return build_llm_schema(self._model, name=self._name)
 
     @override
     def validate(self, data: Any) -> LLMDecision:
@@ -76,39 +70,6 @@ class PydanticDecisionModel(DecisionModel):
                 )
             )
         return calls
-
-
-def _strict_provider_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Return a closed, provider-compatible copy of a Pydantic JSON Schema."""
-    result = deepcopy(schema)
-
-    def normalize(node: Any) -> None:
-        if isinstance(node, list):
-            for item in cast(list[Any], node):
-                normalize(item)
-            return
-        if not isinstance(node, dict):
-            return
-        node_dict = cast(dict[str, Any], node)
-
-        if node_dict.get("type") == "object":
-            node_dict.setdefault("additionalProperties", False)
-            properties = node_dict.get("properties")
-            if isinstance(properties, dict):
-                node_dict["required"] = list(cast(dict[str, Any], properties))
-
-        # OpenAI accepts nested ``anyOf`` but rejects ``oneOf``. The original
-        # adapter still performs full local validation after generation, so
-        # this provider-facing relaxation cannot admit an invalid decision.
-        one_of = node_dict.pop("oneOf", None)
-        if one_of is not None:
-            node_dict["anyOf"] = one_of
-
-        for value in node_dict.values():
-            normalize(value)
-
-    normalize(result)
-    return result
 
 
 def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
