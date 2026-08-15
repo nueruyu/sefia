@@ -1,14 +1,16 @@
+from pathlib import Path
+
 import pytest
 from sefios.sessions import SessionManager, UnknownSessionError
 
 
 @pytest.fixture
-def manager(tmp_path) -> SessionManager:
+def manager(tmp_path: Path) -> SessionManager:
     return SessionManager(tmp_path / "sessions")
 
 
 class TestSessionManager:
-    def test_creates_session_directory(self, tmp_path):
+    def test_creates_session_directory(self, tmp_path: Path) -> None:
         session_dir = tmp_path / "sessions"
         assert not session_dir.exists()
 
@@ -16,7 +18,7 @@ class TestSessionManager:
 
         assert session_dir.is_dir()
 
-    def test_creates_nested_session_directory(self, tmp_path):
+    def test_creates_nested_session_directory(self, tmp_path: Path) -> None:
         session_dir = tmp_path / "var" / "sefia" / "sessions"
         assert not session_dir.parent.exists()
 
@@ -43,7 +45,7 @@ class TestSessionManager:
         assert manager.session_exists(first)
         assert manager.session_exists(second)
 
-    def test_active_session_persists_across_instances(self, tmp_path):
+    def test_active_session_persists_across_instances(self, tmp_path: Path) -> None:
         session_dir = tmp_path / "sessions"
         session_id = SessionManager(session_dir).create_new_active_session()
 
@@ -52,7 +54,7 @@ class TestSessionManager:
         assert reopened.get_active_session_id() == session_id
         assert reopened.session_exists(session_id)
 
-    def test_blank_active_session_file_reads_as_none(self, tmp_path):
+    def test_blank_active_session_file_reads_as_none(self, tmp_path: Path) -> None:
         session_dir = tmp_path / "sessions"
         manager = SessionManager(session_dir)
         (session_dir / "active_session.txt").write_text("   ", encoding="utf-8")
@@ -107,7 +109,7 @@ class TestResolveSession:
         assert manager.get_active_session_id() == resolved.session_id
         assert manager.session_exists(resolved.session_id)
 
-    def test_dangling_active_session_raises(self, tmp_path):
+    def test_dangling_active_session_raises(self, tmp_path: Path) -> None:
         session_dir = tmp_path / "sessions"
         manager = SessionManager(session_dir)
         # Point the active session file at an unregistered id.

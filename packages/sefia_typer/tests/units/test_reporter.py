@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import pytest
+
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia_typer import DefaultCLIReporter, InputRequest, OutputMessage
 
@@ -11,7 +13,9 @@ class _StubResolvedSession:
 
 
 class TestDefaultCLIReporter:
-    def test_created_session_is_announced(self, capsys):
+    def test_created_session_is_announced(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reporter = DefaultCLIReporter()
 
         reporter.on_session_resolved(
@@ -20,7 +24,9 @@ class TestDefaultCLIReporter:
 
         assert "abc" in capsys.readouterr().out
 
-    def test_active_session_is_announced(self, capsys):
+    def test_active_session_is_announced(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reporter = DefaultCLIReporter()
 
         reporter.on_session_resolved(
@@ -29,7 +35,9 @@ class TestDefaultCLIReporter:
 
         assert "abc" in capsys.readouterr().out
 
-    def test_explicit_session_is_quiet(self, capsys):
+    def test_explicit_session_is_quiet(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reporter = DefaultCLIReporter()
 
         reporter.on_session_resolved(
@@ -38,7 +46,9 @@ class TestDefaultCLIReporter:
 
         assert capsys.readouterr().out == ""
 
-    def test_input_request_includes_marker(self, capsys):
+    def test_input_request_includes_marker(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reporter = DefaultCLIReporter()
 
         reporter.on_input_request(
@@ -49,7 +59,9 @@ class TestDefaultCLIReporter:
         assert "INPUT_REQUIRED:xyz" in output
         assert "What topic?" in output
 
-    def test_input_prompt_delta_is_printed_without_newline(self, capsys):
+    def test_input_prompt_delta_is_printed_without_newline(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reporter = DefaultCLIReporter()
 
         reporter.on_input_prompt_delta("call-1", "What ")
@@ -57,7 +69,9 @@ class TestDefaultCLIReporter:
 
         assert capsys.readouterr().out == "What topic?"
 
-    def test_output_includes_marker_and_message(self, capsys):
+    def test_output_includes_marker_and_message(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reporter = DefaultCLIReporter()
 
         reporter.on_output(OutputMessage(interaction_id="xyz", message="Hello there!"))
@@ -66,7 +80,9 @@ class TestDefaultCLIReporter:
         assert "OUTPUT:xyz" in output
         assert "Hello there!" in output
 
-    def test_output_message_delta_is_printed_without_newline(self, capsys):
+    def test_output_message_delta_is_printed_without_newline(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reporter = DefaultCLIReporter()
 
         reporter.on_output_message_delta("call-1", "Hello ")
@@ -74,14 +90,18 @@ class TestDefaultCLIReporter:
 
         assert capsys.readouterr().out == "Hello there!"
 
-    def test_interrupted_announces_waiting_state(self, capsys):
+    def test_interrupted_announces_waiting_state(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reporter = DefaultCLIReporter()
 
         reporter.on_interrupted(_StubResolvedSession(session_id="abc", source="active"))
 
         assert "WAITING FOR INPUT" in capsys.readouterr().out
 
-    def test_inference_error_is_reported_as_error(self, capsys):
+    def test_inference_error_is_reported_as_error(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reporter = DefaultCLIReporter()
 
         reporter.on_inference_error(InvalidInferenceResponseError("bad model response"))
