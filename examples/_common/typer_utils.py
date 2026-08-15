@@ -7,8 +7,9 @@ from typing import Annotated, Any, Callable, Coroutine, Protocol, TypeVar
 import typer
 from rich.console import Console
 from sefios.cli.exceptions import UnknownSessionError
-from typer.models import ArgumentInfo
 from typing_extensions import ParamSpec
+
+from .typer_params import argument
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -56,7 +57,7 @@ def add_session_commands(app: typer.Typer, sessions: SessionCommands) -> None:
     def switch_session(
         session_id: Annotated[
             str,
-            ArgumentInfo(default=..., help="The ID of the session to switch to."),
+            argument(help="The ID of the session to switch to."),
         ],
     ) -> None:
         """Switch the active session."""

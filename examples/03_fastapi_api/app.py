@@ -36,23 +36,23 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
     interviewer = Interviewer(api.input_tool)
     app = FastAPI(title="Sefia FastAPI Example")
 
-    async def unknown_session(_request: Request, exc: Exception) -> JSONResponse:
-        assert isinstance(exc, UnknownSessionError)
+    async def unknown_session(
+        _request: Request, exc: UnknownSessionError
+    ) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
-    async def unknown_input(_request: Request, exc: Exception) -> JSONResponse:
-        assert isinstance(exc, UnknownInputError)
+    async def unknown_input(_request: Request, exc: UnknownInputError) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
-    async def ambiguous_input(_request: Request, exc: Exception) -> JSONResponse:
-        assert isinstance(exc, AmbiguousInputError)
+    async def ambiguous_input(
+        _request: Request, exc: AmbiguousInputError
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=409,
             content={"detail": str(exc), "interaction_ids": exc.interaction_ids},
         )
 
-    async def input_required(_request: Request, exc: Exception) -> JSONResponse:
-        assert isinstance(exc, InputRequired)
+    async def input_required(_request: Request, exc: InputRequired) -> JSONResponse:
         # The Input tool always identifies its request, so a pause surfaced to
         # the client carries an interaction_id (the core type allows None for
         # tools that don't).
@@ -65,10 +65,10 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
             ).model_dump(),
         )
 
-    app.add_exception_handler(UnknownSessionError, unknown_session)
-    app.add_exception_handler(UnknownInputError, unknown_input)
-    app.add_exception_handler(AmbiguousInputError, ambiguous_input)
-    app.add_exception_handler(InputRequired, input_required)
+    app.exception_handler(UnknownSessionError)(unknown_session)
+    app.exception_handler(UnknownInputError)(unknown_input)
+    app.exception_handler(AmbiguousInputError)(ambiguous_input)
+    app.exception_handler(InputRequired)(input_required)
 
     async def index() -> FileResponse:
         return FileResponse(EXAMPLE_DIR / "index.html")
@@ -88,23 +88,11 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
             brief = await interviewer.run()
             return InterviewCompletedResponse(brief=BriefSchema.from_brief(brief))
 
-    app.add_api_route("/", index, methods=["GET"], include_in_schema=False)
-    app.add_api_route(
-        "/sessions",
-        create_session,
-        methods=["POST"],
-        response_model=SessionCreatedResponse,
-    )
-    app.add_api_route(
-        "/sessions/{session_id}/events",
-        events,
-        methods=["GET"],
-    )
-    app.add_api_route(
-        "/sessions/{session_id}/interview",
-        interview,
-        methods=["POST"],
-        response_model=InterviewResponse,
+    app.get("/", include_in_schema=False)(index)
+    app.post("/sessions", response_model=SessionCreatedResponse)(create_session)
+    app.get("/sessions/{session_id}/events")(events)
+    app.post("/sessions/{session_id}/interview", response_model=InterviewResponse)(
+        interview
     )
 
     return app

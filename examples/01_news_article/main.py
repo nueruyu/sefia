@@ -9,9 +9,9 @@ from sefios import SQLitePersistence
 from sefios.cli import SefiaCLI
 from sefios.sessions import FileActiveSessionStore
 from sefios.tools import WebSearch
-from typer.models import ArgumentInfo, OptionInfo
 
 from .._common.policies import VerbosePolicy
+from .._common.typer_params import argument, option
 from .._common.typer_utils import add_session_commands, async_command
 from .agents import NewsWriter, RequirementsClarifier, Researcher
 from .authoring import engrave
@@ -65,41 +65,36 @@ async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArt
 async def chat(
     message: Annotated[
         list[str],
-        ArgumentInfo(
-            default=...,
+        argument(
             help="The input for a new session, or an answer to resume an existing one.",
         ),
     ],
     reply_to: Annotated[
         str | None,
-        OptionInfo(
-            default=...,
-            param_decls=("--reply-to",),
+        option(
+            "--reply-to",
             help="The input interaction ID to answer.",
         ),
     ] = None,
     session_id: Annotated[
         str | None,
-        OptionInfo(
-            default=...,
-            param_decls=("--session-id",),
+        option(
+            "--session-id",
             help="The session ID to use. If not provided, uses the active session.",
         ),
     ] = None,
     model: Annotated[
         str,
-        OptionInfo(
-            default=...,
-            param_decls=("--model",),
+        option(
+            "--model",
             help="The LLM model to use. Can also be set via EXAMPLE_DEFAULT_MODEL env var.",
             envvar="EXAMPLE_DEFAULT_MODEL",
         ),
     ] = "gpt-4o",
     verbose: Annotated[
         bool,
-        OptionInfo(
-            default=...,
-            param_decls=("--verbose",),
+        option(
+            "--verbose",
             help="Enable verbose output for debugging, including LLM prompts.",
         ),
     ] = False,
