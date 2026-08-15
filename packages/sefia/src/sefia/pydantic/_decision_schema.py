@@ -2,16 +2,25 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any, cast
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, WithJsonSchema
 
 from ..llm.schema import LLMSchema, SchemaPath
-from ._tool_arguments import (
-    TOOL_ARGUMENT_MARKER,
-    ToolArgumentContract,
-    ToolSchemaKind,
-)
+from ._tool_arguments import ToolArgumentContract, ToolSchemaKind
+
+_TOOL_ARGUMENT_MARKER = "x-sefia-tool-arguments"
+
+
+@dataclass(frozen=True)
+class _ComposedSchema:
+    schema: dict[str, Any]
+    definitions: dict[str, dict[str, Any]]
+
+
+def tool_argument_placeholder(tool_name: str) -> WithJsonSchema:
+    return WithJsonSchema({_TOOL_ARGUMENT_MARKER: tool_name})
 
 
 def build_decision_schema(
@@ -23,21 +32,30 @@ def build_decision_schema(
         raise ValueError("LLM schema $defs must be an object")
     root_definitions = cast(dict[str, Any], definitions)
     raw_nodes: set[int] = set()
+    raw_definition_names: set[str] = set()
 
     for node in list(_walk(schema)):
-        tool_name = node.pop(TOOL_ARGUMENT_MARKER, None)
+        tool_name = node.pop(_TOOL_ARGUMENT_MARKER, None)
         if not isinstance(tool_name, str):
             continue
         if tool_name not in tools:
             raise ValueError(f"Unknown tool argument marker: {tool_name!r}")
         contract = tools[tool_name]
-        arguments = _compose_definitions(
-            root_definitions, tool_name, deepcopy(contract.schema)
+        composed = _compose_definitions(
+            root_definitions,
+            tool_name,
+            deepcopy(contract.schema),
+            protected_names=raw_definition_names,
+            preserve=contract.kind is ToolSchemaKind.RAW,
         )
         node.clear()
-        node.update(arguments)
+        node.update(composed.schema)
         if contract.kind is ToolSchemaKind.RAW:
             raw_nodes.add(id(node))
+            raw_nodes.update(
+                id(definition) for definition in composed.definitions.values()
+            )
+            raw_definition_names.update(composed.definitions)
 
     raw_paths = frozenset(
         path for path, node in _walk_with_paths(schema) if id(node) in raw_nodes
@@ -47,8 +65,13 @@ def build_decision_schema(
 
 
 def _compose_definitions(
-    root: dict[str, Any], namespace: str, schema: dict[str, Any]
-) -> dict[str, Any]:
+    root: dict[str, Any],
+    namespace: str,
+    schema: dict[str, Any],
+    *,
+    protected_names: set[str],
+    preserve: bool,
+) -> _ComposedSchema:
     local: dict[str, Any] = {}
     for keyword in ("$defs", "definitions"):
         definitions = schema.pop(keyword, None)
@@ -56,23 +79,40 @@ def _compose_definitions(
             local.update(cast(dict[str, Any], definitions))
 
     names = {
-        name: _target_name(root, namespace, name, definition)
+        name: _target_name(
+            root,
+            namespace,
+            name,
+            definition,
+            protected_names=protected_names,
+            preserve=preserve,
+        )
         for name, definition in local.items()
     }
     _rewrite_references(schema, names)
+    composed: dict[str, dict[str, Any]] = {}
     for name, definition in local.items():
         target = names[name]
         if target not in root:
             rewritten = deepcopy(definition)
             _rewrite_references(rewritten, names)
             root[target] = rewritten
-    return schema
+            composed[target] = rewritten
+    return _ComposedSchema(schema, composed)
 
 
 def _target_name(
-    root: dict[str, Any], namespace: str, name: str, definition: Any
+    root: dict[str, Any],
+    namespace: str,
+    name: str,
+    definition: Any,
+    *,
+    protected_names: set[str],
+    preserve: bool,
 ) -> str:
-    if name not in root or root[name] == definition:
+    if name not in root:
+        return name
+    if not preserve and name not in protected_names and root[name] == definition:
         return name
     base = f"{namespace}__{name}"
     candidate = base

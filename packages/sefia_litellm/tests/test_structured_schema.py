@@ -227,6 +227,42 @@ def test_raw_tool_schema_hoists_local_definitions() -> None:
     assert "$defs" not in arguments
     assert arguments["properties"]["item"]["$ref"] == "#/$defs/Item"
     assert schema["$defs"]["Item"]["properties"]["name"]["type"] == "string"
+    assert schema["$defs"]["Item"]["required"] == ["name"]
+
+
+def test_raw_definition_is_not_normalized_with_typed_definition() -> None:
+    shared = make_dataclass("SharedPolicy", [("name", str)])
+
+    async def typed(value: Any) -> None:
+        pass
+
+    typed.__annotations__["value"] = shared
+    raw_schema = {
+        "type": "object",
+        "properties": {"value": {"$ref": "#/$defs/SharedPolicy"}},
+        "required": ["value"],
+        "additionalProperties": False,
+        "$defs": {
+            "SharedPolicy": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "additionalProperties": False,
+            }
+        },
+    }
+    director = ToolOnlyDirector(
+        PydanticModelBackend(),
+        Never,
+        [_raw_tool(raw_schema), _signature_tool(typed, name="typed")],
+    )
+
+    logical = director.build_decision_schema()
+
+    assert "required" not in logical.schema["$defs"]["SharedPolicy"]
+    assert "typed__SharedPolicy" in logical.schema["$defs"]
+    assert ("$defs", "SharedPolicy") in logical.raw_schema_paths
+    with pytest.raises(ValueError, match=r"missing \['name'\]"):
+        LiteLLMSchemaAdapter().build(logical)
 
 
 def test_conflicting_tool_definition_names_are_renamed() -> None:

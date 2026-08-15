@@ -7,7 +7,6 @@ from pydantic import (
     Field,
     TypeAdapter,
     ValidationError,
-    WithJsonSchema,
     create_model,
 )
 from typing_extensions import final, override
@@ -25,9 +24,8 @@ from ..llm.decision import (
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..llm.schema import LLMSchema
-from ._decision_schema import build_decision_schema
+from ._decision_schema import build_decision_schema, tool_argument_placeholder
 from ._tool_arguments import (
-    TOOL_ARGUMENT_MARKER,
     ToolArgumentContract,
     ToolSchemaKind,
 )
@@ -137,7 +135,7 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
                 arguments=(
                     Annotated[
                         contracts[tool.name].validation_type(),
-                        WithJsonSchema({TOOL_ARGUMENT_MARKER: tool.name}),
+                        tool_argument_placeholder(tool.name),
                     ],
                     ...,
                 ),
