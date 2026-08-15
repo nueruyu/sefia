@@ -11,7 +11,7 @@ import inspect
 import logging
 import sys
 import types
-from typing import Annotated, Any, Callable, Union, get_args, get_origin
+from typing import Annotated, Any, Callable, Union, cast, get_args, get_origin
 
 _log = logging.getLogger(__name__)
 
@@ -84,7 +84,9 @@ def declared_methods(cls: type) -> dict[str, Callable[..., Any]]:
             if name.startswith("_") and not is_proto:
                 continue
             if isinstance(raw, (staticmethod, classmethod)):
-                methods[name] = raw.__func__
+                methods[name] = cast(
+                    Callable[..., Any], getattr(cast(object, raw), "__func__")
+                )
             elif inspect.isfunction(raw):
                 methods[name] = raw
     return methods
@@ -128,7 +130,11 @@ def declared_fields(cls: type) -> dict[str, Any]:
     return fields
 
 
-def _resolve(annotation: Any, globalns: dict, localns: dict) -> Any:
+def _resolve(
+    annotation: Any,
+    globalns: dict[str, Any],
+    localns: dict[str, Any],
+) -> Any:
     if not isinstance(annotation, str):
         return annotation
     try:

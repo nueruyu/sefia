@@ -85,7 +85,7 @@ class DecisionToolCall:
     """A validated tool call decision."""
 
     name: str
-    arguments: dict[str, Any] = field(default_factory=dict)
+    arguments: dict[str, Any] = field(default_factory=dict[str, Any])
 
 
 @dataclass(frozen=True)
@@ -109,7 +109,7 @@ class DecisionModel(ABC):
     """Schema and validation boundary for LLM decisions."""
 
     @abstractmethod
-    def schema(self) -> dict:
+    def schema(self) -> dict[str, Any]:
         """Return the JSON schema presented to the LLM."""
         ...
 

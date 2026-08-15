@@ -19,7 +19,7 @@ GLYFF_DOMAIN = glyff.Domain("sefia", version="1")
 
 
 def _partition_middleware(
-    middleware: list,
+    middleware: Sequence[object],
 ) -> tuple[list[InferenceMiddleware], list[StepMiddleware]]:
     inference_middlewares: list[InferenceMiddleware] = []
     step_middlewares: list[StepMiddleware] = []
@@ -76,7 +76,11 @@ class Domain:
             return decorator(func, None)
         if not name:
             raise ValueError("An inference execution name cannot be empty.")
-        return lambda func: decorator(func, name)
+
+        def named_decorator(func: Callable[P, R]) -> Callable[P, R]:
+            return decorator(func, name)
+
+        return named_decorator
 
     def _decorate_inference(
         self, func: Callable[P, R], execution_name: str | None
@@ -84,12 +88,15 @@ class Domain:
         unwrapped = inspect.unwrap(func)
 
         @functools.wraps(func)
-        async def run(*args, **kwargs):
+        async def run(*args: P.args, **kwargs: P.kwargs) -> Any:
             context = get_context()
             function_metadata = metadata.get_metadata(unwrapped)
-            function_policies = function_metadata.get(metadata.KEY_POLICIES, [])
-            profile_key = function_metadata.get(
-                metadata.KEY_PROFILE_KEY, self._default_profile
+            function_policies = cast(
+                list[Policy], function_metadata.get(metadata.KEY_POLICIES, [])
+            )
+            profile_key = cast(
+                Hashable | None,
+                function_metadata.get(metadata.KEY_PROFILE_KEY, self._default_profile),
             )
             inference_strategy, profile_policies = context.resolve_profile(profile_key)
 
@@ -120,7 +127,7 @@ class Domain:
             )
 
             @functools.wraps(func)
-            async def engraved_run(*_args, **_kwargs):
+            async def engraved_run(*_args: P.args, **_kwargs: P.kwargs) -> Any:
                 return await executor.run()
 
             return await self._glyff.engrave(engraved_run, name=execution_name)(
@@ -149,7 +156,9 @@ class Domain:
         if not name:
             raise ValueError("An execution name cannot be empty.")
 
-        def decorator(func):
+        def decorator(
+            func: Callable[P, Awaitable[R]],
+        ) -> Callable[P, Awaitable[R]]:
             return self._glyff.engrave(func, name=name)
 
         return decorator
