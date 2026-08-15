@@ -91,7 +91,7 @@ A `create_model`-built decision model is the schema, picked by an
 
 `pydantic/_decision_schema.py` composes typed tool `$defs` into a provider-neutral
 logical schema and identifies raw JSON Schema regions that adapters must not rewrite.
-The LLM client prepares that contract for its wire format. The LiteLLM adapter adds
+The LLM client prepares that contract for its wire format. The LiteLLM schema adapter adds
 the `payload` envelope, closes strict objects, and reversibly encodes typed mappings
 as arrays of `{key, value}` entries.
 
@@ -100,6 +100,12 @@ reflects callable parameters, `_tool_arguments.py` owns each tool's original sch
 and argument validator, `_decision_model.py` owns local validation, and
 `_decision_schema.py` composes the logical schema. The prepared LLM schema carries
 the inverse response decoder and stream-path normalizer.
+
+`DecisionModelBuilder` implementations return an `LLMSchema`, not a provider-ready
+dictionary. Custom `LLMClient` implementations may use the default identity
+preparation when they accept that logical schema directly, or override
+`prepare_output_schema` and return a `PreparedLLMSchema` with matching response and
+stream-path transformations.
 
 The system prompt is `docstring + response-instructions + the tool definitions (as
 JSON) + the decision JSON Schema`. The user message is the call's arguments rendered

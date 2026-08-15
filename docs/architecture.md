@@ -136,7 +136,7 @@ implementation noted in parentheses.
 | --- | --- |
 | Add an LLM provider | implement `LLMClient`; mirror `packages/sefia_litellm/src/sefia_litellm/_client.py` |
 | Change the logical decision schema | `pydantic/_decision_model.py`, `pydantic/_decision_schema.py` |
-| Change LiteLLM's structured-output wire format | `packages/sefia_litellm/src/sefia_litellm/_schema.py` |
+| Change LiteLLM's structured-output wire format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |

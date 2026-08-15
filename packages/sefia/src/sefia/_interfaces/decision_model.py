@@ -111,7 +111,7 @@ class DecisionModel(ABC):
 
     @abstractmethod
     def schema(self) -> LLMSchema:
-        """Return the JSON schema presented to the LLM."""
+        """Return the logical schema that an LLM client prepares for transport."""
         ...
 
     @abstractmethod

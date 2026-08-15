@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
@@ -8,26 +7,8 @@ from typing import Any, Protocol, cast
 from typing_extensions import final, override
 
 from sefia.llm.schema import LLMSchema, PreparedLLMSchema, SchemaPath
+from ._traversal import matches, resolve, walk, walk_with_paths
 
-_MAP_CHILDREN = ("$defs", "definitions", "properties", "patternProperties")
-_VALUE_CHILDREN = (
-    "additionalProperties",
-    "anyOf",
-    "allOf",
-    "contains",
-    "contentSchema",
-    "dependentSchemas",
-    "else",
-    "if",
-    "items",
-    "not",
-    "oneOf",
-    "prefixItems",
-    "propertyNames",
-    "then",
-    "unevaluatedItems",
-    "unevaluatedProperties",
-)
 _UNSUPPORTED_COMPOSITION = (
     "allOf",
     "not",
@@ -97,7 +78,7 @@ class _EnvelopeComposer:
         payload = deepcopy(logical.schema)
         preserved = {
             id(node)
-            for path, node in _walk_with_paths(payload)
+            for path, node in walk_with_paths(payload)
             if path in logical.raw_schema_paths
         }
         definitions = payload.pop("$defs", None)
@@ -120,7 +101,7 @@ class _SchemaNormalizer:
         self._preserved = preserved
 
     def normalize(self, schema: dict[str, Any]) -> None:
-        for node in _walk(schema, skip=self._preserved):
+        for node in walk(schema, skip=self._preserved):
             if node.get("type") == "object":
                 node.setdefault("additionalProperties", False)
                 properties = node.get("properties")
@@ -140,7 +121,7 @@ class _MappingLowerer:
 
     def lower(self, schema: dict[str, Any]) -> set[int]:
         mapping_ids: set[int] = set()
-        for node in _walk(schema, skip=self._preserved):
+        for node in walk(schema, skip=self._preserved):
             additional = node.get("additionalProperties")
             if node.get("type") != "object" or not isinstance(additional, dict):
                 continue
@@ -176,7 +157,7 @@ class _MappingLowerer:
 @final
 class _CompatibilityValidator:
     def validate(self, schema: dict[str, Any]) -> None:
-        for path, node in _walk_with_paths(schema):
+        for path, node in walk_with_paths(schema):
             if "oneOf" in node:
                 self._unsupported(path, "oneOf is not supported; use a disjoint anyOf")
             for keyword in _UNSUPPORTED_COMPOSITION:
@@ -291,7 +272,7 @@ class _UnionDecoder:
 
     def decode(self, data: Any) -> Any:
         for schema, decoder in self._choices:
-            if _matches(data, schema, self._root):
+            if matches(data, schema, self._root):
                 return decoder.decode(data)
         return data
 
@@ -304,7 +285,7 @@ class _DecoderFactory:
         self._cache: dict[int, _DeferredDecoder] = {}
 
     def build(self, schema: dict[str, Any]) -> _Decoder:
-        schema = _resolve(schema, self._root)
+        schema = resolve(schema, self._root)
         cached = self._cache.get(id(schema))
         if cached is not None:
             return cached
@@ -344,83 +325,3 @@ class _DecoderFactory:
         if schema.get("type") == "array" and isinstance(schema.get("items"), dict):
             return _ArrayDecoder(self.build(cast(dict[str, Any], schema["items"])))
         return _IdentityDecoder()
-
-
-def _walk(node: Any, *, skip: set[int] | None = None) -> Iterator[dict[str, Any]]:
-    if isinstance(node, list):
-        for item in cast(list[Any], node):
-            yield from _walk(item, skip=skip)
-        return
-    if not isinstance(node, dict):
-        return
-    schema = cast(dict[str, Any], node)
-    if skip is not None and id(schema) in skip:
-        return
-    yield schema
-    for _, child in _children(schema):
-        yield from _walk(child, skip=skip)
-
-
-def _walk_with_paths(
-    node: Any, path: SchemaPath = ()
-) -> Iterator[tuple[SchemaPath, dict[str, Any]]]:
-    if isinstance(node, list):
-        for index, item in enumerate(cast(list[Any], node)):
-            yield from _walk_with_paths(item, (*path, index))
-        return
-    if not isinstance(node, dict):
-        return
-    schema = cast(dict[str, Any], node)
-    yield path, schema
-    for child_path, child in _children(schema):
-        yield from _walk_with_paths(child, (*path, *child_path))
-
-
-def _children(node: dict[str, Any]) -> Iterator[tuple[tuple[str, ...], Any]]:
-    for keyword in _MAP_CHILDREN:
-        children = node.get(keyword)
-        if isinstance(children, dict):
-            for name, child in list(cast(dict[str, Any], children).items()):
-                yield (keyword, name), child
-    for keyword in _VALUE_CHILDREN:
-        if keyword in node:
-            yield (keyword,), node[keyword]
-
-
-def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
-    reference = schema.get("$ref")
-    if not isinstance(reference, str) or not reference.startswith("#/$defs/"):
-        return schema
-    definitions = root.get("$defs")
-    if not isinstance(definitions, dict):
-        return schema
-    name = reference.removeprefix("#/$defs/").replace("~1", "/").replace("~0", "~")
-    resolved = cast(dict[str, Any], definitions).get(name)
-    return cast(dict[str, Any], resolved) if isinstance(resolved, dict) else schema
-
-
-def _matches(data: Any, schema: dict[str, Any], root: dict[str, Any]) -> bool:
-    schema = _resolve(schema, root)
-    if "const" in schema and data != schema["const"]:
-        return False
-    expected = schema.get("type")
-    if expected == "null":
-        return data is None
-    if expected == "object":
-        if not isinstance(data, dict):
-            return False
-        required = schema.get("required")
-        return not isinstance(required, list) or set(cast(list[str], required)) <= set(
-            cast(dict[str, Any], data)
-        )
-    if expected == "array":
-        return isinstance(data, list)
-    if expected == "string":
-        return isinstance(data, str)
-    if expected == "integer":
-        return isinstance(data, int) and not isinstance(data, bool)
-    if expected == "number":
-        return isinstance(data, int | float) and not isinstance(data, bool)
-    if expected == "boolean":
-        return isinstance(data, bool)
-    return True
