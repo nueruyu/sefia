@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -109,7 +109,7 @@ class SefiaHTTP:
         model: str | None = None,
         stream: bool | None = None,
         policies: list[Policy] | None = None,
-    ) -> AsyncIterator[SefiaHTTPSession]:
+    ) -> AsyncGenerator[SefiaHTTPSession]:
         self.ensure_session(session_id)
         # Stream by default: the parsed prompt/message deltas are decoded from
         # the streamed tool-call arguments, so LLM-level streaming has to be on

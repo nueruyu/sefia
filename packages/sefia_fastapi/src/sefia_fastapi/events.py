@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -63,7 +63,7 @@ class SessionEvents:
     @asynccontextmanager
     async def _subscribe(
         self, session_id: str
-    ) -> AsyncIterator[asyncio.Queue[_SessionEvent]]:
+    ) -> AsyncGenerator[asyncio.Queue[_SessionEvent]]:
         queue: asyncio.Queue[_SessionEvent] = asyncio.Queue()
         subscribers = self._subscribers.setdefault(session_id, set())
         subscribers.add(queue)

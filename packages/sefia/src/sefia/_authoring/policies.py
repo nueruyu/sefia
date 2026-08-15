@@ -12,7 +12,7 @@ class PolicyDecorator(Protocol):
     def __call__(self, func: C) -> C: ...
 
 
-def policy(value: Policy) -> PolicyDecorator:
+def policy(value: object) -> PolicyDecorator:
     """Attach an inference policy to a function."""
     if not isinstance(value, Policy):
         raise TypeError(

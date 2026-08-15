@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -78,7 +78,7 @@ class SessionScope:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
-    ) -> AsyncIterator[sefia.Session]:
+    ) -> AsyncGenerator[sefia.Session]:
         """Run code within a configured Sefia session context."""
         llm_client = self.llm_client
         resolved_model = model or self.model

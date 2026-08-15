@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable, Coroutine
+from typing import Any, AsyncGenerator, Callable, Coroutine
 
 import glyff  # pyright: ignore[reportMissingTypeStubs]
 from glyff.serialization import (  # pyright: ignore[reportMissingTypeStubs]
@@ -136,7 +136,7 @@ async def memory_session(
     session_id: str = "test-session",
     backend: Any | None = None,
     **session_kwargs: Any,
-) -> AsyncIterator[Session]:
+) -> AsyncGenerator[Session]:
     """A ready-to-use sefia ``Session`` over an in-memory glyff backend.
 
     Pass a shared ``backend`` with a stable ``session_id`` to simulate

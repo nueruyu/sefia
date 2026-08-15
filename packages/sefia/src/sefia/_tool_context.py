@@ -1,5 +1,5 @@
 import contextvars
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -25,7 +25,7 @@ def _callable_identity(
 @contextmanager
 def serving_tool_call(
     call_id: str, function: Callable[..., Any] | None = None
-) -> Iterator[None]:
+) -> Generator[None]:
     """Bind ``call_id`` as the tool call the current handler is serving."""
     token = _tool_call_var.set(
         _ToolCallContext(id=call_id, function=_callable_identity(function))

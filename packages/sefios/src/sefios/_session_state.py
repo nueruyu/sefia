@@ -12,7 +12,7 @@ from __future__ import annotations
 import contextvars
 import hashlib
 import json
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Type, TypeVar
 
@@ -141,7 +141,7 @@ def get_state_store(key: str, state_type: Type[T]) -> StateStore[T]:
 
 
 @contextmanager
-def bind_session_storage(storage: SessionStorage) -> Iterator[None]:
+def bind_session_storage(storage: SessionStorage) -> Generator[None]:
     """Binds ``storage`` as the current session's state storage."""
     token = _session_state_var.set(_SessionState(storage))
     try:
