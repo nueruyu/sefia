@@ -25,9 +25,10 @@ class SessionScope:
     Manages shared configuration for Sefia sessions and provides helpers to run
     code within a configured session context.
 
-    ``persistence`` creates both the glyff execution backend and Sefia's
-    session-state storage so their durability semantics stay aligned. By
-    default both are stored in ``.sessions/sessions.sqlite3``.
+    ``persistence`` provides the durable resources for Sefia sessions. This
+    scope uses its glyff execution backend and session-state storage; facades
+    also use its session registry. SQLite at ``.sessions/sessions.sqlite3`` is
+    the default.
 
     ``history_storage`` selects where run history is persisted; defaults to the
     run's glyff metadata (:class:`~sefia.history_storages.GlyffHistoryStorage`).

@@ -116,7 +116,7 @@ implementation noted in parentheses.
 | `_domain.py` | Convenience constructor for an application-owned `sefia.Domain`. |
 | `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
-| `persistence.py` | Paired execution/state persistence profiles; SQLite is the durable default, with memory and optional JSON-file alternatives. |
+| `persistence.py` | Persistence providers for execution, session state, and the session registry; SQLite is the durable default, with memory and optional JSON-file alternatives. |
 | `_input_channel.py` | Internal persisted routing between the `Input` tool and host-provided CLI/HTTP input. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |
@@ -124,7 +124,7 @@ implementation noted in parentheses.
 | `handlers/` | `_cost` — an observation-seam handler (cost accounting). |
 | `tools/` | `input.py` (external input, pause-by-raise), `output.py` (agent-authored, non-blocking output), `web.py` (DuckDuckGo search). |
 | `storage/` | Session-scoped persistence: the `SessionStorage` interface + memory, SQLite, and JSON-file implementations. |
-| `sessions/` | `SessionManager` — the file-backed registry of known sessions and the active one. |
+| `sessions/` | Durable `SessionRegistry` implementations, local `ActiveSessionStore`, and the CLI-oriented `SessionManager` that composes them. |
 | `cli/` | Gated on `sefios[cli]`: `_app.py` owns the `SefiaCLI` session facade, `_reporting.py` bridges tool/session events to reporter DTOs, and `_cost_reporter.py` adds cost output; the package re-exports the `sefia_typer` reporter surface. |
 | `fastapi/` | Gated on `sefios[fastapi]`: the `SefiaHTTP` facade composing `sefia_fastapi` with `SessionScope`, `Input`, `Output`, and SSE lifecycle/delta streaming; integration exceptions live in `sefios.fastapi.exceptions`. |
 | `_state_store.py` / `_session_state.py` | Typed `StateStore`; the session-state binding and its accessors (`get_state`'s type-keyed tier sits on top; `get_call_state_store` / `get_session_storage` are the tool-facing tier). |
@@ -139,7 +139,7 @@ implementation noted in parentheses.
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
-| Add a persistence backend | implement `PersistenceProvider` so the glyff execution backend and `SessionStorage` are selected together; reference `persistence.py` |
+| Add a persistence backend | implement `PersistenceProvider` so the glyff execution backend, `SessionStorage`, and `SessionRegistry` are selected together; reference `persistence.py` |
 | Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); to change where history lives, pass `history_storage=` to `SessionScope`/`Session` (seam: `HistoryStorage`) |
 | Change shared input routing / persistence rules | `sefios/_input_channel.py` |
 | Change CLI rendering / input callbacks | `packages/sefia_typer` |

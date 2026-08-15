@@ -148,8 +148,9 @@ No. `sefios.SessionScope` uses SQLite by default, with no database service or
 third-party runtime dependency. `MemoryPersistenceProvider` provides ephemeral
 process-local execution, while the optional `FilePersistenceProvider` is intended for
 inspecting JSON during debugging. A Postgres or other backend can implement the typed
-`PersistenceProvider` seam. Your application database stays yours; Sefia stores only
-enough to bring a paused or crashed run back to where it was.
+`PersistenceProvider` seam, including a shared session registry. CLI active-session
+selection remains local workspace state. Your application database stays yours;
+Sefia stores only enough to bring a paused or crashed run back to where it was.
 
 ### Is it production-ready?
 

@@ -6,6 +6,12 @@ from glyff.store import MemoryBackend
 from glyff_pydantic import PydanticSerializer
 from glyff_sqlite import SQLiteBackend
 
+from .sessions import (
+    FileSessionRegistry,
+    MemorySessionRegistry,
+    SessionRegistry,
+    SQLiteSessionRegistry,
+)
 from .storage import (
     FileSessionStorage,
     MemorySessionStorage,
@@ -15,11 +21,13 @@ from .storage import (
 
 
 class PersistenceProvider(Protocol):
-    """Creates the execution and state stores for one session."""
+    """Provides the durable resources used by Sefia sessions."""
 
     def create_execution_backend(self) -> Backend: ...
 
     def create_session_storage(self, session_id: str) -> SessionStorage: ...
+
+    def create_session_registry(self) -> SessionRegistry: ...
 
 
 @final
@@ -35,6 +43,9 @@ class SQLitePersistenceProvider:
     def create_session_storage(self, session_id: str) -> SessionStorage:
         return SQLiteSessionStorage(self.database, session_id, PydanticSerializer())
 
+    def create_session_registry(self) -> SessionRegistry:
+        return SQLiteSessionRegistry(self.database)
+
 
 @final
 class MemoryPersistenceProvider:
@@ -43,6 +54,7 @@ class MemoryPersistenceProvider:
     def __init__(self) -> None:
         self._backend = MemoryBackend()
         self._session_storages: dict[str, MemorySessionStorage] = {}
+        self._session_registry = MemorySessionRegistry()
 
     def create_execution_backend(self) -> Backend:
         return self._backend
@@ -53,6 +65,9 @@ class MemoryPersistenceProvider:
             storage = MemorySessionStorage(PydanticSerializer())
             self._session_storages[session_id] = storage
         return storage
+
+    def create_session_registry(self) -> SessionRegistry:
+        return self._session_registry
 
 
 @final
@@ -77,3 +92,6 @@ class FilePersistenceProvider:
             base_dir=self.session_dir / "sefia_metadata" / session_id,
             serializer=PydanticSerializer(),
         )
+
+    def create_session_registry(self) -> SessionRegistry:
+        return FileSessionRegistry(self.session_dir / "sessions.txt")

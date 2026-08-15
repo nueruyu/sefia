@@ -16,8 +16,8 @@ from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..exceptions import InputRequired
 from ..handlers import CostCalculator
-from ..persistence import SQLitePersistenceProvider
-from ..sessions import SessionManager
+from ..persistence import PersistenceProvider, SQLitePersistenceProvider
+from ..sessions import SessionRegistry
 from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
 
 
@@ -57,9 +57,13 @@ class SefiaHTTP:
         model: str | None = None,
         max_steps: int | None = 25,
         policies: list[Policy] | None = None,
+        persistence: PersistenceProvider | None = None,
     ):
+        persistence = persistence or SQLitePersistenceProvider(
+            session_dir / "sessions.sqlite3"
+        )
         self._events = SessionEvents()
-        self._session_manager = SessionManager(session_dir)
+        self._session_registry: SessionRegistry = persistence.create_session_registry()
         self._input = InputChannel(namespace="http/input_channel")
         self._active_session_id: ContextVar[str | None] = ContextVar(
             "http_active_session_id", default=None
@@ -84,7 +88,7 @@ class SefiaHTTP:
             stream=True,
             max_steps=max_steps,
             policies=scope_policies,
-            persistence=SQLitePersistenceProvider(session_dir / "sessions.sqlite3"),
+            persistence=persistence,
         )
 
     @property
@@ -96,10 +100,10 @@ class SefiaHTTP:
         return self._output_tool
 
     def create_session(self) -> str:
-        return self._session_manager.create_new_active_session()
+        return self._session_registry.create_session()
 
     def ensure_session(self, session_id: str) -> None:
-        if not self._session_manager.session_exists(session_id):
+        if not self._session_registry.session_exists(session_id):
             raise HTTPUnknownSessionError(session_id)
 
     @asynccontextmanager

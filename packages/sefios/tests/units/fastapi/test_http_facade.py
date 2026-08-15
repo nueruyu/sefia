@@ -1,4 +1,3 @@
-from sefios import domain
 import asyncio
 import json
 from collections.abc import Callable, Coroutine
@@ -7,11 +6,12 @@ from typing import Any
 
 import pytest
 from sefia import Tools
-from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
-from sefia_fastapi.events import _SessionEvent
 from sefia.llm import LLMClient, LLMResponse, Message
-from sefios.fastapi import SefiaHTTP
+from sefia_fastapi.events import _SessionEvent
+from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
+from sefios import domain
 from sefios.exceptions import InputRequired
+from sefios.fastapi import SefiaHTTP
 from sefios.tools import Input, Output, OutputMessage
 
 infer = domain(
@@ -94,6 +94,15 @@ class TestSefiaHTTPSessionManagement:
         session_id = http.create_session()
 
         http.ensure_session(session_id)
+
+    def test_created_session_is_known_to_another_instance(self, tmp_path: Path) -> None:
+        session_dir = tmp_path / "sessions"
+        first = SefiaHTTP(session_dir=session_dir, model="gpt-4o-mini")
+        second = SefiaHTTP(session_dir=session_dir, model="gpt-4o-mini")
+
+        session_id = first.create_session()
+
+        second.ensure_session(session_id)
 
     def test_unknown_session_raises_http_error(self, http: SefiaHTTP):
         # The facade raises the sefia_fastapi exception that applications map

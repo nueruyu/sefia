@@ -21,6 +21,12 @@ from .persistence import (
     PersistenceProvider,
     SQLitePersistenceProvider,
 )
+from .sessions import (
+    FileSessionRegistry,
+    MemorySessionRegistry,
+    SessionRegistry,
+    SQLiteSessionRegistry,
+)
 from .state import StateContainer, StateRegistry, get_state, state
 from .storage import (
     FileSessionStorage,
@@ -46,6 +52,10 @@ __all__ = [
     "SQLitePersistenceProvider",
     "MemoryPersistenceProvider",
     "FilePersistenceProvider",
+    "SessionRegistry",
+    "SQLiteSessionRegistry",
+    "MemorySessionRegistry",
+    "FileSessionRegistry",
     "SessionStorage",
     "StateStore",
     "MemorySessionStorage",

@@ -14,8 +14,8 @@ from .._input_channel import InputChannel
 from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..handlers import CostCalculator
-from ..persistence import SQLitePersistenceProvider
-from ..sessions import SessionManager, UnknownSessionError
+from ..persistence import PersistenceProvider, SQLitePersistenceProvider
+from ..sessions import FileActiveSessionStore, SessionManager, UnknownSessionError
 from ..tools import Input, InputRequest, InputResult, Output
 from ._cost_reporter import CostReportingCLIReporter
 from ._reporting import CLIReporting
@@ -60,10 +60,17 @@ class SefiaCLI:
         stream: bool = True,
         max_steps: int | None = 25,
         policies: list[Policy] | None = None,
+        persistence: PersistenceProvider | None = None,
     ):
+        persistence = persistence or SQLitePersistenceProvider(
+            session_dir / "sessions.sqlite3"
+        )
         self._reporter = self._resolve_reporter(reporter)
         self._reporting = CLIReporting(self._reporter)
-        self._session_manager = SessionManager(session_dir)
+        self._session_manager = SessionManager(
+            persistence.create_session_registry(),
+            FileActiveSessionStore(session_dir / "active_session.txt"),
+        )
         self._input = InputChannel(
             on_request=self._reporting.input_request,
             on_prompt_delta=self._reporting.input_prompt_delta,
@@ -88,7 +95,7 @@ class SefiaCLI:
             stream=stream,
             max_steps=max_steps,
             policies=scope_policies,
-            persistence=SQLitePersistenceProvider(session_dir / "sessions.sqlite3"),
+            persistence=persistence,
         )
 
     @property

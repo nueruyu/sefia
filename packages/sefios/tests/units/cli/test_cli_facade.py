@@ -3,8 +3,9 @@ from pathlib import Path
 
 import pytest
 from glyff_pydantic import PydanticSerializer
-from sefios._input_channel import InputChannel
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
+from sefios import MemoryPersistenceProvider
+from sefios._input_channel import InputChannel
 from sefios.cli import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
 from sefios.cli._app import _USE_DEFAULT_REPORTER
 from sefios.storage import MemorySessionStorage
@@ -98,6 +99,22 @@ class TestSefiaCLISessionManagement:
 
     def test_no_active_session_initially(self, cli: SefiaCLI):
         assert cli.get_active_session() is None
+
+    def test_registry_is_shared_but_active_selection_is_local(
+        self, tmp_path: Path
+    ) -> None:
+        persistence = MemoryPersistenceProvider()
+        first = SefiaCLI(
+            session_dir=tmp_path / "first", model="gpt-4o", persistence=persistence
+        )
+        second = SefiaCLI(
+            session_dir=tmp_path / "second", model="gpt-4o", persistence=persistence
+        )
+
+        session_id = first.create_session()
+
+        assert second.get_active_session() is None
+        assert second.switch_session(session_id) == session_id
 
 
 class TestReporterResolution:
