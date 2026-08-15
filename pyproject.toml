@@ -66,6 +66,7 @@ include = [
     "packages/sefia_fastapi/tests",
     "packages/sefios/src",
     "packages/sefios/tests",
+    "examples",
 ]
 exclude = [".venv", ".uv-cache", "**/__pycache__"]
 venvPath = "."
@@ -80,5 +81,6 @@ executionEnvironments = [
     { root = "packages/sefia_typer/tests", reportPrivateUsage = false },
     { root = "packages/sefia_fastapi/tests", reportPrivateUsage = false },
     { root = "packages/sefios/tests", reportPrivateUsage = false },
+    { root = "examples/tests", extraPaths = ["."], reportPrivateUsage = false },
     { root = "." },
 ]

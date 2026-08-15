@@ -1,5 +1,8 @@
 import subprocess
 from importlib import import_module
+from pathlib import Path
+from types import ModuleType
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -10,7 +13,7 @@ main = import_module("examples.02_code_quality.main")
 models = import_module("examples.02_code_quality.models")
 
 
-def _init_repo(path):
+def _init_repo(path: Path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=path, check=True)
     subprocess.run(
         ["git", "config", "user.email", "t@example.com"], cwd=path, check=True
@@ -19,7 +22,7 @@ def _init_repo(path):
 
 
 @pytest.fixture
-def project(tmp_path):
+def project(tmp_path: Path) -> Path:
     """A small tracked git project for the review workflow to operate on."""
     repo = tmp_path / "project"
     repo.mkdir()
@@ -31,13 +34,21 @@ def project(tmp_path):
 
 
 @pytest.fixture
-def workflow(monkeypatch):
+def workflow(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     cli = SefiaCLI(model="gpt-4o", stream=False)
     monkeypatch.setattr(main, "sefia_cli", cli)
     return main
 
 
-def _mock_inference(workflow, monkeypatch, *, scope, review_files, issues, report):
+def _mock_inference(
+    workflow: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    scope: Any,
+    review_files: list[str],
+    issues: dict[Any, list[Any]],
+    report: Any,
+) -> tuple[dict[Any, AsyncMock], AsyncMock]:
     """Mock every @infer entry point used across the review workflow."""
     monkeypatch.setattr(
         workflow.scoping_agent, "define_scope", AsyncMock(return_value=scope)
@@ -53,7 +64,7 @@ def _mock_inference(workflow, monkeypatch, *, scope, review_files, issues, repor
         "propose_and_confirm_review_files",
         AsyncMock(return_value=review_files),
     )
-    review_mocks = {}
+    review_mocks: dict[Any, AsyncMock] = {}
     for perspective, agent in workflow.review_agents.items():
         mock = AsyncMock(return_value=list(issues.get(perspective, [])))
         monkeypatch.setattr(agent, "review", mock)
@@ -65,8 +76,12 @@ def _mock_inference(workflow, monkeypatch, *, scope, review_files, issues, repor
 
 class TestCodeQualityWorkflow:
     async def test_runs_full_review_and_renders_report(
-        self, workflow, project, monkeypatch, capsys
-    ):
+        self,
+        workflow: ModuleType,
+        project: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         scope = models.ProjectScope(project_path=str(project))
         perspective = models.ReviewPerspective.CODING_STYLE
         issue = models.CodeIssue(
@@ -100,7 +115,9 @@ class TestCodeQualityWorkflow:
         for mock in review_mocks.values():
             mock.assert_awaited_once()
         create_report.assert_awaited_once()
-        coding_style_call = review_mocks[perspective].await_args.args[0]
+        coding_style_await = review_mocks[perspective].await_args
+        assert coding_style_await is not None
+        coding_style_call = coding_style_await.args[0]
         assert coding_style_call == {"app.py": "x = 1\n"}
         assert issue.perspective == perspective.value
 
@@ -108,8 +125,12 @@ class TestCodeQualityWorkflow:
         assert "One style issue found." in output
 
     async def test_no_selected_files_skips_review(
-        self, workflow, project, monkeypatch, capsys
-    ):
+        self,
+        workflow: ModuleType,
+        project: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         scope = models.ProjectScope(project_path=str(project))
         report = models.QualityReport(overall_summary="unused")
         review_mocks, create_report = _mock_inference(
