@@ -1,4 +1,5 @@
 from importlib import import_module
+from types import ModuleType
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,7 +13,7 @@ models = import_module("examples.01_news_article.models")
 
 
 @pytest.fixture
-def workflow(monkeypatch):
+def workflow(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     cli = SefiaCLI(model="gpt-4o", stream=False)
     monkeypatch.setattr(main, "sefia_cli", cli)
     return main
@@ -20,8 +21,11 @@ def workflow(monkeypatch):
 
 class TestNewsArticleWorkflow:
     async def test_runs_every_stage_and_renders_article(
-        self, workflow, monkeypatch, capsys
-    ):
+        self,
+        workflow: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         request = models.ArticleRequest(
             topic="Generative AI",
             angle="Impact on developers",
@@ -59,8 +63,11 @@ class TestNewsArticleWorkflow:
         assert "A concise summary." in output
 
     async def test_research_output_feeds_the_writer(
-        self, workflow, monkeypatch, capsys
-    ):
+        self,
+        workflow: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         request = models.ArticleRequest(
             topic="t", angle="a", audience="aud", requirements=[]
         )

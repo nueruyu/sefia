@@ -37,22 +37,26 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
     app = FastAPI(title="Sefia FastAPI Example")
 
     @app.exception_handler(UnknownSessionError)
-    async def _unknown_session(request: Request, exc: UnknownSessionError):
+    async def unknown_session(
+        _request: Request, exc: UnknownSessionError
+    ) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
     @app.exception_handler(UnknownInputError)
-    async def _unknown_input(request: Request, exc: UnknownInputError):
+    async def unknown_input(_request: Request, exc: UnknownInputError) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
     @app.exception_handler(AmbiguousInputError)
-    async def _ambiguous_input(request: Request, exc: AmbiguousInputError):
+    async def ambiguous_input(
+        _request: Request, exc: AmbiguousInputError
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=409,
             content={"detail": str(exc), "interaction_ids": exc.interaction_ids},
         )
 
     @app.exception_handler(InputRequired)
-    async def _input_required(request: Request, exc: InputRequired):
+    async def input_required(_request: Request, exc: InputRequired) -> JSONResponse:
         # The Input tool always identifies its request, so a pause surfaced to
         # the client carries an interaction_id (the core type allows None for
         # tools that don't).
@@ -66,7 +70,7 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
         )
 
     @app.get("/", include_in_schema=False)
-    async def index():
+    async def index() -> FileResponse:
         return FileResponse(EXAMPLE_DIR / "index.html")
 
     @app.post("/sessions", response_model=SessionCreatedResponse)

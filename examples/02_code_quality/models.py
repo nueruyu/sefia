@@ -9,8 +9,8 @@ class ProjectScope:
     """Defines the scope of the code review."""
 
     project_path: str
-    focus_areas: list[str] = field(default_factory=list)
-    excluded_files: list[str] = field(default_factory=list)
+    focus_areas: list[str] = field(default_factory=list[str])
+    excluded_files: list[str] = field(default_factory=list[str])
 
 
 @state(key="examples.code_quality.project_understanding")
@@ -19,9 +19,9 @@ class ProjectUnderstanding:
     """Represents the evolving understanding of the project."""
 
     summary: str = "Not yet analyzed."
-    tech_stack: list[str] = field(default_factory=list)
-    key_components: dict[str, str] = field(default_factory=dict)
-    read_files: list[str] = field(default_factory=list)
+    tech_stack: list[str] = field(default_factory=list[str])
+    key_components: dict[str, str] = field(default_factory=dict[str, str])
+    read_files: list[str] = field(default_factory=list[str])
 
     def copy(self) -> "ProjectUnderstanding":
         return ProjectUnderstanding(
@@ -57,4 +57,6 @@ class QualityReport:
     """Represents the final code quality report."""
 
     overall_summary: str
-    issues_by_perspective: dict[str, list[CodeIssue]] = field(default_factory=dict)
+    issues_by_perspective: dict[str, list[CodeIssue]] = field(
+        default_factory=dict[str, list[CodeIssue]]
+    )

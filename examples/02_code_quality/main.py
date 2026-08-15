@@ -153,7 +153,7 @@ async def chat(
     message: Annotated[
         list[str],
         typer.Argument(
-            help="The input for a new session, or an answer to resume an existing one."
+            help="The input for a new session, or an answer to resume an existing one.",
         ),
     ],
     reply_to: Annotated[

@@ -4,36 +4,53 @@ No real LLM calls are made: the agents' ``@infer`` methods are replaced while
 session persistence and the pause/resume path run for real.
 """
 
+from dataclasses import dataclass
 from importlib import import_module
-from types import SimpleNamespace
+from types import ModuleType
+from typing import Protocol, cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import Response
 from sefia.testing import MockLLMClient, result_response, tool_calls_response
 from sefios.fastapi import SefiaHTTP
 
-app_module = import_module("examples.03_fastapi_api.app")
-agents_module = import_module("examples.03_fastapi_api.agents")
-domain_module = import_module("examples.03_fastapi_api.models")
+app_module: ModuleType = import_module("examples.03_fastapi_api.app")
+agents_module: ModuleType = import_module("examples.03_fastapi_api.agents")
+domain_module: ModuleType = import_module("examples.03_fastapi_api.models")
 
 Brief = domain_module.Brief
 
 
+class _HTTPClient(Protocol):
+    def get(self, url: str) -> Response: ...
+
+    def post(self, url: str, *, json: object | None = None) -> Response: ...
+
+
+@dataclass
+class _API:
+    client: _HTTPClient
+    service: SefiaHTTP
+    app: FastAPI
+
+
 @pytest.fixture
-def api():
+def api() -> _API:
     service = SefiaHTTP(model="gpt-4o-mini")
-    app = app_module.create_app(service)
-    client = TestClient(app)
-    return SimpleNamespace(client=client, service=service, app=app)
+    app = cast(FastAPI, app_module.create_app(service))
+    client = cast(_HTTPClient, TestClient(app))
+    return _API(client=client, service=service, app=app)
 
 
-def _new_session(client: TestClient) -> str:
+def _new_session(client: _HTTPClient) -> str:
     response = client.post("/sessions")
     assert response.status_code == 200
     return response.json()["session_id"]
 
 
-def test_index_serves_hitl_browser_ui(api):
+def test_index_serves_hitl_browser_ui(api: _API) -> None:
     response = api.client.get("/")
 
     assert response.status_code == 200
@@ -46,7 +63,7 @@ def test_index_serves_hitl_browser_ui(api):
 
 
 class TestInterviewFlow:
-    def test_pauses_then_resumes_to_completion(self, api):
+    def test_pauses_then_resumes_to_completion(self, api: _API) -> None:
         question = "Who is the target audience?"
         api.service._session_scope.llm_client = MockLLMClient(
             responses=[
@@ -91,8 +108,10 @@ class TestInterviewFlow:
             },
         }
 
-    def test_unknown_session_is_404(self, api, monkeypatch):
-        async def fake_run(self):
+    def test_unknown_session_is_404(
+        self, api: _API, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def fake_run(_self: object):
             return Brief(topic="ignored", goal="ignored", audience="ignored")
 
         monkeypatch.setattr(agents_module.Interviewer, "run", fake_run)
@@ -101,6 +120,6 @@ class TestInterviewFlow:
         )
         assert response.status_code == 404
 
-    def test_unknown_session_events_is_404(self, api):
+    def test_unknown_session_events_is_404(self, api: _API) -> None:
         response = api.client.get("/sessions/does-not-exist/events")
         assert response.status_code == 404

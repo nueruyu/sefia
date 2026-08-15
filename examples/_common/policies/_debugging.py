@@ -1,3 +1,5 @@
+from typing import Any
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -50,5 +52,5 @@ class PromptDumpHandler(EventHandler[BeforeLLMCall]):
 class VerbosePolicy(Policy):
     """A policy that enables console dumping of LLM prompts for debugging."""
 
-    def create_handlers(self) -> list[EventHandler]:
+    def create_handlers(self) -> list[EventHandler[Any]]:
         return [PromptDumpHandler()]
