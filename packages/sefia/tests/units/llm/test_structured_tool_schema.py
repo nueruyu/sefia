@@ -197,6 +197,34 @@ def test_unsupported_composition_keyword_is_rejected(keyword: str, value: Any) -
         director.build_decision_schema()
 
 
+@pytest.mark.parametrize(
+    "property_name",
+    [
+        "allOf",
+        "not",
+        "dependentRequired",
+        "dependentSchemas",
+        "if",
+        "then",
+        "else",
+        "oneOf",
+    ],
+)
+def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
+    raw_schema = {
+        "type": "object",
+        "properties": {property_name: {"type": "string"}},
+        "required": [property_name],
+        "additionalProperties": False,
+    }
+    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+
+    schema = director.build_decision_schema()
+
+    arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
+    assert arguments == raw_schema
+
+
 def test_mapping_result_is_rejected_as_incompatible_with_strict_output() -> None:
     director = OutputOnlyDirector(PydanticModelBackend(), dict[str, str], [])
 

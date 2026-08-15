@@ -1,4 +1,5 @@
 from copy import deepcopy
+from collections.abc import Iterator
 from typing import Any, cast
 
 from pydantic import ConfigDict, TypeAdapter, create_model
@@ -11,6 +12,25 @@ _UNSUPPORTED_COMPOSITION_KEYWORDS = (
     "if",
     "then",
     "else",
+)
+_SCHEMA_MAP_KEYWORDS = ("$defs", "definitions", "properties", "patternProperties")
+_SCHEMA_VALUE_KEYWORDS = (
+    "additionalProperties",
+    "anyOf",
+    "allOf",
+    "contains",
+    "contentSchema",
+    "dependentSchemas",
+    "else",
+    "if",
+    "items",
+    "not",
+    "oneOf",
+    "prefixItems",
+    "propertyNames",
+    "then",
+    "unevaluatedItems",
+    "unevaluatedProperties",
 )
 
 
@@ -64,8 +84,8 @@ def _normalize_schema(
         if one_of is not None:
             node_dict["anyOf"] = one_of
 
-        for value in node_dict.values():
-            normalize(value)
+        for child in _schema_children(node_dict):
+            normalize(child)
 
     normalize(result)
     return result
@@ -84,6 +104,8 @@ def _restore_raw_argument_schemas(
         if not isinstance(node, dict):
             return
         node_dict = cast(dict[str, Any], node)
+        if id(node_dict) in preserved:
+            return
         properties = node_dict.get("properties")
         if isinstance(properties, dict):
             property_dict = cast(dict[str, Any], properties)
@@ -98,8 +120,8 @@ def _restore_raw_argument_schemas(
                 restored = deepcopy(raw_tool_schemas[cast(str, tool_name)])
                 property_dict["arguments"] = restored
                 preserved.add(id(restored))
-        for value in node_dict.values():
-            visit(value)
+        for child in _schema_children(node_dict):
+            visit(child)
 
     visit(schema)
     return preserved
@@ -142,10 +164,29 @@ def _validate_provider_schema(schema: dict[str, Any]) -> None:
                         f"all object properties must be required; missing {missing}",
                     )
 
-        for key, value in node_dict.items():
-            validate(value, (*path, key))
+        for key, child in _schema_children_with_paths(node_dict):
+            validate(child, (*path, *key))
 
     validate(schema, ())
+
+
+def _schema_children(node: dict[str, Any]) -> Iterator[Any]:
+    for _, child in _schema_children_with_paths(node):
+        yield child
+
+
+def _schema_children_with_paths(
+    node: dict[str, Any],
+) -> Iterator[tuple[tuple[str, ...], Any]]:
+    for keyword in _SCHEMA_MAP_KEYWORDS:
+        children = node.get(keyword)
+        if isinstance(children, dict):
+            for name, child in cast(dict[str, Any], children).items():
+                yield (keyword, name), child
+
+    for keyword in _SCHEMA_VALUE_KEYWORDS:
+        if keyword in node:
+            yield (keyword,), node[keyword]
 
 
 def _unsupported(path: tuple[str, ...], detail: str) -> None:
