@@ -43,10 +43,11 @@ def json_schema_argument_type(schema: dict[str, Any]) -> Any:
     def _validate(value: Any) -> dict[str, Any]:
         if not isinstance(value, dict):
             raise ValueError("arguments must be a JSON object")
-        errors = sorted(validator.iter_errors(value), key=lambda e: list(e.path))
+        value_dict = cast(dict[str, Any], value)
+        errors = sorted(validator.iter_errors(value_dict), key=lambda e: list(e.path))
         if errors:
             raise ValueError("; ".join(error.message for error in errors))
-        return value
+        return value_dict
 
     return Annotated[
         dict[str, Any],

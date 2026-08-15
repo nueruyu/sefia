@@ -14,7 +14,7 @@ import hashlib
 import json
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Type, TypeVar
+from typing import Any, Type, TypeVar, cast
 
 from glyff import ExecutionId  # pyright: ignore[reportMissingTypeStubs]
 from glyff import (  # pyright: ignore[reportMissingTypeStubs]
@@ -55,7 +55,7 @@ class _SessionState:
 
     def __init__(self, storage: SessionStorage):
         self._storage = storage
-        self._state_stores: dict[str, StateStore] = {}
+        self._state_stores: dict[str, StateStore[Any]] = {}
 
     @property
     def storage(self) -> SessionStorage:
@@ -94,7 +94,7 @@ class _SessionState:
             raise TypeError(
                 f"State store for key '{key}' was already created with a different type."
             )
-        return store
+        return cast(StateStore[T], store)
 
 
 _session_state_var = contextvars.ContextVar[_SessionState]("sefios_session_state")

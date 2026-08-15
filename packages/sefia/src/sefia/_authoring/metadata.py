@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 # Attribute that holds sefia's per-function metadata dict, and the keys under
 # which inference policies and the selected profile live inside it.
@@ -15,7 +15,7 @@ def get_metadata(func: Callable[..., Any]) -> dict[str, Any]:
     The lookup unwraps ``functools.wraps`` layers, so it works on a function
     regardless of which decorators wrap it.
     """
-    return getattr(inspect.unwrap(func), METADATA_ATTR, {})
+    return cast(dict[str, Any], getattr(inspect.unwrap(func), METADATA_ATTR, {}))
 
 
 def ensure_metadata(func: Callable[..., Any]) -> dict[str, Any]:
@@ -25,4 +25,4 @@ def ensure_metadata(func: Callable[..., Any]) -> dict[str, Any]:
     if metadata is None:
         metadata = {}
         setattr(underlying, METADATA_ATTR, metadata)
-    return metadata
+    return cast(dict[str, Any], metadata)

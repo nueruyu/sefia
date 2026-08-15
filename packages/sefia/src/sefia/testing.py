@@ -52,8 +52,8 @@ class MockLLMClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict] | None = None,
-        output_schema: dict | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        output_schema: dict[str, Any] | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         reasoning_callback: (
             Callable[[str], Coroutine[None, None, None]] | None

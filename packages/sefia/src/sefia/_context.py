@@ -26,7 +26,9 @@ class SessionContext:
     policies: tuple[Policy, ...]
     tool_collector: ToolCollector
     history_storage: HistoryStorage
-    _profiles: dict[Hashable, ProfileBinding] = field(default_factory=dict)
+    _profiles: dict[Hashable, ProfileBinding] = field(
+        default_factory=dict[Hashable, ProfileBinding]
+    )
 
     def resolve_profile(
         self, profile_key: Hashable | None

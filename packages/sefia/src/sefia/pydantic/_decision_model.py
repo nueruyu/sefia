@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal, Union, cast
 
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, create_model
 from typing_extensions import final, override
@@ -30,7 +30,7 @@ class PydanticDecisionModel(DecisionModel):
         self._adapter = TypeAdapter(model)
 
     @override
-    def schema(self) -> dict:
+    def schema(self) -> dict[str, Any]:
         schema = dict(self._adapter.json_schema())
         schema["description"] = "The model for the LLM's decision on the next action."
         return schema
@@ -60,7 +60,7 @@ class PydanticDecisionModel(DecisionModel):
             calls.append(
                 DecisionToolCall(
                     name=tool_call.name,
-                    arguments=dict(tool_call.arguments),
+                    arguments=cast(dict[str, Any], tool_call.arguments),
                 )
             )
         return calls
@@ -70,7 +70,7 @@ def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
     for item in error.errors():
         if item.get("type") == "union_tag_invalid":
             loc = item.get("loc")
-            if not isinstance(loc, tuple) or "tool_calls" not in loc:
+            if "tool_calls" not in loc:
                 continue
             ctx = item.get("ctx") or {}
             tag = ctx.get("tag")
@@ -79,7 +79,7 @@ def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
 
         if item.get("type") == "literal_error":
             loc = item.get("loc")
-            if isinstance(loc, tuple) and loc and loc[-1] == "name":
+            if loc and loc[-1] == "name":
                 value = item.get("input")
                 if isinstance(value, str):
                     return value
