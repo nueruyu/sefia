@@ -116,7 +116,7 @@ class ResearchService:
         ...
 
 
-scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
+scope = SessionScope(model="gpt-4o")
 
 async def main(topic: str) -> Report:
     service = ResearchService(web=WebSearch())

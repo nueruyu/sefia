@@ -139,7 +139,7 @@ implementation noted in parentheses.
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
-| Add a persistence backend | implement `SessionPersistence` so the glyff execution backend and `SessionStorage` are selected together; reference `persistence.py` |
+| Add a persistence backend | implement `PersistenceProvider` so the glyff execution backend and `SessionStorage` are selected together; reference `persistence.py` |
 | Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); to change where history lives, pass `history_storage=` to `SessionScope`/`Session` (seam: `HistoryStorage`) |
 | Change shared input routing / persistence rules | `sefios/_input_channel.py` |
 | Change CLI rendering / input callbacks | `packages/sefia_typer` |

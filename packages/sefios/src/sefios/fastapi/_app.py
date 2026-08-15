@@ -11,11 +11,12 @@ from sefia_fastapi.events import SessionEvents, SSEEvent
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 from typing_extensions import final
 
-from .._scope import SessionScope
 from .._input_channel import InputChannel
+from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..exceptions import InputRequired
 from ..handlers import CostCalculator
+from ..persistence import SQLitePersistenceProvider
 from ..sessions import SessionManager
 from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
 
@@ -79,11 +80,11 @@ class SefiaHTTP:
             scope_policies.extend(policies)
 
         self._session_scope = SessionScope(
-            session_dir=session_dir,
             model=model,
             stream=True,
             max_steps=max_steps,
             policies=scope_policies,
+            persistence=SQLitePersistenceProvider(session_dir / "sessions.sqlite3"),
         )
 
     @property

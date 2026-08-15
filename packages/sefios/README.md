@@ -28,9 +28,9 @@ Extras:
 ## Persistence
 
 `SessionScope` stores glyff executions and Sefia session state in one SQLite
-database by default. Pass `MemoryPersistence()` for ephemeral process-local runs.
-`FilePersistence` is an optional, debug-oriented JSON representation and requires
-the `file` extra.
+database by default. Pass `MemoryPersistenceProvider()` for ephemeral process-local
+runs. `FilePersistenceProvider` is an optional, debug-oriented JSON representation
+and requires the `file` extra.
 
 ## Documentation
 

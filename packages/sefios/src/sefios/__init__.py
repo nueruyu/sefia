@@ -11,15 +11,15 @@ from sefia import (
     profile,
 )
 
-from ._scope import SessionScope
 from ._domain import domain
+from ._scope import SessionScope
 from ._session_state import get_call_state_store, get_session_storage
 from ._state_store import StateStore
 from .persistence import (
-    FilePersistence,
-    MemoryPersistence,
-    SessionPersistence,
-    SQLitePersistence,
+    FilePersistenceProvider,
+    MemoryPersistenceProvider,
+    PersistenceProvider,
+    SQLitePersistenceProvider,
 )
 from .state import StateContainer, StateRegistry, get_state, state
 from .storage import (
@@ -42,10 +42,10 @@ __all__ = [
     "domain",
     # sefios' own front door and batteries.
     "SessionScope",
-    "SessionPersistence",
-    "SQLitePersistence",
-    "MemoryPersistence",
-    "FilePersistence",
+    "PersistenceProvider",
+    "SQLitePersistenceProvider",
+    "MemoryPersistenceProvider",
+    "FilePersistenceProvider",
     "SessionStorage",
     "StateStore",
     "MemorySessionStorage",

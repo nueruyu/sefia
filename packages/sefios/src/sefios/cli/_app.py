@@ -10,10 +10,11 @@ from sefia_typer import CLIReporter
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 from typing_extensions import final
 
-from .._scope import SessionScope
 from .._input_channel import InputChannel
+from .._scope import SessionScope
 from .._session_state import get_session_storage
 from ..handlers import CostCalculator
+from ..persistence import SQLitePersistenceProvider
 from ..sessions import SessionManager, UnknownSessionError
 from ..tools import Input, InputRequest, InputResult, Output
 from ._cost_reporter import CostReportingCLIReporter
@@ -83,11 +84,11 @@ class SefiaCLI:
         if policies is not None:
             scope_policies.extend(policies)
         self._session_scope = SessionScope(
-            session_dir=session_dir,
             model=model,
             stream=stream,
             max_steps=max_steps,
             policies=scope_policies,
+            persistence=SQLitePersistenceProvider(session_dir / "sessions.sqlite3"),
         )
 
     @property

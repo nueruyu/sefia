@@ -51,7 +51,7 @@ async def summarize(article: str) -> Summary:
     ...
 
 
-scope = SessionScope(session_dir=Path(".sessions"), model="gpt-4o")
+scope = SessionScope(model="gpt-4o")
 
 
 async def main() -> None:
@@ -75,8 +75,8 @@ full rules on arguments, service members, tools, and return types, see
 
 SQLite is the durable local default: glyff execution records and Sefia's
 session-scoped state share one database while using separate tables. For an ephemeral
-process-local session, pass `persistence=MemoryPersistence()`. JSON files remain
-available for debugging with `FilePersistence` from the `sefios[file]` extra.
+process-local session, pass `persistence=MemoryPersistenceProvider()`. JSON files remain
+available for debugging with `FilePersistenceProvider` from the `sefios[file]` extra.
 
 ## 2. Give it a tool
 
@@ -305,7 +305,7 @@ between the two requests changes nothing.
 
 ## Next steps
 
-- Select another `SessionPersistence`, or drop to `sefia.Session` for full
+- Select another `PersistenceProvider`, or drop to `sefia.Session` for full
   control over the LLM client, policies, and middleware.
 - Read [The `@infer` contract](./infer-contract.md) for the rules on arguments,
   service members, tool methods, and return types.

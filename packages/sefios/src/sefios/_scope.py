@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import final
 
 import glyff
@@ -16,7 +15,7 @@ from sefia import HistoryStorage, Policy, Profile, ToolCollector
 from sefia.llm import LLMClient
 
 from ._session_state import bind_session_storage
-from .persistence import SessionPersistence, SQLitePersistence
+from .persistence import PersistenceProvider, SQLitePersistenceProvider
 from .policies import DefaultPolicy
 
 
@@ -28,7 +27,7 @@ class SessionScope:
 
     ``persistence`` creates both the glyff execution backend and Sefia's
     session-state storage so their durability semantics stay aligned. By
-    default both are stored in SQLite under ``session_dir``.
+    default both are stored in ``.sessions/sessions.sqlite3``.
 
     ``history_storage`` selects where run history is persisted; defaults to the
     run's glyff metadata (:class:`~sefia.history_storages.GlyffHistoryStorage`).
@@ -42,7 +41,6 @@ class SessionScope:
     def __init__(
         self,
         *,
-        session_dir: Path = Path(".sessions"),
         model: str | None = None,
         llm_client: LLMClient | None = None,
         policies: list[Policy] | None = None,
@@ -50,11 +48,10 @@ class SessionScope:
         stream: bool = False,
         max_steps: int | None = 25,
         max_repair_attempts: int = 2,
-        persistence: SessionPersistence | None = None,
+        persistence: PersistenceProvider | None = None,
         history_storage: HistoryStorage | None = None,
         tool_collector: ToolCollector | None = None,
     ):
-        self.session_dir = session_dir
         self.model = model
         self.llm_client = llm_client
         self.policies = list(policies or [])
@@ -62,8 +59,8 @@ class SessionScope:
         self.stream = stream
         self.max_steps = max_steps
         self.max_repair_attempts = max_repair_attempts
-        self.persistence = persistence or SQLitePersistence(
-            self.session_dir / "sessions.sqlite3"
+        self.persistence = persistence or SQLitePersistenceProvider(
+            ".sessions/sessions.sqlite3"
         )
         self.history_storage = history_storage
         self.tool_collector = tool_collector
@@ -101,7 +98,7 @@ class SessionScope:
 
         serializer = PydanticSerializer()
 
-        backend = self.persistence.create_backend(session_id, serializer)
+        backend = self.persistence.create_execution_backend(session_id)
         gs = glyff.Session(
             id=glyff.SessionId(session_id),
             backend=backend,
@@ -110,9 +107,7 @@ class SessionScope:
                 FallbackByTypeQualname()
             ),
         )
-        session_storage = self.persistence.create_session_storage(
-            session_id, serializer
-        )
+        session_storage = self.persistence.create_session_storage(session_id)
 
         final_policies: list[Policy] = list(self.policies)
         if policies is not None:
