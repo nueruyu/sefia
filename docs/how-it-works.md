@@ -85,23 +85,21 @@ A `create_model`-built decision model is the schema, picked by an
 
 | Return type | Director | Decision schema |
 | --- | --- | --- |
-| `Never` | `_ToolOnlyDirector` | `{ payload: { decision: "tool_calls", tool_calls: [...] } }` only |
-| has tools | `_ToolEnabledDirector` | `{ payload: anyOf(tool_calls decision, result decision) }` |
-| no tools | `_OutputOnlyDirector` | `{ payload: { decision: "result", result: T } }` only |
+| `Never` | `_ToolOnlyDirector` | `{ decision: "tool_calls", tool_calls: [...] }` only |
+| has tools | `_ToolEnabledDirector` | `oneOf(tool_calls decision, result decision)` |
+| no tools | `_OutputOnlyDirector` | `{ decision: "result", result: T }` only |
 
-The outer object keeps the provider-facing schema portable: unions are nested under
-`payload`, rendered as `anyOf`, and generated object schemas are closed with
-`additionalProperties: false`. Before the schema reaches the provider,
-`pydantic/_provider_schema.py` also composes typed tool `$defs` into the envelope and
-encodes typed mappings as arrays of `{key, value}` entries. The matching decoder
-restores those entries to Python mappings before the unchanged Pydantic decision
-model performs final validation and `payload` is unwrapped.
+`pydantic/_decision_schema.py` composes typed tool `$defs` into a provider-neutral
+logical schema and identifies raw JSON Schema regions that adapters must not rewrite.
+The LLM client prepares that contract for its wire format. The LiteLLM adapter adds
+the `payload` envelope, closes strict objects, and reversibly encodes typed mappings
+as arrays of `{key, value}` entries.
 
 The Pydantic backend keeps these responsibilities separate: `_function_models.py`
 reflects callable parameters, `_tool_arguments.py` owns each tool's original schema
-and argument validator, `_decision_model.py` owns the local decision model, and
-`_provider_schema.py` runs the provider encoding pipeline and builds its inverse
-decoder.
+and argument validator, `_decision_model.py` owns local validation, and
+`_decision_schema.py` composes the logical schema. The prepared LLM schema carries
+the inverse response decoder and stream-path normalizer.
 
 The system prompt is `docstring + response-instructions + the tool definitions (as
 JSON) + the decision JSON Schema`. The user message is the call's arguments rendered
