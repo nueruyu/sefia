@@ -18,6 +18,7 @@ from .._interfaces.decision_model import (
 )
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
+from ..llm.schema import LLMSchema
 from ._provider_schema import ProviderSchema, ProviderSchemaBuilder
 from ._tool_arguments import ToolArgumentContract, ToolSchemaKind
 
@@ -38,8 +39,8 @@ class PydanticDecisionModel(DecisionModel):
         self._provider_schema: ProviderSchema | None = None
 
     @override
-    def schema(self) -> dict[str, Any]:
-        return deepcopy(self._get_provider_schema().schema)
+    def schema(self) -> LLMSchema:
+        return LLMSchema(deepcopy(self._get_provider_schema().schema))
 
     @override
     def validate(self, data: Any) -> LLMDecision:

@@ -2,12 +2,17 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Coroutine
 
 from sefia.llm._messages import LLMResponse, Message
+from sefia.llm.schema import IdentityPreparedLLMSchema, LLMSchema, PreparedLLMSchema
 
 
 class LLMClient(ABC):
     """
     Protocol for a client that interacts with a Large Language Model.
     """
+
+    def prepare_output_schema(self, schema: LLMSchema) -> PreparedLLMSchema:
+        """Adapt a logical schema to this client's wire format."""
+        return IdentityPreparedLLMSchema(schema)
 
     @abstractmethod
     async def complete(

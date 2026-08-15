@@ -25,6 +25,7 @@ from ._message_builder import build_messages, build_repair_messages
 from ._messages import Message
 from ._prompt_formatter import PromptFormatter
 from ._tool_call_ids import ToolCallIdRegistry
+from .schema import PreparedLLMSchema
 
 JsonDefault = Callable[[Any], Any]
 
@@ -79,14 +80,22 @@ class LLMInferenceStrategy(InferenceStrategy):
         publisher: EventPublisher,
     ) -> InferenceDecision:
         director = self._create_director(function_info.return_type, tools.get_all())
-        output_schema = director.build_decision_schema()
+        prepared_schema = self.llm_client.prepare_output_schema(
+            director.build_decision_schema()
+        )
+        output_schema = prepared_schema.schema
         messages = self._build_messages(function_info, history, output_schema, director)
 
         attempt = 0
         while True:
             try:
                 return await self._complete_once(
-                    messages, director, output_schema, tools, publisher
+                    messages,
+                    director,
+                    output_schema,
+                    prepared_schema,
+                    tools,
+                    publisher,
                 )
             except InvalidInferenceResponseError as error:
                 if attempt >= self._max_repair_attempts:
@@ -102,6 +111,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         messages: list[Message],
         director: ExecutionDirector,
         output_schema: dict[str, Any],
+        prepared_schema: PreparedLLMSchema,
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
@@ -159,7 +169,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 lines = raw.splitlines()
                 raw = "\n".join(lines[1:-1]).strip()
 
-            decision_data = json.loads(raw)
+            decision_data = prepared_schema.decode(json.loads(raw))
             return director.process_response_data(decision_data, tool_call_ids)
         except UnknownToolDecisionError as error:
             raise InvalidInferenceResponseError(

@@ -22,6 +22,7 @@ from ..inference import (
     ToolCallRequest,
 )
 from ._tool_call_ids import ToolCallIdRegistry
+from .schema import LLMSchema
 
 _TOOL_DEFINITIONS_HEADER = (
     "\n### Available Tools\n"
@@ -61,7 +62,7 @@ class ExecutionDirector(ABC):
         raise NotImplementedError
 
     @final
-    def build_decision_schema(self) -> dict[str, Any]:
+    def build_decision_schema(self) -> LLMSchema:
         return self.decision_model.schema()
 
     @abstractmethod

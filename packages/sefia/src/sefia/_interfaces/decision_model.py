@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Any
 
 from .._tool_system import ToolEntry
+from ..llm.schema import LLMSchema
 
 
 class DecisionMode(Enum):
@@ -109,7 +110,7 @@ class DecisionModel(ABC):
     """Schema and validation boundary for LLM decisions."""
 
     @abstractmethod
-    def schema(self) -> dict[str, Any]:
+    def schema(self) -> LLMSchema:
         """Return the JSON schema presented to the LLM."""
         ...
 
