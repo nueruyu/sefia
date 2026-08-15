@@ -43,6 +43,7 @@ def add_session_commands(app: typer.Typer, sessions: SessionCommands) -> None:
     session_app = typer.Typer(help="Manage sessions.")
     app.add_typer(session_app, name="session")
 
+    @session_app.command("new")
     def new_session() -> None:
         """Create a new session and make it active."""
         session_id = sessions.create_session()
@@ -50,8 +51,7 @@ def add_session_commands(app: typer.Typer, sessions: SessionCommands) -> None:
             f"[bold]> Created and switched to new session: {session_id}[/bold]"
         )
 
-    session_app.command("new")(new_session)
-
+    @session_app.command("switch")
     def switch_session(
         session_id: Annotated[
             str,
@@ -65,5 +65,3 @@ def add_session_commands(app: typer.Typer, sessions: SessionCommands) -> None:
             console.print(f"[bold red]> Unknown session:[/bold red] {e.session_id}")
             raise typer.Exit(code=1) from e
         console.print(f"[bold]> Switched active session to: {session_id}[/bold]")
-
-    session_app.command("switch")(switch_session)
