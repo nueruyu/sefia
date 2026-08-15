@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 from ..event_system import EventHandler
 from .middleware import InferenceMiddleware, StepMiddleware
@@ -29,7 +30,7 @@ class Policy:
 
     # Class-level fallbacks so subclasses whose __init__ does not call
     # super().__init__() (e.g. dataclasses) still get empty defaults.
-    _handlers_factory: Callable[[], list[EventHandler]] | None = None
+    _handlers_factory: Callable[[], list[EventHandler[Any]]] | None = None
     _middleware_factory: (
         Callable[[], list[InferenceMiddleware | StepMiddleware]] | None
     ) = None
@@ -37,7 +38,7 @@ class Policy:
     def __init__(
         self,
         *,
-        handlers: Callable[[], list[EventHandler]] | None = None,
+        handlers: Callable[[], list[EventHandler[Any]]] | None = None,
         middleware: (
             Callable[[], list[InferenceMiddleware | StepMiddleware]] | None
         ) = None,
@@ -45,7 +46,7 @@ class Policy:
         self._handlers_factory = handlers
         self._middleware_factory = middleware
 
-    def create_handlers(self) -> list[EventHandler]:
+    def create_handlers(self) -> list[EventHandler[Any]]:
         """Create observation handlers used by this policy (default: none)."""
         return self._handlers_factory() if self._handlers_factory else []
 

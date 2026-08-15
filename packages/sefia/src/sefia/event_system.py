@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from functools import lru_cache
 from types import UnionType
-from typing import Generic, Type, TypeVar, Union, get_args, get_origin
+from typing import Any, Generic, Type, TypeVar, Union, get_args, get_origin
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ def _event_types_from_annotation(annotation: object) -> tuple[Type[Event], ...] 
 
 
 def _infer_event_types_from_bases(
-    handler_cls: type, typevars: dict[TypeVar, object]
+    handler_cls: type[EventHandler[Any]], typevars: dict[TypeVar, object]
 ) -> tuple[Type[Event], ...] | None:
     for base in getattr(handler_cls, "__orig_bases__", ()):
         origin = get_origin(base)
@@ -74,7 +74,7 @@ def _infer_event_types_from_bases(
 
 
 @lru_cache(maxsize=None)
-def _infer_event_types(handler_cls: type) -> tuple[Type[Event], ...]:
+def _infer_event_types(handler_cls: type[EventHandler[Any]]) -> tuple[Type[Event], ...]:
     all_event_types: list[Type[Event]] = []
     for cls in handler_cls.__mro__:
         event_types = _infer_event_types_from_bases(cls, {})
@@ -114,14 +114,14 @@ class EventHandler(ABC, Generic[E]):
 class EventPublisher:
     """Manages event handlers and dispatches events."""
 
-    def __init__(self, handlers: list[EventHandler]):
+    def __init__(self, handlers: list[EventHandler[Any]]):
         self._handler_map = self._resolve_handler_map(handlers)
 
     def _resolve_handler_map(
-        self, handlers: list[EventHandler]
-    ) -> dict[type[Event], list[EventHandler]]:
+        self, handlers: list[EventHandler[Any]]
+    ) -> dict[type[Event], list[EventHandler[Any]]]:
         """Inspects handlers to map event types to the handlers that process them."""
-        handler_map: dict[type[Event], list[EventHandler]] = defaultdict(list)
+        handler_map: dict[type[Event], list[EventHandler[Any]]] = defaultdict(list)
         for handler in handlers:
             for event_type in handler.event_types:
                 handler_map[event_type].append(handler)

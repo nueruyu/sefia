@@ -13,8 +13,8 @@ class InferenceStart(Event):
     """Event fired when an inference process begins."""
 
     func_name: str
-    args: tuple
-    kwargs: dict
+    args: tuple[Any, ...]
+    kwargs: dict[str, Any]
 
 
 @dataclass(frozen=True)

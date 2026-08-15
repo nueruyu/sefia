@@ -1,5 +1,5 @@
 import inspect
-from typing import Callable
+from typing import Any, Callable
 
 # Attribute that holds sefia's per-function metadata dict, and the keys under
 # which inference policies and the selected profile live inside it.
@@ -8,7 +8,7 @@ KEY_POLICIES = "policies"
 KEY_PROFILE_KEY = "profile_key"
 
 
-def get_metadata(func: Callable) -> dict:
+def get_metadata(func: Callable[..., Any]) -> dict[str, Any]:
     """
     Return the sefia metadata dict attached to ``func`` (empty if there is none).
 
@@ -18,7 +18,7 @@ def get_metadata(func: Callable) -> dict:
     return getattr(inspect.unwrap(func), METADATA_ATTR, {})
 
 
-def ensure_metadata(func: Callable) -> dict:
+def ensure_metadata(func: Callable[..., Any]) -> dict[str, Any]:
     """Return the attached metadata dict, creating it on the unwrapped function."""
     underlying = inspect.unwrap(func)
     metadata = getattr(underlying, METADATA_ATTR, None)
