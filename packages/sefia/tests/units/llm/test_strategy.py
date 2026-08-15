@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from sefia._tool_system import SignatureToolEntry, ToolEntry, ToolRegistry
-from sefia.event_system import EventPublisher
+from sefia._tool_system import ToolRegistry
+from sefia.event_system import Event, EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
     FunctionInfo,
@@ -29,9 +29,9 @@ from sefia.pydantic._json_utils import pydantic_json_default
 class MockEventPublisher(EventPublisher):
     def __init__(self):
         super().__init__(handlers=[])
-        self.events = []
+        self.events: list[Event] = []
 
-    async def publish(self, event):
+    async def publish(self, event: Event) -> None:
         self.events.append(event)
 
 
@@ -64,16 +64,6 @@ def chat_tool() -> str:
 _BACKEND = PydanticModelBackend()
 
 
-def _tool(func: Callable[..., Any]) -> ToolEntry:
-    name = _BACKEND.tool_name(func)
-    return SignatureToolEntry(
-        func,
-        name=name,
-        schema_source=func,
-        inspector=_BACKEND,
-    )
-
-
 def _tool_registry(*funcs: Callable[..., Any]) -> ToolRegistry:
     registry = ToolRegistry()
     for func in funcs:
@@ -82,15 +72,15 @@ def _tool_registry(*funcs: Callable[..., Any]) -> ToolRegistry:
 
 
 @pytest.fixture
-def mock_llm_client():
+def mock_llm_client() -> AsyncMock:
     return AsyncMock()
 
 
-DUMMY_SCHEMA: dict = {}
+DUMMY_SCHEMA: dict[str, Any] = {}
 
 
 def _make_strategy(
-    llm_client=None, *, stream: bool = False, max_repair_attempts: int = 2
+    llm_client: Any = None, *, stream: bool = False, max_repair_attempts: int = 2
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
@@ -103,25 +93,6 @@ def _make_strategy(
         stream=stream,
         max_repair_attempts=max_repair_attempts,
     )
-
-
-def _resolve(schema: dict, root: dict) -> dict:
-    if "$ref" in schema:
-        key = schema["$ref"].split("/")[-1]
-        return root["$defs"][key]
-    return schema
-
-
-def _decision_branch(schema: dict, decision: str) -> dict:
-    if schema.get("properties", {}).get("decision", {}).get("const") == decision:
-        return schema
-
-    for candidate in schema["oneOf"]:
-        branch = _resolve(candidate, schema)
-        if branch["properties"]["decision"]["const"] == decision:
-            return branch
-
-    raise AssertionError(f"Decision branch not found: {decision}")
 
 
 def _function_info(
@@ -142,7 +113,9 @@ def _function_info(
 
 
 class TestLLMInferenceStrategy:
-    async def test_decide_next_step_handles_tool_calls(self, mock_llm_client):
+    async def test_decide_next_step_handles_tool_calls(
+        self, mock_llm_client: AsyncMock
+    ):
         tool_calls_payload = json.dumps(
             {
                 "decision": "tool_calls",
@@ -166,7 +139,7 @@ class TestLLMInferenceStrategy:
         assert decision.calls[0].id.startswith("call_")
 
     async def test_decide_next_step_handles_result_with_validation(
-        self, mock_llm_client
+        self, mock_llm_client: AsyncMock
     ):
         result_payload = json.dumps(
             {
@@ -201,7 +174,9 @@ class TestLLMInferenceStrategy:
             for event in publisher.events
         )
 
-    async def test_decide_next_step_publishes_reasoning_tokens(self, mock_llm_client):
+    async def test_decide_next_step_publishes_reasoning_tokens(
+        self, mock_llm_client: AsyncMock
+    ):
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": "done"}'
         )
@@ -229,7 +204,7 @@ class TestLLMInferenceStrategy:
         )
 
     async def test_decide_next_step_does_not_set_reasoning_callback_by_default(
-        self, mock_llm_client
+        self, mock_llm_client: AsyncMock
     ):
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": "done"}'
@@ -246,7 +221,7 @@ class TestLLMInferenceStrategy:
         assert mock_llm_client.complete.await_args.kwargs["reasoning_callback"] is None
 
     async def test_decide_next_step_does_not_set_stream_callback_by_default(
-        self, mock_llm_client
+        self, mock_llm_client: AsyncMock
     ):
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": "done"}'
@@ -263,7 +238,9 @@ class TestLLMInferenceStrategy:
         assert isinstance(decision, ResultDecision)
         assert mock_llm_client.complete.await_args.kwargs["stream_callback"] is None
 
-    async def test_decide_next_step_raises_on_validation_error(self, mock_llm_client):
+    async def test_decide_next_step_raises_on_validation_error(
+        self, mock_llm_client: AsyncMock
+    ):
         # result is missing required 'value' field — Pydantic should reject it
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": {"name": "test"}}'
@@ -280,7 +257,9 @@ class TestLLMInferenceStrategy:
                 MockEventPublisher(),
             )
 
-    async def test_decide_next_step_handles_plain_string_output(self, mock_llm_client):
+    async def test_decide_next_step_handles_plain_string_output(
+        self, mock_llm_client: AsyncMock
+    ):
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": "Hello, world!"}'
         )
@@ -296,7 +275,9 @@ class TestLLMInferenceStrategy:
         assert isinstance(decision, ResultDecision)
         assert decision.result == "Hello, world!"
 
-    async def test_decide_next_step_raises_when_result_null(self, mock_llm_client):
+    async def test_decide_next_step_raises_when_result_null(
+        self, mock_llm_client: AsyncMock
+    ):
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"decision": "result", "result": null}'
         )
