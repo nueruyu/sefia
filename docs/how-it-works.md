@@ -97,6 +97,12 @@ encodes typed mappings as arrays of `{key, value}` entries. The matching decoder
 restores those entries to Python mappings before the unchanged Pydantic decision
 model performs final validation and `payload` is unwrapped.
 
+The Pydantic backend keeps these responsibilities separate: `_function_models.py`
+reflects callable parameters, `_tool_arguments.py` owns each tool's original schema
+and argument validator, `_decision_model.py` owns the local decision model, and
+`_provider_schema.py` runs the provider encoding pipeline and builds its inverse
+decoder.
+
 The system prompt is `docstring + response-instructions + the tool definitions (as
 JSON) + the decision JSON Schema`. The user message is the call's arguments rendered
 as XML (`_build_messages`); prior steps are replayed as ordinary

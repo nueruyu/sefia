@@ -6,7 +6,7 @@ from typing import Any
 
 from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import ToolConflictError
-from sefia.pydantic._function_models import json_schema_argument_type
+from sefia.pydantic._tool_arguments import ToolArgumentContract, ToolSchemaKind
 
 _SEARCH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -92,7 +92,9 @@ def test_registration_shares_the_namespace_with_introspected_tools():
 
 def test_a_malformed_schema_is_rejected_up_front():
     with pytest.raises(jsonschema.SchemaError):
-        json_schema_argument_type({"type": "not-a-type"})
+        ToolArgumentContract(
+            {"type": "not-a-type"}, ToolSchemaKind.RAW
+        ).validation_type()
 
 
 def test_a_schema_is_validated_under_its_declared_dialect():
@@ -107,7 +109,9 @@ def test_a_schema_is_validated_under_its_declared_dialect():
         "required": ["pair"],
     }
 
-    adapter = TypeAdapter(json_schema_argument_type(schema))
+    adapter = TypeAdapter(
+        ToolArgumentContract(schema, ToolSchemaKind.RAW).validation_type()
+    )
 
     assert adapter.validate_python({"pair": ["a", 1]}) == {"pair": ["a", 1]}
     with pytest.raises(ValidationError):

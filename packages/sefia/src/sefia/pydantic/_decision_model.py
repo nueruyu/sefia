@@ -18,9 +18,8 @@ from .._interfaces.decision_model import (
 )
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
-from ._function_models import json_schema_argument_type
-from ._llm_schema import build_llm_schema
-from ._provider_schema import ProviderSchema
+from ._provider_schema import ProviderSchema, ProviderSchemaBuilder
+from ._tool_arguments import ToolArgumentContract, ToolSchemaKind
 
 
 @final
@@ -30,14 +29,12 @@ class PydanticDecisionModel(DecisionModel):
         *,
         model: Any,
         name: str,
-        tool_schemas: dict[str, dict[str, Any]],
-        raw_tool_names: set[str],
+        tools: dict[str, ToolArgumentContract],
     ):
         self._adapter = TypeAdapter(model)
         self._model = model
         self._name = name
-        self._tool_schemas = tool_schemas
-        self._raw_tool_names = raw_tool_names
+        self._tools = tools
         self._provider_schema: ProviderSchema | None = None
 
     @override
@@ -68,11 +65,10 @@ class PydanticDecisionModel(DecisionModel):
 
     def _get_provider_schema(self) -> ProviderSchema:
         if self._provider_schema is None:
-            self._provider_schema = build_llm_schema(
+            self._provider_schema = ProviderSchemaBuilder().build(
                 self._model,
                 name=self._name,
-                tool_schemas=self._tool_schemas,
-                raw_tool_names=self._raw_tool_names,
+                tools=self._tools,
             )
         return self._provider_schema
 
@@ -80,7 +76,7 @@ class PydanticDecisionModel(DecisionModel):
         calls: list[DecisionToolCall] = []
         for tool_call in tool_calls:
             # ``arguments`` is the decoded, schema-validated dict (see
-            # ``json_schema_argument_type``); no per-tool model to dump.
+            # ``ToolArgumentContract``); no per-tool model to dump.
             calls.append(
                 DecisionToolCall(
                     name=tool_call.name,
@@ -115,22 +111,27 @@ def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
 class PydanticDecisionModelFactory(DecisionModelBuilder):
     @override
     def build(self, spec: DecisionModelSpec) -> DecisionModel:
-        tool_schemas = {tool.name: tool.definition().parameters for tool in spec.tools}
+        tools = {
+            tool.name: ToolArgumentContract(
+                schema=tool.definition().parameters,
+                kind=(
+                    ToolSchemaKind.RAW
+                    if isinstance(tool, JsonSchemaToolEntry)
+                    else ToolSchemaKind.TYPED
+                ),
+            )
+            for tool in spec.tools
+        }
         return PydanticDecisionModel(
-            model=self._model(spec, tool_schemas),
+            model=self._model(spec, tools),
             name=spec.name,
-            tool_schemas=tool_schemas,
-            raw_tool_names={
-                tool.name
-                for tool in spec.tools
-                if isinstance(tool, JsonSchemaToolEntry)
-            },
+            tools=tools,
         )
 
     def _tool_calls_type(
         self,
         tools: list[ToolEntry],
-        tool_schemas: dict[str, dict[str, Any]],
+        contracts: dict[str, ToolArgumentContract],
     ) -> Any:
         call_models = [
             create_model(
@@ -138,10 +139,7 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
                 __config__=ConfigDict(extra="forbid"),
                 name=(Literal[tool.name], ...),
                 arguments=(
-                    json_schema_argument_type(
-                        tool_schemas[tool.name],
-                        exposed_schema={"type": "object"},
-                    ),
+                    contracts[tool.name].validation_type(),
                     ...,
                 ),
             )
@@ -158,13 +156,13 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
     def _model(
         self,
         spec: DecisionModelSpec,
-        tool_schemas: dict[str, dict[str, Any]],
+        contracts: dict[str, ToolArgumentContract],
     ) -> Any:
         if spec.mode is DecisionMode.TOOL_ONLY:
-            return self._tool_calls_model(spec, tool_schemas)
+            return self._tool_calls_model(spec, contracts)
         if spec.mode is DecisionMode.TOOL_ENABLED:
             branch_models = [
-                self._tool_calls_model(spec, tool_schemas),
+                self._tool_calls_model(spec, contracts),
                 self._result_model(spec),
             ]
             return Annotated[
@@ -178,7 +176,7 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
     def _tool_calls_model(
         self,
         spec: DecisionModelSpec,
-        tool_schemas: dict[str, dict[str, Any]],
+        contracts: dict[str, ToolArgumentContract],
     ) -> type:
         if spec.mode is DecisionMode.TOOL_ONLY:
             name = spec.name
@@ -189,7 +187,7 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
             name,
             __config__=ConfigDict(extra="forbid"),
             decision=(Literal["tool_calls"], ...),
-            tool_calls=(self._tool_calls_type(spec.tools, tool_schemas), ...),
+            tool_calls=(self._tool_calls_type(spec.tools, contracts), ...),
         )
 
     def _result_model(self, spec: DecisionModelSpec) -> type:

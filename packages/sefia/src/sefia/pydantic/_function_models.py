@@ -2,60 +2,15 @@ import functools
 import inspect
 import re
 from collections.abc import Callable
-from typing import Annotated, Any, Literal, cast
+from typing import Any, Literal, cast
 
-import jsonschema
-import jsonschema.validators
 from pydantic import (
     BaseModel,
-    BeforeValidator,
     ConfigDict,
-    WithJsonSchema,
     create_model,
 )
 
 ExtraPolicy = Literal["forbid", "allow", "ignore"]
-
-
-def json_schema_argument_type(
-    schema: dict[str, Any], *, exposed_schema: dict[str, Any] | None = None
-) -> Any:
-    """A Pydantic-usable type that validates a dict against a raw JSON Schema.
-
-    ``BeforeValidator`` runs strict ``jsonschema`` validation (required, types,
-    ``additionalProperties``, ...) on the decoded arguments, and
-    ``WithJsonSchema`` embeds the schema verbatim so it reaches the LLM through
-    the decision model's own JSON schema. Kept internal to the pydantic backend:
-    the raw type never crosses a tool or interface boundary.
-    """
-
-    # The schema's own ``$schema`` declaration picks the dialect (draft-04
-    # through 2020-12), so a client-supplied schema is validated under the
-    # rules it was written for. Absent a declaration, default to Draft 2020-12
-    # — the dialect Pydantic v2 itself generates, so raw and introspected tool
-    # schemas are validated under the same rules. Checking the schema up front
-    # surfaces a malformed user-supplied schema as a ``jsonschema.SchemaError``
-    # instead of a confusing per-call failure.
-    validator_cls = jsonschema.validators.validator_for(
-        schema, default=jsonschema.Draft202012Validator
-    )
-    validator_cls.check_schema(schema)
-    validator = validator_cls(schema)
-
-    def _validate(value: Any) -> dict[str, Any]:
-        if not isinstance(value, dict):
-            raise ValueError("arguments must be a JSON object")
-        value_dict = cast(dict[str, Any], value)
-        errors = sorted(validator.iter_errors(value_dict), key=lambda e: list(e.path))
-        if errors:
-            raise ValueError("; ".join(error.message for error in errors))
-        return value_dict
-
-    return Annotated[
-        dict[str, Any],
-        BeforeValidator(_validate),
-        WithJsonSchema(schema if exposed_schema is None else exposed_schema),
-    ]
 
 
 class _UnhashableCallableKey:

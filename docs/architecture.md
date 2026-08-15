@@ -135,7 +135,7 @@ implementation noted in parentheses.
 | Goal | Where |
 | --- | --- |
 | Add an LLM provider | implement `LLMClient`; mirror `packages/sefia_litellm/src/sefia_litellm/_client.py` |
-| Change how the prompt / decision schema is built | `llm/_strategy.py` (the `_ExecutionDirector`s), `pydantic/_llm_schema.py`, `pydantic/_provider_schema.py`, `llm/_xml_prompt_formatter.py` |
+| Change how the prompt / decision schema is built | `llm/_strategy.py` (the `_ExecutionDirector`s), `pydantic/_decision_model.py`, `pydantic/_provider_schema.py`, `llm/_xml_prompt_formatter.py` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
