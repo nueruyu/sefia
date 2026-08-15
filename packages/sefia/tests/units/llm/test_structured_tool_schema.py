@@ -1,5 +1,6 @@
 import json
-from typing import Annotated, Any, Literal, Never
+from dataclasses import dataclass, make_dataclass
+from typing import Annotated, Any, Literal, Never, cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -15,8 +16,10 @@ from sefia._tool_system import (
 from sefia.event_system import Event, EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.inference import FunctionInfo, InferenceDecision, ToolCallDecision
+from sefia.inference import ResultDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse
 from sefia.llm._execution_directors import OutputOnlyDirector, ToolOnlyDirector
+from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._decision_model import _unknown_tool_name_from_error
 
@@ -41,6 +44,16 @@ def _tool() -> ToolEntry:
         ask_user,
         name=name,
         schema_source=ask_user,
+        inspector=backend,
+    )
+
+
+def _signature_tool(function: Any, *, name: str) -> ToolEntry:
+    backend = PydanticModelBackend()
+    return SignatureToolEntry(
+        function,
+        name=name,
+        schema_source=function,
         inspector=backend,
     )
 
@@ -96,6 +109,94 @@ def test_tool_only_schema_embeds_tool_argument_schema() -> None:
     assert arguments["required"] == ["question"]
     assert arguments["additionalProperties"] is False
     assert arguments["properties"]["question"]["minLength"] == 1
+
+
+@dataclass
+class _Audience:
+    role: str
+
+
+@dataclass
+class _ArticleRequest:
+    topic: str
+    audience: _Audience
+
+
+async def _research(article_request: _ArticleRequest) -> list[str]:
+    return [article_request.topic]
+
+
+def test_typed_tool_schema_hoists_nested_definitions() -> None:
+    director = ToolOnlyDirector(
+        PydanticModelBackend(), Never, [_signature_tool(_research, name="research")]
+    )
+
+    schema = director.build_decision_schema()
+
+    arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
+    request_schema = _resolve(arguments["properties"]["article_request"], schema)
+    assert request_schema["required"] == ["topic", "audience"]
+    assert request_schema["additionalProperties"] is False
+    audience_schema = _resolve(request_schema["properties"]["audience"], schema)
+    assert audience_schema["required"] == ["role"]
+
+
+def test_conflicting_tool_definition_names_are_renamed() -> None:
+    first_type = make_dataclass("Shared", [("text", str)])
+    second_type = make_dataclass("Shared", [("count", int)])
+
+    async def first(value: Any) -> None:
+        pass
+
+    async def second(value: Any) -> None:
+        pass
+
+    first.__annotations__["value"] = first_type
+    second.__annotations__["value"] = second_type
+    director = ToolOnlyDirector(
+        PydanticModelBackend(),
+        Never,
+        [
+            _signature_tool(first, name="first"),
+            _signature_tool(second, name="second"),
+        ],
+    )
+
+    schema = director.build_decision_schema()
+
+    shared_definitions = {
+        name: definition
+        for name, definition in schema["$defs"].items()
+        if name == "Shared" or name.startswith("second__Shared")
+    }
+    assert len(shared_definitions) == 2
+    assert {
+        tuple(definition["properties"]) for definition in shared_definitions.values()
+    } == {
+        ("text",),
+        ("count",),
+    }
+    _assert_local_references_resolve(schema)
+
+
+def _assert_local_references_resolve(
+    node: Any, root: dict[str, Any] | None = None
+) -> None:
+    if root is None:
+        assert isinstance(node, dict)
+        root = cast(dict[str, Any], node)
+    if isinstance(node, list):
+        for item in cast(list[Any], node):
+            _assert_local_references_resolve(item, root)
+        return
+    if not isinstance(node, dict):
+        return
+    node_dict = cast(dict[str, Any], node)
+    reference = node_dict.get("$ref")
+    if isinstance(reference, str) and reference.startswith("#/$defs/"):
+        assert reference.removeprefix("#/$defs/") in root["$defs"]
+    for value in node_dict.values():
+        _assert_local_references_resolve(value, root)
 
 
 def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
@@ -225,11 +326,172 @@ def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
     assert arguments == raw_schema
 
 
-def test_mapping_result_is_rejected_as_incompatible_with_strict_output() -> None:
+def _result_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    payload = _resolve(schema["properties"]["payload"], schema)
+    return _resolve(payload["properties"]["result"], schema)
+
+
+def test_mapping_result_is_lowered_and_decoded() -> None:
     director = OutputOnlyDirector(PydanticModelBackend(), dict[str, str], [])
 
-    with pytest.raises(ValueError, match="additionalProperties to false"):
-        director.build_decision_schema()
+    schema = director.build_decision_schema()
+
+    result_schema = _result_schema(schema)
+    assert result_schema["type"] == "array"
+    assert result_schema["items"]["additionalProperties"] is False
+    assert result_schema["items"]["required"] == ["key", "value"]
+
+    decision = director.process_response_data(
+        {
+            "payload": {
+                "decision": "result",
+                "result": [
+                    {"key": "Maintainability", "value": "good"},
+                    {"key": "Dependencies", "value": "current"},
+                ],
+            }
+        }
+    )
+
+    assert isinstance(decision, ResultDecision)
+    assert decision.result == {
+        "Maintainability": "good",
+        "Dependencies": "current",
+    }
+
+
+def test_mapping_constraints_are_lowered_to_entry_constraints() -> None:
+    output_type = Annotated[dict[str, str], Field(min_length=1, max_length=2)]
+    director = OutputOnlyDirector(PydanticModelBackend(), output_type, [])
+
+    result_schema = _result_schema(director.build_decision_schema())
+
+    assert result_schema["minItems"] == 1
+    assert result_schema["maxItems"] == 2
+
+
+@dataclass
+class _Issue:
+    description: str
+
+
+@dataclass
+class _Report:
+    issues_by_perspective: dict[str, list[_Issue]]
+
+
+def test_nested_mapping_result_is_lowered_and_decoded() -> None:
+    director = OutputOnlyDirector(PydanticModelBackend(), _Report, [])
+
+    schema = director.build_decision_schema()
+    report_schema = _result_schema(schema)
+    report_schema = _resolve(report_schema, schema)
+    mapping_schema = report_schema["properties"]["issues_by_perspective"]
+    assert mapping_schema["type"] == "array"
+
+    decision = director.process_response_data(
+        {
+            "payload": {
+                "decision": "result",
+                "result": {
+                    "issues_by_perspective": [
+                        {
+                            "key": "Maintainability",
+                            "value": [{"description": "Use clearer names."}],
+                        }
+                    ]
+                },
+            }
+        }
+    )
+
+    assert isinstance(decision, ResultDecision)
+    assert decision.result == _Report(
+        issues_by_perspective={
+            "Maintainability": [_Issue(description="Use clearer names.")]
+        }
+    )
+
+
+def test_mapping_decoder_rejects_duplicate_keys() -> None:
+    director = OutputOnlyDirector(PydanticModelBackend(), dict[str, str], [])
+
+    with pytest.raises(ValueError, match="duplicate mapping key"):
+        director.process_response_data(
+            {
+                "payload": {
+                    "decision": "result",
+                    "result": [
+                        {"key": "same", "value": "first"},
+                        {"key": "same", "value": "second"},
+                    ],
+                }
+            }
+        )
+
+
+def test_mapping_decoder_rejects_malformed_entries() -> None:
+    director = OutputOnlyDirector(PydanticModelBackend(), dict[str, str], [])
+
+    with pytest.raises(ValueError, match="contain only key and value"):
+        director.process_response_data(
+            {
+                "payload": {
+                    "decision": "result",
+                    "result": [{"key": "missing-value"}],
+                }
+            }
+        )
+
+
+def test_mapping_nested_in_list_is_lowered_and_decoded() -> None:
+    director = OutputOnlyDirector(PydanticModelBackend(), list[dict[str, int]], [])
+
+    decision = director.process_response_data(
+        {
+            "payload": {
+                "decision": "result",
+                "result": [[{"key": "count", "value": 3}]],
+            }
+        }
+    )
+
+    assert isinstance(decision, ResultDecision)
+    assert decision.result == [{"count": 3}]
+
+
+async def _categorize(labels: dict[str, int]) -> None:
+    pass
+
+
+def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
+    director = ToolOnlyDirector(
+        PydanticModelBackend(),
+        Never,
+        [_signature_tool(_categorize, name="categorize")],
+    )
+
+    schema = director.build_decision_schema()
+    arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
+    assert arguments["properties"]["labels"]["type"] == "array"
+
+    decision = director.process_response_data(
+        {
+            "payload": {
+                "decision": "tool_calls",
+                "tool_calls": [
+                    {
+                        "name": "categorize",
+                        "arguments": {"labels": [{"key": "important", "value": 2}]},
+                    }
+                ],
+            }
+        },
+        ToolCallIdRegistry(),
+    )
+
+    assert isinstance(decision, ToolCallDecision)
+    assert decision.calls[0].arguments == {"labels": {"important": 2}}
 
 
 def test_unknown_tool_name_ignores_root_literal_errors() -> None:

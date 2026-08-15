@@ -17,7 +17,9 @@ from pydantic import (
 ExtraPolicy = Literal["forbid", "allow", "ignore"]
 
 
-def json_schema_argument_type(schema: dict[str, Any]) -> Any:
+def json_schema_argument_type(
+    schema: dict[str, Any], *, exposed_schema: dict[str, Any] | None = None
+) -> Any:
     """A Pydantic-usable type that validates a dict against a raw JSON Schema.
 
     ``BeforeValidator`` runs strict ``jsonschema`` validation (required, types,
@@ -52,7 +54,7 @@ def json_schema_argument_type(schema: dict[str, Any]) -> Any:
     return Annotated[
         dict[str, Any],
         BeforeValidator(_validate),
-        WithJsonSchema(schema),
+        WithJsonSchema(schema if exposed_schema is None else exposed_schema),
     ]
 
 
