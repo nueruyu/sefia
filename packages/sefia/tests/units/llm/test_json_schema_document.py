@@ -1,6 +1,11 @@
 import pytest
 
-from sefia.llm.json_schema import JsonSchemaDocument, LocalDefinitionRef
+from sefia.llm.json_schema import (
+    DefinitionRegistry,
+    JsonObject,
+    JsonSchemaDocument,
+    LocalDefinitionRef,
+)
 
 
 def test_schema_document_rejects_non_json_values() -> None:
@@ -72,3 +77,37 @@ def test_local_definition_reference_handles_json_pointer_escaping() -> None:
     assert nested.resolve_from(
         {"User": {"properties": {"name": {"type": "string"}}}}
     ) == {"type": "string"}
+
+
+def test_definition_registry_imports_definitions_and_rewrites_references() -> None:
+    definitions: JsonObject = {}
+    registry = DefinitionRegistry(definitions)
+    fragment: JsonObject = {
+        "$ref": "#/$defs/Item",
+        "$defs": {"Item": {"type": "string"}},
+    }
+
+    imported = registry.import_schema(fragment, namespace="search")
+
+    assert imported.schema == {"$ref": "#/$defs/Item"}
+    assert imported.definitions == {"Item": {"type": "string"}}
+    assert definitions == imported.definitions
+
+
+def test_definition_registry_renames_conflicts_and_reserved_definitions() -> None:
+    definitions: JsonObject = {"Item": {"type": "string"}}
+    registry = DefinitionRegistry(definitions)
+    registry.reserve(["Item"])
+    fragment: JsonObject = {
+        "$ref": "#/$defs/Item",
+        "$defs": {"Item": {"type": "string"}},
+    }
+
+    imported = registry.import_schema(fragment, namespace="search")
+
+    assert imported.schema == {"$ref": "#/$defs/search__Item"}
+    assert imported.definitions == {"search__Item": {"type": "string"}}
+    assert definitions == {
+        "Item": {"type": "string"},
+        "search__Item": {"type": "string"},
+    }

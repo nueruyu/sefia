@@ -1,3 +1,4 @@
+from ._composition import DefinitionRegistry, ImportedSchema
 from ._document import JsonSchemaDocument, SchemaCursor, SchemaNode, SchemaType
 from ._json import (
     JsonObject,
@@ -11,6 +12,8 @@ from ._reference import LocalDefinitionRef
 from ._vocabulary import SchemaKeyword
 
 __all__ = [
+    "DefinitionRegistry",
+    "ImportedSchema",
     "LocalDefinitionRef",
     "JsonObject",
     "JsonScalar",

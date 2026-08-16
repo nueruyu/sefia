@@ -136,7 +136,8 @@ implementation noted in parentheses.
 | --- | --- |
 | Add an LLM provider | implement `LLMClient`; mirror `packages/sefia_litellm/src/sefia_litellm/_client.py` |
 | Change the step-decision payload or validation | `pydantic/_step_decision.py` |
-| Change logical step-decision schema composition | `pydantic/_schema_composer.py` |
+| Change Pydantic step-decision schema assembly | `pydantic/_step_decision.py` |
+| Change generic `$defs` import or `$ref` rewriting | `llm/json_schema/_composition.py` |
 | Change LiteLLM's structured-output wire format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |

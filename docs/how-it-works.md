@@ -88,10 +88,11 @@ A `StepDecisionSpec` selects one of three shapes:
 | has tools | `TOOLS_OR_RESULT` | `oneOf(tool_calls decision, result decision)` |
 | no tools | `RESULT_ONLY` | `{ decision: "result", result: T }` only |
 
-`pydantic/_schema_composer.py` composes typed tool `$defs` into a provider-neutral
-`JsonSchemaDocument` and identifies raw JSON Schema regions that adapters must not
-rewrite. Recursive JSON value types and `SchemaNode` accessors keep schema traversal
-out of `dict[str, Any]`.
+`llm/json_schema` imports tool `$defs`, resolves name collisions, and rewrites local
+references without knowing about tools or Pydantic. `pydantic/_step_decision.py`
+places those fragments into the step-decision schema and identifies raw JSON Schema
+regions that adapters must not rewrite. Recursive JSON value types and `SchemaNode`
+accessors keep schema traversal out of `dict[str, Any]`.
 The logical schema crosses the `LLMClient` boundary once. `LiteLLMClient` adapts it
 to the model's wire format, uses native structured output when available, and puts
 the adapted schema in the system prompt otherwise. Its schema adapter adds the
@@ -101,9 +102,10 @@ for response decoding.
 
 The Pydantic backend keeps these responsibilities separate: `_function_models.py`
 reflects callable parameters, `_tool_arguments.py` owns each tool's original schema
-and argument validator, `_step_decision.py` builds and validates the Pydantic payload,
-and `_schema_composer.py` composes the logical schema. Provider-side response decoding
-and stream-path normalization stay inside the client implementation.
+and argument validator, and `_step_decision.py` builds the logical schema and validates
+the Pydantic payload. Generic definition composition lives in `llm/json_schema`.
+Provider-side response decoding and stream-path normalization stay inside the client
+implementation.
 
 `StepDecisionSchemaFactory` implementations create a `StepDecisionSchema`. It exposes
 the logical `StructuredOutputSchema` sent to the client and validates the returned

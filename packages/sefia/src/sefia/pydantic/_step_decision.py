@@ -8,6 +8,7 @@ from pydantic import (
     Field,
     TypeAdapter,
     ValidationError,
+    WithJsonSchema,
     create_model,
 )
 from typing_extensions import final, override
@@ -22,16 +23,22 @@ from ..llm.step_decision import (
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCallsDecision
-from ..llm.json_schema import JsonSchemaDocument
-from ..llm.structured_output import StructuredOutputSchema, StructuredValue
-from ._schema_composer import (
-    compose_structured_output_schema,
-    tool_argument_schema_placeholder,
+from ..llm.json_schema import (
+    DefinitionRegistry,
+    JsonSchemaDocument,
+    SchemaKeyword,
+    SchemaNode,
+    SchemaPath,
+    require_json_object,
 )
+from ..llm.structured_output import StructuredOutputSchema, StructuredValue
 from ._tool_arguments import (
     ToolArgumentContract,
     ToolSchemaKind,
 )
+
+_TOOL_ARGUMENT_MARKER = "x-sefia-tool-arguments"
+K = SchemaKeyword
 
 
 class _ToolCallPayload(BaseModel):
@@ -56,6 +63,44 @@ class _ResultPayload(BaseModel):
 
 
 _StepDecisionPayload = _ToolCallsPayload | _ResultPayload
+
+
+def _tool_argument_schema_placeholder(tool_name: str) -> WithJsonSchema:
+    return WithJsonSchema({_TOOL_ARGUMENT_MARKER: tool_name})
+
+
+def _compose_structured_output_schema(
+    model: Any, tools: dict[str, ToolArgumentContract]
+) -> StructuredOutputSchema:
+    schema = require_json_object(TypeAdapter(model).json_schema())
+    root = SchemaNode(schema)
+    registry = DefinitionRegistry(root.ensure_definitions())
+    raw_paths: set[SchemaPath] = set()
+
+    for cursor in list(root.walk()):
+        tool_name = cursor.node.value.pop(_TOOL_ARGUMENT_MARKER, None)
+        if not isinstance(tool_name, str):
+            continue
+        if tool_name not in tools:
+            raise ValueError(f"Unknown tool argument marker: {tool_name!r}")
+
+        contract = tools[tool_name]
+        imported = registry.import_schema(
+            contract.schema.mutable_copy(),
+            namespace=tool_name,
+        )
+        cursor.node.value.clear()
+        cursor.node.value.update(imported.schema)
+        if contract.kind is ToolSchemaKind.RAW:
+            registry.reserve(imported.definitions)
+            raw_paths.add(cursor.path)
+            raw_paths.update((K.DEFINITIONS, name) for name in imported.definitions)
+
+    root.set_description("The model for the LLM's decision on the next action.")
+    return StructuredOutputSchema(
+        document=JsonSchemaDocument.from_mapping(schema),
+        preserved_schema_paths=frozenset(raw_paths),
+    )
 
 
 @final
@@ -135,7 +180,7 @@ class PydanticStepDecisionSchemaFactory(StepDecisionSchemaFactory):
         model = self._model(spec, tools)
         return PydanticStepDecisionSchema(
             model,
-            compose_structured_output_schema(model, tools),
+            _compose_structured_output_schema(model, tools),
         )
 
     def _tool_calls_type(
@@ -151,7 +196,7 @@ class PydanticStepDecisionSchemaFactory(StepDecisionSchemaFactory):
                 arguments=(
                     Annotated[
                         contracts[tool.name].validation_type(),
-                        tool_argument_schema_placeholder(tool.name),
+                        _tool_argument_schema_placeholder(tool.name),
                     ],
                     ...,
                 ),
