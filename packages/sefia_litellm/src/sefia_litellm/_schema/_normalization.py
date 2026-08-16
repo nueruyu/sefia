@@ -1,10 +1,10 @@
-from typing import Any, cast
+from dataclasses import dataclass
 
 from typing_extensions import final
 
-from sefia.llm.schema import SchemaPath
+from sefia.llm.schema import JsonObject, SchemaNode, SchemaPath
 
-from ._traversal import walk, walk_with_paths
+from ._traversal import walk
 
 _UNSUPPORTED_COMPOSITION = (
     "allOf",
@@ -19,87 +19,108 @@ _UNSUPPORTED_COMPOSITION = (
 
 @final
 class SchemaNormalizer:
-    def __init__(self, preserved: set[int]):
+    def __init__(self, preserved: frozenset[SchemaPath]):
         self._preserved = preserved
 
-    def normalize(self, schema: dict[str, Any]) -> None:
-        for node in walk(schema, skip=self._preserved):
-            if node.get("type") == "object":
-                node.setdefault("additionalProperties", False)
-                properties = node.get("properties")
-                if isinstance(properties, dict):
-                    node["required"] = list(cast(dict[str, Any], properties))
-            one_of = node.pop("oneOf", None)
+    def normalize(self, schema: JsonObject) -> None:
+        for _, node in walk(schema, skip=self._preserved):
+            if node.type == "object":
+                node.value.setdefault("additionalProperties", False)
+                properties = node.object_map("properties")
+                if properties is not None:
+                    node.value["required"] = list(properties)
+            one_of = node.value.pop("oneOf", None)
             if one_of is not None:
-                node["anyOf"] = one_of
+                node.value["anyOf"] = one_of
+
+
+@final
+@dataclass(frozen=True)
+class MappingEncoding:
+    path: SchemaPath
+
+
+@final
+@dataclass(frozen=True)
+class SchemaEncodingPlan:
+    mappings: tuple[MappingEncoding, ...] = ()
+
+    @property
+    def mapping_paths(self) -> frozenset[SchemaPath]:
+        return frozenset(encoding.path for encoding in self.mappings)
 
 
 @final
 class MappingLowerer:
-    def __init__(self, preserved: set[int]):
+    def __init__(self, preserved: frozenset[SchemaPath]):
         self._preserved = preserved
 
-    def lower(self, schema: dict[str, Any]) -> set[int]:
-        mapping_ids: set[int] = set()
-        for node in walk(schema, skip=self._preserved):
-            additional = node.get("additionalProperties")
-            if node.get("type") != "object" or not isinstance(additional, dict):
+    def lower(self, schema: JsonObject) -> SchemaEncodingPlan:
+        mappings: list[MappingEncoding] = []
+        for path, node in list(walk(schema, skip=self._preserved)):
+            additional = node.additional_properties()
+            if node.type != "object" or not isinstance(additional, SchemaNode):
                 continue
-            value_schema = cast(dict[str, Any], additional)
-            property_names = node.get("propertyNames")
-            key_schema = (
-                cast(dict[str, Any], property_names)
-                if isinstance(property_names, dict)
+            property_names = node.child("propertyNames")
+            key_schema: JsonObject = (
+                property_names.value
+                if property_names is not None
                 else {"type": "string"}
             )
-            lowered = {
-                key: node[key] for key in ("title", "description") if key in node
+            lowered: JsonObject = {
+                key: node.value[key]
+                for key in ("title", "description")
+                if key in node.value
             }
-            if "minProperties" in node:
-                lowered["minItems"] = node["minProperties"]
-            if "maxProperties" in node:
-                lowered["maxItems"] = node["maxProperties"]
+            if "minProperties" in node.value:
+                lowered["minItems"] = node.value["minProperties"]
+            if "maxProperties" in node.value:
+                lowered["maxItems"] = node.value["maxProperties"]
             lowered.update(
                 type="array",
                 items={
                     "type": "object",
-                    "properties": {"key": key_schema, "value": value_schema},
+                    "properties": {
+                        "key": key_schema,
+                        "value": additional.value,
+                    },
                     "required": ["key", "value"],
                     "additionalProperties": False,
                 },
             )
-            node.clear()
-            node.update(lowered)
-            mapping_ids.add(id(node))
-        return mapping_ids
+            node.value.clear()
+            node.value.update(lowered)
+            mappings.append(MappingEncoding(path))
+        return SchemaEncodingPlan(tuple(mappings))
 
 
 @final
 class CompatibilityValidator:
-    def validate(self, schema: dict[str, Any]) -> None:
-        for path, node in walk_with_paths(schema):
-            if "oneOf" in node:
+    def validate(self, schema: JsonObject) -> None:
+        for path, node in walk(schema):
+            if "oneOf" in node.value:
                 self._unsupported(path, "oneOf is not supported; use a disjoint anyOf")
             for keyword in _UNSUPPORTED_COMPOSITION:
-                if keyword in node:
+                if keyword in node.value:
                     self._unsupported(path, f"{keyword} is not supported")
-            if node.get("type") == "object":
+            if node.type == "object":
                 self._validate_object(path, node)
 
-    def _validate_object(self, path: SchemaPath, node: dict[str, Any]) -> None:
-        if node.get("additionalProperties") is not False:
+    def _validate_object(self, path: SchemaPath, node: SchemaNode) -> None:
+        if node.additional_properties() is not False:
             self._unsupported(
                 path, "object schemas must set additionalProperties to false"
             )
-        properties = node.get("properties")
-        if not isinstance(properties, dict):
+        properties = node.object_map("properties")
+        if properties is None:
             return
-        property_names = set(cast(dict[str, Any], properties))
-        required = node.get("required")
+        required = node.value.get("required")
         required_names: set[str] = (
-            set(cast(list[str], required)) if isinstance(required, list) else set()
+            {item for item in required if isinstance(item, str)}
+            if isinstance(required, list)
+            else set()
         )
-        missing = sorted(property_names - required_names)
+        missing = sorted(set(properties) - required_names)
         if missing:
             self._unsupported(
                 path, f"all object properties must be required; missing {missing}"

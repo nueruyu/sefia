@@ -20,6 +20,7 @@ from sefia.llm._execution_directors import (
     ToolOnlyDirector,
 )
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
+from sefia.llm.schema import SchemaNode
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -151,7 +152,7 @@ class TestToolOnlyDirector:
     def test_build_decision_schema_has_no_result_field(self):
         strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
-        schema = director.build_decision_schema().schema
+        schema = director.build_decision_schema().document.to_dict()
         branch = _decision_branch(schema, "tool_calls")
 
         assert schema["required"] == ["decision", "tool_calls"]
@@ -176,9 +177,7 @@ class TestToolOnlyDirector:
 
         data: object = {
             "decision": "tool_calls",
-            "tool_calls": [
-                {"name": "chat_tool", "arguments": dict[str, object]()}
-            ],
+            "tool_calls": [{"name": "chat_tool", "arguments": dict[str, object]()}],
         }
         result = director.process_response_data(data, ToolCallIdRegistry())
 
@@ -231,11 +230,13 @@ class TestToolEnabledDirector:
         return ToolEnabledDirector(PydanticModelBackend(), output_type, [_tool(search)])
 
     def test_build_decision_schema_has_decision_branches(self):
-        schema = self._director().build_decision_schema().schema
-        payload = schema
+        schema = self._director().build_decision_schema().document.to_dict()
+        payload = SchemaNode(schema)
 
-        assert payload["discriminator"]["propertyName"] == "decision"
-        assert len(payload["oneOf"]) == 2
+        discriminator = payload.object_map("discriminator")
+        assert discriminator is not None
+        assert discriminator["propertyName"] == "decision"
+        assert len(payload.alternatives("oneOf")) == 2
         assert _decision_branch(schema, "tool_calls")["required"] == [
             "decision",
             "tool_calls",
@@ -325,7 +326,7 @@ class TestOutputOnlyDirector:
         return OutputOnlyDirector(PydanticModelBackend(), output_type, [])
 
     def test_build_decision_schema_has_only_result(self):
-        schema = self._director().build_decision_schema().schema
+        schema = self._director().build_decision_schema().document.to_dict()
         branch = _decision_branch(schema, "result")
 
         assert schema["required"] == ["decision", "result"]

@@ -90,12 +90,15 @@ A `create_model`-built decision model is the schema, picked by an
 | no tools | `_OutputOnlyDirector` | `{ decision: "result", result: T }` only |
 
 `pydantic/_decision_schema.py` composes typed tool `$defs` into a provider-neutral
-logical schema and identifies raw JSON Schema regions that adapters must not rewrite.
+`JsonSchemaDocument` and identifies raw JSON Schema regions that adapters must not
+rewrite. Recursive JSON value types and `SchemaNode` accessors keep schema traversal
+out of `dict[str, Any]`.
 The logical schema crosses the `LLMClient` boundary once. `LiteLLMClient` adapts it
 to the model's wire format, uses native structured output when available, and puts
 the adapted schema in the system prompt otherwise. Its schema adapter adds the
 `payload` envelope, closes strict objects, and reversibly encodes typed mappings as
-arrays of `{key, value}` entries.
+arrays of `{key, value}` entries. A path-based encoding plan records those changes
+for response decoding.
 
 The Pydantic backend keeps these responsibilities separate: `_function_models.py`
 reflects callable parameters, `_tool_arguments.py` owns each tool's original schema

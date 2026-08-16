@@ -4,13 +4,13 @@ import logging
 import os
 import json
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Literal, TypedDict, cast
 
 from typing_extensions import final, override
 
 from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
-from sefia.llm.schema import LLMSchema
+from sefia.llm.schema import JsonObject, LLMSchema, require_json_value
 from sefia.llm.streaming import StructuredOutputCallback
 
 from .exceptions import (
@@ -49,8 +49,19 @@ markdown, or code fences.
 """
 
 
+class _JsonSchemaResponseDefinition(TypedDict):
+    name: str
+    schema: JsonObject
+    strict: bool
+
+
+class _JsonSchemaResponseFormat(TypedDict):
+    type: Literal["json_schema"]
+    json_schema: _JsonSchemaResponseDefinition
+
+
 def _with_schema_instruction(
-    messages: list[dict[str, Any]], schema: dict[str, Any]
+    messages: list[dict[str, Any]], schema: JsonObject
 ) -> list[dict[str, Any]]:
     instruction = _SCHEMA_PROMPT.format(
         schema=json.dumps(schema, indent=2, ensure_ascii=False)
@@ -183,16 +194,19 @@ class LiteLLMClient(LLMClient):
         if tools:
             kwargs["tools"] = tools
         if prepared is not None and self._uses_native_structured_output(litellm):
-            kwargs["response_format"] = {
+            response_format: _JsonSchemaResponseFormat = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": "structured_output",
-                    "schema": prepared.schema,
+                    "schema": prepared.wire_schema.to_dict(),
                     "strict": True,
                 },
             }
+            kwargs["response_format"] = response_format
         elif prepared is not None:
-            raw_messages = _with_schema_instruction(raw_messages, prepared.schema)
+            raw_messages = _with_schema_instruction(
+                raw_messages, prepared.wire_schema.to_dict()
+            )
 
         if stream_callback or structured_output_callback or reasoning_callback:
             kwargs["stream"] = True
@@ -304,7 +318,9 @@ class LiteLLMClient(LLMClient):
             lines = raw.splitlines()
             raw = "\n".join(lines[1:-1]).strip()
         try:
-            response.structured_output = prepared.decode(json.loads(raw))
+            response.structured_output = prepared.decode(
+                require_json_value(json.loads(raw))
+            )
         except (json.JSONDecodeError, ValueError):
             return
 

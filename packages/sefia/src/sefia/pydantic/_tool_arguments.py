@@ -7,6 +7,8 @@ import jsonschema.validators
 from pydantic import BeforeValidator, WithJsonSchema
 from typing_extensions import final
 
+from ..llm.schema import JsonSchemaDocument
+
 
 class ToolSchemaKind(Enum):
     TYPED = "typed"
@@ -18,15 +20,16 @@ class ToolSchemaKind(Enum):
 class ToolArgumentContract:
     """Original validation schema and its provider-composition policy."""
 
-    schema: dict[str, Any]
+    schema: JsonSchemaDocument
     kind: ToolSchemaKind
 
     def validation_type(self) -> Any:
+        schema = self.schema.to_dict()
         validator_cls = jsonschema.validators.validator_for(
-            self.schema, default=jsonschema.Draft202012Validator
+            schema, default=jsonschema.Draft202012Validator
         )
-        validator_cls.check_schema(self.schema)
-        validator = validator_cls(self.schema)
+        validator_cls.check_schema(schema)
+        validator = validator_cls(schema)
 
         def validate(value: object) -> dict[str, Any]:
             if not isinstance(value, dict):

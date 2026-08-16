@@ -1,104 +1,61 @@
 from collections.abc import Iterator
-from typing import Any, cast
+from typing import cast
 
-from sefia.llm.schema import SchemaPath
-
-_MAP_CHILDREN = ("$defs", "definitions", "properties", "patternProperties")
-_VALUE_CHILDREN = (
-    "additionalProperties",
-    "anyOf",
-    "allOf",
-    "contains",
-    "contentSchema",
-    "dependentSchemas",
-    "else",
-    "if",
-    "items",
-    "not",
-    "oneOf",
-    "prefixItems",
-    "propertyNames",
-    "then",
-    "unevaluatedItems",
-    "unevaluatedProperties",
-)
+from sefia.llm.schema import JsonObject, SchemaNode, SchemaPath
 
 
-def walk(node: Any, *, skip: set[int] | None = None) -> Iterator[dict[str, Any]]:
-    if isinstance(node, list):
-        for item in cast(list[Any], node):
-            yield from walk(item, skip=skip)
-        return
-    if not isinstance(node, dict):
-        return
-    schema = cast(dict[str, Any], node)
-    if skip is not None and id(schema) in skip:
-        return
-    yield schema
-    for _, child in _children(schema):
-        yield from walk(child, skip=skip)
+def walk(
+    root: JsonObject, *, skip: frozenset[SchemaPath] = frozenset()
+) -> Iterator[tuple[SchemaPath, SchemaNode]]:
+    for cursor in SchemaNode(root).walk():
+        if any(cursor.path[: len(path)] == path for path in skip):
+            continue
+        yield cursor.path, cursor.node
 
 
-def walk_with_paths(
-    node: Any, path: SchemaPath = ()
-) -> Iterator[tuple[SchemaPath, dict[str, Any]]]:
-    if isinstance(node, list):
-        for index, item in enumerate(cast(list[Any], node)):
-            yield from walk_with_paths(item, (*path, index))
-        return
-    if not isinstance(node, dict):
-        return
-    schema = cast(dict[str, Any], node)
-    yield path, schema
-    for child_path, child in _children(schema):
-        yield from walk_with_paths(child, (*path, *child_path))
-
-
-def resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
-    reference = schema.get("$ref")
-    if not isinstance(reference, str) or not reference.startswith("#/$defs/"):
-        return schema
-    definitions = root.get("$defs")
-    if not isinstance(definitions, dict):
-        return schema
+def resolve(
+    schema: JsonObject,
+    root: JsonObject,
+    path: SchemaPath,
+) -> tuple[JsonObject, SchemaPath]:
+    reference = SchemaNode(schema).reference
+    if reference is None or not reference.startswith("#/$defs/"):
+        return schema, path
+    definitions = SchemaNode(root).object_map("$defs")
+    if definitions is None:
+        return schema, path
     name = reference.removeprefix("#/$defs/").replace("~1", "/").replace("~0", "~")
-    resolved = cast(dict[str, Any], definitions).get(name)
-    return cast(dict[str, Any], resolved) if isinstance(resolved, dict) else schema
+    resolved = definitions.get(name)
+    if not isinstance(resolved, dict):
+        return schema, path
+    return resolved, ("$defs", name)
 
 
-def matches(data: object, schema: dict[str, Any], root: dict[str, Any]) -> bool:
-    schema = resolve(schema, root)
+def matches(data: object, schema: JsonObject, root: JsonObject) -> bool:
+    schema, _ = resolve(schema, root, ())
+    node = SchemaNode(schema)
     if "const" in schema and data != schema["const"]:
         return False
-    expected = schema.get("type")
-    if expected == "null":
+    if node.type == "null":
         return data is None
-    if expected == "object":
+    if node.type == "object":
         if not isinstance(data, dict):
             return False
         required = schema.get("required")
-        return not isinstance(required, list) or set(cast(list[str], required)) <= set(
-            cast(dict[str, Any], data)
+        required_names: set[str] = (
+            {item for item in required if isinstance(item, str)}
+            if isinstance(required, list)
+            else set()
         )
-    if expected == "array":
+        return required_names <= set(cast(dict[object, object], data).keys())
+    if node.type == "array":
         return isinstance(data, list)
-    if expected == "string":
+    if node.type == "string":
         return isinstance(data, str)
-    if expected == "integer":
+    if node.type == "integer":
         return isinstance(data, int) and not isinstance(data, bool)
-    if expected == "number":
+    if node.type == "number":
         return isinstance(data, int | float) and not isinstance(data, bool)
-    if expected == "boolean":
+    if node.type == "boolean":
         return isinstance(data, bool)
     return True
-
-
-def _children(node: dict[str, Any]) -> Iterator[tuple[tuple[str, ...], Any]]:
-    for keyword in _MAP_CHILDREN:
-        children = node.get(keyword)
-        if isinstance(children, dict):
-            for name, child in list(cast(dict[str, Any], children).items()):
-                yield (keyword, name), child
-    for keyword in _VALUE_CHILDREN:
-        if keyword in node:
-            yield (keyword,), node[keyword]

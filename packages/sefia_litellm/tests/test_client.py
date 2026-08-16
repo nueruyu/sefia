@@ -20,7 +20,7 @@ from litellm.exceptions import (
 )
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
-from sefia.llm.schema import LLMSchema
+from sefia.llm.schema import JsonSchemaDocument, LLMSchema
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
     LiteLLMClient,
@@ -51,10 +51,12 @@ class TestLiteLLMClient:
             {"type": "function", "function": {"name": "get_weather"}}
         ]
         output_schema = LLMSchema(
-            {
-                "type": "object",
-                "properties": {"city": {"type": "string"}},
-            }
+            JsonSchemaDocument.from_mapping(
+                {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                }
+            )
         )
 
         mock_acompletion.return_value = ModelResponse(
@@ -86,12 +88,14 @@ class TestLiteLLMClient:
     ) -> None:
         client = LiteLLMClient(model="legacy-model", native_structured_output=False)
         schema = LLMSchema(
-            {
-                "type": "object",
-                "properties": {"city": {"type": "string"}},
-                "required": ["city"],
-                "additionalProperties": False,
-            }
+            JsonSchemaDocument.from_mapping(
+                {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                    "additionalProperties": False,
+                }
+            )
         )
         mock_acompletion.return_value = ModelResponse(
             choices=[

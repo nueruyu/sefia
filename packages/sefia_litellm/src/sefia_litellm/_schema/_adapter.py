@@ -1,34 +1,32 @@
-from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, cast
 
 from typing_extensions import final
 
-from sefia.llm.schema import LLMSchema, SchemaPath
+from sefia.llm.schema import (
+    JsonObject,
+    JsonSchemaDocument,
+    JsonValue,
+    LLMSchema,
+    SchemaPath,
+    StructuredValue,
+    to_structured_value,
+)
 
 from ._decoder import Decoder, DecoderFactory
 from ._normalization import CompatibilityValidator, MappingLowerer, SchemaNormalizer
-from ._traversal import walk_with_paths
 
 
 @final
 @dataclass
 class LiteLLMPreparedSchema:
-    _schema: dict[str, Any]
+    wire_schema: JsonSchemaDocument
     _decoder: Decoder
 
-    @property
-    def schema(self) -> dict[str, Any]:
-        return deepcopy(self._schema)
-
-    def decode(self, data: object) -> object:
-        decoded = self._decoder.decode(data)
-        if not isinstance(decoded, dict):
+    def decode(self, data: JsonValue) -> StructuredValue:
+        decoded = self._decoder.decode(to_structured_value(data))
+        if not isinstance(decoded, dict) or set(decoded) != {"payload"}:
             return decoded
-        decoded_map = cast(dict[str, Any], decoded)
-        if set(decoded_map) == {"payload"}:
-            return decoded_map["payload"]
-        return decoded_map
+        return decoded["payload"]
 
     def normalize_stream_path(self, path: SchemaPath) -> SchemaPath | None:
         return path[1:] if path and path[0] == "payload" else path
@@ -39,23 +37,21 @@ class LiteLLMSchemaAdapter:
     def build(self, logical: LLMSchema) -> LiteLLMPreparedSchema:
         schema, preserved = _compose_envelope(logical)
         SchemaNormalizer(preserved).normalize(schema)
-        mapping_ids = MappingLowerer(preserved).lower(schema)
+        plan = MappingLowerer(preserved).lower(schema)
         CompatibilityValidator().validate(schema)
         schema["description"] = "The model for the LLM's decision on the next action."
+        document = JsonSchemaDocument(schema)
         return LiteLLMPreparedSchema(
-            schema, DecoderFactory(schema, mapping_ids).build(schema)
+            document, DecoderFactory(schema, plan).build(schema)
         )
 
 
-def _compose_envelope(logical: LLMSchema) -> tuple[dict[str, Any], set[int]]:
-    payload = deepcopy(logical.schema)
-    preserved = {
-        id(node)
-        for path, node in walk_with_paths(payload)
-        if path in logical.raw_schema_paths
-    }
+def _compose_envelope(
+    logical: LLMSchema,
+) -> tuple[JsonObject, frozenset[SchemaPath]]:
+    payload = logical.document.mutable_copy()
     definitions = payload.pop("$defs", None)
-    schema: dict[str, Any] = {
+    schema: JsonObject = {
         "type": "object",
         "properties": {"payload": payload},
         "required": ["payload"],
@@ -63,4 +59,8 @@ def _compose_envelope(logical: LLMSchema) -> tuple[dict[str, Any], set[int]]:
     }
     if isinstance(definitions, dict):
         schema["$defs"] = definitions
+    preserved = frozenset(
+        path if path and path[0] == "$defs" else ("properties", "payload", *path)
+        for path in logical.raw_schema_paths
+    )
     return schema, preserved

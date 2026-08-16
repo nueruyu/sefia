@@ -25,6 +25,7 @@ from ..llm.decision import (
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..llm.schema import LLMSchema
+from ..llm.schema import JsonSchemaDocument
 from ._decision_schema import build_decision_schema, tool_argument_placeholder
 from ._tool_arguments import (
     ToolArgumentContract,
@@ -126,7 +127,7 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
     def build(self, spec: DecisionModelSpec) -> DecisionModel:
         tools = {
             tool.name: ToolArgumentContract(
-                schema=tool.definition().parameters,
+                schema=JsonSchemaDocument.from_mapping(tool.definition().parameters),
                 kind=(
                     ToolSchemaKind.RAW
                     if isinstance(tool, JsonSchemaToolEntry)

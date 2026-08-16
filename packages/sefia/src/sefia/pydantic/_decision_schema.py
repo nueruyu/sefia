@@ -3,11 +3,18 @@ from __future__ import annotations
 from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from pydantic import TypeAdapter, WithJsonSchema
 
-from ..llm.schema import LLMSchema, SchemaPath
+from ..llm.schema import (
+    JsonObject,
+    JsonSchemaDocument,
+    JsonValue,
+    LLMSchema,
+    SchemaPath,
+    require_json_object,
+)
 from ._tool_arguments import ToolArgumentContract, ToolSchemaKind
 
 _TOOL_ARGUMENT_MARKER = "x-sefia-tool-arguments"
@@ -15,8 +22,8 @@ _TOOL_ARGUMENT_MARKER = "x-sefia-tool-arguments"
 
 @dataclass(frozen=True)
 class _ComposedSchema:
-    schema: dict[str, Any]
-    definitions: dict[str, dict[str, Any]]
+    schema: JsonObject
+    definitions: JsonObject
 
 
 def tool_argument_placeholder(tool_name: str) -> WithJsonSchema:
@@ -26,15 +33,15 @@ def tool_argument_placeholder(tool_name: str) -> WithJsonSchema:
 def build_decision_schema(
     model: Any, tools: dict[str, ToolArgumentContract]
 ) -> LLMSchema:
-    schema = TypeAdapter(model).json_schema()
+    schema = require_json_object(TypeAdapter(model).json_schema())
     definitions = schema.setdefault("$defs", {})
     if not isinstance(definitions, dict):
         raise ValueError("LLM schema $defs must be an object")
-    root_definitions = cast(dict[str, Any], definitions)
-    raw_nodes: set[int] = set()
+    root_definitions = definitions
+    raw_paths: set[SchemaPath] = set()
     raw_definition_names: set[str] = set()
 
-    for node in list(_walk(schema)):
+    for path, node in list(_walk_with_paths(schema)):
         tool_name = node.pop(_TOOL_ARGUMENT_MARKER, None)
         if not isinstance(tool_name, str):
             continue
@@ -44,39 +51,37 @@ def build_decision_schema(
         composed = _compose_definitions(
             root_definitions,
             tool_name,
-            deepcopy(contract.schema),
+            contract.schema.mutable_copy(),
             protected_names=raw_definition_names,
             preserve=contract.kind is ToolSchemaKind.RAW,
         )
         node.clear()
         node.update(composed.schema)
         if contract.kind is ToolSchemaKind.RAW:
-            raw_nodes.add(id(node))
-            raw_nodes.update(
-                id(definition) for definition in composed.definitions.values()
-            )
+            raw_paths.add(path)
+            raw_paths.update(("$defs", name) for name in composed.definitions)
             raw_definition_names.update(composed.definitions)
 
-    raw_paths = frozenset(
-        path for path, node in _walk_with_paths(schema) if id(node) in raw_nodes
-    )
     schema["description"] = "The model for the LLM's decision on the next action."
-    return LLMSchema(schema=schema, raw_schema_paths=raw_paths)
+    return LLMSchema(
+        document=JsonSchemaDocument.from_mapping(schema),
+        raw_schema_paths=frozenset(raw_paths),
+    )
 
 
 def _compose_definitions(
-    root: dict[str, Any],
+    root: JsonObject,
     namespace: str,
-    schema: dict[str, Any],
+    schema: JsonObject,
     *,
     protected_names: set[str],
     preserve: bool,
 ) -> _ComposedSchema:
-    local: dict[str, Any] = {}
+    local: JsonObject = {}
     for keyword in ("$defs", "definitions"):
         definitions = schema.pop(keyword, None)
         if isinstance(definitions, dict):
-            local.update(cast(dict[str, Any], definitions))
+            local.update(definitions)
 
     names = {
         name: _target_name(
@@ -90,7 +95,7 @@ def _compose_definitions(
         for name, definition in local.items()
     }
     _rewrite_references(schema, names)
-    composed: dict[str, dict[str, Any]] = {}
+    composed: JsonObject = {}
     for name, definition in local.items():
         target = names[name]
         if target not in root:
@@ -102,10 +107,10 @@ def _compose_definitions(
 
 
 def _target_name(
-    root: dict[str, Any],
+    root: JsonObject,
     namespace: str,
     name: str,
-    definition: Any,
+    definition: JsonValue,
     *,
     protected_names: set[str],
     preserve: bool,
@@ -123,7 +128,7 @@ def _target_name(
     return candidate
 
 
-def _rewrite_references(node: Any, names: dict[str, str]) -> None:
+def _rewrite_references(node: JsonValue, names: dict[str, str]) -> None:
     for schema_node in _walk(node):
         reference = schema_node.get("$ref")
         if not isinstance(reference, str):
@@ -136,21 +141,20 @@ def _rewrite_references(node: Any, names: dict[str, str]) -> None:
                 break
 
 
-def _walk(node: Any) -> Iterator[dict[str, Any]]:
+def _walk(node: JsonValue) -> Iterator[JsonObject]:
     for _, child in _walk_with_paths(node):
         yield child
 
 
 def _walk_with_paths(
-    node: Any, path: SchemaPath = ()
-) -> Iterator[tuple[SchemaPath, dict[str, Any]]]:
+    node: JsonValue, path: SchemaPath = ()
+) -> Iterator[tuple[SchemaPath, JsonObject]]:
     if isinstance(node, list):
-        for index, item in enumerate(cast(list[Any], node)):
+        for index, item in enumerate(node):
             yield from _walk_with_paths(item, (*path, index))
         return
     if not isinstance(node, dict):
         return
-    schema = cast(dict[str, Any], node)
-    yield path, schema
-    for key, child in schema.items():
+    yield path, node
+    for key, child in node.items():
         yield from _walk_with_paths(child, (*path, key))

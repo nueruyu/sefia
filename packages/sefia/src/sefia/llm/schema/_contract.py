@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
-
 from typing_extensions import final
 
-SchemaPath = tuple[str | int, ...]
+from ._document import JsonSchemaDocument
+
+from ._path import SchemaPath
 
 
 @final
@@ -13,5 +13,5 @@ SchemaPath = tuple[str | int, ...]
 class LLMSchema:
     """A logical structured-output schema produced by Sefia."""
 
-    schema: dict[str, Any]
+    document: JsonSchemaDocument
     raw_schema_paths: frozenset[SchemaPath] = frozenset()

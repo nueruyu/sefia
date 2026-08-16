@@ -13,6 +13,7 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import LLMClient, LLMInferenceStrategy
+from sefia.llm.schema import SchemaNode
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -163,9 +164,10 @@ class TestLLMInferenceStrategy:
         strategy = _make_strategy()
 
         director = strategy._create_director(list[MyIssue], [_tool(search)])
-        schema = director.build_decision_schema().schema
+        schema = director.build_decision_schema().document.to_dict()
 
-        assert "MyIssue" in schema["$defs"]
+        root = SchemaNode(schema)
+        assert "MyIssue" in root.definitions()
         result_branch = _decision_branch(schema, "result")
         result_schema = result_branch["properties"]["result"]
         assert "$defs" not in result_schema
@@ -175,14 +177,14 @@ class TestLLMInferenceStrategy:
         tool_calls_branch = _decision_branch(schema, "tool_calls")
         tool_calls_array = tool_calls_branch["properties"]["tool_calls"]
         tool_call_ref = tool_calls_array["items"]["$ref"].split("/")[-1]
-        assert tool_call_ref in schema["$defs"]
+        assert tool_call_ref in root.definitions()
         assert tool_call_ref.endswith("ToolCall")
 
     def test_build_decision_schema_requires_non_null_result_without_tools(self):
         strategy = _make_strategy()
 
         director = strategy._create_director(list[MyIssue], [])
-        schema = director.build_decision_schema().schema
+        schema = director.build_decision_schema().document.to_dict()
         result_branch = _decision_branch(schema, "result")
 
         assert schema["required"] == ["decision", "result"]
@@ -196,15 +198,19 @@ class TestLLMInferenceStrategy:
         strategy = _make_strategy()
 
         director = strategy._create_director(list[MyIssue], [_tool(search)])
-        schema = director.build_decision_schema().schema
-        payload = schema
+        schema = director.build_decision_schema().document.to_dict()
+        payload = SchemaNode(schema)
 
-        assert payload["discriminator"]["propertyName"] == "decision"
-        assert set(payload["discriminator"]["mapping"]) == {
+        discriminator = payload.object_map("discriminator")
+        assert discriminator is not None
+        assert discriminator["propertyName"] == "decision"
+        mapping = discriminator["mapping"]
+        assert isinstance(mapping, dict)
+        assert set(mapping) == {
             "tool_calls",
             "result",
         }
-        assert len(payload["oneOf"]) == 2
+        assert len(payload.alternatives("oneOf")) == 2
         assert _decision_branch(schema, "tool_calls")["required"] == [
             "decision",
             "tool_calls",

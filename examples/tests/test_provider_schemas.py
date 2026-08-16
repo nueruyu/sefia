@@ -2,6 +2,7 @@ from importlib import import_module
 
 from sefia._tool_system import SignatureToolEntry
 from sefia.llm._execution_directors import OutputOnlyDirector, ToolEnabledDirector
+from sefia.llm.schema import SchemaNode
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._schema import LiteLLMSchemaAdapter
 from sefios.tools import WebSearch
@@ -25,7 +26,7 @@ def test_news_writer_schema_composes_nested_research_tool_types() -> None:
     logical = ToolEnabledDirector(
         backend, news_models.NewsArticle, [tool]
     ).build_decision_schema()
-    schema = LiteLLMSchemaAdapter().build(logical).schema
+    schema = LiteLLMSchemaAdapter().build(logical).wire_schema.to_dict()
 
     assert schema["additionalProperties"] is False
 
@@ -34,9 +35,11 @@ def test_code_quality_report_schema_lowers_perspective_mapping() -> None:
     logical = OutputOnlyDirector(
         PydanticModelBackend(), quality_models.QualityReport, []
     ).build_decision_schema()
-    schema = LiteLLMSchemaAdapter().build(logical).schema
+    schema = LiteLLMSchemaAdapter().build(logical).wire_schema.to_dict()
 
-    report = schema["$defs"]["QualityReport"]
-    perspective_issues = report["properties"]["issues_by_perspective"]
-    assert perspective_issues["type"] == "array"
-    assert perspective_issues["items"]["additionalProperties"] is False
+    report = SchemaNode(schema).definitions()["QualityReport"]
+    perspective_issues = report.properties()["issues_by_perspective"]
+    assert perspective_issues.type == "array"
+    items = perspective_issues.child("items")
+    assert items is not None
+    assert items.additional_properties() is False

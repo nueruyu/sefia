@@ -275,7 +275,7 @@ async def test_inference_on_standalone_function():
     # Check that the schema passed to the LLM does not include the optional `tool_calls`
     output_schema = mock_llm.requests[0].get("output_schema")
     assert output_schema is not None
-    assert "tool_calls" not in output_schema.schema.get("properties", {})
+    assert "tool_calls" not in output_schema.document.to_dict().get("properties", {})
 
 
 def test_policy_attaches_metadata():

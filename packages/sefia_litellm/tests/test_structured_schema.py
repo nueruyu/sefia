@@ -17,6 +17,7 @@ from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionE
 from sefia.inference import FunctionInfo, InferenceDecision, ToolCallDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
+from sefia.llm.schema import SchemaNode
 from sefia.llm.streaming import StructuredOutputEvent
 from sefia.llm.decision import DecisionModelSpec
 from sefia.llm._execution_directors import (
@@ -156,7 +157,7 @@ def _name_constraint(name_schema: dict[str, Any]) -> Any:
 def test_tool_only_schema_embeds_tool_argument_schema() -> None:
     director = ToolOnlyDirector(PydanticModelBackend(), Never, [_tool()])
 
-    schema = _prepare(director).schema
+    schema = _prepare(director).wire_schema.to_dict()
 
     assert _tool_calls_array(schema)["minItems"] == 1
     item = _tool_call_item(schema)
@@ -187,7 +188,7 @@ def test_typed_tool_schema_hoists_nested_definitions() -> None:
         PydanticModelBackend(), Never, [_signature_tool(_research, name="research")]
     )
 
-    schema = _prepare(director).schema
+    schema = _prepare(director).wire_schema.to_dict()
 
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     request_schema = _resolve(arguments["properties"]["article_request"], schema)
@@ -205,9 +206,10 @@ def test_result_shape_cannot_be_mistaken_for_a_tool_call() -> None:
 
     director = ToolEnabledDirector(PydanticModelBackend(), Output, [_tool()])
 
-    schema = director.build_decision_schema().schema
+    schema = director.build_decision_schema().document.to_dict()
 
-    assert schema["$defs"]["Output"]["properties"]["arguments"] == {
+    output = SchemaNode(schema).definitions()["Output"]
+    assert output.properties()["arguments"].value == {
         "additionalProperties": {"type": "integer"},
         "title": "Arguments",
         "type": "object",
@@ -231,13 +233,14 @@ def test_raw_tool_schema_hoists_local_definitions() -> None:
     }
     director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
 
-    schema = _prepare(director).schema
+    schema = _prepare(director).wire_schema.to_dict()
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
 
     assert "$defs" not in arguments
     assert arguments["properties"]["item"]["$ref"] == "#/$defs/Item"
-    assert schema["$defs"]["Item"]["properties"]["name"]["type"] == "string"
-    assert schema["$defs"]["Item"]["required"] == ["name"]
+    item = SchemaNode(schema).definitions()["Item"]
+    assert item.properties()["name"].type == "string"
+    assert item.strings("required") == ("name",)
 
 
 def test_raw_definition_is_not_normalized_with_typed_definition() -> None:
@@ -268,8 +271,9 @@ def test_raw_definition_is_not_normalized_with_typed_definition() -> None:
 
     logical = director.build_decision_schema()
 
-    assert "required" not in logical.schema["$defs"]["SharedPolicy"]
-    assert "typed__SharedPolicy" in logical.schema["$defs"]
+    definitions = logical.document.root().definitions()
+    assert definitions["SharedPolicy"].strings("required") is None
+    assert "typed__SharedPolicy" in definitions
     assert ("$defs", "SharedPolicy") in logical.raw_schema_paths
     with pytest.raises(ValueError, match=r"missing \['name'\]"):
         LiteLLMSchemaAdapter().build(logical)
@@ -296,16 +300,16 @@ def test_conflicting_tool_definition_names_are_renamed() -> None:
         ],
     )
 
-    schema = _prepare(director).schema
+    schema = _prepare(director).wire_schema.to_dict()
 
     shared_definitions = {
         name: definition
-        for name, definition in schema["$defs"].items()
+        for name, definition in SchemaNode(schema).definitions().items()
         if name == "Shared" or name.startswith("second__Shared")
     }
     assert len(shared_definitions) == 2
     assert {
-        tuple(definition["properties"]) for definition in shared_definitions.values()
+        tuple(definition.properties()) for definition in shared_definitions.values()
     } == {
         ("text",),
         ("count",),
@@ -342,7 +346,7 @@ def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
     }
     director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
 
-    schema = _prepare(director).schema
+    schema = _prepare(director).wire_schema.to_dict()
 
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     assert arguments == raw_schema
@@ -454,7 +458,7 @@ def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
     }
     director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
 
-    schema = _prepare(director).schema
+    schema = _prepare(director).wire_schema.to_dict()
 
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     assert arguments == raw_schema
@@ -468,7 +472,7 @@ def _result_schema(schema: dict[str, Any]) -> dict[str, Any]:
 def test_mapping_result_is_lowered_and_decoded() -> None:
     director = OutputOnlyDirector(PydanticModelBackend(), dict[str, str], [])
 
-    schema = _prepare(director).schema
+    schema = _prepare(director).wire_schema.to_dict()
 
     result_schema = _result_schema(schema)
     assert result_schema["type"] == "array"
@@ -499,7 +503,7 @@ def test_mapping_constraints_are_lowered_to_entry_constraints() -> None:
     output_type = Annotated[dict[str, str], Field(min_length=1, max_length=2)]
     director = OutputOnlyDirector(PydanticModelBackend(), output_type, [])
 
-    result_schema = _result_schema(_prepare(director).schema)
+    result_schema = _result_schema(_prepare(director).wire_schema.to_dict())
 
     assert result_schema["minItems"] == 1
     assert result_schema["maxItems"] == 2
@@ -518,7 +522,7 @@ class _Report:
 def test_nested_mapping_result_is_lowered_and_decoded() -> None:
     director = OutputOnlyDirector(PydanticModelBackend(), _Report, [])
 
-    schema = _prepare(director).schema
+    schema = _prepare(director).wire_schema.to_dict()
     report_schema = _result_schema(schema)
     report_schema = _resolve(report_schema, schema)
     mapping_schema = report_schema["properties"]["issues_by_perspective"]
@@ -610,7 +614,7 @@ def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
         [_signature_tool(_categorize, name="categorize")],
     )
 
-    schema = _prepare(director).schema
+    schema = _prepare(director).wire_schema.to_dict()
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     assert arguments["properties"]["labels"]["type"] == "array"
 
