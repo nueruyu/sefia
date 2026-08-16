@@ -21,11 +21,7 @@ from litellm.exceptions import (
 )
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
-from sefia.llm.step_decision import (
-    DefaultStepDecisionModelFactory,
-    StepDecisionModel,
-    StepDecisionSpec,
-)
+from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
@@ -52,7 +48,7 @@ class _CityResult:
 
 def _decision_model() -> StepDecisionModel:
     spec = StepDecisionSpec.result_only(name="StepDecision", output_type=_CityResult)
-    return DefaultStepDecisionModelFactory(PydanticModelBackend()).create(spec)
+    return StepDecisionModel.from_spec(spec, PydanticModelBackend())
 
 
 class TestLiteLLMClient:

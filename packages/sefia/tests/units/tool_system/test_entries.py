@@ -7,10 +7,7 @@ from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import ToolConflictError
 from sefia.inference import ToolCallsDecision
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.step_decision import (
-    DefaultStepDecisionModelFactory,
-    StepDecisionSpec,
-)
+from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 
 _SEARCH_SCHEMA: dict[str, Any] = {
@@ -102,10 +99,11 @@ def test_a_malformed_schema_is_rejected_up_front():
         parameters={"type": "not-a-type"},
     )
     with pytest.raises(jsonschema.SchemaError):
-        DefaultStepDecisionModelFactory(PydanticModelBackend()).create(
+        StepDecisionModel.from_spec(
             StepDecisionSpec.for_inference(
                 name="StepDecision", output_type=Never, tools=[tool]
-            )
+            ),
+            PydanticModelBackend(),
         )
 
 
@@ -122,10 +120,11 @@ def test_a_schema_is_validated_under_its_declared_dialect():
     }
 
     tool = JsonSchemaToolEntry(_noop, name="pair", parameters=schema)
-    decision_model = DefaultStepDecisionModelFactory(PydanticModelBackend()).create(
+    decision_model = StepDecisionModel.from_spec(
         StepDecisionSpec.for_inference(
             name="StepDecision", output_type=Never, tools=[tool]
-        )
+        ),
+        PydanticModelBackend(),
     )
     tool_call_ids = ToolCallIdRegistry()
 

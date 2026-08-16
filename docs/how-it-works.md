@@ -106,9 +106,9 @@ restores a decoded structured value to its declared Python type. It does not kno
 step-decision shape. Provider-side response decoding and stream-path normalization
 stay inside the client implementation.
 
-The default `StepDecisionModelFactory` in `sefia.llm` composes these leaves into a
-`StepDecisionModel`. It exposes the decision mode, result model, and tools, and
-validates the returned value as the corresponding `StepDecision`. An `LLMClient`
+`StepDecisionModel.from_spec()` composes these leaves into a model. It exposes the
+decision mode, result model, and tools, and validates the returned value as the
+corresponding `StepDecision`. An `LLMClient`
 owns decision-envelope composition, schema encoding, prompt fallback, response
 decoding, and structured-stream decoding needed by its model. Step-decision models
 live in `sefia.llm.step_decision`; Python-value schema interfaces and decoded value

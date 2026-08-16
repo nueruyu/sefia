@@ -23,10 +23,9 @@ from ._tool_call_ids import ToolCallIdRegistry
 from .json_schema import require_json_value
 from .step_decision import (
     StepDecisionModel,
-    StepDecisionModelFactory,
     StepDecisionSpec,
 )
-from .structured_output import to_structured_value
+from .structured_output import StructuredValueSchemaFactory, to_structured_value
 from .streaming import StructuredOutputEvent
 
 JsonDefault = Callable[[Any], Any]
@@ -44,7 +43,7 @@ class LLMInferenceStrategy(InferenceStrategy):
     def __init__(
         self,
         llm_client: LLMClient,
-        step_decision_model_factory: StepDecisionModelFactory,
+        structured_value_schema_factory: StructuredValueSchemaFactory,
         prompt_formatter: PromptFormatter,
         json_default: JsonDefault | None = None,
         stream: bool = False,
@@ -53,7 +52,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         if max_repair_attempts < 0:
             raise ValueError("max_repair_attempts must be non-negative")
         self.llm_client = llm_client
-        self.step_decision_model_factory = step_decision_model_factory
+        self._structured_value_schema_factory = structured_value_schema_factory
         self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
@@ -72,7 +71,9 @@ class LLMInferenceStrategy(InferenceStrategy):
             output_type=function_info.return_type,
             tools=tools.get_all(),
         )
-        decision_model = self.step_decision_model_factory.create(spec)
+        decision_model = StepDecisionModel.from_spec(
+            spec, self._structured_value_schema_factory
+        )
         messages = self._build_messages(function_info, history, spec)
 
         attempt = 0

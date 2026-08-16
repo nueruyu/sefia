@@ -2,7 +2,7 @@ from importlib import import_module
 
 from sefia._tool_system import SignatureToolEntry, ToolEntry
 from sefia.llm.json_schema import SchemaNode
-from sefia.llm.step_decision import DefaultStepDecisionModelFactory, StepDecisionSpec
+from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._schema import LiteLLMStructuredOutputAdapter
 from sefios.tools import WebSearch
@@ -16,7 +16,7 @@ def _decision_schema(output_type: object, tools: list[ToolEntry]):
     spec = StepDecisionSpec.for_inference(
         name="StepDecision", output_type=output_type, tools=tools
     )
-    return DefaultStepDecisionModelFactory(PydanticModelBackend()).create(spec)
+    return StepDecisionModel.from_spec(spec, PydanticModelBackend())
 
 
 def test_news_writer_schema_composes_nested_research_tool_types() -> None:

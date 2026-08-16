@@ -19,11 +19,7 @@ from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm.json_schema import SchemaNode
 from sefia.llm.streaming import StructuredOutputEvent
-from sefia.llm.step_decision import (
-    DefaultStepDecisionModelFactory,
-    StepDecisionModel,
-    StepDecisionSpec,
-)
+from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
@@ -36,7 +32,7 @@ def _decision_model(output_type: Any, tools: list[ToolEntry]) -> StepDecisionMod
     spec = StepDecisionSpec.for_inference(
         name="StepDecision", output_type=output_type, tools=tools
     )
-    return DefaultStepDecisionModelFactory(PydanticModelBackend()).create(spec)
+    return StepDecisionModel.from_spec(spec, PydanticModelBackend())
 
 
 def _prepare(decision: StepDecisionModel):
@@ -671,9 +667,7 @@ class TestToolCallValidation:
         formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=client,
-            step_decision_model_factory=DefaultStepDecisionModelFactory(
-                PydanticModelBackend()
-            ),
+            structured_value_schema_factory=PydanticModelBackend(),
             prompt_formatter=formatter,
         )
 

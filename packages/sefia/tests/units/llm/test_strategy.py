@@ -22,7 +22,6 @@ from sefia.llm.events import (
     LLMResponseRepairAttempt,
     LLMTokenReceived,
 )
-from sefia.llm.step_decision import DefaultStepDecisionModelFactory
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -86,9 +85,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        step_decision_model_factory=DefaultStepDecisionModelFactory(
-            PydanticModelBackend()
-        ),
+        structured_value_schema_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,

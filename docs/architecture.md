@@ -104,7 +104,6 @@ implementation noted in parentheses.
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
 | `StructuredValueSchemaFactory` | non-Pydantic Python-value schema generation and restoration | `pydantic/PydanticModelBackend` |
-| `StepDecisionModelFactory` | a different logical decision representation | `llm/DefaultStepDecisionModelFactory` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
 | `HistoryStorage` | where a run's history is persisted (enables compaction) | `GlyffHistoryStorage` (glyff metadata) |

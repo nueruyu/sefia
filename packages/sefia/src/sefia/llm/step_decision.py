@@ -1,10 +1,9 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Never, Protocol, cast
 
 import jsonschema.validators
-from typing_extensions import final, override
+from typing_extensions import final
 
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
@@ -100,30 +99,6 @@ class StepTool:
     arguments: ToolArguments
 
 
-class StepDecisionModel(ABC):
-    @property
-    @abstractmethod
-    def mode(self) -> StepDecisionMode: ...
-
-    @property
-    @abstractmethod
-    def tools(self) -> tuple[StepTool, ...]: ...
-
-    @property
-    @abstractmethod
-    def result(self) -> StructuredValueSchema | None: ...
-
-    @abstractmethod
-    def validate(
-        self, value: StructuredValue, tool_call_ids: ToolCallIdSource | None
-    ) -> StepDecision: ...
-
-
-class StepDecisionModelFactory(ABC):
-    @abstractmethod
-    def create(self, spec: StepDecisionSpec) -> StepDecisionModel: ...
-
-
 class _ToolModel:
     def __init__(self, step_tool: StepTool):
         self.schema = step_tool
@@ -151,7 +126,41 @@ class _ToolModel:
 
 
 @final
-class DefaultStepDecisionModel(StepDecisionModel):
+class StepDecisionModel:
+    @classmethod
+    def from_spec(
+        cls,
+        spec: StepDecisionSpec,
+        value_schema_factory: StructuredValueSchemaFactory,
+    ) -> "StepDecisionModel":
+        tools = {
+            tool.name: _ToolModel(
+                StepTool(
+                    name=tool.name,
+                    arguments=(
+                        JsonToolArguments(
+                            JsonSchemaDocument.from_mapping(
+                                tool.definition().parameters
+                            )
+                        )
+                        if isinstance(tool, JsonSchemaToolEntry)
+                        else TypedToolArguments(
+                            JsonSchemaDocument.from_mapping(
+                                tool.definition().parameters
+                            )
+                        )
+                    ),
+                )
+            )
+            for tool in spec.tools
+        }
+        result = (
+            None
+            if spec.mode is StepDecisionMode.TOOLS_REQUIRED
+            else value_schema_factory.create(spec.output_type)
+        )
+        return cls(spec, tools, result)
+
     def __init__(
         self,
         spec: StepDecisionSpec,
@@ -163,17 +172,14 @@ class DefaultStepDecisionModel(StepDecisionModel):
         self._result = result
 
     @property
-    @override
     def mode(self) -> StepDecisionMode:
         return self._spec.mode
 
     @property
-    @override
     def tools(self) -> tuple[StepTool, ...]:
         return tuple(tool.schema for tool in self._tools.values())
 
     @property
-    @override
     def result(self) -> StructuredValueSchema | None:
         return self._result
 
@@ -235,41 +241,6 @@ class DefaultStepDecisionModel(StepDecisionModel):
         return ResultDecision(self._result.validate(data["result"]))
 
 
-@final
-class DefaultStepDecisionModelFactory(StepDecisionModelFactory):
-    def __init__(self, value_schema_factory: StructuredValueSchemaFactory):
-        self._value_schema_factory = value_schema_factory
-
-    def create(self, spec: StepDecisionSpec) -> StepDecisionModel:
-        tools = {
-            tool.name: _ToolModel(
-                StepTool(
-                    name=tool.name,
-                    arguments=(
-                        JsonToolArguments(
-                            JsonSchemaDocument.from_mapping(
-                                tool.definition().parameters
-                            )
-                        )
-                        if isinstance(tool, JsonSchemaToolEntry)
-                        else TypedToolArguments(
-                            JsonSchemaDocument.from_mapping(
-                                tool.definition().parameters
-                            )
-                        )
-                    ),
-                )
-            )
-            for tool in spec.tools
-        }
-        result = (
-            None
-            if spec.mode is StepDecisionMode.TOOLS_REQUIRED
-            else self._value_schema_factory.create(spec.output_type)
-        )
-        return DefaultStepDecisionModel(spec, tools, result)
-
-
 def _require_record(
     value: StructuredValue, description: str
 ) -> dict[str, StructuredValue]:
@@ -292,11 +263,9 @@ def _require_fields(value: dict[str, StructuredValue], expected: set[str]) -> No
 
 
 __all__ = [
-    "DefaultStepDecisionModelFactory",
     "JsonToolArguments",
     "StepDecisionMode",
     "StepDecisionModel",
-    "StepDecisionModelFactory",
     "StepDecisionSpec",
     "StepTool",
     "ToolCallIdSource",

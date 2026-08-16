@@ -16,7 +16,6 @@ from sefia.llm._arg_stream import (
     parse_tool_call_path,
 )
 from sefia.llm._client import LLMClient
-from sefia.llm.step_decision import DefaultStepDecisionModelFactory
 from sefia.llm.step_decision import StepDecisionModel
 from sefia.llm.streaming import (
     StructuredOutputCallback,
@@ -318,9 +317,7 @@ async def test_arguments_stream_through_a_real_strategy():
     formatter.format_arguments.return_value = "<arguments/>"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
-        step_decision_model_factory=DefaultStepDecisionModelFactory(
-            PydanticModelBackend()
-        ),
+        structured_value_schema_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         stream=True,
     )

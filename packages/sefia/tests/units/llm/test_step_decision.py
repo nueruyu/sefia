@@ -17,7 +17,6 @@ from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm._step_decision_prompt import build_step_decision_prompt
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.step_decision import (
-    DefaultStepDecisionModelFactory,
     StepDecisionMode,
     StepDecisionModel,
     StepDecisionSpec,
@@ -85,9 +84,7 @@ def _step(output_type: Any, tools: list[ToolEntry]) -> _StepDecisionFixture:
     spec = StepDecisionSpec.for_inference(
         name="StepDecision", output_type=output_type, tools=tools
     )
-    return _StepDecisionFixture(
-        spec, DefaultStepDecisionModelFactory(_BACKEND).create(spec)
-    )
+    return _StepDecisionFixture(spec, StepDecisionModel.from_spec(spec, _BACKEND))
 
 
 def _tool(func: Callable[..., Any]) -> ToolEntry:
@@ -119,9 +116,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        step_decision_model_factory=DefaultStepDecisionModelFactory(
-            PydanticModelBackend()
-        ),
+        structured_value_schema_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,
