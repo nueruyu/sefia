@@ -10,7 +10,8 @@ from ._json import (
     to_structured_value,
 )
 from ._path import SchemaPath
-from ._vocabulary import LocalDefinitionRef, SchemaKeyword
+from ._reference import LocalDefinitionRef
+from ._vocabulary import SchemaKeyword
 
 __all__ = [
     "LLMSchema",

@@ -1,7 +1,4 @@
-from dataclasses import dataclass
 from enum import StrEnum
-
-from typing_extensions import final
 
 
 class SchemaKeyword(StrEnum):
@@ -36,41 +33,3 @@ class SchemaKeyword(StrEnum):
     TYPE = "type"
     UNEVALUATED_ITEMS = "unevaluatedItems"
     UNEVALUATED_PROPERTIES = "unevaluatedProperties"
-
-
-@final
-@dataclass(frozen=True)
-class LocalDefinitionRef:
-    name: str
-
-    @classmethod
-    def parse(cls, value: object) -> "LocalDefinitionRef | None":
-        if not isinstance(value, str):
-            return None
-        for prefix in ("#/$defs/", "#/definitions/"):
-            if value.startswith(prefix):
-                token = value.removeprefix(prefix)
-                if "/" in token:
-                    return None
-                name = _decode_pointer_token(token)
-                return cls(name) if name is not None else None
-        return None
-
-    def render(self) -> str:
-        name = self.name.replace("~", "~0").replace("/", "~1")
-        return f"#/$defs/{name}"
-
-
-def _decode_pointer_token(token: str) -> str | None:
-    result: list[str] = []
-    index = 0
-    while index < len(token):
-        if token[index] != "~":
-            result.append(token[index])
-            index += 1
-            continue
-        if index + 1 == len(token) or token[index + 1] not in {"0", "1"}:
-            return None
-        result.append("~" if token[index + 1] == "0" else "/")
-        index += 2
-    return "".join(result)

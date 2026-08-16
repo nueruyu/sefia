@@ -7,7 +7,8 @@ from typing_extensions import TypeAlias, final
 
 from ._json import JsonObject, JsonValue, require_json_object
 from ._path import SchemaPath
-from ._vocabulary import LocalDefinitionRef, SchemaKeyword
+from ._reference import LocalDefinitionRef
+from ._vocabulary import SchemaKeyword
 
 K = SchemaKeyword
 
