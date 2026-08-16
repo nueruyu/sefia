@@ -8,8 +8,8 @@ from sefia.llm.schema import (
     SchemaNode,
     SchemaPath,
     SchemaKeyword,
-    StructuredValue,
 )
+from sefia.llm.structured_output import StructuredValue
 
 from ._normalization import SchemaEncodingPlan
 from ._traversal import matches, resolve

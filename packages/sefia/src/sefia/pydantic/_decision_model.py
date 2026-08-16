@@ -24,7 +24,7 @@ from ..llm.decision import (
 )
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
-from ..llm.schema import LLMSchema
+from ..llm.structured_output import StructuredOutputSchema
 from ..llm.schema import JsonSchemaDocument
 from ._decision_schema import build_decision_schema, tool_argument_placeholder
 from ._tool_arguments import (
@@ -68,10 +68,10 @@ class PydanticDecisionModel(DecisionModel):
         self._adapter: TypeAdapter[_ValidatedDecision] = TypeAdapter(model)
         self._model = model
         self._tools = tools
-        self._schema: LLMSchema | None = None
+        self._schema: StructuredOutputSchema | None = None
 
     @override
-    def schema(self) -> LLMSchema:
+    def schema(self) -> StructuredOutputSchema:
         if self._schema is None:
             self._schema = build_decision_schema(self._model, self._tools)
         return self._schema

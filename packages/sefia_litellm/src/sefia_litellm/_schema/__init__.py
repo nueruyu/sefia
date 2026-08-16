@@ -1,3 +1,3 @@
-from ._adapter import LiteLLMPreparedSchema, LiteLLMSchemaAdapter
+from ._adapter import LiteLLMPreparedSchema, LiteLLMStructuredOutputAdapter
 
-__all__ = ["LiteLLMPreparedSchema", "LiteLLMSchemaAdapter"]
+__all__ = ["LiteLLMPreparedSchema", "LiteLLMStructuredOutputAdapter"]

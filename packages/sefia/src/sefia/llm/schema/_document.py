@@ -179,45 +179,6 @@ class SchemaNode:
     def set_description(self, description: str) -> None:
         self.value[K.DESCRIPTION] = description
 
-    def close_object(self) -> None:
-        self.value.setdefault(K.ADDITIONAL_PROPERTIES, False)
-        properties = self.object_map(K.PROPERTIES)
-        if properties is not None:
-            self.value[K.REQUIRED] = list(properties)
-
-    def normalize_one_of(self) -> None:
-        alternatives = self.value.pop(K.ONE_OF, None)
-        if alternatives is not None:
-            self.value[K.ANY_OF] = alternatives
-
-    def replace_with_mapping_entries(
-        self, key_schema: JsonObject, value_schema: JsonObject
-    ) -> None:
-        replacement: JsonObject = {
-            keyword: self.value[keyword]
-            for keyword in (K.TITLE, K.DESCRIPTION)
-            if keyword in self.value
-        }
-        for source, target in (
-            (K.MIN_PROPERTIES, K.MIN_ITEMS),
-            (K.MAX_PROPERTIES, K.MAX_ITEMS),
-        ):
-            if source in self.value:
-                replacement[target] = self.value[source]
-        replacement.update(
-            {
-                K.TYPE: "array",
-                K.ITEMS: {
-                    K.TYPE: "object",
-                    K.PROPERTIES: {"key": key_schema, "value": value_schema},
-                    K.REQUIRED: ["key", "value"],
-                    K.ADDITIONAL_PROPERTIES: False,
-                },
-            }
-        )
-        self.value.clear()
-        self.value.update(replacement)
-
     def walk(self) -> Iterator["SchemaCursor"]:
         yield from _walk(self.value)
 

@@ -1,6 +1,6 @@
 import pytest
 
-from sefia.llm.schema import JsonSchemaDocument, LocalDefinitionRef, SchemaNode
+from sefia.llm.schema import JsonSchemaDocument, LocalDefinitionRef
 
 
 def test_schema_document_rejects_non_json_values() -> None:
@@ -72,27 +72,3 @@ def test_local_definition_reference_handles_json_pointer_escaping() -> None:
     assert nested.resolve_from(
         {"User": {"properties": {"name": {"type": "string"}}}}
     ) == {"type": "string"}
-
-
-def test_schema_node_owns_common_rewrites() -> None:
-    union = SchemaNode({"oneOf": [{"type": "string"}]})
-    union.normalize_one_of()
-    assert union.one_of() == []
-    assert len(union.any_of()) == 1
-
-    mapping = SchemaNode(
-        {
-            "type": "object",
-            "title": "Labels",
-            "additionalProperties": {"type": "integer"},
-            "minProperties": 1,
-        }
-    )
-
-    value_schema = mapping.additional_properties()
-    assert isinstance(value_schema, SchemaNode)
-    mapping.replace_with_mapping_entries({"type": "string"}, value_schema.value)
-
-    assert mapping.type == "array"
-    assert mapping.items() is not None
-    assert mapping.value["minItems"] == 1

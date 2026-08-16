@@ -6,10 +6,12 @@ from sefia.llm.schema import (
     JsonObject,
     JsonSchemaDocument,
     JsonValue,
-    LLMSchema,
     SchemaKeyword,
     SchemaNode,
     SchemaPath,
+)
+from sefia.llm.structured_output import (
+    StructuredOutputSchema,
     StructuredValue,
     to_structured_value,
 )
@@ -37,8 +39,8 @@ class LiteLLMPreparedSchema:
 
 
 @final
-class LiteLLMSchemaAdapter:
-    def build(self, logical: LLMSchema) -> LiteLLMPreparedSchema:
+class LiteLLMStructuredOutputAdapter:
+    def build(self, logical: StructuredOutputSchema) -> LiteLLMPreparedSchema:
         schema, preserved = _compose_envelope(logical)
         SchemaNormalizer(preserved).normalize(schema)
         plan = MappingLowerer(preserved).lower(schema)
@@ -53,7 +55,7 @@ class LiteLLMSchemaAdapter:
 
 
 def _compose_envelope(
-    logical: LLMSchema,
+    logical: StructuredOutputSchema,
 ) -> tuple[JsonObject, frozenset[SchemaPath]]:
     payload = logical.document.mutable_copy()
     definitions = SchemaNode(payload).take_definitions()
@@ -63,6 +65,6 @@ def _compose_envelope(
     schema = root.value
     preserved = frozenset(
         path if path and path[0] == K.DEFINITIONS else (K.PROPERTIES, "payload", *path)
-        for path in logical.raw_schema_paths
+        for path in logical.preserved_schema_paths
     )
     return schema, preserved

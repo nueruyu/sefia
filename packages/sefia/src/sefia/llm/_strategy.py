@@ -26,7 +26,7 @@ from ._messages import Message
 from ._prompt_formatter import PromptFormatter
 from ._tool_call_ids import ToolCallIdRegistry
 from .decision import DecisionModelBuilder
-from .schema import LLMSchema
+from .structured_output import StructuredOutputSchema
 from .streaming import StructuredOutputEvent
 
 JsonDefault = Callable[[Any], Any]
@@ -108,7 +108,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         messages: list[Message],
         director: ExecutionDirector,
-        output_schema: LLMSchema,
+        output_schema: StructuredOutputSchema,
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:

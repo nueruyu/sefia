@@ -11,12 +11,12 @@ from ..llm.schema import (
     JsonObject,
     JsonSchemaDocument,
     JsonValue,
-    LLMSchema,
     SchemaKeyword,
     SchemaNode,
     SchemaPath,
     require_json_object,
 )
+from ..llm.structured_output import StructuredOutputSchema
 from ._tool_arguments import ToolArgumentContract, ToolSchemaKind
 
 _TOOL_ARGUMENT_MARKER = "x-sefia-tool-arguments"
@@ -35,7 +35,7 @@ def tool_argument_placeholder(tool_name: str) -> WithJsonSchema:
 
 def build_decision_schema(
     model: Any, tools: dict[str, ToolArgumentContract]
-) -> LLMSchema:
+) -> StructuredOutputSchema:
     schema = require_json_object(TypeAdapter(model).json_schema())
     root = SchemaNode(schema)
     root_definitions = root.ensure_definitions()
@@ -64,9 +64,9 @@ def build_decision_schema(
             raw_definition_names.update(composed.definitions)
 
     root.set_description("The model for the LLM's decision on the next action.")
-    return LLMSchema(
+    return StructuredOutputSchema(
         document=JsonSchemaDocument.from_mapping(schema),
-        raw_schema_paths=frozenset(raw_paths),
+        preserved_schema_paths=frozenset(raw_paths),
     )
 
 

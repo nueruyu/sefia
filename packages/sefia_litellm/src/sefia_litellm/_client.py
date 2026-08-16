@@ -10,7 +10,8 @@ from typing_extensions import final, override
 
 from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
-from sefia.llm.schema import JsonObject, LLMSchema, require_json_value
+from sefia.llm.schema import JsonObject, require_json_value
+from sefia.llm.structured_output import StructuredOutputSchema
 from sefia.llm.streaming import StructuredOutputCallback
 
 from .exceptions import (
@@ -19,7 +20,7 @@ from .exceptions import (
     InferenceTemporarilyUnavailableError,
     InferenceTimeoutError,
 )
-from ._schema import LiteLLMPreparedSchema, LiteLLMSchemaAdapter
+from ._schema import LiteLLMPreparedSchema, LiteLLMStructuredOutputAdapter
 from ._schema._streaming import StructuredOutputStreamer
 
 if TYPE_CHECKING:
@@ -170,7 +171,7 @@ class LiteLLMClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
-        output_schema: LLMSchema | None = None,
+        output_schema: StructuredOutputSchema | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         structured_output_callback: StructuredOutputCallback | None = None,
         reasoning_callback: (
@@ -185,7 +186,7 @@ class LiteLLMClient(LLMClient):
 
         raw_messages = [msg.to_dict(exclude_none=True) for msg in messages]
         prepared = (
-            LiteLLMSchemaAdapter().build(output_schema)
+            LiteLLMStructuredOutputAdapter().build(output_schema)
             if output_schema is not None
             else None
         )

@@ -35,7 +35,7 @@ from typing_extensions import final, override
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._session import Session
 from .llm import LLMClient, LLMResponse, Message
-from .llm.schema import LLMSchema
+from .llm.structured_output import StructuredOutputSchema
 from .llm.streaming import StructuredOutputCallback
 from .pydantic._json_utils import pydantic_json_default
 
@@ -55,7 +55,7 @@ class MockLLMClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
-        output_schema: LLMSchema | None = None,
+        output_schema: StructuredOutputSchema | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         structured_output_callback: StructuredOutputCallback | None = None,
         reasoning_callback: (

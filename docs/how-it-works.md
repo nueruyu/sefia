@@ -106,11 +106,12 @@ and argument validator, `_decision_model.py` owns local validation, and
 `_decision_schema.py` composes the logical schema. Provider-side response decoding
 and stream-path normalization stay inside the client implementation.
 
-`DecisionModelBuilder` implementations return an `LLMSchema`, not a provider-ready
+`DecisionModelBuilder` implementations return a `StructuredOutputSchema`, not a provider-ready
 dictionary. An `LLMClient` receives that logical contract and owns any schema
 encoding, prompt fallback, response decoding, and structured-stream decoding needed
 by its model. The decision contracts live in `sefia.llm.decision`; the logical schema
-contract lives in `sefia.llm.schema`.
+contract and decoded value types live in `sefia.llm.structured_output`.
+`sefia.llm.schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 The core system prompt is `docstring + decision semantics + tool definitions`; the
 client adds output-format instructions when the model needs a schema in its prompt.

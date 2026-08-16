@@ -20,7 +20,8 @@ from litellm.exceptions import (
 )
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
-from sefia.llm.schema import JsonSchemaDocument, LLMSchema
+from sefia.llm.schema import JsonSchemaDocument
+from sefia.llm.structured_output import StructuredOutputSchema
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
     LiteLLMClient,
@@ -50,7 +51,7 @@ class TestLiteLLMClient:
         tools: list[dict[str, Any]] = [
             {"type": "function", "function": {"name": "get_weather"}}
         ]
-        output_schema = LLMSchema(
+        output_schema = StructuredOutputSchema(
             JsonSchemaDocument.from_mapping(
                 {
                     "type": "object",
@@ -87,7 +88,7 @@ class TestLiteLLMClient:
         self, mock_acompletion: AsyncMock
     ) -> None:
         client = LiteLLMClient(model="legacy-model", native_structured_output=False)
-        schema = LLMSchema(
+        schema = StructuredOutputSchema(
             JsonSchemaDocument.from_mapping(
                 {
                     "type": "object",

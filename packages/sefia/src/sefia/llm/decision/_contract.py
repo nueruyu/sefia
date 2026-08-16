@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any
 
 from ..._tool_system import ToolEntry
-from ..schema import LLMSchema
+from ..structured_output import StructuredOutputSchema
 
 
 class DecisionMode(Enum):
@@ -110,7 +110,7 @@ class DecisionModel(ABC):
     """Schema and validation boundary for LLM decisions."""
 
     @abstractmethod
-    def schema(self) -> LLMSchema:
+    def schema(self) -> StructuredOutputSchema:
         """Return the logical schema that an LLM client prepares for transport."""
         ...
 

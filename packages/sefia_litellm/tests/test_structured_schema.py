@@ -30,12 +30,12 @@ from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._decision_model import _unknown_tool_name_from_error
 from sefia.streaming import ArgStream, StringEnd
-from sefia_litellm._schema import LiteLLMSchemaAdapter
+from sefia_litellm._schema import LiteLLMStructuredOutputAdapter
 from sefia_litellm._schema._streaming import StructuredOutputStreamer
 
 
 def _prepare(director: Any):
-    return LiteLLMSchemaAdapter().build(director.build_decision_schema())
+    return LiteLLMStructuredOutputAdapter().build(director.build_decision_schema())
 
 
 def _process(director: Any, data: Any, tool_call_ids: ToolCallIdRegistry | None = None):
@@ -274,9 +274,9 @@ def test_raw_definition_is_not_normalized_with_typed_definition() -> None:
     definitions = logical.document.root().definitions()
     assert definitions["SharedPolicy"].strings("required") is None
     assert "typed__SharedPolicy" in definitions
-    assert ("$defs", "SharedPolicy") in logical.raw_schema_paths
+    assert ("$defs", "SharedPolicy") in logical.preserved_schema_paths
     with pytest.raises(ValueError, match=r"missing \['name'\]"):
-        LiteLLMSchemaAdapter().build(logical)
+        LiteLLMStructuredOutputAdapter().build(logical)
 
 
 def test_conflicting_tool_definition_names_are_renamed() -> None:

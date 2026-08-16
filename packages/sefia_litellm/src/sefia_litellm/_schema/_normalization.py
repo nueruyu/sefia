@@ -26,8 +26,8 @@ class SchemaNormalizer:
     def normalize(self, schema: JsonObject) -> None:
         for _, node in walk(schema, skip=self._preserved):
             if node.type == "object":
-                node.close_object()
-            node.normalize_one_of()
+                _close_object(node)
+            _replace_one_of(node)
 
 
 @final
@@ -63,7 +63,7 @@ class MappingLowerer:
                 if property_names is not None
                 else {K.TYPE: "string"}
             )
-            node.replace_with_mapping_entries(key_schema, additional.value)
+            _replace_with_mapping_entries(node, key_schema, additional.value)
             mappings.append(MappingEncoding(path))
         return SchemaEncodingPlan(tuple(mappings))
 
@@ -100,3 +100,45 @@ class CompatibilityValidator:
             "LLM schema is not compatible with strict structured output at "
             f"{location}: {detail}"
         )
+
+
+def _close_object(node: SchemaNode) -> None:
+    node.value.setdefault(K.ADDITIONAL_PROPERTIES, False)
+    properties = node.object_map(K.PROPERTIES)
+    if properties is not None:
+        node.value[K.REQUIRED] = list(properties)
+
+
+def _replace_one_of(node: SchemaNode) -> None:
+    alternatives = node.value.pop(K.ONE_OF, None)
+    if alternatives is not None:
+        node.value[K.ANY_OF] = alternatives
+
+
+def _replace_with_mapping_entries(
+    node: SchemaNode, key_schema: JsonObject, value_schema: JsonObject
+) -> None:
+    replacement: JsonObject = {
+        keyword: node.value[keyword]
+        for keyword in (K.TITLE, K.DESCRIPTION)
+        if keyword in node.value
+    }
+    for source, target in (
+        (K.MIN_PROPERTIES, K.MIN_ITEMS),
+        (K.MAX_PROPERTIES, K.MAX_ITEMS),
+    ):
+        if source in node.value:
+            replacement[target] = node.value[source]
+    replacement.update(
+        {
+            K.TYPE: "array",
+            K.ITEMS: {
+                K.TYPE: "object",
+                K.PROPERTIES: {"key": key_schema, "value": value_schema},
+                K.REQUIRED: ["key", "value"],
+                K.ADDITIONAL_PROPERTIES: False,
+            },
+        }
+    )
+    node.value.clear()
+    node.value.update(replacement)

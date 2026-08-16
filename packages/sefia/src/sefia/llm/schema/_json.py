@@ -7,10 +7,6 @@ JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 JsonObject: TypeAlias = dict[str, JsonValue]
 
-StructuredValue: TypeAlias = (
-    JsonScalar | list["StructuredValue"] | dict[JsonScalar, "StructuredValue"]
-)
-
 
 def is_json_value(value: object) -> TypeGuard[JsonValue]:
     if value is None or isinstance(value, str | int | float | bool):
@@ -38,11 +34,3 @@ def require_json_object(value: Mapping[str, object] | object) -> JsonObject:
     ):
         raise TypeError("value is not a JSON object")
     return cast(JsonObject, value)
-
-
-def to_structured_value(value: JsonValue) -> StructuredValue:
-    if isinstance(value, list):
-        return [to_structured_value(item) for item in value]
-    if isinstance(value, dict):
-        return {key: to_structured_value(item) for key, item in value.items()}
-    return value
