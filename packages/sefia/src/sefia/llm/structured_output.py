@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Any
 
-from typing_extensions import TypeAlias, final
+from typing_extensions import TypeAlias
 
-from .json_schema import JsonScalar, JsonSchemaDocument, JsonValue, SchemaPath
+from .json_schema import JsonScalar, JsonSchemaDocument, JsonValue
 
 StructuredValue: TypeAlias = (
     JsonScalar | list["StructuredValue"] | dict[JsonScalar, "StructuredValue"]
@@ -17,13 +16,6 @@ def to_structured_value(value: JsonValue) -> StructuredValue:
     if isinstance(value, dict):
         return {key: to_structured_value(item) for key, item in value.items()}
     return value
-
-
-@final
-@dataclass(frozen=True)
-class StructuredOutputSchema:
-    document: JsonSchemaDocument
-    preserved_schema_paths: frozenset[SchemaPath] = frozenset()
 
 
 class StructuredValueSchema(ABC):
@@ -41,7 +33,6 @@ class StructuredValueSchemaFactory(ABC):
 
 
 __all__ = [
-    "StructuredOutputSchema",
     "StructuredValue",
     "StructuredValueSchema",
     "StructuredValueSchemaFactory",

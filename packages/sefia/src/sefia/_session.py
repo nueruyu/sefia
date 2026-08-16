@@ -7,8 +7,8 @@ from typing_extensions import final
 from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import Policy
 from .llm.step_decision import (
-    DefaultStepDecisionSchemaFactory,
-    StepDecisionSchemaFactory,
+    DefaultStepDecisionModelFactory,
+    StepDecisionModelFactory,
 )
 from ._interfaces.history_storage import HistoryStorage
 from ._profiles import Profile
@@ -37,7 +37,7 @@ class Session:
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
         inspector: ToolFunctionInspector | None = None,
-        step_decision_schema_factory: StepDecisionSchemaFactory | None = None,
+        step_decision_model_factory: StepDecisionModelFactory | None = None,
         stream: bool = False,
         history_storage: HistoryStorage | None = None,
         max_repair_attempts: int = 2,
@@ -50,12 +50,12 @@ class Session:
 
         # One Pydantic backend supplies callable inspection and result schemas
         # for whichever default seam the caller did not replace.
-        if inspector is None or step_decision_schema_factory is None:
+        if inspector is None or step_decision_model_factory is None:
             default_backend = PydanticModelBackend()
             inspector = inspector or default_backend
-            step_decision_schema_factory = (
-                step_decision_schema_factory
-                or DefaultStepDecisionSchemaFactory(default_backend)
+            step_decision_model_factory = (
+                step_decision_model_factory
+                or DefaultStepDecisionModelFactory(default_backend)
             )
 
         self._tool_collector = tool_collector or DefaultToolCollector(
@@ -67,7 +67,7 @@ class Session:
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
-                step_decision_schema_factory=step_decision_schema_factory,
+                step_decision_model_factory=step_decision_model_factory,
                 prompt_formatter=prompt_formatter,
                 json_default=pydantic_json_default,
                 stream=stream,

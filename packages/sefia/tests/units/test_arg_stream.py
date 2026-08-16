@@ -16,8 +16,8 @@ from sefia.llm._arg_stream import (
     parse_tool_call_path,
 )
 from sefia.llm._client import LLMClient
-from sefia.llm.step_decision import DefaultStepDecisionSchemaFactory
-from sefia.llm.structured_output import StructuredOutputSchema
+from sefia.llm.step_decision import DefaultStepDecisionModelFactory
+from sefia.llm.step_decision import StepDecisionModel
 from sefia.llm.streaming import (
     StructuredOutputCallback,
     StructuredScalar,
@@ -268,7 +268,7 @@ class StreamingClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
-        output_schema: StructuredOutputSchema | None = None,
+        decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         structured_output_callback: StructuredOutputCallback | None = None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
@@ -318,7 +318,7 @@ async def test_arguments_stream_through_a_real_strategy():
     formatter.format_arguments.return_value = "<arguments/>"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
-        step_decision_schema_factory=DefaultStepDecisionSchemaFactory(
+        step_decision_model_factory=DefaultStepDecisionModelFactory(
             PydanticModelBackend()
         ),
         prompt_formatter=formatter,

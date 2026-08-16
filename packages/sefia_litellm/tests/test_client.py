@@ -1,5 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Never, Self
 from unittest.mock import AsyncMock
@@ -20,8 +21,12 @@ from litellm.exceptions import (
 )
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
-from sefia.llm.json_schema import JsonSchemaDocument
-from sefia.llm.structured_output import StructuredOutputSchema
+from sefia.llm.step_decision import (
+    DefaultStepDecisionModelFactory,
+    StepDecisionModel,
+    StepDecisionSpec,
+)
+from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
     LiteLLMClient,
@@ -40,6 +45,16 @@ def mock_acompletion(mocker: MockerFixture) -> AsyncMock:
     return mocker.patch("litellm.acompletion", new_callable=AsyncMock)
 
 
+@dataclass
+class _CityResult:
+    city: str
+
+
+def _decision_model() -> StepDecisionModel:
+    spec = StepDecisionSpec.result_only(name="StepDecision", output_type=_CityResult)
+    return DefaultStepDecisionModelFactory(PydanticModelBackend()).create(spec)
+
+
 class TestLiteLLMClient:
     async def test_complete_sends_correct_request_to_litellm(
         self, mock_acompletion: AsyncMock
@@ -51,14 +66,7 @@ class TestLiteLLMClient:
         tools: list[dict[str, Any]] = [
             {"type": "function", "function": {"name": "get_weather"}}
         ]
-        output_schema = StructuredOutputSchema(
-            JsonSchemaDocument.from_mapping(
-                {
-                    "type": "object",
-                    "properties": {"city": {"type": "string"}},
-                }
-            )
-        )
+        decision_model = _decision_model()
 
         mock_acompletion.return_value = ModelResponse(
             choices=[
@@ -70,7 +78,7 @@ class TestLiteLLMClient:
             ]
         )
 
-        await client.complete(messages, tools=tools, output_schema=output_schema)
+        await client.complete(messages, tools=tools, decision_model=decision_model)
 
         mock_acompletion.assert_called_once()
         call_args = mock_acompletion.call_args[1]
@@ -79,32 +87,28 @@ class TestLiteLLMClient:
         assert call_args["tools"] == tools
         assert call_args["response_format"]["type"] == "json_schema"
         wire_schema = call_args["response_format"]["json_schema"]["schema"]
-        assert wire_schema["properties"]["payload"]["properties"]["city"] == {
-            "type": "string"
-        }
+        city_schema = wire_schema["properties"]["payload"]["properties"]["result"][
+            "properties"
+        ]["city"]
+        assert city_schema["type"] == "string"
         assert call_args["temperature"] == 0.5
 
     async def test_complete_uses_prompt_fallback_and_decodes_response(
         self, mock_acompletion: AsyncMock
     ) -> None:
         client = LiteLLMClient(model="legacy-model", native_structured_output=False)
-        schema = StructuredOutputSchema(
-            JsonSchemaDocument.from_mapping(
-                {
-                    "type": "object",
-                    "properties": {"city": {"type": "string"}},
-                    "required": ["city"],
-                    "additionalProperties": False,
-                }
-            )
-        )
+        model = _decision_model()
         mock_acompletion.return_value = ModelResponse(
             choices=[
                 Choices(
                     finish_reason="stop",
                     index=0,
                     message=LiteLLMMessage(
-                        role="assistant", content='{"payload":{"city":"Tokyo"}}'
+                        role="assistant",
+                        content=(
+                            '{"payload":{"decision":"result",'
+                            '"result":{"city":"Tokyo"}}}'
+                        ),
                     ),
                 )
             ]
@@ -112,7 +116,7 @@ class TestLiteLLMClient:
 
         response = await client.complete(
             [Message(role="system", content="Follow the task.")],
-            output_schema=schema,
+            decision_model=model,
         )
 
         call_args = mock_acompletion.call_args.kwargs
@@ -120,7 +124,10 @@ class TestLiteLLMClient:
         system_prompt = call_args["messages"][0]["content"]
         assert "Follow the task." in system_prompt
         assert '"payload"' in system_prompt
-        assert response.structured_output == {"city": "Tokyo"}
+        assert response.structured_output == {
+            "decision": "result",
+            "result": {"city": "Tokyo"},
+        }
 
     async def test_complete_parses_litellm_response_and_calculates_cost(
         self, mock_acompletion: AsyncMock, mocker: MockerFixture

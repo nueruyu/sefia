@@ -6,12 +6,8 @@ from sefia.llm.json_schema import JsonObject, SchemaKeyword, SchemaNode, SchemaP
 K = SchemaKeyword
 
 
-def walk(
-    root: JsonObject, *, skip: frozenset[SchemaPath] = frozenset()
-) -> Iterator[tuple[SchemaPath, SchemaNode]]:
+def walk(root: JsonObject) -> Iterator[tuple[SchemaPath, SchemaNode]]:
     for cursor in SchemaNode(root).walk():
-        if any(cursor.path[: len(path)] == path for path in skip):
-            continue
         yield cursor.path, cursor.node
 
 

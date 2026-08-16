@@ -82,24 +82,23 @@ unified structured-output schema.
 
 A `StepDecisionSpec` selects one of three shapes:
 
-| Return type | Mode | Step-decision schema |
+| Return type | Mode | Step-decision shape |
 | --- | --- | --- |
 | `Never` | `TOOLS_REQUIRED` | `{ decision: "tool_calls", tool_calls: [...] }` only |
-| has tools | `TOOLS_OR_RESULT` | `oneOf(tool_calls decision, result decision)` |
+| has tools | `TOOLS_OR_RESULT` | tool-calls or result decision |
 | no tools | `RESULT_ONLY` | `{ decision: "result", result: T }` only |
 
-`llm/step_decision.py` owns this logical shape. It composes tool schemas and the
-result's `StructuredValueSchema`, identifies raw JSON Schema regions that adapters
-must not rewrite, and validates decoded values as `StepDecision`s. `llm/json_schema`
-imports `$defs`, resolves name collisions, and rewrites local references without
-knowing about tools or Pydantic. Recursive JSON value types and `SchemaNode`
-accessors keep schema traversal out of `dict[str, Any]`.
-The logical schema crosses the `LLMClient` boundary once. `LiteLLMClient` adapts it
-to the model's wire format, uses native structured output when available, and puts
-the adapted schema in the system prompt otherwise. Its schema adapter adds the
-`payload` envelope, closes strict objects, and reversibly encodes typed mappings as
-arrays of `{key, value}` entries. A path-based encoding plan records those changes
-for response decoding.
+`llm/step_decision.py` owns this logical shape. It retains tools and the result's
+`StructuredValueSchema` as separate components and validates decoded values as
+`StepDecision`s. `llm/json_schema` imports `$defs`, resolves name collisions, and
+rewrites local references without knowing about tools or Pydantic. Recursive JSON
+value types and `SchemaNode` accessors keep schema traversal out of `dict[str, Any]`.
+The logical `StepDecisionModel` crosses the `LLMClient` boundary without first being
+flattened into one JSON Schema document. `LiteLLMClient` prepares the result and each
+tool-argument schema separately, composes the decision and `payload` envelopes, and
+uses the resulting wire schema as native structured output or a prompt instruction.
+Typed mappings are reversibly encoded as arrays of `{key, value}` entries. Raw JSON
+Schema tool arguments are validated without semantic rewriting.
 
 The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
 reflects callable parameters, while `_structured_value.py` produces a JSON Schema and
@@ -107,21 +106,20 @@ restores a decoded structured value to its declared Python type. It does not kno
 step-decision shape. Provider-side response decoding and stream-path normalization
 stay inside the client implementation.
 
-The default `StepDecisionSchemaFactory` in `sefia.llm` composes these leaves into a
-`StepDecisionSchema`. It exposes the logical `StructuredOutputSchema` sent to the
-client and validates the returned value as the corresponding `StepDecision`. An
-`LLMClient` owns any schema encoding,
-prompt fallback, response decoding, and structured-stream decoding needed by its
-model. Step-decision specifications and schema interfaces live in
-`sefia.llm.step_decision`; logical schema and decoded value types live in
-`sefia.llm.structured_output`.
+The default `StepDecisionModelFactory` in `sefia.llm` composes these leaves into a
+`StepDecisionModel`. It exposes the decision mode, result model, and tools, and
+validates the returned value as the corresponding `StepDecision`. An `LLMClient`
+owns decision-envelope composition, schema encoding, prompt fallback, response
+decoding, and structured-stream decoding needed by its model. Step-decision models
+live in `sefia.llm.step_decision`; Python-value schema interfaces and decoded value
+types live in `sefia.llm.structured_output`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 The core system prompt is `docstring + decision semantics + tool definitions`; the
 client adds output-format instructions when the model needs a schema in its prompt.
 The user message is the call's arguments rendered as XML (`_build_messages`); prior
 steps are replayed as ordinary assistant/tool messages. The client is always called
-with `tools=None` and the logical `output_schema` — provider native tool-calling is
+with `tools=None` and the logical `decision_model` — provider native tool-calling is
 never used. The client returns logical structured data when it adapts the wire format;
 the strategy falls back to parsing plain client responses before the step-decision
 validator validates the value (`InvalidInferenceResponseError` if it doesn't conform).

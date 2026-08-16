@@ -90,7 +90,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: `step_decision.py` owns the logical step-decision shape and validation, `json_schema/` contains only JSON Schema concepts, `structured_output.py` defines the Python-value schema seam and Sefia's logical output boundary, `_step_decision_prompt.py` describes the choices to the model, and `_strategy.py` orchestrates calls and repair. | `LLMInferenceStrategy`, `LLMClient`, `StepDecisionSpec`, `StepDecisionSchema`, `StructuredValueSchema`, `JsonSchemaDocument`, prompt formatters |
+| `llm/` | The **default** `InferenceStrategy`: `step_decision.py` owns the provider-neutral step-decision model and validation, `json_schema/` contains only JSON Schema concepts, `structured_output.py` defines the Python-value schema seam, `_step_decision_prompt.py` describes the choices to the model, and `_strategy.py` orchestrates calls and repair. | `LLMInferenceStrategy`, `LLMClient`, `StepDecisionSpec`, `StepDecisionModel`, `StructuredValueSchema`, `JsonSchemaDocument`, prompt formatters |
 | `pydantic/` | The **default** `ToolFunctionInspector` + `StructuredValueSchemaFactory`: callable inspection plus JSON Schema generation and restoration for Python-typed leaves. It does not know the logical step-decision shape. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
 
@@ -104,7 +104,7 @@ implementation noted in parentheses.
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
 | `StructuredValueSchemaFactory` | non-Pydantic Python-value schema generation and restoration | `pydantic/PydanticModelBackend` |
-| `StepDecisionSchemaFactory` | a different logical decision representation | `llm/DefaultStepDecisionSchemaFactory` |
+| `StepDecisionModelFactory` | a different logical decision representation | `llm/DefaultStepDecisionModelFactory` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
 | `HistoryStorage` | where a run's history is persisted (enables compaction) | `GlyffHistoryStorage` (glyff metadata) |
@@ -139,7 +139,7 @@ implementation noted in parentheses.
 | Change the logical step-decision shape or validation | `llm/step_decision.py` |
 | Change Pydantic Python-value schema generation or restoration | `pydantic/_structured_value.py` |
 | Change generic `$defs` import or `$ref` rewriting | `llm/json_schema/_composition.py` |
-| Change LiteLLM's structured-output wire format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
+| Change LiteLLM's decision envelope or structured-output wire format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |

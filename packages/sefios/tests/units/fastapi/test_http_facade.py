@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from sefia import Tools
 from sefia.llm import LLMClient, LLMResponse, Message
-from sefia.llm.structured_output import StructuredOutputSchema
+from sefia.llm.step_decision import StepDecisionModel
 from sefia.llm.streaming import (
     StructuredOutputCallback,
     StructuredStringDelta,
@@ -32,7 +32,7 @@ class StreamingClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
-        output_schema: StructuredOutputSchema | None = None,
+        decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[Any, Any, None]] | None = None,
         structured_output_callback: StructuredOutputCallback | None = None,
         reasoning_callback: (Callable[[str], Coroutine[Any, Any, None]] | None) = None,

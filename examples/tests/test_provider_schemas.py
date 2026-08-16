@@ -2,7 +2,7 @@ from importlib import import_module
 
 from sefia._tool_system import SignatureToolEntry, ToolEntry
 from sefia.llm.json_schema import SchemaNode
-from sefia.llm.step_decision import DefaultStepDecisionSchemaFactory, StepDecisionSpec
+from sefia.llm.step_decision import DefaultStepDecisionModelFactory, StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._schema import LiteLLMStructuredOutputAdapter
 from sefios.tools import WebSearch
@@ -16,7 +16,7 @@ def _decision_schema(output_type: object, tools: list[ToolEntry]):
     spec = StepDecisionSpec.for_inference(
         name="StepDecision", output_type=output_type, tools=tools
     )
-    return DefaultStepDecisionSchemaFactory(PydanticModelBackend()).create(spec)
+    return DefaultStepDecisionModelFactory(PydanticModelBackend()).create(spec)
 
 
 def test_news_writer_schema_composes_nested_research_tool_types() -> None:
@@ -30,15 +30,15 @@ def test_news_writer_schema_composes_nested_research_tool_types() -> None:
         inspector=backend,
     )
 
-    logical = _decision_schema(news_models.NewsArticle, [tool]).structured_output
-    schema = LiteLLMStructuredOutputAdapter().build(logical).wire_schema.to_dict()
+    model = _decision_schema(news_models.NewsArticle, [tool])
+    schema = LiteLLMStructuredOutputAdapter().build(model).wire_schema.to_dict()
 
     assert schema["additionalProperties"] is False
 
 
 def test_code_quality_report_schema_lowers_perspective_mapping() -> None:
-    logical = _decision_schema(quality_models.QualityReport, []).structured_output
-    schema = LiteLLMStructuredOutputAdapter().build(logical).wire_schema.to_dict()
+    model = _decision_schema(quality_models.QualityReport, [])
+    schema = LiteLLMStructuredOutputAdapter().build(model).wire_schema.to_dict()
 
     payload = SchemaNode(schema).properties()["payload"]
     perspective_issues = payload.properties()["result"].properties()[

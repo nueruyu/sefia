@@ -13,8 +13,7 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import LLMClient, LLMInferenceStrategy
-from sefia.llm.json_schema import SchemaNode
-from sefia.llm.step_decision import DefaultStepDecisionSchemaFactory, StepDecisionSpec
+from sefia.llm.step_decision import DefaultStepDecisionModelFactory, StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -79,7 +78,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        step_decision_schema_factory=DefaultStepDecisionSchemaFactory(
+        step_decision_model_factory=DefaultStepDecisionModelFactory(
             PydanticModelBackend()
         ),
         prompt_formatter=formatter,
@@ -87,25 +86,6 @@ def _make_strategy(
         stream=stream,
         max_repair_attempts=max_repair_attempts,
     )
-
-
-def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
-    if "$ref" in schema:
-        key = schema["$ref"].split("/")[-1]
-        return root["$defs"][key]
-    return schema
-
-
-def _decision_branch(schema: dict[str, Any], decision: str) -> dict[str, Any]:
-    if schema.get("properties", {}).get("decision", {}).get("const") == decision:
-        return schema
-
-    for candidate in schema["oneOf"]:
-        branch = _resolve(candidate, schema)
-        if branch["properties"]["decision"]["const"] == decision:
-            return branch
-
-    raise AssertionError(f"Decision branch not found: {decision}")
 
 
 def _function_info(
@@ -164,68 +144,6 @@ class TestLLMInferenceStrategy:
         assert "見つかりました" in str(messages[3].content)
         assert "\\u898b" not in str(messages[3].content)
         assert json.loads(str(messages[3].content)) == "見つかりました"
-
-    def test_structured_output_schema_hoists_nested_definitions(self):
-        spec = StepDecisionSpec.for_inference(
-            name="StepDecision", output_type=list[MyIssue], tools=[_tool(search)]
-        )
-        schema = (
-            DefaultStepDecisionSchemaFactory(PydanticModelBackend())
-            .create(spec)
-            .structured_output.document.to_dict()
-        )
-
-        root = SchemaNode(schema)
-        assert "MyIssue" in root.definitions()
-        result_branch = _decision_branch(schema, "result")
-        result_schema = result_branch["properties"]["result"]
-        assert "$defs" not in result_schema
-        assert result_schema["items"]["$ref"] == "#/$defs/MyIssue"
-        tool_calls_branch = _decision_branch(schema, "tool_calls")
-        tool_call = tool_calls_branch["properties"]["tool_calls"]["items"]
-        assert tool_call["properties"]["arguments"]["required"] == ["q"]
-
-    def test_structured_output_schema_requires_non_null_result_without_tools(self):
-        spec = StepDecisionSpec.for_inference(
-            name="StepDecision", output_type=list[MyIssue], tools=[]
-        )
-        schema = (
-            DefaultStepDecisionSchemaFactory(PydanticModelBackend())
-            .create(spec)
-            .structured_output.document.to_dict()
-        )
-        result_branch = _decision_branch(schema, "result")
-
-        assert schema["required"] == ["decision", "result"]
-        assert result_branch["required"] == ["decision", "result"]
-        assert result_branch["properties"]["decision"]["const"] == "result"
-        result_schema = result_branch["properties"]["result"]
-        assert result_schema["type"] == "array"
-        assert "oneOf" not in result_schema
-
-    def test_structured_output_schema_uses_decision_discriminator_with_tools(self):
-        spec = StepDecisionSpec.for_inference(
-            name="StepDecision", output_type=list[MyIssue], tools=[_tool(search)]
-        )
-        schema = (
-            DefaultStepDecisionSchemaFactory(PydanticModelBackend())
-            .create(spec)
-            .structured_output.document.to_dict()
-        )
-        payload = SchemaNode(schema)
-
-        discriminator = payload.object_map("discriminator")
-        assert discriminator is not None
-        assert discriminator["propertyName"] == "decision"
-        assert len(payload.one_of()) == 2
-        assert _decision_branch(schema, "tool_calls")["required"] == [
-            "decision",
-            "tool_calls",
-        ]
-        assert _decision_branch(schema, "result")["required"] == [
-            "decision",
-            "result",
-        ]
 
     def test_build_messages_tells_no_tool_agent_to_return_empty_collection(self):
         strategy = _make_strategy()

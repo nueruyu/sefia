@@ -94,20 +94,19 @@ def test_definition_registry_imports_definitions_and_rewrites_references() -> No
     assert definitions == imported.definitions
 
 
-def test_definition_registry_renames_conflicts_and_reserved_definitions() -> None:
+def test_definition_registry_renames_conflicting_definitions() -> None:
     definitions: JsonObject = {"Item": {"type": "string"}}
     registry = DefinitionRegistry(definitions)
-    registry.reserve(["Item"])
     fragment: JsonObject = {
         "$ref": "#/$defs/Item",
-        "$defs": {"Item": {"type": "string"}},
+        "$defs": {"Item": {"type": "integer"}},
     }
 
     imported = registry.import_schema(fragment, namespace="search")
 
     assert imported.schema == {"$ref": "#/$defs/search__Item"}
-    assert imported.definitions == {"search__Item": {"type": "string"}}
+    assert imported.definitions == {"search__Item": {"type": "integer"}}
     assert definitions == {
         "Item": {"type": "string"},
-        "search__Item": {"type": "string"},
+        "search__Item": {"type": "integer"},
     }

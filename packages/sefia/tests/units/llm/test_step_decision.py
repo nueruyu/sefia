@@ -16,10 +16,10 @@ from sefia.inference import (
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm._step_decision_prompt import build_step_decision_prompt
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.json_schema import SchemaNode
 from sefia.llm.step_decision import (
-    DefaultStepDecisionSchemaFactory,
-    StepDecisionSchema,
+    DefaultStepDecisionModelFactory,
+    StepDecisionMode,
+    StepDecisionModel,
     StepDecisionSpec,
 )
 from sefia.llm.structured_output import StructuredValue
@@ -68,11 +68,7 @@ _BACKEND = PydanticModelBackend()
 @dataclass(frozen=True)
 class _StepDecisionFixture:
     spec: StepDecisionSpec
-    decision_schema: StepDecisionSchema
-
-    @property
-    def schema(self):
-        return self.decision_schema.structured_output
+    decision_model: StepDecisionModel
 
     def prompt(self) -> str:
         return build_step_decision_prompt(self.spec)
@@ -82,7 +78,7 @@ class _StepDecisionFixture:
         data: StructuredValue,
         tool_call_ids: ToolCallIdRegistry | None = None,
     ):
-        return self.decision_schema.validate(data, tool_call_ids)
+        return self.decision_model.validate(data, tool_call_ids)
 
 
 def _step(output_type: Any, tools: list[ToolEntry]) -> _StepDecisionFixture:
@@ -90,7 +86,7 @@ def _step(output_type: Any, tools: list[ToolEntry]) -> _StepDecisionFixture:
         name="StepDecision", output_type=output_type, tools=tools
     )
     return _StepDecisionFixture(
-        spec, DefaultStepDecisionSchemaFactory(_BACKEND).create(spec)
+        spec, DefaultStepDecisionModelFactory(_BACKEND).create(spec)
     )
 
 
@@ -123,7 +119,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        step_decision_schema_factory=DefaultStepDecisionSchemaFactory(
+        step_decision_model_factory=DefaultStepDecisionModelFactory(
             PydanticModelBackend()
         ),
         prompt_formatter=formatter,
@@ -131,25 +127,6 @@ def _make_strategy(
         stream=stream,
         max_repair_attempts=max_repair_attempts,
     )
-
-
-def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
-    if "$ref" in schema:
-        key = schema["$ref"].split("/")[-1]
-        return root["$defs"][key]
-    return schema
-
-
-def _decision_branch(schema: dict[str, Any], decision: str) -> dict[str, Any]:
-    if schema.get("properties", {}).get("decision", {}).get("const") == decision:
-        return schema
-
-    for candidate in schema["oneOf"]:
-        branch = _resolve(candidate, schema)
-        if branch["properties"]["decision"]["const"] == decision:
-            return branch
-
-    raise AssertionError(f"Decision branch not found: {decision}")
 
 
 def _function_info(
@@ -180,17 +157,11 @@ class TestToolsRequiredDecision:
         with pytest.raises(ValueError, match="must have tools available"):
             _step(Never, [])
 
-    def test_structured_output_schema_has_no_result_field(self):
+    def test_model_exposes_tool_only_structure(self):
         step = _step(Never, [_tool(chat_tool)])
-        schema = step.schema.document.to_dict()
-        branch = _decision_branch(schema, "tool_calls")
-
-        assert schema["required"] == ["decision", "tool_calls"]
-        assert schema["additionalProperties"] is False
-        assert "result" not in branch["properties"]
-        assert branch["properties"]["decision"]["const"] == "tool_calls"
-        assert "tool_calls" in branch["properties"]
-        assert branch["required"] == ["decision", "tool_calls"]
+        assert step.decision_model.mode is StepDecisionMode.TOOLS_REQUIRED
+        assert step.decision_model.result is None
+        assert [tool.name for tool in step.decision_model.tools] == ["chat_tool"]
 
     def test_build_system_prompt_instructs_tool_only(self):
         step = _step(Never, [_tool(chat_tool)])
@@ -257,22 +228,11 @@ class TestToolsOrResultDecision:
     def _step(self, output_type: Any = str) -> _StepDecisionFixture:
         return _step(output_type, [_tool(search)])
 
-    def test_structured_output_schema_has_decision_branches(self):
-        schema = self._step().schema.document.to_dict()
-        payload = SchemaNode(schema)
-
-        discriminator = payload.object_map("discriminator")
-        assert discriminator is not None
-        assert discriminator["propertyName"] == "decision"
-        assert len(payload.one_of()) == 2
-        assert _decision_branch(schema, "tool_calls")["required"] == [
-            "decision",
-            "tool_calls",
-        ]
-        assert _decision_branch(schema, "result")["required"] == [
-            "decision",
-            "result",
-        ]
+    def test_model_exposes_tools_and_result(self):
+        model = self._step().decision_model
+        assert model.mode is StepDecisionMode.TOOLS_OR_RESULT
+        assert model.result is not None
+        assert [tool.name for tool in model.tools] == ["search"]
 
     def test_build_system_prompt_mentions_both_options(self):
         step = self._step()
@@ -349,15 +309,11 @@ class TestResultOnlyDecision:
     def _step(self, output_type: Any = str) -> _StepDecisionFixture:
         return _step(output_type, [])
 
-    def test_structured_output_schema_has_only_result(self):
-        schema = self._step().schema.document.to_dict()
-        branch = _decision_branch(schema, "result")
-
-        assert schema["required"] == ["decision", "result"]
-        assert "tool_calls" not in branch["properties"]
-        assert "result" in branch["properties"]
-        assert branch["properties"]["decision"]["const"] == "result"
-        assert branch["required"] == ["decision", "result"]
+    def test_model_exposes_result_only_structure(self):
+        model = self._step().decision_model
+        assert model.mode is StepDecisionMode.RESULT_ONLY
+        assert model.result is not None
+        assert model.tools == ()
 
     def test_build_system_prompt_mentions_no_tools(self):
         step = self._step()

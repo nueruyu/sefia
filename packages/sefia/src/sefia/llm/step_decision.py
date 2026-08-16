@@ -4,26 +4,17 @@ from enum import Enum
 from typing import Any, Never, Protocol, cast
 
 import jsonschema.validators
-from typing_extensions import final
+from typing_extensions import final, override
 
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCallsDecision
-from .json_schema import (
-    DefinitionRegistry,
-    JsonObject,
-    JsonSchemaDocument,
-    SchemaKeyword,
-    SchemaPath,
-)
+from .json_schema import JsonSchemaDocument
 from .structured_output import (
-    StructuredOutputSchema,
     StructuredValue,
     StructuredValueSchema,
     StructuredValueSchemaFactory,
 )
-
-K = SchemaKeyword
 
 
 class StepDecisionMode(Enum):
@@ -90,10 +81,37 @@ class ToolCallIdSource(Protocol):
     def get_or_create(self, index: int) -> str: ...
 
 
-class StepDecisionSchema(ABC):
+@dataclass(frozen=True)
+class TypedToolArguments:
+    json_schema: JsonSchemaDocument
+
+
+@dataclass(frozen=True)
+class JsonToolArguments:
+    json_schema: JsonSchemaDocument
+
+
+ToolArguments = TypedToolArguments | JsonToolArguments
+
+
+@dataclass(frozen=True)
+class StepTool:
+    name: str
+    arguments: ToolArguments
+
+
+class StepDecisionModel(ABC):
     @property
     @abstractmethod
-    def structured_output(self) -> StructuredOutputSchema: ...
+    def mode(self) -> StepDecisionMode: ...
+
+    @property
+    @abstractmethod
+    def tools(self) -> tuple[StepTool, ...]: ...
+
+    @property
+    @abstractmethod
+    def result(self) -> StructuredValueSchema | None: ...
 
     @abstractmethod
     def validate(
@@ -101,15 +119,15 @@ class StepDecisionSchema(ABC):
     ) -> StepDecision: ...
 
 
-class StepDecisionSchemaFactory(ABC):
+class StepDecisionModelFactory(ABC):
     @abstractmethod
-    def create(self, spec: StepDecisionSpec) -> StepDecisionSchema: ...
+    def create(self, spec: StepDecisionSpec) -> StepDecisionModel: ...
 
 
-class _ToolSchema:
-    def __init__(self, document: JsonSchemaDocument, *, raw: bool):
-        self.document = document
-        self.raw = raw
+class _ToolModel:
+    def __init__(self, step_tool: StepTool):
+        self.schema = step_tool
+        document = step_tool.arguments.json_schema
         schema = document.to_dict()
         validator_cls = jsonschema.validators.validator_for(
             schema, default=jsonschema.Draft202012Validator
@@ -133,21 +151,31 @@ class _ToolSchema:
 
 
 @final
-class DefaultStepDecisionSchema(StepDecisionSchema):
+class DefaultStepDecisionModel(StepDecisionModel):
     def __init__(
         self,
         spec: StepDecisionSpec,
-        tools: dict[str, _ToolSchema],
+        tools: dict[str, _ToolModel],
         result: StructuredValueSchema | None,
     ):
         self._spec = spec
         self._tools = tools
         self._result = result
-        self._structured_output = _build_structured_output(spec, tools, result)
 
     @property
-    def structured_output(self) -> StructuredOutputSchema:
-        return self._structured_output
+    @override
+    def mode(self) -> StepDecisionMode:
+        return self._spec.mode
+
+    @property
+    @override
+    def tools(self) -> tuple[StepTool, ...]:
+        return tuple(tool.schema for tool in self._tools.values())
+
+    @property
+    @override
+    def result(self) -> StructuredValueSchema | None:
+        return self._result
 
     def validate(
         self, value: StructuredValue, tool_call_ids: ToolCallIdSource | None
@@ -208,15 +236,29 @@ class DefaultStepDecisionSchema(StepDecisionSchema):
 
 
 @final
-class DefaultStepDecisionSchemaFactory(StepDecisionSchemaFactory):
+class DefaultStepDecisionModelFactory(StepDecisionModelFactory):
     def __init__(self, value_schema_factory: StructuredValueSchemaFactory):
         self._value_schema_factory = value_schema_factory
 
-    def create(self, spec: StepDecisionSpec) -> StepDecisionSchema:
+    def create(self, spec: StepDecisionSpec) -> StepDecisionModel:
         tools = {
-            tool.name: _ToolSchema(
-                JsonSchemaDocument.from_mapping(tool.definition().parameters),
-                raw=isinstance(tool, JsonSchemaToolEntry),
+            tool.name: _ToolModel(
+                StepTool(
+                    name=tool.name,
+                    arguments=(
+                        JsonToolArguments(
+                            JsonSchemaDocument.from_mapping(
+                                tool.definition().parameters
+                            )
+                        )
+                        if isinstance(tool, JsonSchemaToolEntry)
+                        else TypedToolArguments(
+                            JsonSchemaDocument.from_mapping(
+                                tool.definition().parameters
+                            )
+                        )
+                    ),
+                )
             )
             for tool in spec.tools
         }
@@ -225,125 +267,7 @@ class DefaultStepDecisionSchemaFactory(StepDecisionSchemaFactory):
             if spec.mode is StepDecisionMode.TOOLS_REQUIRED
             else self._value_schema_factory.create(spec.output_type)
         )
-        return DefaultStepDecisionSchema(spec, tools, result)
-
-
-def _build_structured_output(
-    spec: StepDecisionSpec,
-    tools: dict[str, _ToolSchema],
-    result: StructuredValueSchema | None,
-) -> StructuredOutputSchema:
-    definitions: JsonObject = {}
-    registry = DefinitionRegistry(definitions)
-    preserved: set[SchemaPath] = set()
-    branches: list[tuple[JsonObject, set[SchemaPath]]] = []
-
-    if spec.mode is not StepDecisionMode.RESULT_ONLY:
-        branches.append(_tool_calls_branch(tools, registry))
-    if spec.mode is not StepDecisionMode.TOOLS_REQUIRED:
-        assert result is not None
-        imported = registry.import_schema(
-            result.json_schema.mutable_copy(), namespace="result"
-        )
-        branches.append(
-            (
-                _closed_object(
-                    {
-                        "decision": _literal("result"),
-                        "result": imported.schema,
-                    }
-                ),
-                set(),
-            )
-        )
-
-    if len(branches) == 1:
-        schema, preserved = branches[0]
-    else:
-        schema = cast(
-            JsonObject,
-            {
-                K.ONE_OF: [branch for branch, _ in branches],
-                "discriminator": {"propertyName": "decision"},
-            },
-        )
-        for index, (_, paths) in enumerate(branches):
-            for path in paths:
-                if path and path[0] == K.DEFINITIONS:
-                    preserved.add(path)
-                else:
-                    preserved.add((K.ONE_OF, index, *path))
-
-    if definitions:
-        schema[K.DEFINITIONS] = definitions
-    schema[K.DESCRIPTION] = "The model for the LLM's decision on the next action."
-    return StructuredOutputSchema(
-        JsonSchemaDocument(schema),
-        frozenset(preserved),
-    )
-
-
-def _tool_calls_branch(
-    tools: dict[str, _ToolSchema], registry: DefinitionRegistry
-) -> tuple[JsonObject, set[SchemaPath]]:
-    call_schemas: list[JsonObject] = []
-    raw_paths: set[SchemaPath] = set()
-    raw_definitions: set[str] = set()
-    multiple = len(tools) > 1
-
-    for index, (name, tool) in enumerate(tools.items()):
-        imported = registry.import_schema(tool.document.mutable_copy(), namespace=name)
-        call_schemas.append(
-            _closed_object(
-                {
-                    "name": _literal(name),
-                    "arguments": imported.schema,
-                }
-            )
-        )
-        if tool.raw:
-            registry.reserve(imported.definitions)
-            prefix: SchemaPath = (K.ONE_OF, index) if multiple else ()
-            raw_paths.add((*prefix, K.PROPERTIES, "arguments"))
-            raw_definitions.update(imported.definitions)
-
-    if multiple:
-        items = cast(
-            JsonObject,
-            {
-                K.ONE_OF: call_schemas,
-                "discriminator": {"propertyName": "name"},
-            },
-        )
-    else:
-        items = call_schemas[0]
-    branch = _closed_object(
-        {
-            "decision": _literal("tool_calls"),
-            "tool_calls": {
-                K.TYPE: "array",
-                K.ITEMS: items,
-                K.MIN_ITEMS: 1,
-            },
-        }
-    )
-    prefix = (K.PROPERTIES, "tool_calls", K.ITEMS)
-    paths: set[SchemaPath] = {(*prefix, *path) for path in raw_paths}
-    paths.update((K.DEFINITIONS, name) for name in raw_definitions)
-    return branch, paths
-
-
-def _closed_object(properties: JsonObject) -> JsonObject:
-    return {
-        K.TYPE: "object",
-        K.PROPERTIES: properties,
-        K.REQUIRED: list(properties),
-        K.ADDITIONAL_PROPERTIES: False,
-    }
-
-
-def _literal(value: str) -> JsonObject:
-    return {K.TYPE: "string", K.CONST: value}
+        return DefaultStepDecisionModel(spec, tools, result)
 
 
 def _require_record(
@@ -368,10 +292,13 @@ def _require_fields(value: dict[str, StructuredValue], expected: set[str]) -> No
 
 
 __all__ = [
-    "DefaultStepDecisionSchemaFactory",
+    "DefaultStepDecisionModelFactory",
+    "JsonToolArguments",
     "StepDecisionMode",
-    "StepDecisionSchema",
-    "StepDecisionSchemaFactory",
+    "StepDecisionModel",
+    "StepDecisionModelFactory",
     "StepDecisionSpec",
+    "StepTool",
     "ToolCallIdSource",
+    "TypedToolArguments",
 ]

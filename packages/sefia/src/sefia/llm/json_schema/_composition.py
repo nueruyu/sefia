@@ -1,4 +1,3 @@
-from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 
@@ -19,10 +18,6 @@ class ImportedSchema:
 class DefinitionRegistry:
     def __init__(self, definitions: JsonObject):
         self._definitions = definitions
-        self._reserved_names: set[str] = set()
-
-    def reserve(self, names: Iterable[str]) -> None:
-        self._reserved_names.update(names)
 
     def import_schema(self, schema: JsonObject, *, namespace: str) -> ImportedSchema:
         local = SchemaNode(schema).take_definitions()
@@ -46,7 +41,7 @@ class DefinitionRegistry:
     def _target_name(self, namespace: str, name: str, definition: JsonValue) -> str:
         if name not in self._definitions:
             return name
-        if name not in self._reserved_names and self._definitions[name] == definition:
+        if self._definitions[name] == definition:
             return name
 
         base = f"{namespace}__{name}"

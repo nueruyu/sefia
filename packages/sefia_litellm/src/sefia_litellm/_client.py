@@ -11,7 +11,7 @@ from typing_extensions import final, override
 from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
 from sefia.llm.json_schema import JsonObject, require_json_value
-from sefia.llm.structured_output import StructuredOutputSchema
+from sefia.llm.step_decision import StepDecisionModel
 from sefia.llm.streaming import StructuredOutputCallback
 
 from .exceptions import (
@@ -171,7 +171,7 @@ class LiteLLMClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
-        output_schema: StructuredOutputSchema | None = None,
+        decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         structured_output_callback: StructuredOutputCallback | None = None,
         reasoning_callback: (
@@ -186,8 +186,8 @@ class LiteLLMClient(LLMClient):
 
         raw_messages = [msg.to_dict(exclude_none=True) for msg in messages]
         prepared = (
-            LiteLLMStructuredOutputAdapter().build(output_schema)
-            if output_schema is not None
+            LiteLLMStructuredOutputAdapter().build(decision_model)
+            if decision_model is not None
             else None
         )
 

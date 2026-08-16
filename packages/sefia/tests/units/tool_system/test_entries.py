@@ -8,7 +8,7 @@ from sefia.exceptions import ToolConflictError
 from sefia.inference import ToolCallsDecision
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.step_decision import (
-    DefaultStepDecisionSchemaFactory,
+    DefaultStepDecisionModelFactory,
     StepDecisionSpec,
 )
 from sefia.pydantic import PydanticModelBackend
@@ -102,7 +102,7 @@ def test_a_malformed_schema_is_rejected_up_front():
         parameters={"type": "not-a-type"},
     )
     with pytest.raises(jsonschema.SchemaError):
-        DefaultStepDecisionSchemaFactory(PydanticModelBackend()).create(
+        DefaultStepDecisionModelFactory(PydanticModelBackend()).create(
             StepDecisionSpec.for_inference(
                 name="StepDecision", output_type=Never, tools=[tool]
             )
@@ -122,14 +122,14 @@ def test_a_schema_is_validated_under_its_declared_dialect():
     }
 
     tool = JsonSchemaToolEntry(_noop, name="pair", parameters=schema)
-    decision_schema = DefaultStepDecisionSchemaFactory(PydanticModelBackend()).create(
+    decision_model = DefaultStepDecisionModelFactory(PydanticModelBackend()).create(
         StepDecisionSpec.for_inference(
             name="StepDecision", output_type=Never, tools=[tool]
         )
     )
     tool_call_ids = ToolCallIdRegistry()
 
-    valid = decision_schema.validate(
+    valid = decision_model.validate(
         {
             "decision": "tool_calls",
             "tool_calls": [{"name": "pair", "arguments": {"pair": ["a", 1]}}],
@@ -140,7 +140,7 @@ def test_a_schema_is_validated_under_its_declared_dialect():
     assert valid.calls[0].arguments == {"pair": ["a", 1]}
 
     with pytest.raises(ValueError, match="Step decision validation failed"):
-        decision_schema.validate(
+        decision_model.validate(
             {
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "pair", "arguments": {"pair": [1, "a"]}}],

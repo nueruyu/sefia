@@ -214,7 +214,7 @@ async def test_inference_with_nonexistent_tool_call():
     assert len(mock_llm.requests) == 1
 
 
-async def test_inference_with_invalid_output_schema():
+async def test_inference_with_invalid_decision_model():
     # Scenario: The LLM returns a result that doesn't match the schema.
     # An invalid response is recoverable, so it is NOT engraved as a permanent
     # failure: it surfaces as an InvalidInferenceResponseError (a PauseException),
@@ -273,9 +273,9 @@ async def test_inference_on_standalone_function():
     assert summary == "This is a summary."
     assert len(mock_llm.requests) == 1
     # Check that the schema passed to the LLM does not include the optional `tool_calls`
-    output_schema = mock_llm.requests[0].get("output_schema")
-    assert output_schema is not None
-    assert "tool_calls" not in output_schema.document.to_dict().get("properties", {})
+    decision_model = mock_llm.requests[0].get("decision_model")
+    assert decision_model is not None
+    assert "tool_calls" not in decision_model.document.to_dict().get("properties", {})
 
 
 def test_policy_attaches_metadata():

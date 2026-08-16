@@ -20,11 +20,8 @@ _UNSUPPORTED_COMPOSITION = (
 
 @final
 class SchemaNormalizer:
-    def __init__(self, preserved: frozenset[SchemaPath]):
-        self._preserved = preserved
-
     def normalize(self, schema: JsonObject) -> None:
-        for _, node in walk(schema, skip=self._preserved):
+        for _, node in walk(schema):
             if node.type == "object":
                 _close_object(node)
             _replace_one_of(node)
@@ -48,12 +45,9 @@ class SchemaEncodingPlan:
 
 @final
 class MappingLowerer:
-    def __init__(self, preserved: frozenset[SchemaPath]):
-        self._preserved = preserved
-
     def lower(self, schema: JsonObject) -> SchemaEncodingPlan:
         mappings: list[MappingEncoding] = []
-        for path, node in list(walk(schema, skip=self._preserved)):
+        for path, node in list(walk(schema)):
             additional = node.additional_properties()
             if node.type != "object" or not isinstance(additional, SchemaNode):
                 continue
