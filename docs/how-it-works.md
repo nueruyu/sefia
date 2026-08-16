@@ -66,7 +66,7 @@ loop:
   re-run on resume. Within a batch, calls run serially unless their tools are
   marked `@concurrent`; results always land in history in request order (see
   [Tools](#tools-discovery-schema-execution)).
-- **History** is the accumulating list of `ToolCallDecision` / `ToolCallResult`
+- **History** is the accumulating list of `ToolCallsDecision` / `ToolCallResult`
   (`inference.py`), held in-memory by `StepHistory` and persisted by the executor
   through a `HistoryStorage` seam — see "History storage and compaction" below.
 - **Two seams, kept apart:** *middleware* wraps the loop and can retry or
@@ -80,16 +80,15 @@ loop:
 translation. Instead of provider-native tool-calling, it asks the model for one
 unified structured-output schema.
 
-A `create_model`-built decision model is the schema, picked by an
-`_ExecutionDirector`:
+A `StepDecisionSpec` selects one of three shapes:
 
-| Return type | Director | Decision schema |
+| Return type | Mode | Step-decision schema |
 | --- | --- | --- |
-| `Never` | `_ToolOnlyDirector` | `{ decision: "tool_calls", tool_calls: [...] }` only |
-| has tools | `_ToolEnabledDirector` | `oneOf(tool_calls decision, result decision)` |
-| no tools | `_OutputOnlyDirector` | `{ decision: "result", result: T }` only |
+| `Never` | `TOOLS_REQUIRED` | `{ decision: "tool_calls", tool_calls: [...] }` only |
+| has tools | `TOOLS_OR_RESULT` | `oneOf(tool_calls decision, result decision)` |
+| no tools | `RESULT_ONLY` | `{ decision: "result", result: T }` only |
 
-`pydantic/_decision_schema.py` composes typed tool `$defs` into a provider-neutral
+`pydantic/_schema_composer.py` composes typed tool `$defs` into a provider-neutral
 `JsonSchemaDocument` and identifies raw JSON Schema regions that adapters must not
 rewrite. Recursive JSON value types and `SchemaNode` accessors keep schema traversal
 out of `dict[str, Any]`.
@@ -102,15 +101,16 @@ for response decoding.
 
 The Pydantic backend keeps these responsibilities separate: `_function_models.py`
 reflects callable parameters, `_tool_arguments.py` owns each tool's original schema
-and argument validator, `_decision_model.py` owns local validation, and
-`_decision_schema.py` composes the logical schema. Provider-side response decoding
+and argument validator, `_step_decision.py` builds and validates the Pydantic payload,
+and `_schema_composer.py` composes the logical schema. Provider-side response decoding
 and stream-path normalization stay inside the client implementation.
 
-`DecisionModelBuilder` implementations return a `StructuredOutputSchema`, not a provider-ready
-dictionary. An `LLMClient` receives that logical contract and owns any schema
-encoding, prompt fallback, response decoding, and structured-stream decoding needed
-by its model. The decision contracts live in `sefia.llm.decision`; the logical schema
-contract and decoded value types live in `sefia.llm.structured_output`.
+`StepDecisionDefinitionBuilder` implementations return a passive definition
+containing the logical `StructuredOutputSchema` and its validator. An `LLMClient`
+receives the schema and owns any encoding, prompt fallback, response decoding, and
+structured-stream decoding needed by its model. Step-decision specifications and validation interfaces live in
+`sefia.llm.step_decision`; logical schema and decoded value types live in
+`sefia.llm.structured_output`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 The core system prompt is `docstring + decision semantics + tool definitions`; the
@@ -119,8 +119,8 @@ The user message is the call's arguments rendered as XML (`_build_messages`); pr
 steps are replayed as ordinary assistant/tool messages. The client is always called
 with `tools=None` and the logical `output_schema` — provider native tool-calling is
 never used. The client returns logical structured data when it adapts the wire format;
-the strategy falls back to parsing plain client responses before the decision model
-validates the result (`InvalidInferenceResponseError` if it doesn't conform).
+the strategy falls back to parsing plain client responses before the step-decision
+validator validates the value (`InvalidInferenceResponseError` if it doesn't conform).
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
 first **repaired in place**: the strategy appends the invalid output and the
@@ -210,7 +210,7 @@ compatibility. It must already use the strict structured-output subset
 supported by the verified providers: object properties are required, objects set
 `additionalProperties` to `false`, unions use `anyOf` rather than `oneOf`, and
 unsupported composition keywords such as `allOf` and conditional schemas are
-omitted. Incompatible schemas fail when the provider-facing decision schema is
+omitted. Incompatible schemas fail when the provider-facing step-decision schema is
 built, before an LLM request is made.
 
 **Execution** (`_tool_execution.py`, engraved through

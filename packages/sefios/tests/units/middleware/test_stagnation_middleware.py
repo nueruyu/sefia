@@ -5,9 +5,9 @@ import pytest
 from sefia import StepContext
 from sefia._history import StepHistory
 from sefia.inference import (
-    InferenceDecision,
+    StepDecision,
     ResultDecision,
-    ToolCallDecision,
+    ToolCallsDecision,
     ToolCallRequest,
 )
 from sefios.middleware import StagnationDetector, StagnationError
@@ -22,13 +22,13 @@ async def _step(
     name: str,
     args: dict[str, Any],
     step: int = 0,
-) -> InferenceDecision:
+) -> StepDecision:
     """Drives one step whose decision calls a single tool."""
-    decision = ToolCallDecision(
+    decision = ToolCallsDecision(
         calls=[ToolCallRequest(id="1", name=name, arguments=args)]
     )
 
-    async def nxt() -> ToolCallDecision:
+    async def nxt() -> ToolCallsDecision:
         return decision
 
     return await middleware.wrap(StepContext(step=step, history=_empty_history()), nxt)
@@ -81,7 +81,7 @@ class TestStagnationDetector:
 
     async def test_records_each_call_in_a_multi_call_decision(self):
         middleware = StagnationDetector(max_repeats=3)
-        decision = ToolCallDecision(
+        decision = ToolCallsDecision(
             calls=[
                 ToolCallRequest(id=str(i), name="t", arguments={"a": 1})
                 for i in range(3)

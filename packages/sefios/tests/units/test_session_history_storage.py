@@ -4,7 +4,7 @@ import pytest
 from glyff import ArgumentsDigest, DomainId, ExecutionId, ExecutionName, Serializer
 from pytest_mock import MockerFixture
 from sefia import HistorySnapshot
-from sefia.inference import ToolCallDecision, ToolCallRequest, ToolCallResult
+from sefia.inference import ToolCallsDecision, ToolCallRequest, ToolCallResult
 
 from sefios import MemorySessionStorage
 from sefios.history_storages import SessionHistoryStorage
@@ -41,7 +41,7 @@ class TestSessionHistoryStorage:
         history_storage = SessionHistoryStorage()
         snapshot = HistorySnapshot(
             items=(
-                ToolCallDecision(
+                ToolCallsDecision(
                     calls=[ToolCallRequest(id="1", name="add_note", arguments={"x": 1})]
                 ),
                 ToolCallResult(tool_call_id="1", result="noted"),

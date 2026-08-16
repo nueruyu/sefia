@@ -4,7 +4,7 @@ from sefia._history import StepHistory
 from sefia.inference import (
     HistoryItem,
     ResultDecision,
-    ToolCallDecision,
+    ToolCallsDecision,
     ToolCallRequest,
     ToolCallResult,
 )
@@ -16,7 +16,7 @@ from sefios.middleware._compaction import _truncate_history
 def _step(i: int) -> list[HistoryItem]:
     """One completed step: a decision and its tool result."""
     return [
-        ToolCallDecision(
+        ToolCallsDecision(
             calls=[ToolCallRequest(id=str(i), name="a_tool", arguments={"i": i})]
         ),
         ToolCallResult(tool_call_id=str(i), result=f"result {i}"),

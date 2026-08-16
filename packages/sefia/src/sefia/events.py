@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .event_system import Event
-from .inference import HistoryItem, InferenceDecision, ToolCallRequest
+from .inference import HistoryItem, StepDecision, ToolCallRequest
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class BeforeInferenceStep(Event):
 class AfterInferenceStep(Event):
     """Event fired just after a decision is received from the inference strategy."""
 
-    decision: InferenceDecision
+    decision: StepDecision
 
 
 @dataclass(frozen=True)

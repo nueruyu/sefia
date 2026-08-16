@@ -78,7 +78,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `_authoring/` | Authoring API split by responsibility: domain ownership and runtime engraving, inference assembly, profile/policy selection, tool markers, and decorator metadata. | `Domain`, `concurrent`, `preview`, `policy`, `profile` |
 | `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
 | `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
-| `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallDecision`, `FinalAnswerDecision` |
+| `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallsDecision`, `ResultDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |
 | `_history.py` | The run's conversation history as pure in-memory state (loading/persistence/step-count live on the executor). | `StepHistory` |
@@ -90,8 +90,8 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: `decision/` owns decisions, `json_schema/` contains only JSON Schema concepts, `structured_output/` owns Sefia's logical output contract, `_strategy.py` orchestrates calls and repair, and `_execution_directors.py` converts decisions. | `LLMInferenceStrategy`, `LLMClient`, `JsonSchemaDocument`, `StructuredOutputSchema`, prompt formatters |
-| `pydantic/` | The **default** `ToolFunctionInspector` + `DecisionModelBuilder`: callable inspection, logical decision-schema composition, and local validation. | `PydanticModelBackend` |
+| `llm/` | The **default** `InferenceStrategy`: `step_decision/` defines step-decision specifications and validation seams, `json_schema/` contains only JSON Schema concepts, `structured_output/` owns Sefia's logical output boundary, `_step_decision_prompt.py` describes the choices to the model, and `_strategy.py` orchestrates calls and repair. | `LLMInferenceStrategy`, `LLMClient`, `StepDecisionSpec`, `JsonSchemaDocument`, `StructuredOutputSchema`, prompt formatters |
+| `pydantic/` | The **default** `ToolFunctionInspector` + `StepDecisionDefinitionBuilder`: callable inspection, step-decision payload validation, and logical schema composition. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
 
 ### The seams (`_interfaces/`) — the extension ports
@@ -103,7 +103,7 @@ implementation noted in parentheses.
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
-| `ToolFunctionInspector` / `DecisionModelBuilder` | non-Pydantic schema gen & validation | `pydantic/PydanticModelBackend` |
+| `ToolFunctionInspector` / `StepDecisionDefinitionBuilder` | non-Pydantic schema generation and validation | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
 | `HistoryStorage` | where a run's history is persisted (enables compaction) | `GlyffHistoryStorage` (glyff metadata) |
@@ -135,7 +135,8 @@ implementation noted in parentheses.
 | Goal | Where |
 | --- | --- |
 | Add an LLM provider | implement `LLMClient`; mirror `packages/sefia_litellm/src/sefia_litellm/_client.py` |
-| Change the logical decision schema | `pydantic/_decision_model.py`, `pydantic/_decision_schema.py` |
+| Change the step-decision payload or validation | `pydantic/_step_decision.py` |
+| Change logical step-decision schema composition | `pydantic/_schema_composer.py` |
 | Change LiteLLM's structured-output wire format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
@@ -148,7 +149,7 @@ implementation noted in parentheses.
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |
 | Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role alias in `_tool_system.py`, scanners in `_introspection.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
-| Support a new output type system | `ToolFunctionInspector` / `DecisionModelBuilder` in `pydantic/_model_backend.py` |
+| Support a new output type system | `ToolFunctionInspector` / `StepDecisionDefinitionBuilder` in `pydantic/_model_backend.py` |
 | Register a tool from a raw JSON Schema (no signature) | `JsonSchemaToolEntry` / `ToolRegistry.add_json_tool` in `_tool_system/` |
 | Read the serving call's id inside a tool body | `current_tool_call_id` / `current_tool_call_id_for` in `_tool_context.py` |
 | Install a whole tool-discovery rule for a run (e.g. client-defined tools) | pass `tool_collector=` to `SessionScope`/`SessionScope.session()`/`Session` (seam: `ToolCollector`) |

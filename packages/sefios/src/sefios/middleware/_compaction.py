@@ -1,7 +1,7 @@
 from typing import Awaitable, Callable
 
 from sefia._interfaces.middleware import StepContext, StepMiddleware
-from sefia.inference import HistoryItem, InferenceDecision, ToolCallDecision
+from sefia.inference import HistoryItem, StepDecision, ToolCallsDecision
 from typing_extensions import final, override
 
 
@@ -15,7 +15,7 @@ def _truncate_history(history: list[HistoryItem], keep_items: int) -> list[Histo
         return list(history)
     tail = list(history[-keep_items:]) if keep_items > 0 else []
     start = next(
-        (i for i, item in enumerate(tail) if isinstance(item, ToolCallDecision)),
+        (i for i, item in enumerate(tail) if isinstance(item, ToolCallsDecision)),
         len(tail),
     )
     return tail[start:]
@@ -42,8 +42,8 @@ class HistoryCompactor(StepMiddleware):
     async def wrap(
         self,
         ctx: StepContext,
-        nxt: Callable[[], Awaitable[InferenceDecision]],
-    ) -> InferenceDecision:
+        nxt: Callable[[], Awaitable[StepDecision]],
+    ) -> StepDecision:
         if len(ctx.history.items) > self.max_items:
             compacted = _truncate_history(list(ctx.history.items), self._keep_items)
             ctx.history.rewrite(compacted)

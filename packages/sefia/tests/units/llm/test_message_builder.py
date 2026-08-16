@@ -8,12 +8,13 @@ from sefia._tool_system import SignatureToolEntry, ToolEntry
 from sefia.event_system import Event, EventPublisher
 from sefia.inference import (
     FunctionInfo,
-    ToolCallDecision,
+    ToolCallsDecision,
     ToolCallRequest,
     ToolCallResult,
 )
 from sefia.llm import LLMClient, LLMInferenceStrategy
 from sefia.llm.json_schema import SchemaNode
+from sefia.llm.step_decision import StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -78,7 +79,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        decision_builder=PydanticModelBackend(),
+        step_decision_builder=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,
@@ -126,7 +127,7 @@ class TestLLMInferenceStrategy:
     def test_build_messages_correctly(self):
         strategy = _make_strategy()
         history = [
-            ToolCallDecision(
+            ToolCallsDecision(
                 calls=[
                     ToolCallRequest(
                         id="1",
@@ -138,11 +139,13 @@ class TestLLMInferenceStrategy:
             ToolCallResult(tool_call_id="1", result="見つかりました"),
         ]
 
-        director = strategy._create_director(str, [_tool(search)])
+        spec = StepDecisionSpec.for_inference(
+            name="StepDecision", output_type=str, tools=[_tool(search)]
+        )
         messages = strategy._build_messages(
             _function_info(arguments={"arg": "val"}),
             history,
-            director,
+            spec,
         )
 
         assert len(messages) == 4
@@ -160,11 +163,11 @@ class TestLLMInferenceStrategy:
         assert "\\u898b" not in str(messages[3].content)
         assert json.loads(str(messages[3].content)) == "見つかりました"
 
-    def test_build_decision_schema_hoists_nested_definitions(self):
-        strategy = _make_strategy()
-
-        director = strategy._create_director(list[MyIssue], [_tool(search)])
-        schema = director.build_decision_schema().document.to_dict()
+    def test_structured_output_schema_hoists_nested_definitions(self):
+        spec = StepDecisionSpec.for_inference(
+            name="StepDecision", output_type=list[MyIssue], tools=[_tool(search)]
+        )
+        schema = PydanticModelBackend().build(spec).schema.document.to_dict()
 
         root = SchemaNode(schema)
         assert "MyIssue" in root.definitions()
@@ -180,11 +183,11 @@ class TestLLMInferenceStrategy:
         assert tool_call_ref in root.definitions()
         assert tool_call_ref.endswith("ToolCall")
 
-    def test_build_decision_schema_requires_non_null_result_without_tools(self):
-        strategy = _make_strategy()
-
-        director = strategy._create_director(list[MyIssue], [])
-        schema = director.build_decision_schema().document.to_dict()
+    def test_structured_output_schema_requires_non_null_result_without_tools(self):
+        spec = StepDecisionSpec.for_inference(
+            name="StepDecision", output_type=list[MyIssue], tools=[]
+        )
+        schema = PydanticModelBackend().build(spec).schema.document.to_dict()
         result_branch = _decision_branch(schema, "result")
 
         assert schema["required"] == ["decision", "result"]
@@ -194,11 +197,11 @@ class TestLLMInferenceStrategy:
         assert result_schema["type"] == "array"
         assert "oneOf" not in result_schema
 
-    def test_build_decision_schema_uses_decision_discriminator_with_tools(self):
-        strategy = _make_strategy()
-
-        director = strategy._create_director(list[MyIssue], [_tool(search)])
-        schema = director.build_decision_schema().document.to_dict()
+    def test_structured_output_schema_uses_decision_discriminator_with_tools(self):
+        spec = StepDecisionSpec.for_inference(
+            name="StepDecision", output_type=list[MyIssue], tools=[_tool(search)]
+        )
+        schema = PydanticModelBackend().build(spec).schema.document.to_dict()
         payload = SchemaNode(schema)
 
         discriminator = payload.object_map("discriminator")
@@ -223,11 +226,13 @@ class TestLLMInferenceStrategy:
     def test_build_messages_tells_no_tool_agent_to_return_empty_collection(self):
         strategy = _make_strategy()
 
-        director = strategy._create_director(list[MyIssue], [])
+        spec = StepDecisionSpec.for_inference(
+            name="StepDecision", output_type=list[MyIssue], tools=[]
+        )
         messages = strategy._build_messages(
             _function_info(return_type=list[MyIssue]),
             [],
-            director,
+            spec,
         )
 
         assert "empty collection instead of null" in str(messages[0].content)

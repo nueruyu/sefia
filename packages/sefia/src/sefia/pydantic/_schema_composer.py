@@ -29,11 +29,11 @@ class _ComposedSchema:
     definitions: JsonObject
 
 
-def tool_argument_placeholder(tool_name: str) -> WithJsonSchema:
+def tool_argument_schema_placeholder(tool_name: str) -> WithJsonSchema:
     return WithJsonSchema({_TOOL_ARGUMENT_MARKER: tool_name})
 
 
-def build_decision_schema(
+def compose_structured_output_schema(
     model: Any, tools: dict[str, ToolArgumentContract]
 ) -> StructuredOutputSchema:
     schema = require_json_object(TypeAdapter(model).json_schema())

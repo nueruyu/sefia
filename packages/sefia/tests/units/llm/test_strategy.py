@@ -12,7 +12,7 @@ from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
     FunctionInfo,
     ResultDecision,
-    ToolCallDecision,
+    ToolCallsDecision,
     ToolCallRequest,
     ToolCallResult,
 )
@@ -85,7 +85,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        decision_builder=PydanticModelBackend(),
+        step_decision_builder=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,
@@ -130,7 +130,7 @@ class TestLLMInferenceStrategy:
             MockEventPublisher(),
         )
 
-        assert isinstance(decision, ToolCallDecision)
+        assert isinstance(decision, ToolCallsDecision)
         assert len(decision.calls) == 1
         assert decision.calls[0].name == "my_tool"
         assert decision.calls[0].arguments == {"param": 1}
@@ -418,7 +418,7 @@ class TestResponseRepair:
             _function_info(), [], _tool_registry(my_tool), MockEventPublisher()
         )
 
-        assert isinstance(decision, ToolCallDecision)
+        assert isinstance(decision, ToolCallsDecision)
         assert decision.calls[0].name == "my_tool"
         assert client.complete.await_count == 2
 
@@ -430,7 +430,7 @@ class TestResponseRepair:
         ]
         strategy = _make_strategy(client)
         history = [
-            ToolCallDecision(
+            ToolCallsDecision(
                 calls=[ToolCallRequest(id="1", name="search", arguments={"q": "x"})]
             ),
             ToolCallResult(tool_call_id="1", result="found"),

@@ -14,37 +14,43 @@ from sefia._tool_system import (
 )
 from sefia.event_system import Event, EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
-from sefia.inference import FunctionInfo, InferenceDecision, ToolCallDecision
+from sefia.inference import FunctionInfo, StepDecision, ToolCallsDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm.json_schema import SchemaNode
 from sefia.llm.streaming import StructuredOutputEvent
-from sefia.llm.decision import DecisionModelSpec
-from sefia.llm._execution_directors import (
-    OutputOnlyDirector,
-    ToolEnabledDirector,
-    ToolOnlyDirector,
-)
+from sefia.llm.step_decision import StepDecisionDefinition, StepDecisionSpec
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
-from sefia.pydantic._decision_model import _unknown_tool_name_from_error
+from sefia.pydantic._step_decision import _unknown_tool_name_from_error
 from sefia.streaming import ArgStream, StringEnd
 from sefia_litellm._schema import LiteLLMStructuredOutputAdapter
 from sefia_litellm._schema._streaming import StructuredOutputStreamer
 
 
-def _prepare(director: Any):
-    return LiteLLMStructuredOutputAdapter().build(director.build_decision_schema())
+def _definition(output_type: Any, tools: list[ToolEntry]) -> StepDecisionDefinition:
+    spec = StepDecisionSpec.for_inference(
+        name="StepDecision", output_type=output_type, tools=tools
+    )
+    return PydanticModelBackend().build(spec)
 
 
-def _process(director: Any, data: Any, tool_call_ids: ToolCallIdRegistry | None = None):
-    prepared = _prepare(director)
-    return director.process_response_data(prepared.decode(data), tool_call_ids)
+def _prepare(decision: StepDecisionDefinition):
+    return LiteLLMStructuredOutputAdapter().build(decision.schema)
+
+
+def _process(
+    decision: StepDecisionDefinition,
+    data: Any,
+    tool_call_ids: ToolCallIdRegistry | None = None,
+) -> StepDecision:
+    prepared = _prepare(decision)
+    return decision.validator.validate(prepared.decode(data), tool_call_ids)
 
 
 def test_prepared_schema_removes_payload_from_stream_paths() -> None:
-    prepared = _prepare(OutputOnlyDirector(PydanticModelBackend(), str, []))
+    prepared = _prepare(_definition(str, []))
 
     assert prepared.normalize_stream_path(
         ("payload", "tool_calls", 0, "arguments", "question")
@@ -52,7 +58,7 @@ def test_prepared_schema_removes_payload_from_stream_paths() -> None:
 
 
 async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
-    prepared = _prepare(ToolOnlyDirector(PydanticModelBackend(), Never, [_tool()]))
+    prepared = _prepare(_definition(Never, [_tool()]))
     events: list[object] = []
 
     async def collect(_tool_call_id: str, stream: ArgStream) -> None:
@@ -155,9 +161,9 @@ def _name_constraint(name_schema: dict[str, Any]) -> Any:
 
 
 def test_tool_only_schema_embeds_tool_argument_schema() -> None:
-    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_tool()])
+    definition = _definition(Never, [_tool()])
 
-    schema = _prepare(director).wire_schema.to_dict()
+    schema = _prepare(definition).wire_schema.to_dict()
 
     assert _tool_calls_array(schema)["minItems"] == 1
     item = _tool_call_item(schema)
@@ -184,11 +190,9 @@ async def _research(article_request: _ArticleRequest) -> list[str]:
 
 
 def test_typed_tool_schema_hoists_nested_definitions() -> None:
-    director = ToolOnlyDirector(
-        PydanticModelBackend(), Never, [_signature_tool(_research, name="research")]
-    )
+    definition = _definition(Never, [_signature_tool(_research, name="research")])
 
-    schema = _prepare(director).wire_schema.to_dict()
+    schema = _prepare(definition).wire_schema.to_dict()
 
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     request_schema = _resolve(arguments["properties"]["article_request"], schema)
@@ -204,9 +208,9 @@ def test_result_shape_cannot_be_mistaken_for_a_tool_call() -> None:
         name: Literal["ask_user"]
         arguments: dict[str, int]
 
-    director = ToolEnabledDirector(PydanticModelBackend(), Output, [_tool()])
+    definition = _definition(Output, [_tool()])
 
-    schema = director.build_decision_schema().document.to_dict()
+    schema = definition.schema.document.to_dict()
 
     output = SchemaNode(schema).definitions()["Output"]
     assert output.properties()["arguments"].value == {
@@ -231,9 +235,9 @@ def test_raw_tool_schema_hoists_local_definitions() -> None:
             }
         },
     }
-    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+    definition = _definition(Never, [_raw_tool(raw_schema)])
 
-    schema = _prepare(director).wire_schema.to_dict()
+    schema = _prepare(definition).wire_schema.to_dict()
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
 
     assert "$defs" not in arguments
@@ -263,13 +267,12 @@ def test_raw_definition_is_not_normalized_with_typed_definition() -> None:
             }
         },
     }
-    director = ToolOnlyDirector(
-        PydanticModelBackend(),
+    definition = _definition(
         Never,
         [_raw_tool(raw_schema), _signature_tool(typed, name="typed")],
     )
 
-    logical = director.build_decision_schema()
+    logical = definition.schema
 
     definitions = logical.document.root().definitions()
     assert definitions["SharedPolicy"].strings("required") is None
@@ -291,8 +294,7 @@ def test_conflicting_tool_definition_names_are_renamed() -> None:
 
     first.__annotations__["value"] = first_type
     second.__annotations__["value"] = second_type
-    director = ToolOnlyDirector(
-        PydanticModelBackend(),
+    definition = _definition(
         Never,
         [
             _signature_tool(first, name="first"),
@@ -300,7 +302,7 @@ def test_conflicting_tool_definition_names_are_renamed() -> None:
         ],
     )
 
-    schema = _prepare(director).wire_schema.to_dict()
+    schema = _prepare(definition).wire_schema.to_dict()
 
     shared_definitions = {
         name: definition
@@ -344,9 +346,9 @@ def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
         "required": ["query"],
         "additionalProperties": False,
     }
-    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+    definition = _definition(Never, [_raw_tool(raw_schema)])
 
-    schema = _prepare(director).wire_schema.to_dict()
+    schema = _prepare(definition).wire_schema.to_dict()
 
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     assert arguments == raw_schema
@@ -401,10 +403,10 @@ def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
 def test_incompatible_raw_tool_schema_is_rejected_without_rewriting(
     raw_schema: dict[str, Any], message: str
 ) -> None:
-    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+    definition = _definition(Never, [_raw_tool(raw_schema)])
 
     with pytest.raises(ValueError, match=message):
-        _prepare(director)
+        _prepare(definition)
 
 
 _UNSUPPORTED_COMPOSITIONS: list[tuple[str, Any]] = [
@@ -430,10 +432,10 @@ def test_unsupported_composition_keyword_is_rejected(keyword: str, value: Any) -
         "additionalProperties": False,
         keyword: value,
     }
-    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+    definition = _definition(Never, [_raw_tool(raw_schema)])
 
     with pytest.raises(ValueError, match=rf"{keyword} is not supported"):
-        _prepare(director)
+        _prepare(definition)
 
 
 @pytest.mark.parametrize(
@@ -456,9 +458,9 @@ def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
         "required": [property_name],
         "additionalProperties": False,
     }
-    director = ToolOnlyDirector(PydanticModelBackend(), Never, [_raw_tool(raw_schema)])
+    definition = _definition(Never, [_raw_tool(raw_schema)])
 
-    schema = _prepare(director).wire_schema.to_dict()
+    schema = _prepare(definition).wire_schema.to_dict()
 
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     assert arguments == raw_schema
@@ -470,9 +472,9 @@ def _result_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_mapping_result_is_lowered_and_decoded() -> None:
-    director = OutputOnlyDirector(PydanticModelBackend(), dict[str, str], [])
+    definition = _definition(dict[str, str], [])
 
-    schema = _prepare(director).wire_schema.to_dict()
+    schema = _prepare(definition).wire_schema.to_dict()
 
     result_schema = _result_schema(schema)
     assert result_schema["type"] == "array"
@@ -480,7 +482,7 @@ def test_mapping_result_is_lowered_and_decoded() -> None:
     assert result_schema["items"]["required"] == ["key", "value"]
 
     decision = _process(
-        director,
+        definition,
         {
             "payload": {
                 "decision": "result",
@@ -501,9 +503,9 @@ def test_mapping_result_is_lowered_and_decoded() -> None:
 
 def test_mapping_constraints_are_lowered_to_entry_constraints() -> None:
     output_type = Annotated[dict[str, str], Field(min_length=1, max_length=2)]
-    director = OutputOnlyDirector(PydanticModelBackend(), output_type, [])
+    definition = _definition(output_type, [])
 
-    result_schema = _result_schema(_prepare(director).wire_schema.to_dict())
+    result_schema = _result_schema(_prepare(definition).wire_schema.to_dict())
 
     assert result_schema["minItems"] == 1
     assert result_schema["maxItems"] == 2
@@ -520,16 +522,16 @@ class _Report:
 
 
 def test_nested_mapping_result_is_lowered_and_decoded() -> None:
-    director = OutputOnlyDirector(PydanticModelBackend(), _Report, [])
+    definition = _definition(_Report, [])
 
-    schema = _prepare(director).wire_schema.to_dict()
+    schema = _prepare(definition).wire_schema.to_dict()
     report_schema = _result_schema(schema)
     report_schema = _resolve(report_schema, schema)
     mapping_schema = report_schema["properties"]["issues_by_perspective"]
     assert mapping_schema["type"] == "array"
 
     decision = _process(
-        director,
+        definition,
         {
             "payload": {
                 "decision": "result",
@@ -554,11 +556,11 @@ def test_nested_mapping_result_is_lowered_and_decoded() -> None:
 
 
 def test_mapping_decoder_rejects_duplicate_keys() -> None:
-    director = OutputOnlyDirector(PydanticModelBackend(), dict[str, str], [])
+    definition = _definition(dict[str, str], [])
 
     with pytest.raises(ValueError, match="duplicate mapping key"):
         _process(
-            director,
+            definition,
             {
                 "payload": {
                     "decision": "result",
@@ -572,11 +574,11 @@ def test_mapping_decoder_rejects_duplicate_keys() -> None:
 
 
 def test_mapping_decoder_rejects_malformed_entries() -> None:
-    director = OutputOnlyDirector(PydanticModelBackend(), dict[str, str], [])
+    definition = _definition(dict[str, str], [])
 
     with pytest.raises(ValueError, match="contain only key and value"):
         _process(
-            director,
+            definition,
             {
                 "payload": {
                     "decision": "result",
@@ -587,10 +589,10 @@ def test_mapping_decoder_rejects_malformed_entries() -> None:
 
 
 def test_mapping_nested_in_list_is_lowered_and_decoded() -> None:
-    director = OutputOnlyDirector(PydanticModelBackend(), list[dict[str, int]], [])
+    definition = _definition(list[dict[str, int]], [])
 
     decision = _process(
-        director,
+        definition,
         {
             "payload": {
                 "decision": "result",
@@ -608,18 +610,17 @@ async def _categorize(labels: dict[str, int]) -> None:
 
 
 def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
-    director = ToolOnlyDirector(
-        PydanticModelBackend(),
+    definition = _definition(
         Never,
         [_signature_tool(_categorize, name="categorize")],
     )
 
-    schema = _prepare(director).wire_schema.to_dict()
+    schema = _prepare(definition).wire_schema.to_dict()
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     assert arguments["properties"]["labels"]["type"] == "array"
 
     decision = _process(
-        director,
+        definition,
         {
             "payload": {
                 "decision": "tool_calls",
@@ -634,7 +635,7 @@ def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
         ToolCallIdRegistry(),
     )
 
-    assert isinstance(decision, ToolCallDecision)
+    assert isinstance(decision, ToolCallsDecision)
     assert decision.calls[0].arguments == {"labels": {"important": 2}}
 
 
@@ -645,24 +646,24 @@ def test_unknown_tool_name_ignores_root_literal_errors() -> None:
     assert _unknown_tool_name_from_error(exc_info.value) is None
 
 
-def test_decision_model_spec_rejects_tool_modes_without_tools() -> None:
+def test_step_decision_spec_rejects_tool_modes_without_tools() -> None:
     with pytest.raises(ValueError, match="require at least one tool"):
-        DecisionModelSpec.tool_only(
-            name="LLMDecision",
+        StepDecisionSpec.tools_required(
+            name="StepDecision",
             output_type=Never,
             tools=[],
         )
 
     with pytest.raises(ValueError, match="require at least one tool"):
-        DecisionModelSpec.tool_enabled(
-            name="LLMDecision",
+        StepDecisionSpec.tools_or_result(
+            name="StepDecision",
             output_type=str,
             tools=[],
         )
 
 
 class TestToolCallValidation:
-    """The decision model validates tool arguments end-to-end via the backend."""
+    """The step-decision validator validates tool arguments end-to-end."""
 
     def _strategy(self, content: str) -> LLMInferenceStrategy:
         client = Mock(spec=LLMClient)
@@ -674,7 +675,7 @@ class TestToolCallValidation:
         formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=client,
-            decision_builder=PydanticModelBackend(),
+            step_decision_builder=PydanticModelBackend(),
             prompt_formatter=formatter,
         )
 
@@ -683,7 +684,7 @@ class TestToolCallValidation:
         registry.add(ask_user, name="ask_user")
         return registry
 
-    async def _decide(self, payload: dict[str, Any]) -> InferenceDecision:
+    async def _decide(self, payload: dict[str, Any]) -> StepDecision:
         strategy = self._strategy(json.dumps({"payload": payload}))
         return await strategy.decide_next_step(
             FunctionInfo(
@@ -754,6 +755,6 @@ class TestToolCallValidation:
             }
         )
 
-        assert isinstance(decision, ToolCallDecision)
+        assert isinstance(decision, ToolCallsDecision)
         assert decision.calls[0].name == "ask_user"
         assert decision.calls[0].arguments == {"question": "Hello"}

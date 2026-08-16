@@ -12,92 +12,82 @@ from pydantic import (
 )
 from typing_extensions import final, override
 
-from ..llm.decision import (
-    DecisionMode,
-    DecisionModel,
-    DecisionModelBuilder,
-    DecisionModelSpec,
-    DecisionToolCall,
-    LLMDecision,
-    ResultLLMDecision,
-    ToolCallsLLMDecision,
+from ..llm.step_decision import (
+    StepDecisionDefinition,
+    StepDecisionDefinitionBuilder,
+    StepDecisionMode,
+    StepDecisionSpec,
+    StepDecisionValidator,
+    ToolCallIdSource,
 )
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
-from ..llm.structured_output import StructuredOutputSchema
+from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCallsDecision
 from ..llm.json_schema import JsonSchemaDocument
-from ._decision_schema import build_decision_schema, tool_argument_placeholder
+from ._schema_composer import (
+    compose_structured_output_schema,
+    tool_argument_schema_placeholder,
+)
 from ._tool_arguments import (
     ToolArgumentContract,
     ToolSchemaKind,
 )
 
 
-class _ValidatedToolCall(BaseModel):
+class _ToolCallPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
     arguments: dict[str, Any]
 
 
-class _ValidatedToolCallsDecision(BaseModel):
+class _ToolCallsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     decision: Literal["tool_calls"]
-    tool_calls: list[_ValidatedToolCall]
+    tool_calls: list[_ToolCallPayload]
 
 
-class _ValidatedResultDecision(BaseModel):
+class _ResultPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     decision: Literal["result"]
     result: object
 
 
-_ValidatedDecision = _ValidatedToolCallsDecision | _ValidatedResultDecision
+_StepDecisionPayload = _ToolCallsPayload | _ResultPayload
 
 
 @final
-class PydanticDecisionModel(DecisionModel):
-    def __init__(
-        self,
-        *,
-        model: Any,
-        tools: dict[str, ToolArgumentContract],
-    ):
-        self._adapter: TypeAdapter[_ValidatedDecision] = TypeAdapter(model)
-        self._model = model
-        self._tools = tools
-        self._schema: StructuredOutputSchema | None = None
+class PydanticStepDecisionValidator(StepDecisionValidator):
+    def __init__(self, model: Any):
+        self._adapter: TypeAdapter[_StepDecisionPayload] = TypeAdapter(model)
 
     @override
-    def schema(self) -> StructuredOutputSchema:
-        if self._schema is None:
-            self._schema = build_decision_schema(self._model, self._tools)
-        return self._schema
-
-    @override
-    def validate(self, data: object) -> LLMDecision:
+    def validate(
+        self, value: object, tool_call_ids: ToolCallIdSource | None
+    ) -> StepDecision:
         try:
-            decision = self._adapter.validate_python(data)
-            if isinstance(decision, _ValidatedToolCallsDecision):
-                return ToolCallsLLMDecision(
-                    tool_calls=self._extract_tool_calls(decision.tool_calls)
+            payload = self._adapter.validate_python(value)
+            if isinstance(payload, _ToolCallsPayload):
+                if tool_call_ids is None:
+                    raise RuntimeError("Tool call ids are required for tool calls.")
+                return ToolCallsDecision(
+                    calls=[
+                        ToolCallRequest(
+                            id=tool_call_ids.get_or_create(index),
+                            name=tool_call.name,
+                            arguments=tool_call.arguments,
+                        )
+                        for index, tool_call in enumerate(payload.tool_calls)
+                    ]
                 )
-            return ResultLLMDecision(result=decision.result)
+            return ResultDecision(result=payload.result)
         except ValidationError as e:
             unknown_tool_name = _unknown_tool_name_from_error(e)
             if unknown_tool_name is not None:
                 raise UnknownToolDecisionError(unknown_tool_name) from e
-            raise ValueError(f"Decision validation failed: {e}") from e
-
-    def _extract_tool_calls(
-        self, tool_calls: list[_ValidatedToolCall]
-    ) -> list[DecisionToolCall]:
-        return [
-            DecisionToolCall(name=tool_call.name, arguments=tool_call.arguments)
-            for tool_call in tool_calls
-        ]
+            raise ValueError(f"Step decision validation failed: {e}") from e
 
 
 def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
@@ -122,9 +112,9 @@ def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
 
 
 @final
-class PydanticDecisionModelFactory(DecisionModelBuilder):
+class PydanticStepDecisionDefinitionBuilder(StepDecisionDefinitionBuilder):
     @override
-    def build(self, spec: DecisionModelSpec) -> DecisionModel:
+    def build(self, spec: StepDecisionSpec) -> StepDecisionDefinition:
         tools = {
             tool.name: ToolArgumentContract(
                 schema=JsonSchemaDocument.from_mapping(tool.definition().parameters),
@@ -136,9 +126,10 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
             )
             for tool in spec.tools
         }
-        return PydanticDecisionModel(
-            model=self._model(spec, tools),
-            tools=tools,
+        model = self._model(spec, tools)
+        return StepDecisionDefinition(
+            schema=compose_structured_output_schema(model, tools),
+            validator=PydanticStepDecisionValidator(model),
         )
 
     def _tool_calls_type(
@@ -149,12 +140,12 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
         call_models = [
             create_model(
                 f"{tool.name}ToolCall",
-                __base__=_ValidatedToolCall,
+                __base__=_ToolCallPayload,
                 name=(Literal[tool.name], ...),
                 arguments=(
                     Annotated[
                         contracts[tool.name].validation_type(),
-                        tool_argument_placeholder(tool.name),
+                        tool_argument_schema_placeholder(tool.name),
                     ],
                     ...,
                 ),
@@ -171,12 +162,12 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
 
     def _model(
         self,
-        spec: DecisionModelSpec,
+        spec: StepDecisionSpec,
         contracts: dict[str, ToolArgumentContract],
     ) -> Any:
-        if spec.mode is DecisionMode.TOOL_ONLY:
+        if spec.mode is StepDecisionMode.TOOLS_REQUIRED:
             return self._tool_calls_model(spec, contracts)
-        if spec.mode is DecisionMode.TOOL_ENABLED:
+        if spec.mode is StepDecisionMode.TOOLS_OR_RESULT:
             branch_models = [
                 self._tool_calls_model(spec, contracts),
                 self._result_model(spec),
@@ -185,34 +176,34 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
                 Union[tuple(branch_models)],
                 Field(discriminator="decision"),
             ]
-        if spec.mode is DecisionMode.OUTPUT_ONLY:
+        if spec.mode is StepDecisionMode.RESULT_ONLY:
             return self._result_model(spec)
-        raise ValueError(f"Unsupported decision mode: {spec.mode!r}")
+        raise ValueError(f"Unsupported step decision mode: {spec.mode!r}")
 
     def _tool_calls_model(
         self,
-        spec: DecisionModelSpec,
+        spec: StepDecisionSpec,
         contracts: dict[str, ToolArgumentContract],
-    ) -> type[_ValidatedToolCallsDecision]:
-        if spec.mode is DecisionMode.TOOL_ONLY:
+    ) -> type[_ToolCallsPayload]:
+        if spec.mode is StepDecisionMode.TOOLS_REQUIRED:
             name = spec.name
         else:
             name = f"{spec.name}ToolCalls"
 
         return create_model(
             name,
-            __base__=_ValidatedToolCallsDecision,
+            __base__=_ToolCallsPayload,
             tool_calls=(self._tool_calls_type(spec.tools, contracts), ...),
         )
 
-    def _result_model(self, spec: DecisionModelSpec) -> type[_ValidatedResultDecision]:
-        if spec.mode is DecisionMode.OUTPUT_ONLY:
+    def _result_model(self, spec: StepDecisionSpec) -> type[_ResultPayload]:
+        if spec.mode is StepDecisionMode.RESULT_ONLY:
             name = spec.name
         else:
             name = f"{spec.name}Result"
 
         return create_model(
             name,
-            __base__=_ValidatedResultDecision,
+            __base__=_ResultPayload,
             result=(spec.output_type, ...),
         )

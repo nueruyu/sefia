@@ -2,30 +2,29 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import Any, Callable, Never
+from typing import Any, Callable
 
 from typing_extensions import final, override
 
 from .._interfaces import InferenceStrategy
-from .._tool_system import ToolEntry, ToolRegistry
+from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
-from ..inference import FunctionInfo, HistoryItem, InferenceDecision
+from ..inference import FunctionInfo, HistoryItem, StepDecision
 from ..streaming import StreamHandler
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
-from ._execution_directors import (
-    ExecutionDirector,
-    OutputOnlyDirector,
-    ToolEnabledDirector,
-    ToolOnlyDirector,
-)
 from ._message_builder import build_messages, build_repair_messages
 from ._messages import Message
 from ._prompt_formatter import PromptFormatter
+from ._step_decision_prompt import build_step_decision_prompt
 from ._tool_call_ids import ToolCallIdRegistry
-from .decision import DecisionModelBuilder
+from .step_decision import (
+    StepDecisionDefinitionBuilder,
+    StepDecisionSpec,
+    StepDecisionValidator,
+)
 from .structured_output import StructuredOutputSchema
 from .streaming import StructuredOutputEvent
 
@@ -44,7 +43,7 @@ class LLMInferenceStrategy(InferenceStrategy):
     def __init__(
         self,
         llm_client: LLMClient,
-        decision_builder: DecisionModelBuilder,
+        step_decision_builder: StepDecisionDefinitionBuilder,
         prompt_formatter: PromptFormatter,
         json_default: JsonDefault | None = None,
         stream: bool = False,
@@ -53,25 +52,11 @@ class LLMInferenceStrategy(InferenceStrategy):
         if max_repair_attempts < 0:
             raise ValueError("max_repair_attempts must be non-negative")
         self.llm_client = llm_client
-        self.decision_builder = decision_builder
+        self.step_decision_builder = step_decision_builder
         self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
         self._max_repair_attempts = max_repair_attempts
-
-    def _create_director(
-        self, output_type: Any, tools: list[ToolEntry]
-    ) -> ExecutionDirector:
-        if output_type is Never:
-            if not tools:
-                raise ValueError(
-                    "An @infer function returning Never must have tools available, "
-                    "otherwise the inference loop can never make progress."
-                )
-            return ToolOnlyDirector(self.decision_builder, output_type, tools)
-        if tools:
-            return ToolEnabledDirector(self.decision_builder, output_type, tools)
-        return OutputOnlyDirector(self.decision_builder, output_type, tools)
 
     @override
     async def decide_next_step(
@@ -80,18 +65,22 @@ class LLMInferenceStrategy(InferenceStrategy):
         history: Sequence[HistoryItem],
         tools: ToolRegistry,
         publisher: EventPublisher,
-    ) -> InferenceDecision:
-        director = self._create_director(function_info.return_type, tools.get_all())
-        output_schema = director.build_decision_schema()
-        messages = self._build_messages(function_info, history, director)
+    ) -> StepDecision:
+        spec = StepDecisionSpec.for_inference(
+            name="StepDecision",
+            output_type=function_info.return_type,
+            tools=tools.get_all(),
+        )
+        decision = self.step_decision_builder.build(spec)
+        messages = self._build_messages(function_info, history, spec)
 
         attempt = 0
         while True:
             try:
                 return await self._complete_once(
                     messages,
-                    director,
-                    output_schema,
+                    decision.validator,
+                    decision.schema,
                     tools,
                     publisher,
                 )
@@ -107,11 +96,11 @@ class LLMInferenceStrategy(InferenceStrategy):
     async def _complete_once(
         self,
         messages: list[Message],
-        director: ExecutionDirector,
+        validator: StepDecisionValidator,
         output_schema: StructuredOutputSchema,
         tools: ToolRegistry,
         publisher: EventPublisher,
-    ) -> InferenceDecision:
+    ) -> StepDecision:
         await publisher.publish(
             events.BeforeLLMCall(
                 messages=messages,
@@ -178,7 +167,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                     lines = raw.splitlines()
                     raw = "\n".join(lines[1:-1]).strip()
                 decision_data = json.loads(raw)
-            return director.process_response_data(decision_data, tool_call_ids)
+            return validator.validate(decision_data, tool_call_ids)
         except UnknownToolDecisionError as error:
             raise InvalidInferenceResponseError(
                 f"LLM output requested an unknown tool: {error.tool_name!r}",
@@ -194,12 +183,12 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         function_info: FunctionInfo,
         history: Sequence[HistoryItem],
-        director: ExecutionDirector,
+        spec: StepDecisionSpec,
     ) -> list[Message]:
         return build_messages(
             function_info,
             history,
-            director,
+            build_step_decision_prompt(spec),
             self._prompt_formatter,
             self._json_default,
         )

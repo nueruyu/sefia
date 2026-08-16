@@ -11,16 +11,13 @@ from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
     FunctionInfo,
     ResultDecision,
-    ToolCallDecision,
+    ToolCallsDecision,
 )
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
-from sefia.llm._execution_directors import (
-    OutputOnlyDirector,
-    ToolEnabledDirector,
-    ToolOnlyDirector,
-)
+from sefia.llm._step_decision_prompt import build_step_decision_prompt
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.json_schema import SchemaNode
+from sefia.llm.step_decision import StepDecisionDefinition, StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -63,6 +60,29 @@ def chat_tool() -> str:
 _BACKEND = PydanticModelBackend()
 
 
+@dataclass(frozen=True)
+class _StepDecisionFixture:
+    spec: StepDecisionSpec
+    definition: StepDecisionDefinition
+
+    @property
+    def schema(self):
+        return self.definition.schema
+
+    def prompt(self) -> str:
+        return build_step_decision_prompt(self.spec)
+
+    def validate(self, data: object, tool_call_ids: ToolCallIdRegistry | None = None):
+        return self.definition.validator.validate(data, tool_call_ids)
+
+
+def _step(output_type: Any, tools: list[ToolEntry]) -> _StepDecisionFixture:
+    spec = StepDecisionSpec.for_inference(
+        name="StepDecision", output_type=output_type, tools=tools
+    )
+    return _StepDecisionFixture(spec, _BACKEND.build(spec))
+
+
 def _tool(func: Callable[..., Any]) -> ToolEntry:
     name = _BACKEND.tool_name(func)
     return SignatureToolEntry(
@@ -92,7 +112,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        decision_builder=PydanticModelBackend(),
+        step_decision_builder=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,
@@ -136,23 +156,20 @@ def _function_info(
     )
 
 
-class TestToolOnlyDirector:
-    """Tests for _ToolOnlyDirector — the Never return type mode."""
+class TestToolsRequiredDecision:
+    """Tests for __StepDecisionFixture — the Never return type mode."""
 
-    def test_create_director_returns_tool_only_for_never(self):
-        strategy = _make_strategy()
-        director = strategy._create_director(Never, [_tool(chat_tool)])
-        assert isinstance(director, ToolOnlyDirector)
+    def test_step_returns_tool_only_for_never(self):
+        step = _step(Never, [_tool(chat_tool)])
+        assert isinstance(step, _StepDecisionFixture)
 
-    def test_create_director_raises_for_never_without_tools(self):
-        strategy = _make_strategy()
+    def test_step_raises_for_never_without_tools(self):
         with pytest.raises(ValueError, match="must have tools available"):
-            strategy._create_director(Never, [])
+            _step(Never, [])
 
-    def test_build_decision_schema_has_no_result_field(self):
-        strategy = _make_strategy()
-        director = strategy._create_director(Never, [_tool(chat_tool)])
-        schema = director.build_decision_schema().document.to_dict()
+    def test_structured_output_schema_has_no_result_field(self):
+        step = _step(Never, [_tool(chat_tool)])
+        schema = step.schema.document.to_dict()
         branch = _decision_branch(schema, "tool_calls")
 
         assert schema["required"] == ["decision", "tool_calls"]
@@ -163,25 +180,23 @@ class TestToolOnlyDirector:
         assert branch["required"] == ["decision", "tool_calls"]
 
     def test_build_system_prompt_instructs_tool_only(self):
-        strategy = _make_strategy()
-        director = strategy._create_director(Never, [_tool(chat_tool)])
-        prompt = director.build_system_prompt_addition()
+        step = _step(Never, [_tool(chat_tool)])
+        prompt = step.prompt()
 
         assert "result" not in prompt or "There is no `result`" in prompt
         assert "tool_calls" in prompt
         assert '"$defs"' not in prompt
 
     def test_process_decision_accepts_tool_calls(self):
-        strategy = _make_strategy()
-        director = strategy._create_director(Never, [_tool(chat_tool)])
+        step = _step(Never, [_tool(chat_tool)])
 
         data: object = {
             "decision": "tool_calls",
             "tool_calls": [{"name": "chat_tool", "arguments": dict[str, object]()}],
         }
-        result = director.process_response_data(data, ToolCallIdRegistry())
+        result = step.validate(data, ToolCallIdRegistry())
 
-        assert isinstance(result, ToolCallDecision)
+        assert isinstance(result, ToolCallsDecision)
         assert result.calls[0].name == "chat_tool"
 
     async def test_decide_next_step_returns_tool_call_decision_for_never(self):
@@ -201,7 +216,7 @@ class TestToolOnlyDirector:
             MockEventPublisher(),
         )
 
-        assert isinstance(result, ToolCallDecision)
+        assert isinstance(result, ToolCallsDecision)
 
     async def test_decide_next_step_raises_when_llm_returns_result_for_never(
         self,
@@ -223,14 +238,14 @@ class TestToolOnlyDirector:
             )
 
 
-class TestToolEnabledDirector:
-    """Tests for _ToolEnabledDirector — tools and result are both allowed."""
+class TestToolsOrResultDecision:
+    """Tests for __StepDecisionFixture — tools and result are both allowed."""
 
-    def _director(self, output_type: Any = str) -> ToolEnabledDirector:
-        return ToolEnabledDirector(PydanticModelBackend(), output_type, [_tool(search)])
+    def _step(self, output_type: Any = str) -> _StepDecisionFixture:
+        return _step(output_type, [_tool(search)])
 
-    def test_build_decision_schema_has_decision_branches(self):
-        schema = self._director().build_decision_schema().document.to_dict()
+    def test_structured_output_schema_has_decision_branches(self):
+        schema = self._step().schema.document.to_dict()
         payload = SchemaNode(schema)
 
         discriminator = payload.object_map("discriminator")
@@ -247,15 +262,15 @@ class TestToolEnabledDirector:
         ]
 
     def test_build_system_prompt_mentions_both_options(self):
-        director = self._director()
-        prompt = director.build_system_prompt_addition()
+        step = self._step()
+        prompt = step.prompt()
 
         assert "tool_calls" in prompt
         assert "result" in prompt
 
     def test_process_decision_returns_tool_call_decision(self):
-        director = self._director()
-        result = director.process_response_data(
+        step = self._step()
+        result = step.validate(
             {
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "search", "arguments": {"q": "x"}}],
@@ -263,32 +278,28 @@ class TestToolEnabledDirector:
             ToolCallIdRegistry(),
         )
 
-        assert isinstance(result, ToolCallDecision)
+        assert isinstance(result, ToolCallsDecision)
         assert result.calls[0].name == "search"
         assert result.calls[0].arguments == {"q": "x"}
 
     def test_process_decision_returns_result_decision(self):
-        director = self._director(output_type=str)
-        result = director.process_response_data(
-            {"decision": "result", "result": "done"}
-        )
+        step = self._step(output_type=str)
+        result = step.validate({"decision": "result", "result": "done"})
 
         assert isinstance(result, ResultDecision)
         assert result.result == "done"
 
     def test_process_decision_accepts_logical_decision(self):
-        director = self._director(output_type=str)
+        step = self._step(output_type=str)
 
-        result = director.process_response_data(
-            {"decision": "result", "result": "done"}
-        )
+        result = step.validate({"decision": "result", "result": "done"})
 
         assert isinstance(result, ResultDecision)
         assert result.result == "done"
 
     def test_process_decision_validates_result_type(self):
-        director = self._director(output_type=MyOutput)
-        result = director.process_response_data(
+        step = self._step(output_type=MyOutput)
+        result = step.validate(
             {
                 "decision": "result",
                 "result": {"name": "ok", "value": 7},
@@ -300,17 +311,17 @@ class TestToolEnabledDirector:
         assert result.result.value == 7
 
     def test_process_decision_raises_when_decision_branch_is_incomplete(self):
-        director = self._director()
+        step = self._step()
         with pytest.raises(
             ValueError,
-            match="Decision validation failed",
+            match="Step decision validation failed",
         ):
-            director.process_response_data({"decision": "tool_calls"})
+            step.validate({"decision": "tool_calls"})
 
     def test_decision_validation_rejects_fields_from_other_branch(self):
-        director = self._director()
-        with pytest.raises(ValueError, match="Decision validation failed"):
-            director.process_response_data(
+        step = self._step()
+        with pytest.raises(ValueError, match="Step decision validation failed"):
+            step.validate(
                 {
                     "decision": "tool_calls",
                     "result": "extra",
@@ -319,14 +330,14 @@ class TestToolEnabledDirector:
             )
 
 
-class TestOutputOnlyDirector:
-    """Tests for _OutputOnlyDirector — no tools, result required."""
+class TestResultOnlyDecision:
+    """Tests for __StepDecisionFixture — no tools, result required."""
 
-    def _director(self, output_type: Any = str) -> OutputOnlyDirector:
-        return OutputOnlyDirector(PydanticModelBackend(), output_type, [])
+    def _step(self, output_type: Any = str) -> _StepDecisionFixture:
+        return _step(output_type, [])
 
-    def test_build_decision_schema_has_only_result(self):
-        schema = self._director().build_decision_schema().document.to_dict()
+    def test_structured_output_schema_has_only_result(self):
+        schema = self._step().schema.document.to_dict()
         branch = _decision_branch(schema, "result")
 
         assert schema["required"] == ["decision", "result"]
@@ -336,23 +347,21 @@ class TestOutputOnlyDirector:
         assert branch["required"] == ["decision", "result"]
 
     def test_build_system_prompt_mentions_no_tools(self):
-        director = self._director()
-        prompt = director.build_system_prompt_addition()
+        step = self._step()
+        prompt = step.prompt()
 
         assert "No tools are available" in prompt
 
     def test_process_decision_returns_result(self):
-        director = self._director(output_type=str)
-        result = director.process_response_data(
-            {"decision": "result", "result": "hello"}
-        )
+        step = self._step(output_type=str)
+        result = step.validate({"decision": "result", "result": "hello"})
 
         assert isinstance(result, ResultDecision)
         assert result.result == "hello"
 
     def test_process_decision_validates_structured_output(self):
-        director = self._director(output_type=MyOutput)
-        result = director.process_response_data(
+        step = self._step(output_type=MyOutput)
+        result = step.validate(
             {
                 "decision": "result",
                 "result": {"name": "test", "value": 99},
@@ -363,7 +372,7 @@ class TestOutputOnlyDirector:
         assert isinstance(result.result, MyOutput)
         assert result.result.name == "test"
 
-    def test_decision_model_rejects_null_result(self):
-        director = self._director()
-        with pytest.raises(ValueError, match="Decision validation failed"):
-            director.process_response_data({"decision": "result", "result": None})
+    def test_step_decision_rejects_null_result(self):
+        step = self._step()
+        with pytest.raises(ValueError, match="Step decision validation failed"):
+            step.validate({"decision": "result", "result": None})

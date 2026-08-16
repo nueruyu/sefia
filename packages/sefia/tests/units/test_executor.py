@@ -23,8 +23,8 @@ from sefia.event_system import EventHandler, EventPublisher
 from sefia.events import AttemptStart, StepStarted
 from sefia.inference import (
     ResultDecision,
-    InferenceDecision,
-    ToolCallDecision,
+    StepDecision,
+    ToolCallsDecision,
     ToolCallRequest,
     ToolCallResult,
 )
@@ -65,8 +65,8 @@ class _StepLimiter(StepMiddleware):
     async def wrap(
         self,
         ctx: StepContext,
-        nxt: Callable[[], Awaitable[InferenceDecision]],
-    ) -> InferenceDecision:
+        nxt: Callable[[], Awaitable[StepDecision]],
+    ) -> StepDecision:
         if ctx.step >= self.max_steps:
             raise _MaxStepsExceededError()
         return await nxt()
@@ -160,7 +160,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
 
         mock_strategy.decide_next_step.side_effect = [
-            ToolCallDecision(
+            ToolCallsDecision(
                 calls=[ToolCallRequest(id="1", name="my_tool", arguments={"a": 1})]
             ),
             ResultDecision(result="final result"),
@@ -200,7 +200,7 @@ class TestInferenceExecutor:
             non_engrave,
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
-            ToolCallDecision(
+            ToolCallsDecision(
                 calls=[ToolCallRequest(id="1", name="nonexistent_tool", arguments={})]
             ),
             ResultDecision(result="recovered"),
@@ -223,7 +223,7 @@ class TestInferenceExecutor:
         assert result == "recovered"
         history = mock_strategy.decide_next_step.call_args_list[1].kwargs["history"]
         assert len(history) == 2
-        assert isinstance(history[0], ToolCallDecision)
+        assert isinstance(history[0], ToolCallsDecision)
         assert isinstance(history[1], ToolCallResult)
         assert "Error: Tool 'nonexistent_tool' not found" in history[1].result
 
@@ -239,7 +239,7 @@ class TestInferenceExecutor:
             non_engrave,
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
-            ToolCallDecision(calls=[]),
+            ToolCallsDecision(calls=[]),
             ResultDecision(result="done"),
         ]
 
@@ -273,7 +273,7 @@ class TestInferenceExecutor:
             mock_publisher,
             non_engrave,
         ) = executor_dependencies
-        mock_strategy.decide_next_step.return_value = ToolCallDecision(calls=[])
+        mock_strategy.decide_next_step.return_value = ToolCallsDecision(calls=[])
 
         executor = _make_executor(
             sample_func,
@@ -304,7 +304,7 @@ class TestInferenceExecutor:
             non_engrave,
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
-            ToolCallDecision(calls=[]),
+            ToolCallsDecision(calls=[]),
             ResultDecision(result="done"),
         ]
 
@@ -317,8 +317,8 @@ class TestInferenceExecutor:
             async def wrap(
                 self,
                 ctx: StepContext,
-                nxt: Callable[[], Awaitable[InferenceDecision]],
-            ) -> InferenceDecision:
+                nxt: Callable[[], Awaitable[StepDecision]],
+            ) -> StepDecision:
                 calls.append(f"{self.label}:enter:{ctx.step}")
                 decision = await nxt()
                 calls.append(f"{self.label}:exit:{ctx.step}")
@@ -363,7 +363,7 @@ class TestInferenceExecutor:
             non_engrave,
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
-            ToolCallDecision(
+            ToolCallsDecision(
                 calls=[ToolCallRequest(id="1", name="boom_tool", arguments={})]
             ),
             ResultDecision(result="recovered"),
@@ -574,7 +574,7 @@ class TestInferenceExecutor:
             non_engrave,
         ) = executor_dependencies
         stored_items = (
-            ToolCallDecision(
+            ToolCallsDecision(
                 calls=[ToolCallRequest(id="1", name="a_tool", arguments={})]
             ),
             ToolCallResult(tool_call_id="1", result="earlier"),
@@ -617,10 +617,10 @@ class TestInferenceExecutor:
             mock_publisher,
             non_engrave,
         ) = executor_dependencies
-        decision = ToolCallDecision(
+        decision = ToolCallsDecision(
             calls=[ToolCallRequest(id="1", name="my_tool", arguments={"a": 1})]
         )
-        empty_decision = ToolCallDecision(calls=[])
+        empty_decision = ToolCallsDecision(calls=[])
         mock_strategy.decide_next_step.side_effect = [
             decision,
             empty_decision,
@@ -672,8 +672,8 @@ class TestInferenceExecutor:
             async def wrap(
                 self,
                 ctx: StepContext,
-                nxt: Callable[[], Awaitable[InferenceDecision]],
-            ) -> InferenceDecision:
+                nxt: Callable[[], Awaitable[StepDecision]],
+            ) -> StepDecision:
                 ctx.history.rewrite([ctx.history.items[-1]])
                 return await nxt()
 
@@ -709,7 +709,7 @@ class TestInferenceExecutor:
         # compaction. The strategy still receives the full live history.
         mock_strategy, mock_collector, mock_publisher, _ = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
-            ToolCallDecision(calls=[]),
+            ToolCallsDecision(calls=[]),
             ResultDecision(result="done"),
         ]
 

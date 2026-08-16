@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
-from ..inference import FunctionInfo, HistoryItem, InferenceDecision
+from ..inference import FunctionInfo, HistoryItem, StepDecision
 
 
 class InferenceStrategy(ABC):
@@ -18,6 +18,6 @@ class InferenceStrategy(ABC):
         history: Sequence[HistoryItem],
         tools: ToolRegistry,
         publisher: EventPublisher,
-    ) -> InferenceDecision:
+    ) -> StepDecision:
         """Decides the next action, either calling tools or returning a result."""
         ...

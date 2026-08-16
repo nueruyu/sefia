@@ -8,7 +8,7 @@ import pytest
 
 from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
-from sefia.inference import FunctionInfo, ToolCallDecision
+from sefia.inference import FunctionInfo, ToolCallsDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse, Message
 from sefia.llm._arg_stream import (
     ToolArgStreamer,
@@ -317,7 +317,7 @@ async def test_arguments_stream_through_a_real_strategy():
     formatter.format_arguments.return_value = "<arguments/>"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
-        decision_builder=PydanticModelBackend(),
+        step_decision_builder=PydanticModelBackend(),
         prompt_formatter=formatter,
         stream=True,
     )
@@ -337,7 +337,7 @@ async def test_arguments_stream_through_a_real_strategy():
         publisher=publisher,
     )
 
-    assert isinstance(decision, ToolCallDecision)
+    assert isinstance(decision, ToolCallsDecision)
     assert collector.tool_call_ids == [decision.calls[0].id]
     assert (
         "".join(e.text for e in collector.events if isinstance(e, StringDelta))

@@ -1,7 +1,6 @@
 from sefia import Domain, HistoryStorage, InferenceStrategy, Session, ToolCollector
 from sefia.history_storages import GlyffHistoryStorage
 from sefia.llm import LLMInferenceStrategy
-from sefia.llm._execution_directors import ExecutionDirector
 from sefia.tool_collectors import DefaultToolCollector
 
 
@@ -17,8 +16,3 @@ def test_standard_implementations_are_final():
     assert getattr(DefaultToolCollector, "__final__", False)
     assert getattr(Session, "__final__", False)
     assert getattr(Domain, "__final__", False)
-
-
-def test_execution_director_template_methods_are_final():
-    assert getattr(ExecutionDirector.build_decision_schema, "__final__", False)
-    assert getattr(ExecutionDirector.process_response_data, "__final__", False)

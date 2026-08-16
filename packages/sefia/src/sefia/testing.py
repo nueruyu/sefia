@@ -108,7 +108,7 @@ def result_response(result: Any) -> LLMResponse:
 
     ``result`` may be anything the framework's JSON encoding handles —
     including dataclasses and Pydantic models, which serialize to the object
-    shape the decision schema validates.
+    shape the step-decision schema validates.
     """
     return LLMResponse(
         content=json.dumps(

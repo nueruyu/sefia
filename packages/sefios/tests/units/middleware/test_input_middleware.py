@@ -1,9 +1,9 @@
 from sefia import StepContext, ToolRegistry
 from sefia._history import StepHistory
 from sefia.inference import (
-    InferenceDecision,
+    StepDecision,
     ResultDecision,
-    ToolCallDecision,
+    ToolCallsDecision,
     ToolCallRequest,
 )
 from sefios.middleware import InputCallComposer
@@ -38,9 +38,9 @@ def _tool_call(id_: str, name: str = "search") -> ToolCallRequest:
 
 
 async def _run(
-    middleware: InputCallComposer, decision: InferenceDecision, step: int = 0
-) -> InferenceDecision:
-    async def nxt() -> InferenceDecision:
+    middleware: InputCallComposer, decision: StepDecision, step: int = 0
+) -> StepDecision:
+    async def nxt() -> StepDecision:
         return decision
 
     return await middleware.wrap(
@@ -62,18 +62,18 @@ class TestInputCallComposer:
 
     async def test_tool_decision_without_input_calls_is_unchanged(self):
         middleware = InputCallComposer()
-        decision = ToolCallDecision(calls=[_tool_call("t1")])
+        decision = ToolCallsDecision(calls=[_tool_call("t1")])
 
         assert await _run(middleware, decision) is decision
 
     async def test_single_input_call_is_unchanged(self):
         middleware = InputCallComposer()
-        decision = ToolCallDecision(calls=[_human_call("h1", "What is the audience?")])
+        decision = ToolCallsDecision(calls=[_human_call("h1", "What is the audience?")])
 
         assert await _run(middleware, decision) is decision
 
     async def test_multiple_input_calls_are_composed(self):
-        decision = ToolCallDecision(
+        decision = ToolCallsDecision(
             calls=[
                 _human_call("h1", "What is the target audience?"),
                 _human_call("h2", "What is the goal of the article?"),
@@ -82,7 +82,7 @@ class TestInputCallComposer:
 
         composed = await _run(InputCallComposer(), decision)
 
-        assert isinstance(composed, ToolCallDecision)
+        assert isinstance(composed, ToolCallsDecision)
         assert composed is not decision
         assert composed.calls == [
             ToolCallRequest(
@@ -100,7 +100,7 @@ class TestInputCallComposer:
         before = _tool_call("t1", name="lookup")
         between = _tool_call("t2", name="calculate")
         after = _tool_call("t3", name="save")
-        decision = ToolCallDecision(
+        decision = ToolCallsDecision(
             calls=[
                 before,
                 _human_call("h1", "First prompt?"),
@@ -112,7 +112,7 @@ class TestInputCallComposer:
 
         composed = await _run(InputCallComposer(), decision)
 
-        assert isinstance(composed, ToolCallDecision)
+        assert isinstance(composed, ToolCallsDecision)
         assert composed.calls[0] is before
         assert composed.calls[2] is between
         assert composed.calls[3] is after
@@ -128,7 +128,7 @@ class TestInputCallComposer:
         async def compose_prompts(prompts: list[str]) -> str:
             return " / ".join(prompts)
 
-        decision = ToolCallDecision(
+        decision = ToolCallsDecision(
             calls=[
                 _human_call("h1", "First prompt?"),
                 _human_call("h2", "Second prompt?"),
@@ -140,15 +140,15 @@ class TestInputCallComposer:
             decision,
         )
 
-        assert isinstance(composed, ToolCallDecision)
+        assert isinstance(composed, ToolCallsDecision)
         assert composed.calls[0].arguments["prompt"] == (
             "First prompt? / Second prompt?"
         )
 
     async def test_sequential_input_steps_are_not_collapsed(self):
         middleware = InputCallComposer()
-        first = ToolCallDecision(calls=[_human_call("h1", "Who is the audience?")])
-        second = ToolCallDecision(
+        first = ToolCallsDecision(calls=[_human_call("h1", "Who is the audience?")])
+        second = ToolCallsDecision(
             calls=[_human_call("h2", "Educational or promotional?")]
         )
 
@@ -156,7 +156,7 @@ class TestInputCallComposer:
         assert await _run(middleware, second, step=1) is second
 
     async def test_invalid_input_arguments_are_left_unchanged(self):
-        decision = ToolCallDecision(
+        decision = ToolCallsDecision(
             calls=[
                 ToolCallRequest(
                     id="h1",
@@ -174,7 +174,7 @@ class TestInputCallComposer:
         assert await _run(InputCallComposer(), decision) is decision
 
     async def test_unregistered_input_name_is_left_unchanged(self):
-        decision = ToolCallDecision(
+        decision = ToolCallsDecision(
             calls=[
                 ToolCallRequest(
                     id="h1",

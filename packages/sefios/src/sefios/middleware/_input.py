@@ -1,7 +1,7 @@
 from typing import Awaitable, Callable
 
 from sefia._interfaces.middleware import StepContext, StepMiddleware
-from sefia.inference import InferenceDecision, ToolCallDecision, ToolCallRequest
+from sefia.inference import StepDecision, ToolCallsDecision, ToolCallRequest
 from sefios.tools.input import Input
 from typing_extensions import final, override
 
@@ -15,10 +15,10 @@ def _join_prompts(prompts: list[str]) -> str:
 
 
 async def _compose_input_calls(
-    decision: ToolCallDecision,
+    decision: ToolCallsDecision,
     input_tool_names: set[str],
     compose_prompts: PromptComposer,
-) -> ToolCallDecision:
+) -> ToolCallsDecision:
     """Compose batched input calls in one decision into one prompt."""
     input_calls = [call for call in decision.calls if call.name in input_tool_names]
     if len(input_calls) <= 1:
@@ -52,7 +52,7 @@ async def _compose_input_calls(
             calls.append(composed_call)
             composed_inserted = True
 
-    return ToolCallDecision(calls=calls)
+    return ToolCallsDecision(calls=calls)
 
 
 @final
@@ -60,7 +60,7 @@ class InputCallComposer(StepMiddleware):
     """
     Composes multiple input requests emitted in the same inference step.
 
-    The middleware only rewrites one ``ToolCallDecision`` batch at a time. Later
+    The middleware only rewrites one ``ToolCallsDecision`` batch at a time. Later
     resumed steps still produce their own independent input requests.
     """
 
@@ -71,10 +71,10 @@ class InputCallComposer(StepMiddleware):
     async def wrap(
         self,
         ctx: StepContext,
-        nxt: Callable[[], Awaitable[InferenceDecision]],
-    ) -> InferenceDecision:
+        nxt: Callable[[], Awaitable[StepDecision]],
+    ) -> StepDecision:
         decision = await nxt()
-        if not isinstance(decision, ToolCallDecision):
+        if not isinstance(decision, ToolCallsDecision):
             return decision
 
         input_tool_names = {
