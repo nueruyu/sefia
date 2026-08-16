@@ -12,7 +12,6 @@ from ..llm.schema import (
     JsonSchemaDocument,
     JsonValue,
     LLMSchema,
-    LocalDefinitionRef,
     SchemaKeyword,
     SchemaNode,
     SchemaPath,
@@ -132,8 +131,10 @@ def _rewrite_references(node: JsonValue, names: dict[str, str]) -> None:
         reference = target.local_reference
         if reference is None:
             continue
-        if reference.name in names:
-            target.set_local_reference(LocalDefinitionRef(names[reference.name]))
+        if reference.definition in names:
+            target.set_local_reference(
+                reference.with_definition(names[reference.definition])
+            )
 
 
 def _walk(node: JsonValue) -> Iterator[JsonObject]:

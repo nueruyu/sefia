@@ -23,10 +23,11 @@ def resolve(
     reference = SchemaNode(schema).local_reference
     if reference is None:
         return schema, path
-    definition = SchemaNode(root).definitions().get(reference.name)
-    if definition is None:
+    definitions = SchemaNode(root).object_map(K.DEFINITIONS)
+    resolved = reference.resolve_from(definitions or {})
+    if not isinstance(resolved, dict):
         return schema, path
-    return definition.value, (K.DEFINITIONS, reference.name)
+    return resolved, (K.DEFINITIONS, reference.definition, *reference.path)
 
 
 def matches(data: object, schema: JsonObject, root: JsonObject) -> bool:

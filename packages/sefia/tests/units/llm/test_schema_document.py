@@ -60,8 +60,18 @@ def test_local_definition_reference_handles_json_pointer_escaping() -> None:
     assert LocalDefinitionRef.parse("#/definitions/Legacy") == LocalDefinitionRef(
         "Legacy"
     )
-    assert LocalDefinitionRef.parse("#/$defs/nested/name") is None
+    assert LocalDefinitionRef.parse("#/$defs/nested/properties/name") == (
+        LocalDefinitionRef("nested", ("properties", "name"))
+    )
     assert LocalDefinitionRef.parse("#/$defs/invalid~escape") is None
+
+    nested = LocalDefinitionRef("User", ("properties", "name"))
+    assert nested.with_definition("tool__User").render() == (
+        "#/$defs/tool__User/properties/name"
+    )
+    assert nested.resolve_from(
+        {"User": {"properties": {"name": {"type": "string"}}}}
+    ) == {"type": "string"}
 
 
 def test_schema_node_owns_common_rewrites() -> None:

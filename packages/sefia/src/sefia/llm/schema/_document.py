@@ -86,7 +86,8 @@ class SchemaNode:
 
     @property
     def local_reference(self) -> LocalDefinitionRef | None:
-        return LocalDefinitionRef.parse(self.value.get(K.REFERENCE))
+        value = self.value.get(K.REFERENCE)
+        return LocalDefinitionRef.parse(value) if isinstance(value, str) else None
 
     def set_local_reference(self, reference: LocalDefinitionRef) -> None:
         self.value[K.REFERENCE] = reference.render()
