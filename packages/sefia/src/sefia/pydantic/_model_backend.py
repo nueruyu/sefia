@@ -3,12 +3,12 @@ from typing import Any, Callable
 from typing_extensions import final, override
 
 from ..llm.step_decision import (
-    StepDecisionDefinition,
-    StepDecisionDefinitionBuilder,
+    StepDecisionSchema,
+    StepDecisionSchemaFactory,
     StepDecisionSpec,
 )
 from .._tool_system import ToolDefinition, ToolFunctionInspector
-from ._step_decision import PydanticStepDecisionDefinitionBuilder
+from ._step_decision import PydanticStepDecisionSchemaFactory
 from ._function_models import (
     PydanticFunctionModelFactory,
     cache_key,
@@ -19,9 +19,9 @@ from ._function_models import (
 
 
 @final
-class PydanticModelBackend(ToolFunctionInspector, StepDecisionDefinitionBuilder):
+class PydanticModelBackend(ToolFunctionInspector, StepDecisionSchemaFactory):
     """
-    Pydantic-backed tool-function inspector and step-decision builder.
+    Pydantic-backed tool-function inspector and step-decision schema factory.
     Supports dataclasses, Pydantic models, primitives, and typing constructs.
     """
 
@@ -32,7 +32,7 @@ class PydanticModelBackend(ToolFunctionInspector, StepDecisionDefinitionBuilder)
         self._function_model_factory = (
             function_model_factory or PydanticFunctionModelFactory()
         )
-        self._step_decision_builder = PydanticStepDecisionDefinitionBuilder()
+        self._step_decision_schema_factory = PydanticStepDecisionSchemaFactory()
         self._definition_cache: dict[Any, ToolDefinition] = {}
 
     @override
@@ -85,5 +85,5 @@ class PydanticModelBackend(ToolFunctionInspector, StepDecisionDefinitionBuilder)
         return {**dict(validated), **(validated.model_extra or {})}
 
     @override
-    def build(self, spec: StepDecisionSpec) -> StepDecisionDefinition:
-        return self._step_decision_builder.build(spec)
+    def create(self, spec: StepDecisionSpec) -> StepDecisionSchema:
+        return self._step_decision_schema_factory.create(spec)

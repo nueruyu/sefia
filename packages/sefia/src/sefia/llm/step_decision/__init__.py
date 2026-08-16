@@ -1,17 +1,15 @@
 from ._contract import (
-    StepDecisionDefinition,
-    StepDecisionDefinitionBuilder,
     StepDecisionMode,
+    StepDecisionSchema,
+    StepDecisionSchemaFactory,
     StepDecisionSpec,
-    StepDecisionValidator,
     ToolCallIdSource,
 )
 
 __all__ = [
-    "StepDecisionDefinition",
-    "StepDecisionDefinitionBuilder",
     "StepDecisionMode",
+    "StepDecisionSchema",
+    "StepDecisionSchemaFactory",
     "StepDecisionSpec",
-    "StepDecisionValidator",
     "ToolCallIdSource",
 ]

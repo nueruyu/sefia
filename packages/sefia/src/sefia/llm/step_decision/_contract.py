@@ -5,7 +5,7 @@ from typing import Any, Never, Protocol
 
 from ..._tool_system import ToolEntry
 from ...inference import StepDecision
-from ..structured_output import StructuredOutputSchema
+from ..structured_output import StructuredOutputSchema, StructuredValue
 
 
 class StepDecisionMode(Enum):
@@ -72,19 +72,17 @@ class ToolCallIdSource(Protocol):
     def get_or_create(self, index: int) -> str: ...
 
 
-class StepDecisionValidator(ABC):
+class StepDecisionSchema(ABC):
+    @property
+    @abstractmethod
+    def structured_output(self) -> StructuredOutputSchema: ...
+
     @abstractmethod
     def validate(
-        self, value: object, tool_call_ids: ToolCallIdSource | None
+        self, value: StructuredValue, tool_call_ids: ToolCallIdSource | None
     ) -> StepDecision: ...
 
 
-@dataclass(frozen=True)
-class StepDecisionDefinition:
-    schema: StructuredOutputSchema
-    validator: StepDecisionValidator
-
-
-class StepDecisionDefinitionBuilder(ABC):
+class StepDecisionSchemaFactory(ABC):
     @abstractmethod
-    def build(self, spec: StepDecisionSpec) -> StepDecisionDefinition: ...
+    def create(self, spec: StepDecisionSpec) -> StepDecisionSchema: ...

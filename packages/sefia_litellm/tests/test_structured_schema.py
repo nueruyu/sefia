@@ -19,7 +19,7 @@ from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm.json_schema import SchemaNode
 from sefia.llm.streaming import StructuredOutputEvent
-from sefia.llm.step_decision import StepDecisionDefinition, StepDecisionSpec
+from sefia.llm.step_decision import StepDecisionSchema, StepDecisionSpec
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
@@ -29,28 +29,28 @@ from sefia_litellm._schema import LiteLLMStructuredOutputAdapter
 from sefia_litellm._schema._streaming import StructuredOutputStreamer
 
 
-def _definition(output_type: Any, tools: list[ToolEntry]) -> StepDecisionDefinition:
+def _decision_schema(output_type: Any, tools: list[ToolEntry]) -> StepDecisionSchema:
     spec = StepDecisionSpec.for_inference(
         name="StepDecision", output_type=output_type, tools=tools
     )
-    return PydanticModelBackend().build(spec)
+    return PydanticModelBackend().create(spec)
 
 
-def _prepare(decision: StepDecisionDefinition):
-    return LiteLLMStructuredOutputAdapter().build(decision.schema)
+def _prepare(decision: StepDecisionSchema):
+    return LiteLLMStructuredOutputAdapter().build(decision.structured_output)
 
 
 def _process(
-    decision: StepDecisionDefinition,
+    decision: StepDecisionSchema,
     data: Any,
     tool_call_ids: ToolCallIdRegistry | None = None,
 ) -> StepDecision:
     prepared = _prepare(decision)
-    return decision.validator.validate(prepared.decode(data), tool_call_ids)
+    return decision.validate(prepared.decode(data), tool_call_ids)
 
 
 def test_prepared_schema_removes_payload_from_stream_paths() -> None:
-    prepared = _prepare(_definition(str, []))
+    prepared = _prepare(_decision_schema(str, []))
 
     assert prepared.normalize_stream_path(
         ("payload", "tool_calls", 0, "arguments", "question")
@@ -58,7 +58,7 @@ def test_prepared_schema_removes_payload_from_stream_paths() -> None:
 
 
 async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
-    prepared = _prepare(_definition(Never, [_tool()]))
+    prepared = _prepare(_decision_schema(Never, [_tool()]))
     events: list[object] = []
 
     async def collect(_tool_call_id: str, stream: ArgStream) -> None:
@@ -161,7 +161,7 @@ def _name_constraint(name_schema: dict[str, Any]) -> Any:
 
 
 def test_tool_only_schema_embeds_tool_argument_schema() -> None:
-    definition = _definition(Never, [_tool()])
+    definition = _decision_schema(Never, [_tool()])
 
     schema = _prepare(definition).wire_schema.to_dict()
 
@@ -190,7 +190,7 @@ async def _research(article_request: _ArticleRequest) -> list[str]:
 
 
 def test_typed_tool_schema_hoists_nested_definitions() -> None:
-    definition = _definition(Never, [_signature_tool(_research, name="research")])
+    definition = _decision_schema(Never, [_signature_tool(_research, name="research")])
 
     schema = _prepare(definition).wire_schema.to_dict()
 
@@ -208,9 +208,9 @@ def test_result_shape_cannot_be_mistaken_for_a_tool_call() -> None:
         name: Literal["ask_user"]
         arguments: dict[str, int]
 
-    definition = _definition(Output, [_tool()])
+    definition = _decision_schema(Output, [_tool()])
 
-    schema = definition.schema.document.to_dict()
+    schema = definition.structured_output.document.to_dict()
 
     output = SchemaNode(schema).definitions()["Output"]
     assert output.properties()["arguments"].value == {
@@ -235,7 +235,7 @@ def test_raw_tool_schema_hoists_local_definitions() -> None:
             }
         },
     }
-    definition = _definition(Never, [_raw_tool(raw_schema)])
+    definition = _decision_schema(Never, [_raw_tool(raw_schema)])
 
     schema = _prepare(definition).wire_schema.to_dict()
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
@@ -247,7 +247,7 @@ def test_raw_tool_schema_hoists_local_definitions() -> None:
     assert item.strings("required") == ("name",)
 
 
-def test_raw_definition_is_not_normalized_with_typed_definition() -> None:
+def test_raw_definition_is_not_normalized_with_typed_decision_schema() -> None:
     shared = make_dataclass("SharedPolicy", [("name", str)])
 
     async def typed(value: Any) -> None:
@@ -267,12 +267,12 @@ def test_raw_definition_is_not_normalized_with_typed_definition() -> None:
             }
         },
     }
-    definition = _definition(
+    definition = _decision_schema(
         Never,
         [_raw_tool(raw_schema), _signature_tool(typed, name="typed")],
     )
 
-    logical = definition.schema
+    logical = definition.structured_output
 
     definitions = logical.document.root().definitions()
     assert definitions["SharedPolicy"].strings("required") is None
@@ -294,7 +294,7 @@ def test_conflicting_tool_definition_names_are_renamed() -> None:
 
     first.__annotations__["value"] = first_type
     second.__annotations__["value"] = second_type
-    definition = _definition(
+    definition = _decision_schema(
         Never,
         [
             _signature_tool(first, name="first"),
@@ -346,7 +346,7 @@ def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
         "required": ["query"],
         "additionalProperties": False,
     }
-    definition = _definition(Never, [_raw_tool(raw_schema)])
+    definition = _decision_schema(Never, [_raw_tool(raw_schema)])
 
     schema = _prepare(definition).wire_schema.to_dict()
 
@@ -403,7 +403,7 @@ def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
 def test_incompatible_raw_tool_schema_is_rejected_without_rewriting(
     raw_schema: dict[str, Any], message: str
 ) -> None:
-    definition = _definition(Never, [_raw_tool(raw_schema)])
+    definition = _decision_schema(Never, [_raw_tool(raw_schema)])
 
     with pytest.raises(ValueError, match=message):
         _prepare(definition)
@@ -432,7 +432,7 @@ def test_unsupported_composition_keyword_is_rejected(keyword: str, value: Any) -
         "additionalProperties": False,
         keyword: value,
     }
-    definition = _definition(Never, [_raw_tool(raw_schema)])
+    definition = _decision_schema(Never, [_raw_tool(raw_schema)])
 
     with pytest.raises(ValueError, match=rf"{keyword} is not supported"):
         _prepare(definition)
@@ -458,7 +458,7 @@ def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
         "required": [property_name],
         "additionalProperties": False,
     }
-    definition = _definition(Never, [_raw_tool(raw_schema)])
+    definition = _decision_schema(Never, [_raw_tool(raw_schema)])
 
     schema = _prepare(definition).wire_schema.to_dict()
 
@@ -472,7 +472,7 @@ def _result_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_mapping_result_is_lowered_and_decoded() -> None:
-    definition = _definition(dict[str, str], [])
+    definition = _decision_schema(dict[str, str], [])
 
     schema = _prepare(definition).wire_schema.to_dict()
 
@@ -503,7 +503,7 @@ def test_mapping_result_is_lowered_and_decoded() -> None:
 
 def test_mapping_constraints_are_lowered_to_entry_constraints() -> None:
     output_type = Annotated[dict[str, str], Field(min_length=1, max_length=2)]
-    definition = _definition(output_type, [])
+    definition = _decision_schema(output_type, [])
 
     result_schema = _result_schema(_prepare(definition).wire_schema.to_dict())
 
@@ -522,7 +522,7 @@ class _Report:
 
 
 def test_nested_mapping_result_is_lowered_and_decoded() -> None:
-    definition = _definition(_Report, [])
+    definition = _decision_schema(_Report, [])
 
     schema = _prepare(definition).wire_schema.to_dict()
     report_schema = _result_schema(schema)
@@ -556,7 +556,7 @@ def test_nested_mapping_result_is_lowered_and_decoded() -> None:
 
 
 def test_mapping_decoder_rejects_duplicate_keys() -> None:
-    definition = _definition(dict[str, str], [])
+    definition = _decision_schema(dict[str, str], [])
 
     with pytest.raises(ValueError, match="duplicate mapping key"):
         _process(
@@ -574,7 +574,7 @@ def test_mapping_decoder_rejects_duplicate_keys() -> None:
 
 
 def test_mapping_decoder_rejects_malformed_entries() -> None:
-    definition = _definition(dict[str, str], [])
+    definition = _decision_schema(dict[str, str], [])
 
     with pytest.raises(ValueError, match="contain only key and value"):
         _process(
@@ -589,7 +589,7 @@ def test_mapping_decoder_rejects_malformed_entries() -> None:
 
 
 def test_mapping_nested_in_list_is_lowered_and_decoded() -> None:
-    definition = _definition(list[dict[str, int]], [])
+    definition = _decision_schema(list[dict[str, int]], [])
 
     decision = _process(
         definition,
@@ -610,7 +610,7 @@ async def _categorize(labels: dict[str, int]) -> None:
 
 
 def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
-    definition = _definition(
+    definition = _decision_schema(
         Never,
         [_signature_tool(_categorize, name="categorize")],
     )
@@ -675,7 +675,7 @@ class TestToolCallValidation:
         formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=client,
-            step_decision_builder=PydanticModelBackend(),
+            step_decision_schema_factory=PydanticModelBackend(),
             prompt_formatter=formatter,
         )
 

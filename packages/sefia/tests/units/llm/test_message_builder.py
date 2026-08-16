@@ -79,7 +79,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        step_decision_builder=PydanticModelBackend(),
+        step_decision_schema_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,
@@ -167,7 +167,9 @@ class TestLLMInferenceStrategy:
         spec = StepDecisionSpec.for_inference(
             name="StepDecision", output_type=list[MyIssue], tools=[_tool(search)]
         )
-        schema = PydanticModelBackend().build(spec).schema.document.to_dict()
+        schema = (
+            PydanticModelBackend().create(spec).structured_output.document.to_dict()
+        )
 
         root = SchemaNode(schema)
         assert "MyIssue" in root.definitions()
@@ -187,7 +189,9 @@ class TestLLMInferenceStrategy:
         spec = StepDecisionSpec.for_inference(
             name="StepDecision", output_type=list[MyIssue], tools=[]
         )
-        schema = PydanticModelBackend().build(spec).schema.document.to_dict()
+        schema = (
+            PydanticModelBackend().create(spec).structured_output.document.to_dict()
+        )
         result_branch = _decision_branch(schema, "result")
 
         assert schema["required"] == ["decision", "result"]
@@ -201,7 +205,9 @@ class TestLLMInferenceStrategy:
         spec = StepDecisionSpec.for_inference(
             name="StepDecision", output_type=list[MyIssue], tools=[_tool(search)]
         )
-        schema = PydanticModelBackend().build(spec).schema.document.to_dict()
+        schema = (
+            PydanticModelBackend().create(spec).structured_output.document.to_dict()
+        )
         payload = SchemaNode(schema)
 
         discriminator = payload.object_map("discriminator")

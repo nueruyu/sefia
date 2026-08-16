@@ -12,11 +12,11 @@ news_models = import_module("examples.01_news_article.models")
 quality_models = import_module("examples.02_code_quality.models")
 
 
-def _definition(output_type: object, tools: list[ToolEntry]):
+def _decision_schema(output_type: object, tools: list[ToolEntry]):
     spec = StepDecisionSpec.for_inference(
         name="StepDecision", output_type=output_type, tools=tools
     )
-    return PydanticModelBackend().build(spec)
+    return PydanticModelBackend().create(spec)
 
 
 def test_news_writer_schema_composes_nested_research_tool_types() -> None:
@@ -30,14 +30,14 @@ def test_news_writer_schema_composes_nested_research_tool_types() -> None:
         inspector=backend,
     )
 
-    logical = _definition(news_models.NewsArticle, [tool]).schema
+    logical = _decision_schema(news_models.NewsArticle, [tool]).structured_output
     schema = LiteLLMStructuredOutputAdapter().build(logical).wire_schema.to_dict()
 
     assert schema["additionalProperties"] is False
 
 
 def test_code_quality_report_schema_lowers_perspective_mapping() -> None:
-    logical = _definition(quality_models.QualityReport, []).schema
+    logical = _decision_schema(quality_models.QualityReport, []).structured_output
     schema = LiteLLMStructuredOutputAdapter().build(logical).wire_schema.to_dict()
 
     report = SchemaNode(schema).definitions()["QualityReport"]

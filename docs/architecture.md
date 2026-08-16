@@ -91,7 +91,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
 | `llm/` | The **default** `InferenceStrategy`: `step_decision/` defines step-decision specifications and validation seams, `json_schema/` contains only JSON Schema concepts, `structured_output/` owns Sefia's logical output boundary, `_step_decision_prompt.py` describes the choices to the model, and `_strategy.py` orchestrates calls and repair. | `LLMInferenceStrategy`, `LLMClient`, `StepDecisionSpec`, `JsonSchemaDocument`, `StructuredOutputSchema`, prompt formatters |
-| `pydantic/` | The **default** `ToolFunctionInspector` + `StepDecisionDefinitionBuilder`: callable inspection, step-decision payload validation, and logical schema composition. | `PydanticModelBackend` |
+| `pydantic/` | The **default** `ToolFunctionInspector` + `StepDecisionSchemaFactory`: callable inspection and construction of validation-capable step-decision schemas. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
 
 ### The seams (`_interfaces/`) — the extension ports
@@ -103,7 +103,7 @@ implementation noted in parentheses.
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
-| `ToolFunctionInspector` / `StepDecisionDefinitionBuilder` | non-Pydantic schema generation and validation | `pydantic/PydanticModelBackend` |
+| `ToolFunctionInspector` / `StepDecisionSchemaFactory` | non-Pydantic schema generation and validation | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
 | `HistoryStorage` | where a run's history is persisted (enables compaction) | `GlyffHistoryStorage` (glyff metadata) |
@@ -149,7 +149,7 @@ implementation noted in parentheses.
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |
 | Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role alias in `_tool_system.py`, scanners in `_introspection.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
-| Support a new output type system | `ToolFunctionInspector` / `StepDecisionDefinitionBuilder` in `pydantic/_model_backend.py` |
+| Support a new output type system | `ToolFunctionInspector` / `StepDecisionSchemaFactory` in `pydantic/_model_backend.py` |
 | Register a tool from a raw JSON Schema (no signature) | `JsonSchemaToolEntry` / `ToolRegistry.add_json_tool` in `_tool_system/` |
 | Read the serving call's id inside a tool body | `current_tool_call_id` / `current_tool_call_id_for` in `_tool_context.py` |
 | Install a whole tool-discovery rule for a run (e.g. client-defined tools) | pass `tool_collector=` to `SessionScope`/`SessionScope.session()`/`Session` (seam: `ToolCollector`) |

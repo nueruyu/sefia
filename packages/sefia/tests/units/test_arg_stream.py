@@ -317,7 +317,7 @@ async def test_arguments_stream_through_a_real_strategy():
     formatter.format_arguments.return_value = "<arguments/>"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
-        step_decision_builder=PydanticModelBackend(),
+        step_decision_schema_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         stream=True,
     )

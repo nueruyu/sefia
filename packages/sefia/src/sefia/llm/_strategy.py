@@ -20,12 +20,13 @@ from ._messages import Message
 from ._prompt_formatter import PromptFormatter
 from ._step_decision_prompt import build_step_decision_prompt
 from ._tool_call_ids import ToolCallIdRegistry
+from .json_schema import require_json_value
 from .step_decision import (
-    StepDecisionDefinitionBuilder,
+    StepDecisionSchema,
+    StepDecisionSchemaFactory,
     StepDecisionSpec,
-    StepDecisionValidator,
 )
-from .structured_output import StructuredOutputSchema
+from .structured_output import to_structured_value
 from .streaming import StructuredOutputEvent
 
 JsonDefault = Callable[[Any], Any]
@@ -43,7 +44,7 @@ class LLMInferenceStrategy(InferenceStrategy):
     def __init__(
         self,
         llm_client: LLMClient,
-        step_decision_builder: StepDecisionDefinitionBuilder,
+        step_decision_schema_factory: StepDecisionSchemaFactory,
         prompt_formatter: PromptFormatter,
         json_default: JsonDefault | None = None,
         stream: bool = False,
@@ -52,7 +53,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         if max_repair_attempts < 0:
             raise ValueError("max_repair_attempts must be non-negative")
         self.llm_client = llm_client
-        self.step_decision_builder = step_decision_builder
+        self.step_decision_schema_factory = step_decision_schema_factory
         self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
@@ -71,7 +72,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             output_type=function_info.return_type,
             tools=tools.get_all(),
         )
-        decision = self.step_decision_builder.build(spec)
+        decision_schema = self.step_decision_schema_factory.create(spec)
         messages = self._build_messages(function_info, history, spec)
 
         attempt = 0
@@ -79,8 +80,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             try:
                 return await self._complete_once(
                     messages,
-                    decision.validator,
-                    decision.schema,
+                    decision_schema,
                     tools,
                     publisher,
                 )
@@ -96,8 +96,7 @@ class LLMInferenceStrategy(InferenceStrategy):
     async def _complete_once(
         self,
         messages: list[Message],
-        validator: StepDecisionValidator,
-        output_schema: StructuredOutputSchema,
+        decision_schema: StepDecisionSchema,
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> StepDecision:
@@ -105,7 +104,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             events.BeforeLLMCall(
                 messages=messages,
                 tools=None,
-                output_schema=output_schema,
+                output_schema=decision_schema.structured_output,
             )
         )
 
@@ -143,7 +142,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             response = await self.llm_client.complete(
                 messages=messages,
                 tools=None,
-                output_schema=output_schema,
+                output_schema=decision_schema.structured_output,
                 stream_callback=stream_callback,
                 structured_output_callback=structured_output_callback,
                 reasoning_callback=reasoning_callback,
@@ -166,8 +165,8 @@ class LLMInferenceStrategy(InferenceStrategy):
                 if raw.startswith("```"):
                     lines = raw.splitlines()
                     raw = "\n".join(lines[1:-1]).strip()
-                decision_data = json.loads(raw)
-            return validator.validate(decision_data, tool_call_ids)
+                decision_data = to_structured_value(require_json_value(json.loads(raw)))
+            return decision_schema.validate(decision_data, tool_call_ids)
         except UnknownToolDecisionError as error:
             raise InvalidInferenceResponseError(
                 f"LLM output requested an unknown tool: {error.tool_name!r}",

@@ -105,10 +105,11 @@ and argument validator, `_step_decision.py` builds and validates the Pydantic pa
 and `_schema_composer.py` composes the logical schema. Provider-side response decoding
 and stream-path normalization stay inside the client implementation.
 
-`StepDecisionDefinitionBuilder` implementations return a passive definition
-containing the logical `StructuredOutputSchema` and its validator. An `LLMClient`
-receives the schema and owns any encoding, prompt fallback, response decoding, and
-structured-stream decoding needed by its model. Step-decision specifications and validation interfaces live in
+`StepDecisionSchemaFactory` implementations create a `StepDecisionSchema`. It exposes
+the logical `StructuredOutputSchema` sent to the client and validates the returned
+value as the corresponding `StepDecision`. An `LLMClient` owns any schema encoding,
+prompt fallback, response decoding, and structured-stream decoding needed by its
+model. Step-decision specifications and schema interfaces live in
 `sefia.llm.step_decision`; logical schema and decoded value types live in
 `sefia.llm.structured_output`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
@@ -235,7 +236,7 @@ inside another dispatched tool; they do not mint or inherit a second identity.
 
 An `@preview` handler receives that same id before its `ArgStream`:
 `handler(tool_call_id, events)`. A step-scoped registry in the inference strategy
-allocates one id per tool-call index; both the streaming router and decision builder
+allocates one id per tool-call index; both the streaming router and decision schema
 request the id from that registry. Preview deltas and the authoritative tool result
 can therefore refer to the same interaction even though the preview runs before tool
 execution.

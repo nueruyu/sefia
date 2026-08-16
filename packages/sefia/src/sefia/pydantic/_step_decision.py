@@ -13,17 +13,17 @@ from pydantic import (
 from typing_extensions import final, override
 
 from ..llm.step_decision import (
-    StepDecisionDefinition,
-    StepDecisionDefinitionBuilder,
     StepDecisionMode,
+    StepDecisionSchema,
+    StepDecisionSchemaFactory,
     StepDecisionSpec,
-    StepDecisionValidator,
     ToolCallIdSource,
 )
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCallsDecision
 from ..llm.json_schema import JsonSchemaDocument
+from ..llm.structured_output import StructuredOutputSchema, StructuredValue
 from ._schema_composer import (
     compose_structured_output_schema,
     tool_argument_schema_placeholder,
@@ -59,13 +59,19 @@ _StepDecisionPayload = _ToolCallsPayload | _ResultPayload
 
 
 @final
-class PydanticStepDecisionValidator(StepDecisionValidator):
-    def __init__(self, model: Any):
+class PydanticStepDecisionSchema(StepDecisionSchema):
+    def __init__(self, model: Any, structured_output: StructuredOutputSchema):
         self._adapter: TypeAdapter[_StepDecisionPayload] = TypeAdapter(model)
+        self._structured_output = structured_output
+
+    @property
+    @override
+    def structured_output(self) -> StructuredOutputSchema:
+        return self._structured_output
 
     @override
     def validate(
-        self, value: object, tool_call_ids: ToolCallIdSource | None
+        self, value: StructuredValue, tool_call_ids: ToolCallIdSource | None
     ) -> StepDecision:
         try:
             payload = self._adapter.validate_python(value)
@@ -112,9 +118,9 @@ def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
 
 
 @final
-class PydanticStepDecisionDefinitionBuilder(StepDecisionDefinitionBuilder):
+class PydanticStepDecisionSchemaFactory(StepDecisionSchemaFactory):
     @override
-    def build(self, spec: StepDecisionSpec) -> StepDecisionDefinition:
+    def create(self, spec: StepDecisionSpec) -> StepDecisionSchema:
         tools = {
             tool.name: ToolArgumentContract(
                 schema=JsonSchemaDocument.from_mapping(tool.definition().parameters),
@@ -127,9 +133,9 @@ class PydanticStepDecisionDefinitionBuilder(StepDecisionDefinitionBuilder):
             for tool in spec.tools
         }
         model = self._model(spec, tools)
-        return StepDecisionDefinition(
-            schema=compose_structured_output_schema(model, tools),
-            validator=PydanticStepDecisionValidator(model),
+        return PydanticStepDecisionSchema(
+            model,
+            compose_structured_output_schema(model, tools),
         )
 
     def _tool_calls_type(

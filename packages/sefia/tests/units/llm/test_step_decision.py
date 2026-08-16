@@ -17,7 +17,8 @@ from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm._step_decision_prompt import build_step_decision_prompt
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.json_schema import SchemaNode
-from sefia.llm.step_decision import StepDecisionDefinition, StepDecisionSpec
+from sefia.llm.step_decision import StepDecisionSchema, StepDecisionSpec
+from sefia.llm.structured_output import StructuredValue
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -63,24 +64,28 @@ _BACKEND = PydanticModelBackend()
 @dataclass(frozen=True)
 class _StepDecisionFixture:
     spec: StepDecisionSpec
-    definition: StepDecisionDefinition
+    decision_schema: StepDecisionSchema
 
     @property
     def schema(self):
-        return self.definition.schema
+        return self.decision_schema.structured_output
 
     def prompt(self) -> str:
         return build_step_decision_prompt(self.spec)
 
-    def validate(self, data: object, tool_call_ids: ToolCallIdRegistry | None = None):
-        return self.definition.validator.validate(data, tool_call_ids)
+    def validate(
+        self,
+        data: StructuredValue,
+        tool_call_ids: ToolCallIdRegistry | None = None,
+    ):
+        return self.decision_schema.validate(data, tool_call_ids)
 
 
 def _step(output_type: Any, tools: list[ToolEntry]) -> _StepDecisionFixture:
     spec = StepDecisionSpec.for_inference(
         name="StepDecision", output_type=output_type, tools=tools
     )
-    return _StepDecisionFixture(spec, _BACKEND.build(spec))
+    return _StepDecisionFixture(spec, _BACKEND.create(spec))
 
 
 def _tool(func: Callable[..., Any]) -> ToolEntry:
@@ -112,7 +117,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        step_decision_builder=PydanticModelBackend(),
+        step_decision_schema_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,
@@ -190,9 +195,9 @@ class TestToolsRequiredDecision:
     def test_process_decision_accepts_tool_calls(self):
         step = _step(Never, [_tool(chat_tool)])
 
-        data: object = {
+        data: StructuredValue = {
             "decision": "tool_calls",
-            "tool_calls": [{"name": "chat_tool", "arguments": dict[str, object]()}],
+            "tool_calls": [{"name": "chat_tool", "arguments": {}}],
         }
         result = step.validate(data, ToolCallIdRegistry())
 

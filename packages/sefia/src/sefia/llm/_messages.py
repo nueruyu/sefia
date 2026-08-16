@@ -1,6 +1,8 @@
 from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Any, Literal, cast
 
+from .structured_output import StructuredValue
+
 
 def _to_serializable(value: Any, exclude_none: bool) -> Any:
     if is_dataclass(value) and not isinstance(value, type):
@@ -55,4 +57,4 @@ class LLMResponse:
     usage: dict[str, Any] | None = None
     stop_reason: str | None = None
     cost: float | None = None
-    structured_output: object | None = None
+    structured_output: StructuredValue | None = None
