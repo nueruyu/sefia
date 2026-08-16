@@ -12,12 +12,16 @@ from ..llm.schema import (
     JsonSchemaDocument,
     JsonValue,
     LLMSchema,
+    LocalDefinitionRef,
+    SchemaKeyword,
+    SchemaNode,
     SchemaPath,
     require_json_object,
 )
 from ._tool_arguments import ToolArgumentContract, ToolSchemaKind
 
 _TOOL_ARGUMENT_MARKER = "x-sefia-tool-arguments"
+K = SchemaKeyword
 
 
 @dataclass(frozen=True)
@@ -34,10 +38,8 @@ def build_decision_schema(
     model: Any, tools: dict[str, ToolArgumentContract]
 ) -> LLMSchema:
     schema = require_json_object(TypeAdapter(model).json_schema())
-    definitions = schema.setdefault("$defs", {})
-    if not isinstance(definitions, dict):
-        raise ValueError("LLM schema $defs must be an object")
-    root_definitions = definitions
+    root = SchemaNode(schema)
+    root_definitions = root.ensure_definitions()
     raw_paths: set[SchemaPath] = set()
     raw_definition_names: set[str] = set()
 
@@ -59,10 +61,10 @@ def build_decision_schema(
         node.update(composed.schema)
         if contract.kind is ToolSchemaKind.RAW:
             raw_paths.add(path)
-            raw_paths.update(("$defs", name) for name in composed.definitions)
+            raw_paths.update((K.DEFINITIONS, name) for name in composed.definitions)
             raw_definition_names.update(composed.definitions)
 
-    schema["description"] = "The model for the LLM's decision on the next action."
+    root.set_description("The model for the LLM's decision on the next action.")
     return LLMSchema(
         document=JsonSchemaDocument.from_mapping(schema),
         raw_schema_paths=frozenset(raw_paths),
@@ -77,11 +79,7 @@ def _compose_definitions(
     protected_names: set[str],
     preserve: bool,
 ) -> _ComposedSchema:
-    local: JsonObject = {}
-    for keyword in ("$defs", "definitions"):
-        definitions = schema.pop(keyword, None)
-        if isinstance(definitions, dict):
-            local.update(definitions)
+    local = SchemaNode(schema).take_definitions()
 
     names = {
         name: _target_name(
@@ -130,15 +128,12 @@ def _target_name(
 
 def _rewrite_references(node: JsonValue, names: dict[str, str]) -> None:
     for schema_node in _walk(node):
-        reference = schema_node.get("$ref")
-        if not isinstance(reference, str):
+        target = SchemaNode(schema_node)
+        reference = target.local_reference
+        if reference is None:
             continue
-        for prefix in ("#/$defs/", "#/definitions/"):
-            if reference.startswith(prefix):
-                name = reference.removeprefix(prefix)
-                if name in names:
-                    schema_node["$ref"] = f"#/$defs/{names[name]}"
-                break
+        if reference.name in names:
+            target.set_local_reference(LocalDefinitionRef(names[reference.name]))
 
 
 def _walk(node: JsonValue) -> Iterator[JsonObject]:

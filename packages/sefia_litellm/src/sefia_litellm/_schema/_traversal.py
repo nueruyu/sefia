@@ -1,7 +1,9 @@
 from collections.abc import Iterator
 from typing import cast
 
-from sefia.llm.schema import JsonObject, SchemaNode, SchemaPath
+from sefia.llm.schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
+
+K = SchemaKeyword
 
 
 def walk(
@@ -18,35 +20,26 @@ def resolve(
     root: JsonObject,
     path: SchemaPath,
 ) -> tuple[JsonObject, SchemaPath]:
-    reference = SchemaNode(schema).reference
-    if reference is None or not reference.startswith("#/$defs/"):
+    reference = SchemaNode(schema).local_reference
+    if reference is None:
         return schema, path
-    definitions = SchemaNode(root).object_map("$defs")
-    if definitions is None:
+    definition = SchemaNode(root).definitions().get(reference.name)
+    if definition is None:
         return schema, path
-    name = reference.removeprefix("#/$defs/").replace("~1", "/").replace("~0", "~")
-    resolved = definitions.get(name)
-    if not isinstance(resolved, dict):
-        return schema, path
-    return resolved, ("$defs", name)
+    return definition.value, (K.DEFINITIONS, reference.name)
 
 
 def matches(data: object, schema: JsonObject, root: JsonObject) -> bool:
     schema, _ = resolve(schema, root, ())
     node = SchemaNode(schema)
-    if "const" in schema and data != schema["const"]:
+    if K.CONST in schema and data != schema[K.CONST]:
         return False
     if node.type == "null":
         return data is None
     if node.type == "object":
         if not isinstance(data, dict):
             return False
-        required = schema.get("required")
-        required_names: set[str] = (
-            {item for item in required if isinstance(item, str)}
-            if isinstance(required, list)
-            else set()
-        )
+        required_names = set(node.required() or ())
         return required_names <= set(cast(dict[object, object], data).keys())
     if node.type == "array":
         return isinstance(data, list)

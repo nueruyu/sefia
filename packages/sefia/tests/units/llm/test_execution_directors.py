@@ -236,7 +236,7 @@ class TestToolEnabledDirector:
         discriminator = payload.object_map("discriminator")
         assert discriminator is not None
         assert discriminator["propertyName"] == "decision"
-        assert len(payload.alternatives("oneOf")) == 2
+        assert len(payload.one_of()) == 2
         assert _decision_branch(schema, "tool_calls")["required"] == [
             "decision",
             "tool_calls",

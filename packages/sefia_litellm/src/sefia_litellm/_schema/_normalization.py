@@ -2,18 +2,19 @@ from dataclasses import dataclass
 
 from typing_extensions import final
 
-from sefia.llm.schema import JsonObject, SchemaNode, SchemaPath
-
 from ._traversal import walk
+from sefia.llm.schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
+
+K = SchemaKeyword
 
 _UNSUPPORTED_COMPOSITION = (
-    "allOf",
-    "not",
-    "dependentRequired",
-    "dependentSchemas",
-    "if",
-    "then",
-    "else",
+    K.ALL_OF,
+    K.NOT,
+    K.DEPENDENT_REQUIRED,
+    K.DEPENDENT_SCHEMAS,
+    K.IF,
+    K.THEN,
+    K.ELSE,
 )
 
 
@@ -25,13 +26,8 @@ class SchemaNormalizer:
     def normalize(self, schema: JsonObject) -> None:
         for _, node in walk(schema, skip=self._preserved):
             if node.type == "object":
-                node.value.setdefault("additionalProperties", False)
-                properties = node.object_map("properties")
-                if properties is not None:
-                    node.value["required"] = list(properties)
-            one_of = node.value.pop("oneOf", None)
-            if one_of is not None:
-                node.value["anyOf"] = one_of
+                node.close_object()
+            node.normalize_one_of()
 
 
 @final
@@ -61,35 +57,13 @@ class MappingLowerer:
             additional = node.additional_properties()
             if node.type != "object" or not isinstance(additional, SchemaNode):
                 continue
-            property_names = node.child("propertyNames")
+            property_names = node.property_names()
             key_schema: JsonObject = (
                 property_names.value
                 if property_names is not None
-                else {"type": "string"}
+                else {K.TYPE: "string"}
             )
-            lowered: JsonObject = {
-                key: node.value[key]
-                for key in ("title", "description")
-                if key in node.value
-            }
-            if "minProperties" in node.value:
-                lowered["minItems"] = node.value["minProperties"]
-            if "maxProperties" in node.value:
-                lowered["maxItems"] = node.value["maxProperties"]
-            lowered.update(
-                type="array",
-                items={
-                    "type": "object",
-                    "properties": {
-                        "key": key_schema,
-                        "value": additional.value,
-                    },
-                    "required": ["key", "value"],
-                    "additionalProperties": False,
-                },
-            )
-            node.value.clear()
-            node.value.update(lowered)
+            node.replace_with_mapping_entries(key_schema, additional.value)
             mappings.append(MappingEncoding(path))
         return SchemaEncodingPlan(tuple(mappings))
 
@@ -98,7 +72,7 @@ class MappingLowerer:
 class CompatibilityValidator:
     def validate(self, schema: JsonObject) -> None:
         for path, node in walk(schema):
-            if "oneOf" in node.value:
+            if K.ONE_OF in node.value:
                 self._unsupported(path, "oneOf is not supported; use a disjoint anyOf")
             for keyword in _UNSUPPORTED_COMPOSITION:
                 if keyword in node.value:
@@ -111,15 +85,8 @@ class CompatibilityValidator:
             self._unsupported(
                 path, "object schemas must set additionalProperties to false"
             )
-        properties = node.object_map("properties")
-        if properties is None:
-            return
-        required = node.value.get("required")
-        required_names: set[str] = (
-            {item for item in required if isinstance(item, str)}
-            if isinstance(required, list)
-            else set()
-        )
+        properties = node.properties()
+        required_names = set(node.required() or ())
         missing = sorted(set(properties) - required_names)
         if missing:
             self._unsupported(

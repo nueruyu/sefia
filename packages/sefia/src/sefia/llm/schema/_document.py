@@ -7,29 +7,37 @@ from typing_extensions import TypeAlias, final
 
 from ._json import JsonObject, JsonValue, require_json_object
 from ._path import SchemaPath
+from ._vocabulary import LocalDefinitionRef, SchemaKeyword
+
+K = SchemaKeyword
 
 SchemaType: TypeAlias = Literal[
     "null", "boolean", "integer", "number", "string", "array", "object"
 ]
 
-_MAP_CHILDREN = ("$defs", "definitions", "properties", "patternProperties")
+_MAP_CHILDREN = (
+    K.DEFINITIONS,
+    K.LEGACY_DEFINITIONS,
+    K.PROPERTIES,
+    K.PATTERN_PROPERTIES,
+)
 _VALUE_CHILDREN = (
-    "additionalProperties",
-    "anyOf",
-    "allOf",
-    "contains",
-    "contentSchema",
-    "dependentSchemas",
-    "else",
-    "if",
-    "items",
-    "not",
-    "oneOf",
-    "prefixItems",
-    "propertyNames",
-    "then",
-    "unevaluatedItems",
-    "unevaluatedProperties",
+    K.ADDITIONAL_PROPERTIES,
+    K.ANY_OF,
+    K.ALL_OF,
+    K.CONTAINS,
+    K.CONTENT_SCHEMA,
+    K.DEPENDENT_SCHEMAS,
+    K.ELSE,
+    K.IF,
+    K.ITEMS,
+    K.NOT,
+    K.ONE_OF,
+    K.PREFIX_ITEMS,
+    K.PROPERTY_NAMES,
+    K.THEN,
+    K.UNEVALUATED_ITEMS,
+    K.UNEVALUATED_PROPERTIES,
 )
 
 
@@ -38,9 +46,26 @@ _VALUE_CHILDREN = (
 class SchemaNode:
     value: JsonObject
 
+    @classmethod
+    def object_schema(
+        cls,
+        properties: JsonObject,
+        *,
+        required: tuple[str, ...] | None = None,
+        closed: bool = True,
+    ) -> "SchemaNode":
+        value: JsonObject = {
+            K.TYPE: "object",
+            K.PROPERTIES: properties,
+            K.REQUIRED: list(required if required is not None else properties),
+        }
+        if closed:
+            value[K.ADDITIONAL_PROPERTIES] = False
+        return cls(value)
+
     @property
     def type(self) -> SchemaType | None:
-        value = self.value.get("type")
+        value = self.value.get(K.TYPE)
         if value in {
             "null",
             "boolean",
@@ -55,8 +80,15 @@ class SchemaNode:
 
     @property
     def reference(self) -> str | None:
-        value = self.value.get("$ref")
+        value = self.value.get(K.REFERENCE)
         return value if isinstance(value, str) else None
+
+    @property
+    def local_reference(self) -> LocalDefinitionRef | None:
+        return LocalDefinitionRef.parse(self.value.get(K.REFERENCE))
+
+    def set_local_reference(self, reference: LocalDefinitionRef) -> None:
+        self.value[K.REFERENCE] = reference.render()
 
     def object_map(self, keyword: str) -> dict[str, JsonValue] | None:
         value = self.value.get(keyword)
@@ -81,7 +113,7 @@ class SchemaNode:
         return [SchemaNode(item) for item in value if isinstance(item, dict)]
 
     def properties(self) -> dict[str, "SchemaNode"]:
-        values = self.object_map("properties")
+        values = self.object_map(K.PROPERTIES)
         if values is None:
             return {}
         return {
@@ -91,7 +123,7 @@ class SchemaNode:
         }
 
     def definitions(self) -> dict[str, "SchemaNode"]:
-        values = self.object_map("$defs")
+        values = self.object_map(K.DEFINITIONS)
         if values is None:
             return {}
         return {
@@ -104,14 +136,85 @@ class SchemaNode:
         value = self.value.get(keyword)
         return SchemaNode(value) if isinstance(value, dict) else None
 
-    def alternatives(self, keyword: Literal["anyOf", "oneOf"]) -> list["SchemaNode"]:
-        return self.nodes(keyword)
+    def any_of(self) -> list["SchemaNode"]:
+        return self.nodes(K.ANY_OF)
+
+    def one_of(self) -> list["SchemaNode"]:
+        return self.nodes(K.ONE_OF)
+
+    def required(self) -> tuple[str, ...] | None:
+        return self.strings(K.REQUIRED)
 
     def additional_properties(self) -> "bool | SchemaNode | None":
-        value = self.value.get("additionalProperties")
+        value = self.value.get(K.ADDITIONAL_PROPERTIES)
         if isinstance(value, bool):
             return value
         return SchemaNode(value) if isinstance(value, dict) else None
+
+    def items(self) -> "SchemaNode | None":
+        return self.child(K.ITEMS)
+
+    def property_names(self) -> "SchemaNode | None":
+        return self.child(K.PROPERTY_NAMES)
+
+    def ensure_definitions(self) -> JsonObject:
+        definitions = self.value.setdefault(K.DEFINITIONS, {})
+        if not isinstance(definitions, dict):
+            raise ValueError("JSON Schema $defs must be an object")
+        return definitions
+
+    def set_definitions(self, definitions: JsonObject) -> None:
+        self.value[K.DEFINITIONS] = definitions
+
+    def take_definitions(self) -> JsonObject:
+        definitions: JsonObject = {}
+        for keyword in (K.DEFINITIONS, K.LEGACY_DEFINITIONS):
+            value = self.value.pop(keyword, None)
+            if isinstance(value, dict):
+                definitions.update(value)
+        return definitions
+
+    def set_description(self, description: str) -> None:
+        self.value[K.DESCRIPTION] = description
+
+    def close_object(self) -> None:
+        self.value.setdefault(K.ADDITIONAL_PROPERTIES, False)
+        properties = self.object_map(K.PROPERTIES)
+        if properties is not None:
+            self.value[K.REQUIRED] = list(properties)
+
+    def normalize_one_of(self) -> None:
+        alternatives = self.value.pop(K.ONE_OF, None)
+        if alternatives is not None:
+            self.value[K.ANY_OF] = alternatives
+
+    def replace_with_mapping_entries(
+        self, key_schema: JsonObject, value_schema: JsonObject
+    ) -> None:
+        replacement: JsonObject = {
+            keyword: self.value[keyword]
+            for keyword in (K.TITLE, K.DESCRIPTION)
+            if keyword in self.value
+        }
+        for source, target in (
+            (K.MIN_PROPERTIES, K.MIN_ITEMS),
+            (K.MAX_PROPERTIES, K.MAX_ITEMS),
+        ):
+            if source in self.value:
+                replacement[target] = self.value[source]
+        replacement.update(
+            {
+                K.TYPE: "array",
+                K.ITEMS: {
+                    K.TYPE: "object",
+                    K.PROPERTIES: {"key": key_schema, "value": value_schema},
+                    K.REQUIRED: ["key", "value"],
+                    K.ADDITIONAL_PROPERTIES: False,
+                },
+            }
+        )
+        self.value.clear()
+        self.value.update(replacement)
 
     def walk(self) -> Iterator["SchemaCursor"]:
         yield from _walk(self.value)

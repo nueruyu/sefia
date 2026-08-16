@@ -7,11 +7,14 @@ from sefia.llm.schema import (
     JsonScalar,
     SchemaNode,
     SchemaPath,
+    SchemaKeyword,
     StructuredValue,
 )
 
 from ._normalization import SchemaEncodingPlan
 from ._traversal import matches, resolve
+
+K = SchemaKeyword
 
 
 class Decoder(Protocol):
@@ -119,26 +122,27 @@ class DecoderFactory:
     def _build_node(self, schema: JsonObject, path: SchemaPath) -> Decoder:
         node = SchemaNode(schema)
         if path in self._mapping_paths:
-            items = node.child("items")
+            items = node.items()
             properties = items.properties() if items is not None else {}
             if set(properties) != {"key", "value"}:
                 raise ValueError("lowered mapping schema is missing key/value entries")
             return _MappingDecoder(
                 self.build(
-                    properties["key"].value, (*path, "items", "properties", "key")
+                    properties["key"].value,
+                    (*path, K.ITEMS, K.PROPERTIES, "key"),
                 ),
                 self.build(
                     properties["value"].value,
-                    (*path, "items", "properties", "value"),
+                    (*path, K.ITEMS, K.PROPERTIES, "value"),
                 ),
             )
-        alternatives = node.alternatives("anyOf")
+        alternatives = node.any_of()
         if alternatives:
             return _UnionDecoder(
                 [
                     (
                         alternative.value,
-                        self.build(alternative.value, (*path, "anyOf", index)),
+                        self.build(alternative.value, (*path, K.ANY_OF, index)),
                     )
                     for index, alternative in enumerate(alternatives)
                 ],
@@ -148,12 +152,12 @@ class DecoderFactory:
             properties = node.properties()
             return _ObjectDecoder(
                 {
-                    name: self.build(child.value, (*path, "properties", name))
+                    name: self.build(child.value, (*path, K.PROPERTIES, name))
                     for name, child in properties.items()
                 }
             )
         if node.type == "array":
-            items = node.child("items")
+            items = node.items()
             if items is not None:
-                return _ArrayDecoder(self.build(items.value, (*path, "items")))
+                return _ArrayDecoder(self.build(items.value, (*path, K.ITEMS)))
         return _IdentityDecoder()

@@ -10,9 +10,11 @@ from ._json import (
     to_structured_value,
 )
 from ._path import SchemaPath
+from ._vocabulary import LocalDefinitionRef, SchemaKeyword
 
 __all__ = [
     "LLMSchema",
+    "LocalDefinitionRef",
     "JsonObject",
     "JsonScalar",
     "JsonSchemaDocument",
@@ -21,6 +23,7 @@ __all__ = [
     "SchemaNode",
     "SchemaPath",
     "SchemaType",
+    "SchemaKeyword",
     "StructuredValue",
     "require_json_object",
     "require_json_value",

@@ -210,7 +210,7 @@ class TestLLMInferenceStrategy:
             "tool_calls",
             "result",
         }
-        assert len(payload.alternatives("oneOf")) == 2
+        assert len(payload.one_of()) == 2
         assert _decision_branch(schema, "tool_calls")["required"] == [
             "decision",
             "tool_calls",
