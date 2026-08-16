@@ -88,10 +88,11 @@ A `StepDecisionSpec` selects one of three shapes:
 | has tools | `TOOLS_OR_RESULT` | `oneOf(tool_calls decision, result decision)` |
 | no tools | `RESULT_ONLY` | `{ decision: "result", result: T }` only |
 
-`llm/json_schema` imports tool `$defs`, resolves name collisions, and rewrites local
-references without knowing about tools or Pydantic. `pydantic/_step_decision.py`
-places those fragments into the step-decision schema and identifies raw JSON Schema
-regions that adapters must not rewrite. Recursive JSON value types and `SchemaNode`
+`llm/step_decision.py` owns this logical shape. It composes tool schemas and the
+result's `StructuredValueSchema`, identifies raw JSON Schema regions that adapters
+must not rewrite, and validates decoded values as `StepDecision`s. `llm/json_schema`
+imports `$defs`, resolves name collisions, and rewrites local references without
+knowing about tools or Pydantic. Recursive JSON value types and `SchemaNode`
 accessors keep schema traversal out of `dict[str, Any]`.
 The logical schema crosses the `LLMClient` boundary once. `LiteLLMClient` adapts it
 to the model's wire format, uses native structured output when available, and puts
@@ -100,16 +101,16 @@ the adapted schema in the system prompt otherwise. Its schema adapter adds the
 arrays of `{key, value}` entries. A path-based encoding plan records those changes
 for response decoding.
 
-The Pydantic backend keeps these responsibilities separate: `_function_models.py`
-reflects callable parameters, `_tool_arguments.py` owns each tool's original schema
-and argument validator, and `_step_decision.py` builds the logical schema and validates
-the Pydantic payload. Generic definition composition lives in `llm/json_schema`.
-Provider-side response decoding and stream-path normalization stay inside the client
-implementation.
+The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
+reflects callable parameters, while `_structured_value.py` produces a JSON Schema and
+restores a decoded structured value to its declared Python type. It does not know the
+step-decision shape. Provider-side response decoding and stream-path normalization
+stay inside the client implementation.
 
-`StepDecisionSchemaFactory` implementations create a `StepDecisionSchema`. It exposes
-the logical `StructuredOutputSchema` sent to the client and validates the returned
-value as the corresponding `StepDecision`. An `LLMClient` owns any schema encoding,
+The default `StepDecisionSchemaFactory` in `sefia.llm` composes these leaves into a
+`StepDecisionSchema`. It exposes the logical `StructuredOutputSchema` sent to the
+client and validates the returned value as the corresponding `StepDecision`. An
+`LLMClient` owns any schema encoding,
 prompt fallback, response decoding, and structured-stream decoding needed by its
 model. Step-decision specifications and schema interfaces live in
 `sefia.llm.step_decision`; logical schema and decoded value types live in

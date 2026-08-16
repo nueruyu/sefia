@@ -6,7 +6,10 @@ from typing_extensions import final
 
 from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import Policy
-from .llm.step_decision import StepDecisionSchemaFactory
+from .llm.step_decision import (
+    DefaultStepDecisionSchemaFactory,
+    StepDecisionSchemaFactory,
+)
 from ._interfaces.history_storage import HistoryStorage
 from ._profiles import Profile
 from ._tool_system import ToolCollector, ToolFunctionInspector
@@ -45,14 +48,14 @@ class Session:
         self._policies: list[Policy] = list(policies) if policies is not None else []
         self._history_storage = history_storage or GlyffHistoryStorage()
 
-        # ``PydanticModelBackend`` is both a ToolFunctionInspector (for the
-        # collector) and a StepDecisionSchemaFactory (for the strategy); one
-        # shared instance backs whichever seam the caller didn't supply.
+        # One Pydantic backend supplies callable inspection and result schemas
+        # for whichever default seam the caller did not replace.
         if inspector is None or step_decision_schema_factory is None:
             default_backend = PydanticModelBackend()
             inspector = inspector or default_backend
             step_decision_schema_factory = (
-                step_decision_schema_factory or default_backend
+                step_decision_schema_factory
+                or DefaultStepDecisionSchemaFactory(default_backend)
             )
 
         self._tool_collector = tool_collector or DefaultToolCollector(

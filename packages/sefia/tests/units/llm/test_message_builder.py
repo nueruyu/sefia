@@ -14,7 +14,7 @@ from sefia.inference import (
 )
 from sefia.llm import LLMClient, LLMInferenceStrategy
 from sefia.llm.json_schema import SchemaNode
-from sefia.llm.step_decision import StepDecisionSpec
+from sefia.llm.step_decision import DefaultStepDecisionSchemaFactory, StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -79,7 +79,9 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        step_decision_schema_factory=PydanticModelBackend(),
+        step_decision_schema_factory=DefaultStepDecisionSchemaFactory(
+            PydanticModelBackend()
+        ),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,
@@ -168,7 +170,9 @@ class TestLLMInferenceStrategy:
             name="StepDecision", output_type=list[MyIssue], tools=[_tool(search)]
         )
         schema = (
-            PydanticModelBackend().create(spec).structured_output.document.to_dict()
+            DefaultStepDecisionSchemaFactory(PydanticModelBackend())
+            .create(spec)
+            .structured_output.document.to_dict()
         )
 
         root = SchemaNode(schema)
@@ -177,20 +181,18 @@ class TestLLMInferenceStrategy:
         result_schema = result_branch["properties"]["result"]
         assert "$defs" not in result_schema
         assert result_schema["items"]["$ref"] == "#/$defs/MyIssue"
-        # tool_calls items reference a per-tool call model in $defs, not an inline
-        # blob, so each tool's arguments stay constrained by its own schema.
         tool_calls_branch = _decision_branch(schema, "tool_calls")
-        tool_calls_array = tool_calls_branch["properties"]["tool_calls"]
-        tool_call_ref = tool_calls_array["items"]["$ref"].split("/")[-1]
-        assert tool_call_ref in root.definitions()
-        assert tool_call_ref.endswith("ToolCall")
+        tool_call = tool_calls_branch["properties"]["tool_calls"]["items"]
+        assert tool_call["properties"]["arguments"]["required"] == ["q"]
 
     def test_structured_output_schema_requires_non_null_result_without_tools(self):
         spec = StepDecisionSpec.for_inference(
             name="StepDecision", output_type=list[MyIssue], tools=[]
         )
         schema = (
-            PydanticModelBackend().create(spec).structured_output.document.to_dict()
+            DefaultStepDecisionSchemaFactory(PydanticModelBackend())
+            .create(spec)
+            .structured_output.document.to_dict()
         )
         result_branch = _decision_branch(schema, "result")
 
@@ -206,19 +208,15 @@ class TestLLMInferenceStrategy:
             name="StepDecision", output_type=list[MyIssue], tools=[_tool(search)]
         )
         schema = (
-            PydanticModelBackend().create(spec).structured_output.document.to_dict()
+            DefaultStepDecisionSchemaFactory(PydanticModelBackend())
+            .create(spec)
+            .structured_output.document.to_dict()
         )
         payload = SchemaNode(schema)
 
         discriminator = payload.object_map("discriminator")
         assert discriminator is not None
         assert discriminator["propertyName"] == "decision"
-        mapping = discriminator["mapping"]
-        assert isinstance(mapping, dict)
-        assert set(mapping) == {
-            "tool_calls",
-            "result",
-        }
         assert len(payload.one_of()) == 2
         assert _decision_branch(schema, "tool_calls")["required"] == [
             "decision",

@@ -2,13 +2,11 @@ from typing import Any, Callable
 
 from typing_extensions import final, override
 
-from ..llm.step_decision import (
-    StepDecisionSchema,
-    StepDecisionSchemaFactory,
-    StepDecisionSpec,
+from ..llm.structured_output import (
+    StructuredValueSchema,
+    StructuredValueSchemaFactory,
 )
 from .._tool_system import ToolDefinition, ToolFunctionInspector
-from ._step_decision import PydanticStepDecisionSchemaFactory
 from ._function_models import (
     PydanticFunctionModelFactory,
     cache_key,
@@ -16,12 +14,13 @@ from ._function_models import (
     get_callable_qualname,
     sanitize_function_name,
 )
+from ._structured_value import PydanticStructuredValueSchemaFactory
 
 
 @final
-class PydanticModelBackend(ToolFunctionInspector, StepDecisionSchemaFactory):
+class PydanticModelBackend(ToolFunctionInspector, StructuredValueSchemaFactory):
     """
-    Pydantic-backed tool-function inspector and step-decision schema factory.
+    Pydantic-backed tool-function inspector and structured-value schema factory.
     Supports dataclasses, Pydantic models, primitives, and typing constructs.
     """
 
@@ -32,7 +31,7 @@ class PydanticModelBackend(ToolFunctionInspector, StepDecisionSchemaFactory):
         self._function_model_factory = (
             function_model_factory or PydanticFunctionModelFactory()
         )
-        self._step_decision_schema_factory = PydanticStepDecisionSchemaFactory()
+        self._structured_value_schema_factory = PydanticStructuredValueSchemaFactory()
         self._definition_cache: dict[Any, ToolDefinition] = {}
 
     @override
@@ -85,5 +84,5 @@ class PydanticModelBackend(ToolFunctionInspector, StepDecisionSchemaFactory):
         return {**dict(validated), **(validated.model_extra or {})}
 
     @override
-    def create(self, spec: StepDecisionSpec) -> StepDecisionSchema:
-        return self._step_decision_schema_factory.create(spec)
+    def create(self, python_type: Any) -> StructuredValueSchema:
+        return self._structured_value_schema_factory.create(python_type)

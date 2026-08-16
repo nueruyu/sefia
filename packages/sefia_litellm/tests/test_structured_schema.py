@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal, Never, cast
 from unittest.mock import Mock
 
 import pytest
-from pydantic import Field, TypeAdapter, ValidationError
+from pydantic import Field
 
 from sefia._tool_system import (
     JsonSchemaToolEntry,
@@ -19,11 +19,14 @@ from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm.json_schema import SchemaNode
 from sefia.llm.streaming import StructuredOutputEvent
-from sefia.llm.step_decision import StepDecisionSchema, StepDecisionSpec
+from sefia.llm.step_decision import (
+    DefaultStepDecisionSchemaFactory,
+    StepDecisionSchema,
+    StepDecisionSpec,
+)
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
-from sefia.pydantic._step_decision import _unknown_tool_name_from_error
 from sefia.streaming import ArgStream, StringEnd
 from sefia_litellm._schema import LiteLLMStructuredOutputAdapter
 from sefia_litellm._schema._streaming import StructuredOutputStreamer
@@ -33,7 +36,7 @@ def _decision_schema(output_type: Any, tools: list[ToolEntry]) -> StepDecisionSc
     spec = StepDecisionSpec.for_inference(
         name="StepDecision", output_type=output_type, tools=tools
     )
-    return PydanticModelBackend().create(spec)
+    return DefaultStepDecisionSchemaFactory(PydanticModelBackend()).create(spec)
 
 
 def _prepare(decision: StepDecisionSchema):
@@ -212,7 +215,12 @@ def test_result_shape_cannot_be_mistaken_for_a_tool_call() -> None:
 
     schema = definition.structured_output.document.to_dict()
 
-    output = SchemaNode(schema).definitions()["Output"]
+    result_branch = next(
+        branch
+        for branch in SchemaNode(schema).one_of()
+        if branch.properties()["decision"].value["const"] == "result"
+    )
+    output = result_branch.properties()["result"]
     assert output.properties()["arguments"].value == {
         "additionalProperties": {"type": "integer"},
         "title": "Arguments",
@@ -639,13 +647,6 @@ def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
     assert decision.calls[0].arguments == {"labels": {"important": 2}}
 
 
-def test_unknown_tool_name_ignores_root_literal_errors() -> None:
-    with pytest.raises(ValidationError) as exc_info:
-        TypeAdapter(Literal["expected"]).validate_python("actual")
-
-    assert _unknown_tool_name_from_error(exc_info.value) is None
-
-
 def test_step_decision_spec_rejects_tool_modes_without_tools() -> None:
     with pytest.raises(ValueError, match="require at least one tool"):
         StepDecisionSpec.tools_required(
@@ -675,7 +676,9 @@ class TestToolCallValidation:
         formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=client,
-            step_decision_schema_factory=PydanticModelBackend(),
+            step_decision_schema_factory=DefaultStepDecisionSchemaFactory(
+                PydanticModelBackend()
+            ),
             prompt_formatter=formatter,
         )
 
