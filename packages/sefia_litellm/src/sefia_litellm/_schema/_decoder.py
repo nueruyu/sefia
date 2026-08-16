@@ -6,12 +6,12 @@ from ._traversal import matches, resolve
 
 
 class Decoder(Protocol):
-    def decode(self, data: Any) -> Any: ...
+    def decode(self, data: object) -> object: ...
 
 
 @final
 class _IdentityDecoder:
-    def decode(self, data: Any) -> Any:
+    def decode(self, data: object) -> object:
         return data
 
 
@@ -20,7 +20,7 @@ class _DeferredDecoder:
     def __init__(self) -> None:
         self.target: Decoder | None = None
 
-    def decode(self, data: Any) -> Any:
+    def decode(self, data: object) -> object:
         return data if self.target is None else self.target.decode(data)
 
 
@@ -29,14 +29,14 @@ class _ObjectDecoder:
     def __init__(self, properties: dict[str, Decoder]):
         self._properties = properties
 
-    def decode(self, data: Any) -> Any:
+    def decode(self, data: object) -> object:
         if not isinstance(data, dict):
             return data
         return {
             key: self._properties[key].decode(value)
-            if key in self._properties
+            if isinstance(key, str) and key in self._properties
             else value
-            for key, value in cast(dict[str, Any], data).items()
+            for key, value in cast(dict[object, object], data).items()
         }
 
 
@@ -45,10 +45,10 @@ class _ArrayDecoder:
     def __init__(self, item: Decoder):
         self._item = item
 
-    def decode(self, data: Any) -> Any:
+    def decode(self, data: object) -> object:
         if not isinstance(data, list):
             return data
-        return [self._item.decode(item) for item in cast(list[Any], data)]
+        return [self._item.decode(item) for item in cast(list[object], data)]
 
 
 @final
@@ -57,14 +57,14 @@ class _MappingDecoder:
         self._key = key
         self._value = value
 
-    def decode(self, data: Any) -> Any:
+    def decode(self, data: object) -> object:
         if not isinstance(data, list):
             return data
-        result: dict[Any, Any] = {}
-        for entry in cast(list[Any], data):
+        result: dict[object, object] = {}
+        for entry in cast(list[object], data):
             if not isinstance(entry, dict):
                 raise ValueError("mapping entries must be objects")
-            entry_map = cast(dict[str, Any], entry)
+            entry_map = cast(dict[object, object], entry)
             if set(entry_map) != {"key", "value"}:
                 raise ValueError("mapping entries must contain only key and value")
             key = self._key.decode(entry_map["key"])
@@ -85,7 +85,7 @@ class _UnionDecoder:
         self._choices = choices
         self._root = root
 
-    def decode(self, data: Any) -> Any:
+    def decode(self, data: object) -> object:
         for schema, decoder in self._choices:
             if matches(data, schema, self._root):
                 return decoder.decode(data)

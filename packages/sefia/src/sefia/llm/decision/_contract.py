@@ -93,7 +93,7 @@ class DecisionToolCall:
 class ResultLLMDecision:
     """A validated decision to return the inference result."""
 
-    result: Any
+    result: object
 
 
 @dataclass(frozen=True)
@@ -115,7 +115,7 @@ class DecisionModel(ABC):
         ...
 
     @abstractmethod
-    def validate(self, data: Any) -> LLMDecision:
+    def validate(self, data: object) -> LLMDecision:
         """Validate raw response data and return a normalized decision."""
         ...
 

@@ -28,7 +28,7 @@ class ToolArgumentContract:
         validator_cls.check_schema(self.schema)
         validator = validator_cls(self.schema)
 
-        def validate(value: Any) -> dict[str, Any]:
+        def validate(value: object) -> dict[str, Any]:
             if not isinstance(value, dict):
                 raise ValueError("arguments must be a JSON object")
             value_dict = cast(dict[str, Any], value)

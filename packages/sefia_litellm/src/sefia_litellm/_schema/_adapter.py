@@ -21,7 +21,7 @@ class LiteLLMPreparedSchema:
     def schema(self) -> dict[str, Any]:
         return deepcopy(self._schema)
 
-    def decode(self, data: Any) -> Any:
+    def decode(self, data: object) -> object:
         decoded = self._decoder.decode(data)
         if not isinstance(decoded, dict):
             return decoded

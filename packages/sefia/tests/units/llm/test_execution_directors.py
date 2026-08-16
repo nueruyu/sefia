@@ -174,13 +174,13 @@ class TestToolOnlyDirector:
         strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
 
-        result = director.process_response_data(
-            {
-                "decision": "tool_calls",
-                "tool_calls": [{"name": "chat_tool", "arguments": {}}],
-            },
-            ToolCallIdRegistry(),
-        )
+        data: object = {
+            "decision": "tool_calls",
+            "tool_calls": [
+                {"name": "chat_tool", "arguments": dict[str, object]()}
+            ],
+        }
+        result = director.process_response_data(data, ToolCallIdRegistry())
 
         assert isinstance(result, ToolCallDecision)
         assert result.calls[0].name == "chat_tool"

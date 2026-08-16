@@ -22,11 +22,11 @@ class _UnhashableCallableKey:
     def __hash__(self) -> int:
         return id(self._obj)
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, _UnhashableCallableKey) and self._obj is other._obj
 
 
-def cache_key(func: Callable[..., Any]) -> Any:
+def cache_key(func: Callable[..., Any]) -> object:
     try:
         hash(func)
     except TypeError:
@@ -117,7 +117,7 @@ class PydanticFunctionModelFactory:
     """Creates and caches Pydantic models derived from callable signatures."""
 
     def __init__(self):
-        self._params_model_cache: dict[Any, type[BaseModel]] = {}
+        self._params_model_cache: dict[object, type[BaseModel]] = {}
 
     def params_model(
         self,

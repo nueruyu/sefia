@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union, cast
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import (
+    BaseModel,
     ConfigDict,
     Field,
     TypeAdapter,
@@ -31,6 +32,30 @@ from ._tool_arguments import (
 )
 
 
+class _ValidatedToolCall(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    arguments: dict[str, Any]
+
+
+class _ValidatedToolCallsDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["tool_calls"]
+    tool_calls: list[_ValidatedToolCall]
+
+
+class _ValidatedResultDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["result"]
+    result: object
+
+
+_ValidatedDecision = _ValidatedToolCallsDecision | _ValidatedResultDecision
+
+
 @final
 class PydanticDecisionModel(DecisionModel):
     def __init__(
@@ -39,7 +64,7 @@ class PydanticDecisionModel(DecisionModel):
         model: Any,
         tools: dict[str, ToolArgumentContract],
     ):
-        self._adapter = TypeAdapter(model)
+        self._adapter: TypeAdapter[_ValidatedDecision] = TypeAdapter(model)
         self._model = model
         self._tools = tools
         self._schema: LLMSchema | None = None
@@ -51,34 +76,27 @@ class PydanticDecisionModel(DecisionModel):
         return self._schema
 
     @override
-    def validate(self, data: Any) -> LLMDecision:
+    def validate(self, data: object) -> LLMDecision:
         try:
             decision = self._adapter.validate_python(data)
-            if decision.decision == "tool_calls":
+            if isinstance(decision, _ValidatedToolCallsDecision):
                 return ToolCallsLLMDecision(
                     tool_calls=self._extract_tool_calls(decision.tool_calls)
                 )
-            if decision.decision == "result":
-                return ResultLLMDecision(result=decision.result)
-            raise ValueError(f"Unsupported decision type: {decision.decision!r}")
+            return ResultLLMDecision(result=decision.result)
         except ValidationError as e:
             unknown_tool_name = _unknown_tool_name_from_error(e)
             if unknown_tool_name is not None:
                 raise UnknownToolDecisionError(unknown_tool_name) from e
             raise ValueError(f"Decision validation failed: {e}") from e
 
-    def _extract_tool_calls(self, tool_calls: list[Any]) -> list[DecisionToolCall]:
-        calls: list[DecisionToolCall] = []
-        for tool_call in tool_calls:
-            # ``arguments`` is the decoded, schema-validated dict (see
-            # ``ToolArgumentContract``); no per-tool model to dump.
-            calls.append(
-                DecisionToolCall(
-                    name=tool_call.name,
-                    arguments=cast(dict[str, Any], tool_call.arguments),
-                )
-            )
-        return calls
+    def _extract_tool_calls(
+        self, tool_calls: list[_ValidatedToolCall]
+    ) -> list[DecisionToolCall]:
+        return [
+            DecisionToolCall(name=tool_call.name, arguments=tool_call.arguments)
+            for tool_call in tool_calls
+        ]
 
 
 def _unknown_tool_name_from_error(error: ValidationError) -> str | None:
@@ -130,7 +148,7 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
         call_models = [
             create_model(
                 f"{tool.name}ToolCall",
-                __config__=ConfigDict(extra="forbid"),
+                __base__=_ValidatedToolCall,
                 name=(Literal[tool.name], ...),
                 arguments=(
                     Annotated[
@@ -174,7 +192,7 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
         self,
         spec: DecisionModelSpec,
         contracts: dict[str, ToolArgumentContract],
-    ) -> type:
+    ) -> type[_ValidatedToolCallsDecision]:
         if spec.mode is DecisionMode.TOOL_ONLY:
             name = spec.name
         else:
@@ -182,12 +200,11 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
 
         return create_model(
             name,
-            __config__=ConfigDict(extra="forbid"),
-            decision=(Literal["tool_calls"], ...),
+            __base__=_ValidatedToolCallsDecision,
             tool_calls=(self._tool_calls_type(spec.tools, contracts), ...),
         )
 
-    def _result_model(self, spec: DecisionModelSpec) -> type:
+    def _result_model(self, spec: DecisionModelSpec) -> type[_ValidatedResultDecision]:
         if spec.mode is DecisionMode.OUTPUT_ONLY:
             name = spec.name
         else:
@@ -195,7 +212,6 @@ class PydanticDecisionModelFactory(DecisionModelBuilder):
 
         return create_model(
             name,
-            __config__=ConfigDict(extra="forbid"),
-            decision=(Literal["result"], ...),
+            __base__=_ValidatedResultDecision,
             result=(spec.output_type, ...),
         )

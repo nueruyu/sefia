@@ -55,4 +55,4 @@ class LLMResponse:
     usage: dict[str, Any] | None = None
     stop_reason: str | None = None
     cost: float | None = None
-    structured_output: Any | None = None
+    structured_output: object | None = None

@@ -66,7 +66,7 @@ def resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
     return cast(dict[str, Any], resolved) if isinstance(resolved, dict) else schema
 
 
-def matches(data: Any, schema: dict[str, Any], root: dict[str, Any]) -> bool:
+def matches(data: object, schema: dict[str, Any], root: dict[str, Any]) -> bool:
     schema = resolve(schema, root)
     if "const" in schema and data != schema["const"]:
         return False

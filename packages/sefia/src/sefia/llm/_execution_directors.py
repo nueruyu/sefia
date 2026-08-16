@@ -66,7 +66,7 @@ class ExecutionDirector(ABC):
 
     @final
     def process_response_data(
-        self, data: Any, tool_call_ids: ToolCallIdRegistry | None = None
+        self, data: object, tool_call_ids: ToolCallIdRegistry | None = None
     ) -> InferenceDecision:
         decision = self.decision_model.validate(data)
         return self._process_decision(decision, tool_call_ids)
