@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 from typing import cast
 
-from sefia.llm.schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
+from sefia.llm.json_schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
 
 K = SchemaKeyword
 

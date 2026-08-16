@@ -13,7 +13,7 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import LLMClient, LLMInferenceStrategy
-from sefia.llm.schema import SchemaNode
+from sefia.llm.json_schema import SchemaNode
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 

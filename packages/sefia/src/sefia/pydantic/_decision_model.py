@@ -25,7 +25,7 @@ from ..llm.decision import (
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..llm.structured_output import StructuredOutputSchema
-from ..llm.schema import JsonSchemaDocument
+from ..llm.json_schema import JsonSchemaDocument
 from ._decision_schema import build_decision_schema, tool_argument_placeholder
 from ._tool_arguments import (
     ToolArgumentContract,

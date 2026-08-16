@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from typing_extensions import TypeAlias, final
 
-from .schema import SchemaPath
+from .json_schema import SchemaPath
 
 
 @final

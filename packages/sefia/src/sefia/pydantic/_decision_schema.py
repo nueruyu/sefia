@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import TypeAdapter, WithJsonSchema
 
-from ..llm.schema import (
+from ..llm.json_schema import (
     JsonObject,
     JsonSchemaDocument,
     JsonValue,

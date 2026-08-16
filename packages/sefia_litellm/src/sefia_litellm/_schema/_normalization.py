@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing_extensions import final
 
 from ._traversal import walk
-from sefia.llm.schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
+from sefia.llm.json_schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
 
 K = SchemaKeyword
 

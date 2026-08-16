@@ -10,7 +10,7 @@ from typing_extensions import final, override
 
 from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
-from sefia.llm.schema import JsonObject, require_json_value
+from sefia.llm.json_schema import JsonObject, require_json_value
 from sefia.llm.structured_output import StructuredOutputSchema
 from sefia.llm.streaming import StructuredOutputCallback
 

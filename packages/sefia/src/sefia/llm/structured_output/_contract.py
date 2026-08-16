@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from typing_extensions import final
 
-from ..schema import JsonSchemaDocument, SchemaPath
+from ..json_schema import JsonSchemaDocument, SchemaPath
 
 
 @final

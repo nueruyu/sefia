@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from typing_extensions import final
 
-from sefia.llm.schema import (
+from sefia.llm.json_schema import (
     JsonObject,
     JsonSchemaDocument,
     JsonValue,

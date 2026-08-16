@@ -20,7 +20,7 @@ from sefia.llm._execution_directors import (
     ToolOnlyDirector,
 )
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.schema import SchemaNode
+from sefia.llm.json_schema import SchemaNode
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 

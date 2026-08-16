@@ -7,7 +7,7 @@ import jsonschema.validators
 from pydantic import BeforeValidator, WithJsonSchema
 from typing_extensions import final
 
-from ..llm.schema import JsonSchemaDocument
+from ..llm.json_schema import JsonSchemaDocument
 
 
 class ToolSchemaKind(Enum):

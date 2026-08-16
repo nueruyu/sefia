@@ -20,7 +20,7 @@ from litellm.exceptions import (
 )
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
-from sefia.llm.schema import JsonSchemaDocument
+from sefia.llm.json_schema import JsonSchemaDocument
 from sefia.llm.structured_output import StructuredOutputSchema
 from sefia_litellm._client import (
     _SILENCE_LEVEL,

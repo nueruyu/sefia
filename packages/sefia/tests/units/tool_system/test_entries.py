@@ -6,7 +6,7 @@ from typing import Any
 
 from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import ToolConflictError
-from sefia.llm.schema import JsonSchemaDocument
+from sefia.llm.json_schema import JsonSchemaDocument
 from sefia.pydantic._tool_arguments import ToolArgumentContract, ToolSchemaKind
 
 _SEARCH_SCHEMA: dict[str, Any] = {

@@ -17,7 +17,7 @@ from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionE
 from sefia.inference import FunctionInfo, InferenceDecision, ToolCallDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
-from sefia.llm.schema import SchemaNode
+from sefia.llm.json_schema import SchemaNode
 from sefia.llm.streaming import StructuredOutputEvent
 from sefia.llm.decision import DecisionModelSpec
 from sefia.llm._execution_directors import (

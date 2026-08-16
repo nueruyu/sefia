@@ -1,6 +1,6 @@
 import pytest
 
-from sefia.llm.schema import JsonSchemaDocument, LocalDefinitionRef
+from sefia.llm.json_schema import JsonSchemaDocument, LocalDefinitionRef
 
 
 def test_schema_document_rejects_non_json_values() -> None:

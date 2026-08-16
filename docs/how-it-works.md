@@ -111,7 +111,7 @@ dictionary. An `LLMClient` receives that logical contract and owns any schema
 encoding, prompt fallback, response decoding, and structured-stream decoding needed
 by its model. The decision contracts live in `sefia.llm.decision`; the logical schema
 contract and decoded value types live in `sefia.llm.structured_output`.
-`sefia.llm.schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
+`sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 The core system prompt is `docstring + decision semantics + tool definitions`; the
 client adds output-format instructions when the model needs a schema in its prompt.

@@ -1,6 +1,6 @@
 from typing_extensions import TypeAlias
 
-from ..schema import JsonScalar, JsonValue
+from ..json_schema import JsonScalar, JsonValue
 
 StructuredValue: TypeAlias = (
     JsonScalar | list["StructuredValue"] | dict[JsonScalar, "StructuredValue"]

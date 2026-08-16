@@ -2,7 +2,7 @@ from importlib import import_module
 
 from sefia._tool_system import SignatureToolEntry
 from sefia.llm._execution_directors import OutputOnlyDirector, ToolEnabledDirector
-from sefia.llm.schema import SchemaNode
+from sefia.llm.json_schema import SchemaNode
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._schema import LiteLLMStructuredOutputAdapter
 from sefios.tools import WebSearch
