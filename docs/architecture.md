@@ -34,7 +34,8 @@ sefios ─┬▶ sefia
         └▶ sefia_fastapi        (optional: sefios[fastapi])
 
 sefia_litellm ─┬▶ sefia
-               └▶ litellm
+               ├▶ litellm
+               └▶ jsonweir
 
 sefia_typer ─┬▶ sefia
              └▶ typer / rich
@@ -43,8 +44,7 @@ sefia_fastapi ─┬▶ sefia
                └▶ fastapi
 
 sefia ─┬▶ pydantic
-       ├▶ glyff / glyff-file-store / glyff-pydantic
-       └▶ jsonweir
+       └▶ glyff / glyff-file-store / glyff-pydantic
 
 jsonweir is a separate package published on PyPI, not a workspace member.
 ```
@@ -90,7 +90,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: `decision/` owns the logical decision contract, `schema/` owns LLM schema preparation contracts, `_strategy.py` orchestrates calls and repair, and `_execution_directors.py` converts decisions. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
+| `llm/` | The **default** `InferenceStrategy`: `decision/` owns the logical decision contract, `schema/` owns the provider-neutral schema contract, `_strategy.py` orchestrates calls and repair, and `_execution_directors.py` converts decisions. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
 | `pydantic/` | The **default** `ToolFunctionInspector` + `DecisionModelBuilder`: callable inspection, logical decision-schema composition, and local validation. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
 

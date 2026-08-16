@@ -20,6 +20,7 @@ from litellm.exceptions import (
 )
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
+from sefia.llm.schema import LLMSchema
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
     LiteLLMClient,
@@ -42,15 +43,19 @@ class TestLiteLLMClient:
     async def test_complete_sends_correct_request_to_litellm(
         self, mock_acompletion: AsyncMock
     ):
-        client = LiteLLMClient(model="gpt-4o", temperature=0.5)
+        client = LiteLLMClient(
+            model="gpt-4o", native_structured_output=True, temperature=0.5
+        )
         messages = [Message(role="user", content="Hello")]
         tools: list[dict[str, Any]] = [
             {"type": "function", "function": {"name": "get_weather"}}
         ]
-        output_schema: dict[str, Any] = {
-            "type": "object",
-            "properties": {"city": {"type": "string"}},
-        }
+        output_schema = LLMSchema(
+            {
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+            }
+        )
 
         mock_acompletion.return_value = ModelResponse(
             choices=[
@@ -70,8 +75,47 @@ class TestLiteLLMClient:
         assert call_args["messages"] == [{"role": "user", "content": "Hello"}]
         assert call_args["tools"] == tools
         assert call_args["response_format"]["type"] == "json_schema"
-        assert call_args["response_format"]["json_schema"]["schema"] == output_schema
+        wire_schema = call_args["response_format"]["json_schema"]["schema"]
+        assert wire_schema["properties"]["payload"]["properties"]["city"] == {
+            "type": "string"
+        }
         assert call_args["temperature"] == 0.5
+
+    async def test_complete_uses_prompt_fallback_and_decodes_response(
+        self, mock_acompletion: AsyncMock
+    ) -> None:
+        client = LiteLLMClient(model="legacy-model", native_structured_output=False)
+        schema = LLMSchema(
+            {
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+                "required": ["city"],
+                "additionalProperties": False,
+            }
+        )
+        mock_acompletion.return_value = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant", content='{"payload":{"city":"Tokyo"}}'
+                    ),
+                )
+            ]
+        )
+
+        response = await client.complete(
+            [Message(role="system", content="Follow the task.")],
+            output_schema=schema,
+        )
+
+        call_args = mock_acompletion.call_args.kwargs
+        assert "response_format" not in call_args
+        system_prompt = call_args["messages"][0]["content"]
+        assert "Follow the task." in system_prompt
+        assert '"payload"' in system_prompt
+        assert response.structured_output == {"city": "Tokyo"}
 
     async def test_complete_parses_litellm_response_and_calculates_cost(
         self, mock_acompletion: AsyncMock, mocker: MockerFixture
@@ -300,7 +344,9 @@ class TestLiteLLMClient:
             stream,
             callback,
             None,
+            None,
             [{"role": "user", "content": "Hello"}],
+            None,
         )
 
     async def test_complete_streams_when_only_reasoning_callback_is_provided(
@@ -332,8 +378,10 @@ class TestLiteLLMClient:
         handle_stream.assert_awaited_once_with(
             stream,
             None,
+            None,
             reasoning_callback,
             [{"role": "user", "content": "Hello"}],
+            None,
         )
 
     async def test_handle_stream_routes_reasoning_and_content_separately(
@@ -378,7 +426,7 @@ class TestLiteLLMClient:
             reasoning_tokens.append(token)
 
         response = await client._handle_stream(
-            fake_stream(), on_content, on_reasoning, []
+            fake_stream(), on_content, None, on_reasoning, [], None
         )
 
         assert reasoning_tokens == ["Let me ", "think."]

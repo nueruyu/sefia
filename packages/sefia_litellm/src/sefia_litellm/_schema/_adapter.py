@@ -2,9 +2,9 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, cast
 
-from typing_extensions import final, override
+from typing_extensions import final
 
-from sefia.llm.schema import LLMSchema, PreparedLLMSchema, SchemaPath
+from sefia.llm.schema import LLMSchema, SchemaPath
 
 from ._decoder import Decoder, DecoderFactory
 from ._normalization import CompatibilityValidator, MappingLowerer, SchemaNormalizer
@@ -13,16 +13,14 @@ from ._traversal import walk_with_paths
 
 @final
 @dataclass
-class LiteLLMPreparedSchema(PreparedLLMSchema):
+class LiteLLMPreparedSchema:
     _schema: dict[str, Any]
     _decoder: Decoder
 
     @property
-    @override
     def schema(self) -> dict[str, Any]:
         return deepcopy(self._schema)
 
-    @override
     def decode(self, data: Any) -> Any:
         decoded = self._decoder.decode(data)
         if not isinstance(decoded, dict):
@@ -32,7 +30,6 @@ class LiteLLMPreparedSchema(PreparedLLMSchema):
             return decoded_map["payload"]
         return decoded_map
 
-    @override
     def normalize_stream_path(self, path: SchemaPath) -> SchemaPath | None:
         return path[1:] if path and path[0] == "payload" else path
 

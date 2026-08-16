@@ -17,6 +17,7 @@ from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionE
 from sefia.inference import FunctionInfo, InferenceDecision, ToolCallDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
+from sefia.llm.streaming import StructuredOutputEvent
 from sefia.llm.decision import DecisionModelSpec
 from sefia.llm._execution_directors import (
     OutputOnlyDirector,
@@ -29,6 +30,7 @@ from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._decision_model import _unknown_tool_name_from_error
 from sefia.streaming import ArgStream, StringEnd
 from sefia_litellm._schema import LiteLLMSchemaAdapter
+from sefia_litellm._schema._streaming import StructuredOutputStreamer
 
 
 def _prepare(director: Any):
@@ -59,15 +61,23 @@ async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
     streamer = ToolArgStreamer(
         {"ask_user": collect},
         lambda index: f"call-{index}",
-        prepared.normalize_stream_path,
     )
-    streamer.on_token(
+    wire_streamer = StructuredOutputStreamer(
+        prepared, lambda event: _dispatch_event(streamer, event)
+    )
+    await wire_streamer.feed(
         '{"payload":{"decision":"tool_calls","tool_calls":['
         '{"name":"ask_user","arguments":{"question":"Hello"}}]}}'
     )
     await streamer.close()
 
     assert StringEnd(name="question", value="Hello") in events
+
+
+async def _dispatch_event(
+    streamer: ToolArgStreamer, event: StructuredOutputEvent
+) -> None:
+    streamer.on_event(event)
 
 
 async def ask_user(question: Annotated[str, Field(min_length=1)]) -> str:
@@ -652,8 +662,10 @@ class TestToolCallValidation:
 
     def _strategy(self, content: str) -> LLMInferenceStrategy:
         client = Mock(spec=LLMClient)
-        client.complete.return_value = LLMResponse(content=content)
-        client.prepare_output_schema.side_effect = LiteLLMSchemaAdapter().build
+        client.complete.return_value = LLMResponse(
+            content=content,
+            structured_output=cast(dict[str, Any], json.loads(content))["payload"],
+        )
         formatter = Mock()
         formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(

@@ -14,12 +14,11 @@ JsonDefault = Callable[[Any], Any]
 def build_messages(
     function_info: FunctionInfo,
     history: Sequence[HistoryItem],
-    output_schema: dict[str, Any],
     director: ExecutionDirector,
     prompt_formatter: PromptFormatter,
     json_default: JsonDefault | None,
 ) -> list[Message]:
-    system_prompt_addition = director.build_system_prompt_addition(output_schema)
+    system_prompt_addition = director.build_system_prompt_addition()
     messages = [
         Message(
             role="system",

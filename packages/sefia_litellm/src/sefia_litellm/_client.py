@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import json
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, cast
 
@@ -9,7 +10,8 @@ from typing_extensions import final, override
 
 from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
-from sefia.llm.schema import LLMSchema, PreparedLLMSchema
+from sefia.llm.schema import LLMSchema
+from sefia.llm.streaming import StructuredOutputCallback
 
 from .exceptions import (
     InferenceConnectionError,
@@ -17,7 +19,8 @@ from .exceptions import (
     InferenceTemporarilyUnavailableError,
     InferenceTimeoutError,
 )
-from ._schema import LiteLLMSchemaAdapter
+from ._schema import LiteLLMPreparedSchema, LiteLLMSchemaAdapter
+from ._schema._streaming import StructuredOutputStreamer
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage
@@ -36,6 +39,32 @@ _LOG_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 # surfaces real failures as exceptions (see ``_to_inference_error``), so its
 # log output is noise that can be turned off entirely without hiding errors.
 _SILENCE_LEVEL = logging.CRITICAL + 1
+
+_SCHEMA_PROMPT = """
+### Response Format
+Return exactly one raw JSON object matching this schema. Do not include prose,
+markdown, or code fences.
+
+{schema}
+"""
+
+
+def _with_schema_instruction(
+    messages: list[dict[str, Any]], schema: dict[str, Any]
+) -> list[dict[str, Any]]:
+    instruction = _SCHEMA_PROMPT.format(
+        schema=json.dumps(schema, indent=2, ensure_ascii=False)
+    ).strip()
+    result = [message.copy() for message in messages]
+    for message in result:
+        if message.get("role") != "system":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            message["content"] = f"{content}\n\n{instruction}"
+            return result
+    result.insert(0, {"role": "system", "content": instruction})
+    return result
 
 
 def _env_suppress_logs_default() -> bool:
@@ -108,7 +137,14 @@ class LiteLLMClient(LLMClient):
     various LLM providers.
     """
 
-    def __init__(self, model: str, *, suppress_logs: bool | None = None, **kwargs: Any):
+    def __init__(
+        self,
+        model: str,
+        *,
+        suppress_logs: bool | None = None,
+        native_structured_output: bool | None = None,
+        **kwargs: Any,
+    ):
         self.model = model
         self._kwargs = kwargs
         # ``None`` defers to SEFIA_LITELLM_SUPPRESS_LOGS (default: suppress);
@@ -116,18 +152,16 @@ class LiteLLMClient(LLMClient):
         self._suppress_logs = (
             _env_suppress_logs_default() if suppress_logs is None else suppress_logs
         )
-
-    @override
-    def prepare_output_schema(self, schema: LLMSchema) -> PreparedLLMSchema:
-        return LiteLLMSchemaAdapter().build(schema)
+        self._native_structured_output = native_structured_output
 
     @override
     async def complete(
         self,
         messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
-        output_schema: dict[str, Any] | None = None,
+        output_schema: LLMSchema | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
+        structured_output_callback: StructuredOutputCallback | None = None,
         reasoning_callback: (
             Callable[[str], Coroutine[None, None, None]] | None
         ) = None,
@@ -139,21 +173,28 @@ class LiteLLMClient(LLMClient):
         _configure_litellm_logging(self._suppress_logs)
 
         raw_messages = [msg.to_dict(exclude_none=True) for msg in messages]
+        prepared = (
+            LiteLLMSchemaAdapter().build(output_schema)
+            if output_schema is not None
+            else None
+        )
 
         kwargs = self._kwargs.copy()
         if tools:
             kwargs["tools"] = tools
-        if output_schema:
+        if prepared is not None and self._uses_native_structured_output(litellm):
             kwargs["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": "structured_output",
-                    "schema": output_schema,
+                    "schema": prepared.schema,
                     "strict": True,
                 },
             }
+        elif prepared is not None:
+            raw_messages = _with_schema_instruction(raw_messages, prepared.schema)
 
-        if stream_callback or reasoning_callback:
+        if stream_callback or structured_output_callback or reasoning_callback:
             kwargs["stream"] = True
 
         try:
@@ -172,7 +213,12 @@ class LiteLLMClient(LLMClient):
             ):
                 stream = cast(AsyncIterator[Any], response)
                 return await self._handle_stream(
-                    stream, stream_callback, reasoning_callback, raw_messages
+                    stream,
+                    stream_callback,
+                    structured_output_callback,
+                    reasoning_callback,
+                    raw_messages,
+                    prepared,
                 )
         except Exception as e:
             inference_error = _to_inference_error(e)
@@ -182,14 +228,18 @@ class LiteLLMClient(LLMClient):
 
         if not isinstance(response, ModelResponse):
             raise RuntimeError("Invalid model response")
-        return self._handle_response(response)
+        result = self._handle_response(response)
+        self._decode_structured_output(result, prepared)
+        return result
 
     async def _handle_stream(
         self,
         stream: AsyncIterator[Any],
         callback: Callable[[str], Coroutine[None, None, None]] | None,
+        structured_output_callback: StructuredOutputCallback | None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
         raw_messages: list[dict[str, Any]],
+        prepared: LiteLLMPreparedSchema | None,
     ) -> LLMResponse:
         """Processes a streaming response."""
         import litellm
@@ -200,6 +250,11 @@ class LiteLLMClient(LLMClient):
         # so we accumulate reasoning deltas ourselves and attach them to the final
         # response below.
         reasoning_parts: list[str] = []
+        structured_streamer = (
+            StructuredOutputStreamer(prepared, structured_output_callback)
+            if prepared is not None and structured_output_callback is not None
+            else None
+        )
         async for chunk in stream:
             chunks.append(chunk)
             choices = getattr(chunk, "choices", None)
@@ -212,8 +267,11 @@ class LiteLLMClient(LLMClient):
                 if reasoning_callback:
                     await reasoning_callback(reasoning)
             content = getattr(delta, "content", None)
-            if content and callback:
-                await callback(content)
+            if content:
+                if callback:
+                    await callback(content)
+                if structured_streamer is not None:
+                    await structured_streamer.feed(content)
 
         build_stream_response = cast(
             Callable[..., ModelResponse | None],
@@ -224,9 +282,31 @@ class LiteLLMClient(LLMClient):
             raise RuntimeError("Invalid model response")
 
         result = self._handle_response(response)
+        self._decode_structured_output(result, prepared)
         if reasoning_parts and result.reasoning_content is None:
             result.reasoning_content = "".join(reasoning_parts)
         return result
+
+    def _uses_native_structured_output(self, litellm: Any) -> bool:
+        if self._native_structured_output is not None:
+            return self._native_structured_output
+        supports = cast(Callable[..., bool], litellm.supports_response_schema)
+        return supports(model=self.model)
+
+    @staticmethod
+    def _decode_structured_output(
+        response: LLMResponse, prepared: LiteLLMPreparedSchema | None
+    ) -> None:
+        if prepared is None or response.content is None:
+            return
+        raw = response.content.strip()
+        if raw.startswith("```"):
+            lines = raw.splitlines()
+            raw = "\n".join(lines[1:-1]).strip()
+        try:
+            response.structured_output = prepared.decode(json.loads(raw))
+        except (json.JSONDecodeError, ValueError):
+            return
 
     def _calculate_cost(self, response: ModelResponse) -> float | None:
         """Calculates the cost of a response, if usage data is available."""

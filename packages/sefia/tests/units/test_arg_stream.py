@@ -1,4 +1,5 @@
 import logging
+import json
 from collections.abc import Callable, Coroutine
 from typing import Any
 from unittest.mock import Mock
@@ -15,6 +16,13 @@ from sefia.llm._arg_stream import (
     parse_tool_call_path,
 )
 from sefia.llm._client import LLMClient
+from sefia.llm.schema import LLMSchema
+from sefia.llm.streaming import (
+    StructuredOutputCallback,
+    StructuredScalar,
+    StructuredStringDelta,
+    StructuredStringEnd,
+)
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import (
     ArgStream,
@@ -47,8 +55,7 @@ async def run_router(
     collector = Collector()
     streamer = ToolArgStreamer({tool: collector}, _tool_call_id)
 
-    for start in range(0, len(json_text), chunk_size):
-        streamer.on_token(json_text[start : start + chunk_size])
+    _feed_events(streamer, json_text, chunk_size)
     await streamer.close()
     return collector.events
 
@@ -59,14 +66,39 @@ async def run_router_handlers(
     collectors = {name: Collector() for name in tools}
     streamer = ToolArgStreamer(dict(collectors), _tool_call_id)
 
-    for start in range(0, len(json_text), chunk_size):
-        streamer.on_token(json_text[start : start + chunk_size])
+    _feed_events(streamer, json_text, chunk_size)
     await streamer.close()
     return {name: collector.events for name, collector in collectors.items()}
 
 
 def _delta_text(events: list[Any]) -> str:
     return "".join(e.text for e in events if isinstance(e, StringDelta))
+
+
+def _feed_events(streamer: ToolArgStreamer, text: str, chunk_size: int) -> None:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return
+    for index, call in enumerate(payload.get("tool_calls", [])):
+        for field, field_value in call.items():
+            if field == "name":
+                streamer.on_event(
+                    StructuredStringEnd(("tool_calls", index, "name"), field_value)
+                )
+            elif field == "arguments":
+                for name, value in field_value.items():
+                    path = ("tool_calls", index, "arguments", name)
+                    if isinstance(value, str):
+                        for start in range(0, len(value), chunk_size):
+                            streamer.on_event(
+                                StructuredStringDelta(
+                                    path, value[start : start + chunk_size]
+                                )
+                            )
+                        streamer.on_event(StructuredStringEnd(path, value))
+                    else:
+                        streamer.on_event(StructuredScalar(path, value))
 
 
 # --- router unit tests --------------------------------------------------------
@@ -148,11 +180,10 @@ async def test_logs_token_processing_exception_and_closes_channels(
     streamer._dispatch = Mock(side_effect=RuntimeError("boom"))
 
     with caplog.at_level(logging.ERROR, logger="sefia.llm._arg_stream"):
-        streamer.on_token('{"tool_calls":[]}')
+        streamer.on_event(StructuredScalar(("tool_calls",), None))
 
-    assert streamer._stopped is True
     assert streamer._channels == {}
-    assert "Error processing token in ToolArgStreamer" in caplog.text
+    assert "Error processing event in ToolArgStreamer" in caplog.text
     with pytest.raises(StopAsyncIteration):
         await anext(channel)
 
@@ -236,13 +267,32 @@ class StreamingClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
-        output_schema: dict[str, Any] | None = None,
+        output_schema: LLMSchema | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
+        structured_output_callback: StructuredOutputCallback | None = None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMResponse:
         if stream_callback is not None:
             for char in self.content:
                 await stream_callback(char)
+        if structured_output_callback is not None:
+            payload = json.loads(self.content)
+            for index, call in enumerate(payload.get("tool_calls", [])):
+                await structured_output_callback(
+                    StructuredStringEnd(("tool_calls", index, "name"), call["name"])
+                )
+                for name, value in call["arguments"].items():
+                    path = ("tool_calls", index, "arguments", name)
+                    if isinstance(value, str):
+                        for character in value:
+                            await structured_output_callback(
+                                StructuredStringDelta(path, character)
+                            )
+                        await structured_output_callback(
+                            StructuredStringEnd(path, value)
+                        )
+                    else:
+                        await structured_output_callback(StructuredScalar(path, value))
         return LLMResponse(content=self.content)
 
 

@@ -13,7 +13,6 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import LLMClient, LLMInferenceStrategy
-from sefia.llm.schema import IdentityPreparedLLMSchema
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -66,9 +65,6 @@ def _tool(func: Callable[..., Any]) -> ToolEntry:
     )
 
 
-DUMMY_SCHEMA: dict[str, Any] = {}
-
-
 def _make_strategy(
     llm_client: LLMClient | None = None,
     *,
@@ -79,7 +75,6 @@ def _make_strategy(
     formatter = Mock()
     formatter.format_arguments.return_value = "<arguments/>"
     client = llm_client if llm_client is not None else AsyncMock()
-    client.prepare_output_schema = Mock(side_effect=IdentityPreparedLLMSchema)
     return LLMInferenceStrategy(
         llm_client=client,
         decision_builder=PydanticModelBackend(),
@@ -146,7 +141,6 @@ class TestLLMInferenceStrategy:
         messages = strategy._build_messages(
             _function_info(arguments={"arg": "val"}),
             history,
-            DUMMY_SCHEMA,
             director,
         )
 
@@ -227,7 +221,6 @@ class TestLLMInferenceStrategy:
         messages = strategy._build_messages(
             _function_info(return_type=list[MyIssue]),
             [],
-            DUMMY_SCHEMA,
             director,
         )
 

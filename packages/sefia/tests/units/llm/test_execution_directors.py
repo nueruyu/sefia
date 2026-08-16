@@ -20,7 +20,6 @@ from sefia.llm._execution_directors import (
     ToolOnlyDirector,
 )
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.schema import IdentityPreparedLLMSchema
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -80,9 +79,6 @@ def _tool_registry(*funcs: Callable[..., Any]) -> ToolRegistry:
     return registry
 
 
-DUMMY_SCHEMA: dict[str, Any] = {}
-
-
 def _make_strategy(
     llm_client: LLMClient | None = None,
     *,
@@ -93,7 +89,6 @@ def _make_strategy(
     formatter = Mock()
     formatter.format_arguments.return_value = "<arguments/>"
     client = llm_client if llm_client is not None else AsyncMock()
-    client.prepare_output_schema = Mock(side_effect=IdentityPreparedLLMSchema)
     return LLMInferenceStrategy(
         llm_client=client,
         decision_builder=PydanticModelBackend(),
@@ -169,12 +164,10 @@ class TestToolOnlyDirector:
     def test_build_system_prompt_instructs_tool_only(self):
         strategy = _make_strategy()
         director = strategy._create_director(Never, [_tool(chat_tool)])
-        schema = director.build_decision_schema().schema
-        prompt = director.build_system_prompt_addition(schema)
+        prompt = director.build_system_prompt_addition()
 
         assert "result" not in prompt or "There is no `result`" in prompt
         assert "tool_calls" in prompt
-        assert "### Response Format" in prompt
         assert '"$defs"' not in prompt
 
     def test_process_decision_accepts_tool_calls(self):
@@ -254,9 +247,7 @@ class TestToolEnabledDirector:
 
     def test_build_system_prompt_mentions_both_options(self):
         director = self._director()
-        prompt = director.build_system_prompt_addition(
-            director.build_decision_schema().schema
-        )
+        prompt = director.build_system_prompt_addition()
 
         assert "tool_calls" in prompt
         assert "result" in prompt
@@ -345,9 +336,7 @@ class TestOutputOnlyDirector:
 
     def test_build_system_prompt_mentions_no_tools(self):
         director = self._director()
-        prompt = director.build_system_prompt_addition(
-            director.build_decision_schema().schema
-        )
+        prompt = director.build_system_prompt_addition()
 
         assert "No tools are available" in prompt
 

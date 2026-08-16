@@ -6,6 +6,12 @@ from typing import Any
 import pytest
 from sefia import Tools
 from sefia.llm import LLMClient, LLMResponse, Message
+from sefia.llm.schema import LLMSchema
+from sefia.llm.streaming import (
+    StructuredOutputCallback,
+    StructuredStringDelta,
+    StructuredStringEnd,
+)
 from sefia_fastapi.events import _SessionEvent
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 from sefios import MemoryPersistence, domain
@@ -26,14 +32,36 @@ class StreamingClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
-        output_schema: dict[str, Any] | None = None,
+        output_schema: LLMSchema | None = None,
         stream_callback: Callable[[str], Coroutine[Any, Any, None]] | None = None,
+        structured_output_callback: StructuredOutputCallback | None = None,
         reasoning_callback: (Callable[[str], Coroutine[Any, Any, None]] | None) = None,
     ) -> LLMResponse:
         content = self.responses.pop(0)
         if stream_callback is not None:
             for character in content:
                 await stream_callback(character)
+        if structured_output_callback is not None:
+            payload = json.loads(content)
+            for index, call in enumerate(payload.get("tool_calls", [])):
+                await structured_output_callback(
+                    StructuredStringEnd(("tool_calls", index, "name"), call["name"])
+                )
+                for name, value in call["arguments"].items():
+                    if isinstance(value, str):
+                        for character in value:
+                            await structured_output_callback(
+                                StructuredStringDelta(
+                                    ("tool_calls", index, "arguments", name),
+                                    character,
+                                )
+                            )
+                        await structured_output_callback(
+                            StructuredStringEnd(
+                                ("tool_calls", index, "arguments", name),
+                                value,
+                            )
+                        )
         return LLMResponse(content=content)
 
 

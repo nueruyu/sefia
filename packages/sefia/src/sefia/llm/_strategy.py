@@ -26,7 +26,8 @@ from ._messages import Message
 from ._prompt_formatter import PromptFormatter
 from ._tool_call_ids import ToolCallIdRegistry
 from .decision import DecisionModelBuilder
-from .schema import PreparedLLMSchema
+from .schema import LLMSchema
+from .streaming import StructuredOutputEvent
 
 JsonDefault = Callable[[Any], Any]
 
@@ -81,11 +82,8 @@ class LLMInferenceStrategy(InferenceStrategy):
         publisher: EventPublisher,
     ) -> InferenceDecision:
         director = self._create_director(function_info.return_type, tools.get_all())
-        prepared_schema = self.llm_client.prepare_output_schema(
-            director.build_decision_schema()
-        )
-        output_schema = prepared_schema.schema
-        messages = self._build_messages(function_info, history, output_schema, director)
+        output_schema = director.build_decision_schema()
+        messages = self._build_messages(function_info, history, director)
 
         attempt = 0
         while True:
@@ -94,7 +92,6 @@ class LLMInferenceStrategy(InferenceStrategy):
                     messages,
                     director,
                     output_schema,
-                    prepared_schema,
                     tools,
                     publisher,
                 )
@@ -111,8 +108,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         messages: list[Message],
         director: ExecutionDirector,
-        output_schema: dict[str, Any],
-        prepared_schema: PreparedLLMSchema,
+        output_schema: LLMSchema,
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> InferenceDecision:
@@ -133,20 +129,26 @@ class LLMInferenceStrategy(InferenceStrategy):
             tool_arg_streamer = ToolArgStreamer(
                 tool_stream_handlers,
                 tool_call_ids.get_or_create,
-                prepared_schema.normalize_stream_path,
             )
         if self._stream:
 
             async def on_token(token: str):
-                if tool_arg_streamer is not None:
-                    tool_arg_streamer.on_token(token)
                 await publisher.publish(events.LLMTokenReceived(token=token))
+
+            async def on_structured_output(event: StructuredOutputEvent) -> None:
+                if tool_arg_streamer is not None:
+                    tool_arg_streamer.on_event(event)
 
             async def on_reasoning_token(token: str):
                 await publisher.publish(events.LLMReasoningTokenReceived(token=token))
 
             stream_callback = on_token
+            structured_output_callback = (
+                on_structured_output if tool_arg_streamer is not None else None
+            )
             reasoning_callback = on_reasoning_token
+        else:
+            structured_output_callback = None
 
         try:
             response = await self.llm_client.complete(
@@ -154,6 +156,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 tools=None,
                 output_schema=output_schema,
                 stream_callback=stream_callback,
+                structured_output_callback=structured_output_callback,
                 reasoning_callback=reasoning_callback,
             )
         finally:
@@ -161,18 +164,20 @@ class LLMInferenceStrategy(InferenceStrategy):
                 await tool_arg_streamer.close()
         await publisher.publish(events.AfterLLMCall(response))
 
-        if response.content is None:
+        if response.content is None and response.structured_output is None:
             raise InvalidInferenceResponseError(
                 "LLM did not provide a response content."
             )
 
         try:
-            raw = response.content.strip()
-            if raw.startswith("```"):
-                lines = raw.splitlines()
-                raw = "\n".join(lines[1:-1]).strip()
-
-            decision_data = prepared_schema.decode(json.loads(raw))
+            decision_data = response.structured_output
+            if decision_data is None:
+                assert response.content is not None
+                raw = response.content.strip()
+                if raw.startswith("```"):
+                    lines = raw.splitlines()
+                    raw = "\n".join(lines[1:-1]).strip()
+                decision_data = json.loads(raw)
             return director.process_response_data(decision_data, tool_call_ids)
         except UnknownToolDecisionError as error:
             raise InvalidInferenceResponseError(
@@ -189,13 +194,11 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         function_info: FunctionInfo,
         history: Sequence[HistoryItem],
-        output_schema: dict[str, Any],
         director: ExecutionDirector,
     ) -> list[Message]:
         return build_messages(
             function_info,
             history,
-            output_schema,
             director,
             self._prompt_formatter,
             self._json_default,

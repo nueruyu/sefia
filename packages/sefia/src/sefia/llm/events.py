@@ -6,6 +6,7 @@ from typing import Any
 from ..event_system import Event
 from ..exceptions import InvalidInferenceResponseError
 from ._messages import LLMResponse, Message
+from .schema import LLMSchema
 
 
 @dataclass(frozen=True)
@@ -14,7 +15,7 @@ class BeforeLLMCall(Event):
 
     messages: list[Message]
     tools: list[dict[str, Any]] | None
-    output_schema: dict[str, Any] | None
+    output_schema: LLMSchema | None
 
 
 @dataclass(frozen=True)

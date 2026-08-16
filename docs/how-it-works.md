@@ -91,32 +91,32 @@ A `create_model`-built decision model is the schema, picked by an
 
 `pydantic/_decision_schema.py` composes typed tool `$defs` into a provider-neutral
 logical schema and identifies raw JSON Schema regions that adapters must not rewrite.
-The LLM client prepares that contract for its wire format. The LiteLLM schema adapter adds
-the `payload` envelope, closes strict objects, and reversibly encodes typed mappings
-as arrays of `{key, value}` entries.
+The logical schema crosses the `LLMClient` boundary once. `LiteLLMClient` adapts it
+to the model's wire format, uses native structured output when available, and puts
+the adapted schema in the system prompt otherwise. Its schema adapter adds the
+`payload` envelope, closes strict objects, and reversibly encodes typed mappings as
+arrays of `{key, value}` entries.
 
 The Pydantic backend keeps these responsibilities separate: `_function_models.py`
 reflects callable parameters, `_tool_arguments.py` owns each tool's original schema
 and argument validator, `_decision_model.py` owns local validation, and
-`_decision_schema.py` composes the logical schema. The prepared LLM schema carries
-the inverse response decoder and stream-path normalizer.
+`_decision_schema.py` composes the logical schema. Provider-side response decoding
+and stream-path normalization stay inside the client implementation.
 
 `DecisionModelBuilder` implementations return an `LLMSchema`, not a provider-ready
-dictionary. Custom `LLMClient` implementations may use the default identity
-preparation when they accept that logical schema directly, or override
-`prepare_output_schema` and return a `PreparedLLMSchema` with matching response and
-stream-path transformations.
-The decision contracts live in `sefia.llm.decision`; schema preparation contracts
-live in `sefia.llm.schema`.
+dictionary. An `LLMClient` receives that logical contract and owns any schema
+encoding, prompt fallback, response decoding, and structured-stream decoding needed
+by its model. The decision contracts live in `sefia.llm.decision`; the logical schema
+contract lives in `sefia.llm.schema`.
 
-The system prompt is `docstring + response-instructions + the tool definitions (as
-JSON) + the decision JSON Schema`. The user message is the call's arguments rendered
-as XML (`_build_messages`); prior steps are replayed as ordinary
-assistant/tool messages. The client is always called with `tools=None` and the
-unified `output_schema` — provider native tool-calling is never used. The reply is
-stripped of any ``` fence, `json.loads`-ed, validated into the decision model, and
-`process_decision` validates `result` against the declared return type
-(`InvalidInferenceResponseError` if it doesn't conform).
+The core system prompt is `docstring + decision semantics + tool definitions`; the
+client adds output-format instructions when the model needs a schema in its prompt.
+The user message is the call's arguments rendered as XML (`_build_messages`); prior
+steps are replayed as ordinary assistant/tool messages. The client is always called
+with `tools=None` and the logical `output_schema` — provider native tool-calling is
+never used. The client returns logical structured data when it adapts the wire format;
+the strategy falls back to parsing plain client responses before the decision model
+validates the result (`InvalidInferenceResponseError` if it doesn't conform).
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
 first **repaired in place**: the strategy appends the invalid output and the

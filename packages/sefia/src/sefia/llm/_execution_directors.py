@@ -28,11 +28,6 @@ _TOOL_DEFINITIONS_HEADER = (
     "\n### Available Tools\n"
     "Here is a list of tools you can call. Use their `name` in the `tool_calls` field.\n"
 )
-_RESPONSE_FORMAT_HEADER = (
-    "\n### Response Format\n"
-    "Your response MUST be a single, valid, raw JSON object. Do not include "
-    "prose, markdown, or code fences.\n"
-)
 _TOOL_CALLS_RESPONSE_FORMAT = (
     "To call tools, select the `tool_calls` decision and provide each tool's "
     "name and arguments according to the response schema."
@@ -66,7 +61,7 @@ class ExecutionDirector(ABC):
         return self.decision_model.schema()
 
     @abstractmethod
-    def build_system_prompt_addition(self, output_schema: dict[str, Any]) -> str:
+    def build_system_prompt_addition(self) -> str:
         raise NotImplementedError
 
     @final
@@ -115,7 +110,7 @@ class ToolOnlyDirector(ExecutionDirector):
         )
 
     @override
-    def build_system_prompt_addition(self, output_schema: dict[str, Any]) -> str:
+    def build_system_prompt_addition(self) -> str:
         core_instruction = (
             "Your task is to call tools. You MUST set `decision` to `tool_calls` "
             "and populate the `tool_calls` field. There is no `result` — "
@@ -125,7 +120,6 @@ class ToolOnlyDirector(ExecutionDirector):
             f"\n\n### Response Instructions\n{core_instruction}\n"
             f"{_TOOL_DEFINITIONS_HEADER}"
             f"{json.dumps(self._tool_definitions(), indent=2, ensure_ascii=False)}\n"
-            f"{_RESPONSE_FORMAT_HEADER}"
             f"{_TOOL_CALLS_RESPONSE_FORMAT}"
         )
 
@@ -151,7 +145,7 @@ class ToolEnabledDirector(ExecutionDirector):
         )
 
     @override
-    def build_system_prompt_addition(self, output_schema: dict[str, Any]) -> str:
+    def build_system_prompt_addition(self) -> str:
         core_instruction = (
             "Your task is to decide the next step. You have two options:\n"
             "1. Call one or more tools by setting `decision` to `tool_calls` "
@@ -165,7 +159,6 @@ class ToolEnabledDirector(ExecutionDirector):
             f"\n\n### Response Instructions\n{core_instruction}\n"
             f"{_TOOL_DEFINITIONS_HEADER}"
             f"{json.dumps(self._tool_definitions(), indent=2, ensure_ascii=False)}\n"
-            f"{_RESPONSE_FORMAT_HEADER}"
             f"{_TOOL_CALLS_RESPONSE_FORMAT}\n"
             f"{_RESULT_RESPONSE_FORMAT}"
         )
@@ -192,7 +185,7 @@ class OutputOnlyDirector(ExecutionDirector):
         )
 
     @override
-    def build_system_prompt_addition(self, output_schema: dict[str, Any]) -> str:
+    def build_system_prompt_addition(self) -> str:
         core_instruction = (
             "Your task is to provide a non-null result by setting `decision` "
             "to `result` and populating the `result` field. No tools are "
@@ -201,7 +194,6 @@ class OutputOnlyDirector(ExecutionDirector):
         )
         return (
             f"\n\n### Response Instructions\n{core_instruction}\n"
-            f"{_RESPONSE_FORMAT_HEADER}"
             f"{_RESULT_RESPONSE_FORMAT}"
         )
 

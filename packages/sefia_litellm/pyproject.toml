@@ -7,6 +7,7 @@ authors = [{ name = "nueruyu" }]
 requires-python = ">=3.11"
 dependencies = [
     "sefia>=0.1.0",
+    "jsonweir>=0.1.0",
     "typing-extensions>=4.6",
     # 1.63.0 is the first release exposing reasoning_content / thinking blocks,
     # which the adapter reads and streams; older versions install fine but would
