@@ -1,3 +1,3 @@
-from ._compiler import CompiledOutputSchema, OutputSchemaCompiler
+from ._decision_envelope import DecisionEnvelope, DecisionEnvelopeFormat
 
-__all__ = ["CompiledOutputSchema", "OutputSchemaCompiler"]
+__all__ = ["DecisionEnvelope", "DecisionEnvelopeFormat"]

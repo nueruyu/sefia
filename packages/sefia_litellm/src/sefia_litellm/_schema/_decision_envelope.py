@@ -1,94 +1,91 @@
 from dataclasses import dataclass
 from typing import cast
 
+from typing_extensions import final
+
 from sefia.llm.json_schema import (
     DefinitionRegistry,
     JsonObject,
     JsonSchemaDocument,
+    JsonValue,
     SchemaKeyword,
     SchemaNode,
     SchemaPath,
 )
 from sefia.llm.llm_output import LLMOutput
-from sefia.llm.step_decision import StepDecisionMode
+from sefia.llm.step_decision import (
+    StepDecisionMode,
+    StepDecisionModel,
+    StepTool,
+    TypedToolArguments,
+)
 
+from ._dialect import StructuredOutputDialect
 from ._fragment import CompiledFragment
+from ._mapping import MappingTransform
 
 K = SchemaKeyword
 
 
+@final
 @dataclass(frozen=True)
 class DecisionEnvelope:
-    mode: StepDecisionMode
-    result: CompiledFragment | None
-    tools: dict[str, CompiledFragment]
+    payload: LLMOutput
 
-    def build_schema(self) -> JsonObject:
-        definitions: JsonObject = {}
-        registry = DefinitionRegistry(definitions)
-        payload = self._payload_schema(registry)
-        root = SchemaNode.object_schema({"payload": payload})
-        if definitions:
-            root.set_definitions(definitions)
-        root.set_description("The model for the LLM's decision on the next action.")
-        return root.value
+    @classmethod
+    def from_output(cls, output: LLMOutput) -> "DecisionEnvelope":
+        fields = output.to_object("decision envelope")
+        if set(fields) != {"payload"}:
+            raise ValueError("decision envelope must contain exactly one payload")
+        return cls(fields["payload"])
 
-    def decode(self, output: LLMOutput) -> LLMOutput:
+
+@final
+class DecisionEnvelopeFormat:
+    def __init__(
+        self,
+        schema: JsonSchemaDocument,
+        result: CompiledFragment | None,
+        tools: dict[str, CompiledFragment],
+    ) -> None:
+        self._schema = schema
+        self._result = result
+        self._tools = tools
+
+    @classmethod
+    def from_model(cls, model: StepDecisionModel) -> "DecisionEnvelopeFormat":
+        dialect = StructuredOutputDialect()
+        result = (
+            _compile_typed_fragment(model.result.json_schema, dialect)
+            if model.result is not None
+            else None
+        )
+        tools = {
+            tool.name: _compile_tool_fragment(tool, dialect) for tool in model.tools
+        }
+        schema = _build_schema(model.mode, result, tools)
+        return cls(JsonSchemaDocument(schema), result, tools)
+
+    @property
+    def schema(self) -> JsonSchemaDocument:
+        return self._schema
+
+    def decode_json(self, text: str) -> LLMOutput:
+        return self._decode(LLMOutput.parse_json(text))
+
+    def decode(self, data: JsonValue) -> LLMOutput:
+        return self._decode(LLMOutput.from_json(data))
+
+    def _decode(self, output: LLMOutput) -> LLMOutput:
         try:
-            envelope = output.to_object()
+            envelope = DecisionEnvelope.from_output(output)
         except ValueError:
             return output
-        if set(envelope) != {"payload"}:
-            return output
-        return self._decode_payload(envelope["payload"])
+        return self._decode_payload(envelope.payload)
 
     @staticmethod
     def logical_path(path: SchemaPath) -> SchemaPath | None:
         return path[1:] if path and path[0] == "payload" else path
-
-    def _payload_schema(self, registry: DefinitionRegistry) -> JsonObject:
-        branches: list[JsonObject] = []
-        if self.mode is not StepDecisionMode.RESULT_ONLY:
-            branches.append(self._tool_calls_schema(registry))
-        if self.mode is not StepDecisionMode.TOOLS_REQUIRED:
-            assert self.result is not None
-            schema = JsonSchemaDocument(self.result.wire_schema).mutable_copy()
-            imported = registry.import_schema(schema, namespace="result")
-            branches.append(
-                _closed_object({"decision": _literal("result"), "result": imported})
-            )
-        if len(branches) == 1:
-            return branches[0]
-        return cast(
-            JsonObject,
-            {
-                K.ANY_OF: branches,
-                "discriminator": {"propertyName": "decision"},
-            },
-        )
-
-    def _tool_calls_schema(self, registry: DefinitionRegistry) -> JsonObject:
-        calls: list[JsonObject] = []
-        for name, fragment in self.tools.items():
-            schema = JsonSchemaDocument(fragment.wire_schema).mutable_copy()
-            imported = registry.import_schema(schema, namespace=name)
-            calls.append(
-                _closed_object({"name": _literal(name), "arguments": imported})
-            )
-        items: JsonObject = (
-            calls[0]
-            if len(calls) == 1
-            else cast(
-                JsonObject,
-                {K.ANY_OF: calls, "discriminator": {"propertyName": "name"}},
-            )
-        )
-        return _closed_object(
-            {
-                "decision": _literal("tool_calls"),
-                "tool_calls": {K.TYPE: "array", K.ITEMS: items, K.MIN_ITEMS: 1},
-            }
-        )
 
     def _decode_payload(self, output: LLMOutput) -> LLMOutput:
         try:
@@ -109,10 +106,10 @@ class DecisionEnvelope:
     def _decode_result(
         self, output: LLMOutput, fields: dict[str, LLMOutput]
     ) -> LLMOutput:
-        if self.result is None or "result" not in fields:
+        if self._result is None or "result" not in fields:
             return output
         return LLMOutput.from_object(
-            {**fields, "result": self.result.decode(fields["result"])}
+            {**fields, "result": self._result.decode(fields["result"])}
         )
 
     def _decode_tool_calls(
@@ -144,12 +141,98 @@ class DecisionEnvelope:
             tool_name = name.to_string() if name is not None else None
         except ValueError:
             return output
-        fragment = self.tools.get(tool_name) if tool_name is not None else None
+        fragment = self._tools.get(tool_name) if tool_name is not None else None
         if fragment is None or "arguments" not in fields:
             return output
         return LLMOutput.from_object(
             {**fields, "arguments": fragment.decode(fields["arguments"])}
         )
+
+
+def _compile_tool_fragment(
+    tool: StepTool, dialect: StructuredOutputDialect
+) -> CompiledFragment:
+    if isinstance(tool.arguments, TypedToolArguments):
+        return _compile_typed_fragment(tool.arguments.json_schema, dialect)
+    wire_schema = tool.arguments.json_schema.mutable_copy()
+    dialect.validate(wire_schema)
+    return CompiledFragment(wire_schema)
+
+
+def _compile_typed_fragment(
+    document: JsonSchemaDocument, dialect: StructuredOutputDialect
+) -> CompiledFragment:
+    wire_schema = document.mutable_copy()
+    dialect.adapt(wire_schema)
+    mapping = MappingTransform.lower(wire_schema)
+    dialect.validate(wire_schema)
+    return CompiledFragment(wire_schema, mapping)
+
+
+def _build_schema(
+    mode: StepDecisionMode,
+    result: CompiledFragment | None,
+    tools: dict[str, CompiledFragment],
+) -> JsonObject:
+    definitions: JsonObject = {}
+    registry = DefinitionRegistry(definitions)
+    payload = _payload_schema(mode, result, tools, registry)
+    root = SchemaNode.object_schema({"payload": payload})
+    if definitions:
+        root.set_definitions(definitions)
+    root.set_description("The model for the LLM's decision on the next action.")
+    return root.value
+
+
+def _payload_schema(
+    mode: StepDecisionMode,
+    result: CompiledFragment | None,
+    tools: dict[str, CompiledFragment],
+    registry: DefinitionRegistry,
+) -> JsonObject:
+    branches: list[JsonObject] = []
+    if mode is not StepDecisionMode.RESULT_ONLY:
+        branches.append(_tool_calls_schema(tools, registry))
+    if mode is not StepDecisionMode.TOOLS_REQUIRED:
+        assert result is not None
+        schema = JsonSchemaDocument(result.wire_schema).mutable_copy()
+        imported = registry.import_schema(schema, namespace="result")
+        branches.append(
+            _closed_object({"decision": _literal("result"), "result": imported})
+        )
+    if len(branches) == 1:
+        return branches[0]
+    return cast(
+        JsonObject,
+        {
+            K.ANY_OF: branches,
+            "discriminator": {"propertyName": "decision"},
+        },
+    )
+
+
+def _tool_calls_schema(
+    tools: dict[str, CompiledFragment], registry: DefinitionRegistry
+) -> JsonObject:
+    calls: list[JsonObject] = []
+    for name, fragment in tools.items():
+        schema = JsonSchemaDocument(fragment.wire_schema).mutable_copy()
+        imported = registry.import_schema(schema, namespace=name)
+        calls.append(_closed_object({"name": _literal(name), "arguments": imported}))
+    items: JsonObject = (
+        calls[0]
+        if len(calls) == 1
+        else cast(
+            JsonObject,
+            {K.ANY_OF: calls, "discriminator": {"propertyName": "name"}},
+        )
+    )
+    return _closed_object(
+        {
+            "decision": _literal("tool_calls"),
+            "tool_calls": {K.TYPE: "array", K.ITEMS: items, K.MIN_ITEMS: 1},
+        }
+    )
 
 
 def _closed_object(properties: JsonObject) -> JsonObject:

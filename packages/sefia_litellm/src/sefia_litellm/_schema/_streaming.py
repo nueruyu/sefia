@@ -9,13 +9,13 @@ from sefia.llm.streaming import (
     StringEnd,
 )
 
-from ._compiler import CompiledOutputSchema
+from ._decision_envelope import DecisionEnvelopeFormat
 
 
 class OutputEventStreamer:
     def __init__(
         self,
-        schema: CompiledOutputSchema,
+        schema: DecisionEnvelopeFormat,
         callback: OutputCallback,
     ) -> None:
         self._schema = schema

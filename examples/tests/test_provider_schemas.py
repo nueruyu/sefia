@@ -4,7 +4,7 @@ from sefia._tool_system import SignatureToolEntry, ToolEntry
 from sefia.llm.json_schema import SchemaNode
 from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
-from sefia_litellm._schema import OutputSchemaCompiler
+from sefia_litellm._schema import DecisionEnvelopeFormat
 from sefios.tools import WebSearch
 
 news_agents = import_module("examples.01_news_article.agents")
@@ -31,14 +31,14 @@ def test_news_writer_schema_composes_nested_research_tool_types() -> None:
     )
 
     model = _decision_schema(news_models.NewsArticle, [tool])
-    schema = OutputSchemaCompiler().compile(model).wire_schema.to_dict()
+    schema = DecisionEnvelopeFormat.from_model(model).schema.to_dict()
 
     assert schema["additionalProperties"] is False
 
 
 def test_code_quality_report_schema_lowers_perspective_mapping() -> None:
     model = _decision_schema(quality_models.QualityReport, [])
-    schema = OutputSchemaCompiler().compile(model).wire_schema.to_dict()
+    schema = DecisionEnvelopeFormat.from_model(model).schema.to_dict()
 
     payload = SchemaNode(schema).properties()["payload"]
     perspective_issues = payload.properties()["result"].properties()[

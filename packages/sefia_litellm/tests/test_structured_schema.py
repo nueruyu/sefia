@@ -29,7 +29,7 @@ from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import ArgStream, StringEnd
-from sefia_litellm._schema import OutputSchemaCompiler
+from sefia_litellm._schema import DecisionEnvelope, DecisionEnvelopeFormat
 from sefia_litellm._schema._streaming import OutputEventStreamer
 
 
@@ -41,7 +41,7 @@ def _decision_model(output_type: Any, tools: list[ToolEntry]) -> StepDecisionMod
 
 
 def _prepare(decision: StepDecisionModel):
-    return OutputSchemaCompiler().compile(decision)
+    return DecisionEnvelopeFormat.from_model(decision)
 
 
 def _process(
@@ -61,11 +61,28 @@ def test_compiled_schema_removes_payload_from_stream_paths() -> None:
     ) == ("tool_calls", 0, "arguments", "question")
 
 
-def test_decision_envelope_builds_schema_without_consuming_fragments() -> None:
-    compiled = _prepare(_decision_model(str, [_tool()]))
+def test_decision_envelope_models_the_wire_payload() -> None:
+    payload = LLMOutput.from_json({"decision": "result", "result": "done"})
 
-    assert compiled.envelope.build_schema() == compiled.wire_schema.to_dict()
-    assert compiled.envelope.build_schema() == compiled.wire_schema.to_dict()
+    envelope = DecisionEnvelope.from_output(LLMOutput.from_object({"payload": payload}))
+
+    assert envelope.payload.data == payload.data
+
+
+def test_decision_envelope_rejects_other_fields() -> None:
+    output = LLMOutput.from_json({"payload": {}, "extra": True})
+
+    with pytest.raises(ValueError, match="exactly one payload"):
+        DecisionEnvelope.from_output(output)
+
+
+def test_decision_envelope_format_returns_defensive_schema_copies() -> None:
+    envelope_format = _prepare(_decision_model(str, [_tool()]))
+
+    schema = envelope_format.schema.to_dict()
+    schema.clear()
+
+    assert envelope_format.schema.to_dict()
 
 
 async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
@@ -172,7 +189,7 @@ def _name_constraint(name_schema: dict[str, Any]) -> Any:
 def test_tool_only_schema_embeds_tool_argument_schema() -> None:
     definition = _decision_model(Never, [_tool()])
 
-    schema = _prepare(definition).wire_schema.to_dict()
+    schema = _prepare(definition).schema.to_dict()
 
     assert _tool_calls_array(schema)["minItems"] == 1
     item = _tool_call_item(schema)
@@ -201,7 +218,7 @@ async def _research(article_request: _ArticleRequest) -> list[str]:
 def test_typed_tool_schema_hoists_nested_definitions() -> None:
     definition = _decision_model(Never, [_signature_tool(_research, name="research")])
 
-    schema = _prepare(definition).wire_schema.to_dict()
+    schema = _prepare(definition).schema.to_dict()
 
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     request_schema = _resolve(arguments["properties"]["article_request"], schema)
@@ -219,7 +236,7 @@ def test_result_shape_cannot_be_mistaken_for_a_tool_call() -> None:
 
     definition = _decision_model(Output, [_tool()])
 
-    schema = _prepare(definition).wire_schema.to_dict()
+    schema = _prepare(definition).schema.to_dict()
     payload = SchemaNode(schema).properties()["payload"].value
 
     result_branch = next(
@@ -252,7 +269,7 @@ def test_raw_tool_schema_hoists_local_definitions() -> None:
     }
     definition = _decision_model(Never, [_raw_tool(raw_schema)])
 
-    schema = _prepare(definition).wire_schema.to_dict()
+    schema = _prepare(definition).schema.to_dict()
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
 
     assert "$defs" not in arguments
@@ -288,7 +305,7 @@ def test_raw_definition_is_not_normalized_with_typed_decision_model() -> None:
     )
 
     with pytest.raises(ValueError, match=r"missing \['name'\]"):
-        OutputSchemaCompiler().compile(definition)
+        DecisionEnvelopeFormat.from_model(definition)
 
 
 def test_conflicting_tool_definition_names_are_renamed() -> None:
@@ -311,7 +328,7 @@ def test_conflicting_tool_definition_names_are_renamed() -> None:
         ],
     )
 
-    schema = _prepare(definition).wire_schema.to_dict()
+    schema = _prepare(definition).schema.to_dict()
 
     shared_definitions = {
         name: definition
@@ -357,7 +374,7 @@ def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
     }
     definition = _decision_model(Never, [_raw_tool(raw_schema)])
 
-    schema = _prepare(definition).wire_schema.to_dict()
+    schema = _prepare(definition).schema.to_dict()
 
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     assert arguments == raw_schema
@@ -469,7 +486,7 @@ def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
     }
     definition = _decision_model(Never, [_raw_tool(raw_schema)])
 
-    schema = _prepare(definition).wire_schema.to_dict()
+    schema = _prepare(definition).schema.to_dict()
 
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     assert arguments == raw_schema
@@ -483,7 +500,7 @@ def _result_schema(schema: dict[str, Any]) -> dict[str, Any]:
 def test_mapping_result_is_lowered_and_decoded() -> None:
     definition = _decision_model(dict[str, str], [])
 
-    schema = _prepare(definition).wire_schema.to_dict()
+    schema = _prepare(definition).schema.to_dict()
 
     result_schema = _result_schema(schema)
     assert result_schema["type"] == "array"
@@ -514,7 +531,7 @@ def test_mapping_constraints_are_lowered_to_entry_constraints() -> None:
     output_type = Annotated[dict[str, str], Field(min_length=1, max_length=2)]
     definition = _decision_model(output_type, [])
 
-    result_schema = _result_schema(_prepare(definition).wire_schema.to_dict())
+    result_schema = _result_schema(_prepare(definition).schema.to_dict())
 
     assert result_schema["minItems"] == 1
     assert result_schema["maxItems"] == 2
@@ -533,7 +550,7 @@ class _Report:
 def test_nested_mapping_result_is_lowered_and_decoded() -> None:
     definition = _decision_model(_Report, [])
 
-    schema = _prepare(definition).wire_schema.to_dict()
+    schema = _prepare(definition).schema.to_dict()
     report_schema = _result_schema(schema)
     report_schema = _resolve(report_schema, schema)
     mapping_schema = report_schema["properties"]["issues_by_perspective"]
@@ -653,7 +670,7 @@ def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
         [_signature_tool(_categorize, name="categorize")],
     )
 
-    schema = _prepare(definition).wire_schema.to_dict()
+    schema = _prepare(definition).schema.to_dict()
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
     assert arguments["properties"]["labels"]["type"] == "array"
 

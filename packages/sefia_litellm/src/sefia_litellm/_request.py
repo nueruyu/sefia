@@ -9,7 +9,7 @@ from sefia.llm import Message
 from sefia.llm.json_schema import JsonObject
 from sefia.llm.step_decision import StepDecisionModel
 
-from ._schema import CompiledOutputSchema, OutputSchemaCompiler
+from ._schema import DecisionEnvelopeFormat
 
 _SCHEMA_PROMPT = """
 ### Response Format
@@ -36,7 +36,7 @@ class _JsonSchemaResponseFormat(TypedDict):
 class PreparedRequest:
     messages: list[dict[str, Any]]
     kwargs: dict[str, Any]
-    output: CompiledOutputSchema | None
+    output: DecisionEnvelopeFormat | None
 
 
 def prepare_request(
@@ -52,7 +52,7 @@ def prepare_request(
 ) -> PreparedRequest:
     raw_messages = [message.to_dict(exclude_none=True) for message in messages]
     output = (
-        OutputSchemaCompiler().compile(decision_model)
+        DecisionEnvelopeFormat.from_model(decision_model)
         if decision_model is not None
         else None
     )
@@ -69,19 +69,19 @@ def prepare_request(
             kwargs["response_format"] = _response_format(output)
         else:
             raw_messages = _with_schema_instruction(
-                raw_messages, output.wire_schema.to_dict()
+                raw_messages, output.schema.to_dict()
             )
     if stream:
         kwargs["stream"] = True
     return PreparedRequest(raw_messages, kwargs, output)
 
 
-def _response_format(output: CompiledOutputSchema) -> _JsonSchemaResponseFormat:
+def _response_format(output: DecisionEnvelopeFormat) -> _JsonSchemaResponseFormat:
     return {
         "type": "json_schema",
         "json_schema": {
             "name": "structured_output",
-            "schema": output.wire_schema.to_dict(),
+            "schema": output.schema.to_dict(),
             "strict": True,
         },
     }
