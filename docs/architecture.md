@@ -140,7 +140,7 @@ implementation noted in parentheses.
 | `_output_stream.py` | Parses incremental wire JSON and converts its payload events into core `OutputEvent`s. |
 | `_schema/_decision_envelope.py` | Models the wire decision envelope and builds its schema format, output decoding, and path translation from `StepDecisionModel`. |
 | `_schema/_policy.py` | Declares independent generated/user-defined schema policies, applies permitted corrections, and validates the shared strict-output constraints. |
-| `_schema/_mapping.py` | Owns the reversible mapping-to-entry-list schema transformation and output restoration. |
+| `_schema/_mapping.py` / `_mapping_restoration.py` | Define mapping-to-entry-list schema lowering and its separate schema-guided output restoration. |
 | `_schema/_value_format.py` | Defines how each result or tool-argument value is represented on the wire and restored at runtime. |
 
 ## Where to change what
