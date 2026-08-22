@@ -20,9 +20,13 @@ from sefia.llm.step_decision import (
     TypedToolArguments,
 )
 
-from ._dialect import StructuredOutputDialect
 from ._fragment import CompiledFragment
-from ._mapping import MappingTransform
+from ._policy import (
+    GENERATED_SCHEMA_POLICY,
+    USER_DEFINED_SCHEMA_POLICY,
+    SchemaPolicy,
+    prepare_schema,
+)
 
 K = SchemaKeyword
 
@@ -54,15 +58,12 @@ class DecisionEnvelopeFormat:
 
     @classmethod
     def from_model(cls, model: StepDecisionModel) -> "DecisionEnvelopeFormat":
-        dialect = StructuredOutputDialect()
         result = (
-            _compile_typed_fragment(model.result.json_schema, dialect)
+            _compile_fragment(model.result.json_schema, GENERATED_SCHEMA_POLICY)
             if model.result is not None
             else None
         )
-        tools = {
-            tool.name: _compile_tool_fragment(tool, dialect) for tool in model.tools
-        }
+        tools = {tool.name: _compile_tool_fragment(tool) for tool in model.tools}
         schema = _build_schema(model.mode, result, tools)
         return cls(JsonSchemaDocument(schema), result, tools)
 
@@ -149,24 +150,17 @@ class DecisionEnvelopeFormat:
         )
 
 
-def _compile_tool_fragment(
-    tool: StepTool, dialect: StructuredOutputDialect
-) -> CompiledFragment:
+def _compile_tool_fragment(tool: StepTool) -> CompiledFragment:
     if isinstance(tool.arguments, TypedToolArguments):
-        return _compile_typed_fragment(tool.arguments.json_schema, dialect)
-    wire_schema = tool.arguments.json_schema.mutable_copy()
-    dialect.validate(wire_schema)
-    return CompiledFragment(wire_schema)
+        return _compile_fragment(tool.arguments.json_schema, GENERATED_SCHEMA_POLICY)
+    return _compile_fragment(tool.arguments.json_schema, USER_DEFINED_SCHEMA_POLICY)
 
 
-def _compile_typed_fragment(
-    document: JsonSchemaDocument, dialect: StructuredOutputDialect
+def _compile_fragment(
+    document: JsonSchemaDocument, policy: SchemaPolicy
 ) -> CompiledFragment:
-    wire_schema = document.mutable_copy()
-    dialect.adapt(wire_schema)
-    mapping = MappingTransform.lower(wire_schema)
-    dialect.validate(wire_schema)
-    return CompiledFragment(wire_schema, mapping)
+    prepared = prepare_schema(document.mutable_copy(), policy)
+    return CompiledFragment(prepared.wire_schema, prepared.mapping)
 
 
 def _build_schema(
