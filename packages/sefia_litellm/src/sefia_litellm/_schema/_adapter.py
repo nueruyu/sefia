@@ -75,7 +75,7 @@ class _StepDecisionDecoder:
             and self._result is not None
             and "result" in fields
         ):
-            return StructuredValue.object(
+            return StructuredValue.from_object(
                 {**fields, "result": self._result.decode(fields["result"])}
             )
         tool_calls = fields.get("tool_calls")
@@ -102,12 +102,12 @@ class _StepDecisionDecoder:
                 calls.append(value)
                 continue
             calls.append(
-                StructuredValue.object(
+                StructuredValue.from_object(
                     {**call, "arguments": decoder.decode(call["arguments"])}
                 )
             )
-        return StructuredValue.object(
-            {**fields, "tool_calls": StructuredValue.array(calls)}
+        return StructuredValue.from_object(
+            {**fields, "tool_calls": StructuredValue.from_array(calls)}
         )
 
 

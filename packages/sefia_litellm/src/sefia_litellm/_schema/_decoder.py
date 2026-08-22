@@ -46,7 +46,7 @@ class _ObjectDecoder:
             fields = data.to_object()
         except ValueError:
             return data
-        return StructuredValue.object(
+        return StructuredValue.from_object(
             {
                 key: self._properties[key].decode(value)
                 if key in self._properties
@@ -66,7 +66,7 @@ class _ArrayDecoder:
             values = data.to_array()
         except ValueError:
             return data
-        return StructuredValue.array(self._item.decode(item) for item in values)
+        return StructuredValue.from_array(self._item.decode(item) for item in values)
 
 
 @final
@@ -89,7 +89,7 @@ class _MappingDecoder:
             if key in result:
                 raise ValueError(f"duplicate mapping key: {key!r}")
             result[key] = self._value.decode(fields["value"])
-        return StructuredValue.mapping(result)
+        return StructuredValue.from_mapping(result)
 
 
 @final

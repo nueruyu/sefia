@@ -1,4 +1,3 @@
-import builtins
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import cast
@@ -11,44 +10,44 @@ from .json_schema import JsonScalar, JsonValue
 @final
 @dataclass(frozen=True)
 class StructuredValue:
-    _value: JsonScalar | list[builtins.object] | dict[builtins.object, builtins.object]
+    _value: JsonScalar | list[object] | dict[object, object]
 
     @classmethod
     def from_json(cls, value: JsonValue) -> "StructuredValue":
         return cls._from_value(value)
 
     @classmethod
-    def _from_value(cls, value: builtins.object) -> "StructuredValue":
+    def _from_value(cls, value: object) -> "StructuredValue":
         if isinstance(value, list):
-            items = cast(list[builtins.object], value)
+            items = cast(list[object], value)
             return cls(list(items))
         if isinstance(value, dict):
-            fields = cast(dict[builtins.object, builtins.object], value)
+            fields = cast(dict[object, object], value)
             return cls(dict(fields))
         if value is None or isinstance(value, str | int | float | bool):
             return cls(value)
         raise ValueError(f"Unsupported structured value: {value!r}")
 
     @classmethod
-    def scalar(cls, value: JsonScalar) -> "StructuredValue":
+    def from_scalar(cls, value: JsonScalar) -> "StructuredValue":
         return cls(value)
 
     @classmethod
-    def array(cls, values: Iterable["StructuredValue"]) -> "StructuredValue":
+    def from_array(cls, values: Iterable["StructuredValue"]) -> "StructuredValue":
         return cls([value.value for value in values])
 
     @classmethod
-    def object(cls, fields: Mapping[str, "StructuredValue"]) -> "StructuredValue":
+    def from_object(cls, fields: Mapping[str, "StructuredValue"]) -> "StructuredValue":
         return cls({name: value.value for name, value in fields.items()})
 
     @classmethod
-    def mapping(
+    def from_mapping(
         cls, entries: Mapping[JsonScalar, "StructuredValue"]
     ) -> "StructuredValue":
         return cls({key: value.value for key, value in entries.items()})
 
     @property
-    def value(self) -> builtins.object:
+    def value(self) -> object:
         return self._value
 
     def to_object(self, description: str = "value") -> dict[str, "StructuredValue"]:
