@@ -33,22 +33,22 @@ def restore_mappings(
     output: LLMOutput,
     *,
     schema: JsonObject,
-    mapping_paths: frozenset[SchemaPath],
+    restoration_paths: frozenset[SchemaPath],
 ) -> LLMOutput:
-    return _restore(output, schema, schema, mapping_paths, ())
+    return _restore(output, schema, schema, restoration_paths, ())
 
 
 def _restore(
     output: LLMOutput,
     schema: JsonObject,
     root: JsonObject,
-    mapping_paths: frozenset[SchemaPath],
+    restoration_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> LLMOutput:
     schema, path = _resolve(schema, root, path)
     node = SchemaNode(schema)
-    if path in mapping_paths:
-        return _restore_mapping(output, node, root, mapping_paths, path)
+    if path in restoration_paths:
+        return _restore_mapping(output, node, root, restoration_paths, path)
 
     alternatives = node.any_of()
     if alternatives:
@@ -58,15 +58,15 @@ def _restore(
                     output,
                     alternative.value,
                     root,
-                    mapping_paths,
+                    restoration_paths,
                     (*path, K.ANY_OF, index),
                 )
         return output
 
     if node.type == "object":
-        return _restore_object(output, node, root, mapping_paths, path)
+        return _restore_object(output, node, root, restoration_paths, path)
     if node.type == "array":
-        return _restore_array(output, node, root, mapping_paths, path)
+        return _restore_array(output, node, root, restoration_paths, path)
     return output
 
 
@@ -114,7 +114,7 @@ def _restore_object(
     output: LLMOutput,
     node: SchemaNode,
     root: JsonObject,
-    mapping_paths: frozenset[SchemaPath],
+    restoration_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> LLMOutput:
     try:
@@ -128,7 +128,7 @@ def _restore_object(
                 value,
                 properties[name].value,
                 root,
-                mapping_paths,
+                restoration_paths,
                 (*path, K.PROPERTIES, name),
             )
             if name in properties
@@ -142,7 +142,7 @@ def _restore_array(
     output: LLMOutput,
     node: SchemaNode,
     root: JsonObject,
-    mapping_paths: frozenset[SchemaPath],
+    restoration_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> LLMOutput:
     items = node.items()
@@ -153,7 +153,7 @@ def _restore_array(
     except ValueError:
         return output
     return LLMOutput.from_array(
-        _restore(value, items.value, root, mapping_paths, (*path, K.ITEMS))
+        _restore(value, items.value, root, restoration_paths, (*path, K.ITEMS))
         for value in values
     )
 
@@ -162,7 +162,7 @@ def _restore_mapping(
     output: LLMOutput,
     node: SchemaNode,
     root: JsonObject,
-    mapping_paths: frozenset[SchemaPath],
+    restoration_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> LLMOutput:
     items = node.items()
@@ -177,7 +177,7 @@ def _restore_mapping(
             entry.key,
             properties["key"].value,
             root,
-            mapping_paths,
+            restoration_paths,
             (*path, K.ITEMS, K.PROPERTIES, "key"),
         ).to_scalar("mapping key")
         if key in result:
@@ -186,7 +186,7 @@ def _restore_mapping(
             entry.value,
             properties["value"].value,
             root,
-            mapping_paths,
+            restoration_paths,
             (*path, K.ITEMS, K.PROPERTIES, "value"),
         )
     return LLMOutput.from_mapping(result)

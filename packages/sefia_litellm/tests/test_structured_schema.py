@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal, Never, cast
 from unittest.mock import Mock
 
 import pytest
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from sefia._tool_system import (
     JsonSchemaToolEntry,
@@ -680,6 +680,23 @@ def test_mapping_constraints_are_lowered_to_entry_constraints() -> None:
 
     assert result_schema["minItems"] == 1
     assert result_schema["maxItems"] == 2
+
+
+class _HybridObject(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    fixed: str
+    __pydantic_extra__: dict[str, int]  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+def test_hybrid_object_is_not_lowered_as_a_dictionary() -> None:
+    definition = _decision_model(_HybridObject, [])
+
+    with pytest.raises(
+        ValueError,
+        match="objects combining fixed properties with dictionary values",
+    ):
+        _prepare(definition)
 
 
 @dataclass

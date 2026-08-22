@@ -23,17 +23,22 @@ _PROPERTY_TO_ITEM_CONSTRAINT = {
 
 @final
 @dataclass(frozen=True)
-class MappingSchema:
+class DictionarySchema:
     key_schema: JsonObject
     value_schema: JsonObject
     annotations: JsonObject
-    entry_list_constraints: JsonObject
+    entry_array_constraints: JsonObject
 
     @classmethod
-    def from_node(cls, node: SchemaNode) -> "MappingSchema | None":
+    def from_node(cls, node: SchemaNode) -> "DictionarySchema":
         values = node.additional_properties()
         if node.type != "object" or not isinstance(values, SchemaNode):
-            return None
+            raise ValueError("node is not a dictionary schema")
+        if node.properties() or node.required():
+            raise ValueError(
+                "objects combining fixed properties with dictionary values "
+                "cannot be lowered safely"
+            )
         keys = node.property_names()
         return cls(
             key_schema=keys.value if keys is not None else {K.TYPE: "string"},
@@ -43,37 +48,20 @@ class MappingSchema:
                 for keyword in _PRESERVED_ANNOTATIONS
                 if keyword in node.value
             },
-            entry_list_constraints={
+            entry_array_constraints={
                 target: node.value[source]
                 for source, target in _PROPERTY_TO_ITEM_CONSTRAINT.items()
                 if source in node.value
             },
         )
 
-    def to_entry_list(self) -> "MappingEntryListSchema":
-        return MappingEntryListSchema(
-            key_schema=self.key_schema,
-            value_schema=self.value_schema,
-            annotations=self.annotations,
-            constraints=self.entry_list_constraints,
-        )
-
-
-@final
-@dataclass(frozen=True)
-class MappingEntryListSchema:
-    key_schema: JsonObject
-    value_schema: JsonObject
-    annotations: JsonObject
-    constraints: JsonObject
-
-    def to_json_schema(self) -> JsonObject:
+    def to_entry_array_schema(self) -> JsonObject:
         entry = SchemaNode.object_schema(
             {"key": self.key_schema, "value": self.value_schema}
         )
         return {
             **self.annotations,
-            **self.constraints,
+            **self.entry_array_constraints,
             K.TYPE: "array",
             K.ITEMS: entry.value,
         }
@@ -81,35 +69,44 @@ class MappingEntryListSchema:
 
 @final
 @dataclass(frozen=True)
-class MappingTransform:
-    schema: JsonObject
-    mapping_paths: frozenset[SchemaPath]
+class LoweredMappingSchema:
+    wire_schema: JsonObject
+    restoration_paths: frozenset[SchemaPath]
 
-    @classmethod
-    def lower(cls, schema: JsonObject) -> "MappingTransform":
-        mapping_paths: set[SchemaPath] = set()
-        while cursor := _next_mapping(schema):
-            path, node, mapping = cursor
-            replacement = mapping.to_entry_list().to_json_schema()
-            node.value.clear()
-            node.value.update(replacement)
-            mapping_paths.add(path)
-        restoration_schema = JsonSchemaDocument(schema).mutable_copy()
-        return cls(restoration_schema, frozenset(mapping_paths))
-
-    def restore(self, output: LLMOutput) -> LLMOutput:
+    def decode(self, output: LLMOutput) -> LLMOutput:
         return restore_mappings(
             output,
-            schema=self.schema,
-            mapping_paths=self.mapping_paths,
+            schema=self.wire_schema,
+            restoration_paths=self.restoration_paths,
         )
 
 
-def _next_mapping(
+def lower_mapping_schemas(schema: JsonObject) -> LoweredMappingSchema:
+    restoration_paths: set[SchemaPath] = set()
+    while cursor := _find_dictionary_schema(schema):
+        path, node, dictionary = cursor
+        replacement = dictionary.to_entry_array_schema()
+        node.value.clear()
+        node.value.update(replacement)
+        restoration_paths.add(path)
+    wire_schema = JsonSchemaDocument(schema).mutable_copy()
+    return LoweredMappingSchema(wire_schema, frozenset(restoration_paths))
+
+
+def _find_dictionary_schema(
     schema: JsonObject,
-) -> tuple[SchemaPath, SchemaNode, MappingSchema] | None:
+) -> tuple[SchemaPath, SchemaNode, DictionarySchema] | None:
     for cursor in SchemaNode(schema).walk():
-        mapping = MappingSchema.from_node(cursor.node)
-        if mapping is not None:
-            return cursor.path, cursor.node, mapping
+        if _is_dictionary_schema(cursor.node):
+            return (
+                cursor.path,
+                cursor.node,
+                DictionarySchema.from_node(cursor.node),
+            )
     return None
+
+
+def _is_dictionary_schema(node: SchemaNode) -> bool:
+    return node.type == "object" and isinstance(
+        node.additional_properties(), SchemaNode
+    )
