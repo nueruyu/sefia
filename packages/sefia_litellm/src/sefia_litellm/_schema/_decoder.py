@@ -9,7 +9,7 @@ from sefia.llm.json_schema import (
     SchemaPath,
     SchemaKeyword,
 )
-from sefia.llm.structured_value import StructuredValue
+from sefia.llm.llm_output import LLMOutput
 
 from ._normalization import SchemaEncodingPlan
 from ._traversal import matches, resolve
@@ -18,12 +18,12 @@ K = SchemaKeyword
 
 
 class Decoder(Protocol):
-    def decode(self, data: StructuredValue) -> StructuredValue: ...
+    def decode(self, data: LLMOutput) -> LLMOutput: ...
 
 
 @final
 class _IdentityDecoder:
-    def decode(self, data: StructuredValue) -> StructuredValue:
+    def decode(self, data: LLMOutput) -> LLMOutput:
         return data
 
 
@@ -32,7 +32,7 @@ class _DeferredDecoder:
     def __init__(self) -> None:
         self.target: Decoder | None = None
 
-    def decode(self, data: StructuredValue) -> StructuredValue:
+    def decode(self, data: LLMOutput) -> LLMOutput:
         return data if self.target is None else self.target.decode(data)
 
 
@@ -41,12 +41,12 @@ class _ObjectDecoder:
     def __init__(self, properties: dict[str, Decoder]):
         self._properties = properties
 
-    def decode(self, data: StructuredValue) -> StructuredValue:
+    def decode(self, data: LLMOutput) -> LLMOutput:
         try:
             fields = data.to_object()
         except ValueError:
             return data
-        return StructuredValue.from_object(
+        return LLMOutput.from_object(
             {
                 key: self._properties[key].decode(value)
                 if key in self._properties
@@ -61,12 +61,12 @@ class _ArrayDecoder:
     def __init__(self, item: Decoder):
         self._item = item
 
-    def decode(self, data: StructuredValue) -> StructuredValue:
+    def decode(self, data: LLMOutput) -> LLMOutput:
         try:
             values = data.to_array()
         except ValueError:
             return data
-        return StructuredValue.from_array(self._item.decode(item) for item in values)
+        return LLMOutput.from_array(self._item.decode(item) for item in values)
 
 
 @final
@@ -75,12 +75,12 @@ class _MappingDecoder:
         self._key = key
         self._value = value
 
-    def decode(self, data: StructuredValue) -> StructuredValue:
+    def decode(self, data: LLMOutput) -> LLMOutput:
         try:
             entries = data.to_array()
         except ValueError:
             return data
-        result: dict[JsonScalar, StructuredValue] = {}
+        result: dict[JsonScalar, LLMOutput] = {}
         for entry in entries:
             fields = entry.to_object("mapping entry")
             if set(fields) != {"key", "value"}:
@@ -89,7 +89,7 @@ class _MappingDecoder:
             if key in result:
                 raise ValueError(f"duplicate mapping key: {key!r}")
             result[key] = self._value.decode(fields["value"])
-        return StructuredValue.from_mapping(result)
+        return LLMOutput.from_mapping(result)
 
 
 @final
@@ -100,9 +100,9 @@ class _UnionDecoder:
         self._choices = choices
         self._root = root
 
-    def decode(self, data: StructuredValue) -> StructuredValue:
+    def decode(self, data: LLMOutput) -> LLMOutput:
         for schema, decoder in self._choices:
-            if matches(data.value, schema, self._root):
+            if matches(data.data, schema, self._root):
                 return decoder.decode(data)
         return data
 

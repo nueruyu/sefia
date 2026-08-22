@@ -26,7 +26,7 @@ from .step_decision import (
     StepDecisionSpec,
 )
 from .result_schema import ResultSchemaFactory
-from .structured_value import StructuredValue
+from .llm_output import LLMOutput
 from .streaming import OutputEvent
 
 JsonDefault = Callable[[Any], Any]
@@ -163,9 +163,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 if raw.startswith("```"):
                     lines = raw.splitlines()
                     raw = "\n".join(lines[1:-1]).strip()
-                decision_data = StructuredValue.from_json(
-                    require_json_value(json.loads(raw))
-                )
+                decision_data = LLMOutput.from_json(require_json_value(json.loads(raw)))
             return decision_model.validate(decision_data, tool_call_ids)
         except UnknownToolDecisionError as error:
             raise InvalidInferenceResponseError(

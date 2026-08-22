@@ -18,7 +18,7 @@ from sefia.llm.step_decision import (
     StepTool,
     TypedToolArguments,
 )
-from sefia.llm.structured_value import StructuredValue
+from sefia.llm.llm_output import LLMOutput
 
 from ._decoder import Decoder, DecoderFactory
 from ._normalization import CompatibilityValidator, MappingLowerer, SchemaNormalizer
@@ -32,8 +32,8 @@ class LiteLLMPreparedSchema:
     wire_schema: JsonSchemaDocument
     _decoder: Decoder
 
-    def decode(self, data: JsonValue) -> StructuredValue:
-        value = StructuredValue.from_json(data)
+    def decode(self, data: JsonValue) -> LLMOutput:
+        value = LLMOutput.from_json(data)
         try:
             fields = value.to_object()
         except ValueError:
@@ -48,7 +48,7 @@ class LiteLLMPreparedSchema:
 
 @final
 class _IdentityDecoder:
-    def decode(self, data: StructuredValue) -> StructuredValue:
+    def decode(self, data: LLMOutput) -> LLMOutput:
         return data
 
 
@@ -58,7 +58,7 @@ class _StepDecisionDecoder:
         self._result = result
         self._tools = tools
 
-    def decode(self, data: StructuredValue) -> StructuredValue:
+    def decode(self, data: LLMOutput) -> LLMOutput:
         try:
             fields = data.to_object()
         except ValueError:
@@ -75,7 +75,7 @@ class _StepDecisionDecoder:
             and self._result is not None
             and "result" in fields
         ):
-            return StructuredValue.from_object(
+            return LLMOutput.from_object(
                 {**fields, "result": self._result.decode(fields["result"])}
             )
         tool_calls = fields.get("tool_calls")
@@ -85,7 +85,7 @@ class _StepDecisionDecoder:
             values = tool_calls.to_array()
         except ValueError:
             return data
-        calls: list[StructuredValue] = []
+        calls: list[LLMOutput] = []
         for value in values:
             try:
                 call = value.to_object()
@@ -102,12 +102,12 @@ class _StepDecisionDecoder:
                 calls.append(value)
                 continue
             calls.append(
-                StructuredValue.from_object(
+                LLMOutput.from_object(
                     {**call, "arguments": decoder.decode(call["arguments"])}
                 )
             )
-        return StructuredValue.from_object(
-            {**fields, "tool_calls": StructuredValue.from_array(calls)}
+        return LLMOutput.from_object(
+            {**fields, "tool_calls": LLMOutput.from_array(calls)}
         )
 
 

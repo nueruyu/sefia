@@ -11,7 +11,7 @@ from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCalls
 from .json_schema import JsonSchemaDocument
 from ._tool_call_ids import ToolCallIdRegistry
 from .result_schema import ResultSchema, ResultSchemaFactory
-from .structured_value import StructuredValue
+from .llm_output import LLMOutput
 
 
 class StepDecisionMode(Enum):
@@ -88,9 +88,9 @@ class _ToolModel:
         validator_cls.check_schema(schema)
         self._validator = validator_cls(schema)
 
-    def validate(self, value: StructuredValue) -> dict[str, Any]:
+    def validate(self, value: LLMOutput) -> dict[str, Any]:
         value.to_object("arguments")
-        value_dict = cast(dict[str, Any], value.value)
+        value_dict = cast(dict[str, Any], value.data)
         errors = sorted(
             self._validator.iter_errors(value_dict),
             key=lambda error: list(error.path),
@@ -159,7 +159,7 @@ class StepDecisionModel:
         return self._result
 
     def validate(
-        self, value: StructuredValue, tool_call_ids: ToolCallIdRegistry | None
+        self, value: LLMOutput, tool_call_ids: ToolCallIdRegistry | None
     ) -> StepDecision:
         try:
             data = value.to_object("step decision")
@@ -183,7 +183,7 @@ class StepDecisionModel:
 
     def _validate_tool_calls(
         self,
-        data: dict[str, StructuredValue],
+        data: dict[str, LLMOutput],
         tool_call_ids: ToolCallIdRegistry | None,
     ) -> ToolCallsDecision:
         _require_fields(data, {"decision", "tool_calls"})
@@ -210,14 +210,14 @@ class StepDecisionModel:
             )
         return ToolCallsDecision(requests)
 
-    def _validate_result(self, data: dict[str, StructuredValue]) -> ResultDecision:
+    def _validate_result(self, data: dict[str, LLMOutput]) -> ResultDecision:
         _require_fields(data, {"decision", "result"})
         if self._result is None:
             raise ValueError("result is not allowed")
         return ResultDecision(self._result.validate(data["result"]))
 
 
-def _require_fields(value: dict[str, StructuredValue], expected: set[str]) -> None:
+def _require_fields(value: dict[str, LLMOutput], expected: set[str]) -> None:
     actual = set(value)
     if actual != expected:
         missing = expected - actual

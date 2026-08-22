@@ -3,6 +3,7 @@ from ._messages import LLMResponse, Message, ToolCall
 from ._prompt_formatter import PromptFormatter
 from ._strategy import LLMInferenceStrategy
 from ._xml_prompt_formatter import XmlPromptFormatter
+from .llm_output import LLMOutput, LLMOutputData
 
 __all__ = [
     "LLMClient",
@@ -10,6 +11,8 @@ __all__ = [
     "ToolCall",
     "LLMResponse",
     "LLMInferenceStrategy",
+    "LLMOutput",
+    "LLMOutputData",
     "PromptFormatter",
     "XmlPromptFormatter",
 ]

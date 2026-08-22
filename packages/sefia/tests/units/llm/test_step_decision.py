@@ -22,7 +22,7 @@ from sefia.llm.step_decision import (
     StepDecisionSpec,
 )
 from sefia.llm.json_schema import JsonValue
-from sefia.llm.structured_value import StructuredValue
+from sefia.llm.llm_output import LLMOutput
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -75,14 +75,10 @@ class _StepDecisionFixture:
 
     def validate(
         self,
-        data: StructuredValue | JsonValue,
+        data: LLMOutput | JsonValue,
         tool_call_ids: ToolCallIdRegistry | None = None,
     ):
-        value = (
-            data
-            if isinstance(data, StructuredValue)
-            else StructuredValue.from_json(data)
-        )
+        value = data if isinstance(data, LLMOutput) else LLMOutput.from_json(data)
         return self.decision_model.validate(value, tool_call_ids)
 
 
@@ -175,7 +171,7 @@ class TestToolsRequiredDecision:
     def test_process_decision_accepts_tool_calls(self):
         step = _step(Never, [_tool(chat_tool)])
 
-        data = StructuredValue.from_json(
+        data = LLMOutput.from_json(
             {
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "chat_tool", "arguments": {}}],

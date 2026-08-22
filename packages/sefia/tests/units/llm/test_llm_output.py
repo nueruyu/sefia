@@ -1,10 +1,10 @@
 import pytest
 
-from sefia.llm.structured_value import StructuredValue
+from sefia.llm.llm_output import LLMOutput
 
 
-def test_from_json_builds_nested_structured_value() -> None:
-    value = StructuredValue.from_json(
+def test_from_json_builds_nested_llm_output() -> None:
+    value = LLMOutput.from_json(
         {"name": "report", "items": [1, True, None], "metadata": {"count": 3}}
     )
 
@@ -16,7 +16,7 @@ def test_from_json_builds_nested_structured_value() -> None:
         None,
     ]
     assert fields["metadata"].to_object()["count"].to_scalar() == 3
-    assert value.value == {
+    assert value.data == {
         "name": "report",
         "items": [1, True, None],
         "metadata": {"count": 3},
@@ -32,14 +32,14 @@ def test_from_json_builds_nested_structured_value() -> None:
     ],
 )
 def test_shape_accessors_reject_wrong_shape(method: str, message: str) -> None:
-    value = StructuredValue.from_scalar(1)
+    value = LLMOutput.from_scalar(1)
 
     with pytest.raises(ValueError, match=message):
         getattr(value, method)()
 
 
 def test_to_object_rejects_mapping_keys() -> None:
-    value = StructuredValue.from_mapping({1: StructuredValue.from_scalar("one")})
+    value = LLMOutput.from_mapping({1: LLMOutput.from_scalar("one")})
 
     with pytest.raises(ValueError, match="must have string keys"):
         value.to_object("record")
@@ -47,4 +47,4 @@ def test_to_object_rejects_mapping_keys() -> None:
 
 def test_to_scalar_rejects_container() -> None:
     with pytest.raises(ValueError, match="must be a scalar"):
-        StructuredValue.from_array([]).to_scalar()
+        LLMOutput.from_array([]).to_scalar()

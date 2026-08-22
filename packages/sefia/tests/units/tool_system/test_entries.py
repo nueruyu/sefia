@@ -7,7 +7,7 @@ from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import ToolConflictError
 from sefia.inference import ToolCallsDecision
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.structured_value import StructuredValue
+from sefia.llm.llm_output import LLMOutput
 from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 
@@ -130,7 +130,7 @@ def test_a_schema_is_validated_under_its_declared_dialect():
     tool_call_ids = ToolCallIdRegistry()
 
     valid = decision_model.validate(
-        StructuredValue.from_json(
+        LLMOutput.from_json(
             {
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "pair", "arguments": {"pair": ["a", 1]}}],
@@ -143,7 +143,7 @@ def test_a_schema_is_validated_under_its_declared_dialect():
 
     with pytest.raises(ValueError, match="Step decision validation failed"):
         decision_model.validate(
-            StructuredValue.from_json(
+            LLMOutput.from_json(
                 {
                     "decision": "tool_calls",
                     "tool_calls": [{"name": "pair", "arguments": {"pair": [1, "a"]}}],

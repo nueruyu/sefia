@@ -19,7 +19,7 @@ from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm.json_schema import SchemaNode
 from sefia.llm.streaming import OutputEvent
-from sefia.llm.structured_value import StructuredValue
+from sefia.llm.llm_output import LLMOutput
 from sefia.llm.step_decision import (
     StepDecisionMode,
     StepDecisionModel,
@@ -666,7 +666,7 @@ class TestToolCallValidation:
         client = Mock(spec=LLMClient)
         client.complete.return_value = LLMResponse(
             content=content,
-            structured_output=StructuredValue.from_json(
+            structured_output=LLMOutput.from_json(
                 cast(dict[str, Any], json.loads(content))["payload"]
             ),
         )

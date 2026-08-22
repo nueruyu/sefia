@@ -22,7 +22,7 @@ from sefia.llm.events import (
     LLMResponseRepairAttempt,
     LLMTokenReceived,
 )
-from sefia.llm.structured_value import StructuredValue
+from sefia.llm.llm_output import LLMOutput
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -177,7 +177,7 @@ class TestLLMInferenceStrategy:
         self, mock_llm_client: AsyncMock
     ) -> None:
         mock_llm_client.complete.return_value = LLMResponse(
-            structured_output=StructuredValue.from_json(
+            structured_output=LLMOutput.from_json(
                 {"decision": "result", "result": "done"}
             )
         )
