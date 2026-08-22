@@ -2,7 +2,6 @@ from dataclasses import dataclass
 
 from typing_extensions import final
 
-from ._traversal import walk
 from sefia.llm.json_schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
 
 K = SchemaKeyword
@@ -21,7 +20,8 @@ _UNSUPPORTED_COMPOSITION = (
 @final
 class SchemaNormalizer:
     def normalize(self, schema: JsonObject) -> None:
-        for _, node in walk(schema):
+        for cursor in SchemaNode(schema).walk():
+            node = cursor.node
             if node.type == "object":
                 _close_object(node)
             _replace_one_of(node)
@@ -37,7 +37,8 @@ class MappingPlan:
 class MappingLowerer:
     def lower(self, schema: JsonObject) -> MappingPlan:
         mapping_paths: set[SchemaPath] = set()
-        for path, node in list(walk(schema)):
+        for cursor in list(SchemaNode(schema).walk()):
+            path, node = cursor.path, cursor.node
             additional = node.additional_properties()
             if node.type != "object" or not isinstance(additional, SchemaNode):
                 continue
@@ -55,7 +56,8 @@ class MappingLowerer:
 @final
 class CompatibilityValidator:
     def validate(self, schema: JsonObject) -> None:
-        for path, node in walk(schema):
+        for cursor in SchemaNode(schema).walk():
+            path, node = cursor.path, cursor.node
             if K.ONE_OF in node.value:
                 self._unsupported(path, "oneOf is not supported; use a disjoint anyOf")
             for keyword in _UNSUPPORTED_COMPOSITION:

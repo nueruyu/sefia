@@ -92,6 +92,14 @@ class SchemaNode:
     def set_local_reference(self, reference: LocalDefinitionRef) -> None:
         self.value[K.REFERENCE] = reference.render()
 
+    def resolve_local_reference(self, root: "SchemaNode") -> "SchemaNode | None":
+        reference = self.local_reference
+        if reference is None:
+            return None
+        definitions = root.object_map(K.DEFINITIONS)
+        resolved = reference.resolve_from(definitions or {})
+        return SchemaNode(resolved) if isinstance(resolved, dict) else None
+
     def object_map(self, keyword: str) -> dict[str, JsonValue] | None:
         value = self.value.get(keyword)
         return value if isinstance(value, dict) else None

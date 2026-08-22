@@ -55,6 +55,9 @@ def test_schema_node_exposes_structure_without_untyped_indexing() -> None:
         ("properties", "items", "items"),
         ("$defs", "Item"),
     }
+    resolved = item.resolve_local_reference(root)
+    assert resolved is not None
+    assert resolved.value == definition.value
 
 
 def test_local_definition_reference_handles_json_pointer_escaping() -> None:

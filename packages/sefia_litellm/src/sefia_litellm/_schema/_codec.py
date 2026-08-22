@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import cast
 
 from typing_extensions import final
 
@@ -14,7 +15,6 @@ from sefia.llm.json_schema import (
 from sefia.llm.llm_output import LLMOutput
 
 from ._normalization import MappingPlan
-from ._traversal import matches, resolve
 
 K = SchemaKeyword
 
@@ -135,7 +135,7 @@ def _decode(
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> LLMOutput:
-    schema, path = resolve(schema, root, path)
+    schema, path = _resolve(schema, root, path)
     node = SchemaNode(schema)
     if path in mapping_paths:
         return _decode_mapping(output, node, root, mapping_paths, path)
@@ -143,7 +143,7 @@ def _decode(
     alternatives = node.any_of()
     if alternatives:
         for index, alternative in enumerate(alternatives):
-            if matches(output.data, alternative.value, root):
+            if _matches(output.data, alternative.value, root):
                 return _decode(
                     output,
                     alternative.value,
@@ -158,6 +158,46 @@ def _decode(
     if node.type == "array":
         return _decode_array(output, node, root, mapping_paths, path)
     return output
+
+
+def _resolve(
+    schema: JsonObject,
+    root: JsonObject,
+    path: SchemaPath,
+) -> tuple[JsonObject, SchemaPath]:
+    node = SchemaNode(schema)
+    reference = node.local_reference
+    if reference is None:
+        return schema, path
+    resolved = node.resolve_local_reference(SchemaNode(root))
+    if resolved is None:
+        return schema, path
+    return resolved.value, (K.DEFINITIONS, reference.definition, *reference.path)
+
+
+def _matches(data: object, schema: JsonObject, root: JsonObject) -> bool:
+    schema, _ = _resolve(schema, root, ())
+    node = SchemaNode(schema)
+    if K.CONST in schema and data != schema[K.CONST]:
+        return False
+    if node.type == "null":
+        return data is None
+    if node.type == "object":
+        if not isinstance(data, dict):
+            return False
+        required_names = set(node.required() or ())
+        return required_names <= set(cast(dict[object, object], data).keys())
+    if node.type == "array":
+        return isinstance(data, list)
+    if node.type == "string":
+        return isinstance(data, str)
+    if node.type == "integer":
+        return isinstance(data, int) and not isinstance(data, bool)
+    if node.type == "number":
+        return isinstance(data, int | float) and not isinstance(data, bool)
+    if node.type == "boolean":
+        return isinstance(data, bool)
+    return True
 
 
 def _decode_object(
