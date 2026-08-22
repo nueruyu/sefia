@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import TypeAlias, cast
@@ -18,7 +19,31 @@ class LLMOutput:
 
     @classmethod
     def from_json(cls, value: JsonValue) -> "LLMOutput":
-        return cls._from_value(value)
+        return cls._from_json_value(value)
+
+    @classmethod
+    def parse_json(cls, text: str) -> "LLMOutput":
+        return cls._from_json_value(cast(object, json.loads(text)))
+
+    @classmethod
+    def _from_json_value(cls, value: object) -> "LLMOutput":
+        if isinstance(value, list):
+            items = cast(list[object], value)
+            return cls([cls._from_json_value(item).data for item in items])
+        if isinstance(value, dict):
+            fields = cast(dict[object, object], value)
+            if not all(isinstance(key, str) for key in fields):
+                raise ValueError("JSON objects must have string keys")
+            return cls(
+                {
+                    key: cls._from_json_value(item).data
+                    for key, item in fields.items()
+                    if isinstance(key, str)
+                }
+            )
+        if value is None or isinstance(value, str | int | float | bool):
+            return cls(value)
+        raise ValueError(f"Unsupported JSON value: {value!r}")
 
     @classmethod
     def _from_value(cls, value: object) -> "LLMOutput":

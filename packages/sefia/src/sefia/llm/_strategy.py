@@ -20,7 +20,6 @@ from ._messages import Message
 from ._prompt_formatter import PromptFormatter
 from ._step_decision_prompt import build_step_decision_prompt
 from ._tool_call_ids import ToolCallIdRegistry
-from .json_schema import require_json_value
 from .step_decision import (
     StepDecisionModel,
     StepDecisionSpec,
@@ -163,7 +162,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 if raw.startswith("```"):
                     lines = raw.splitlines()
                     raw = "\n".join(lines[1:-1]).strip()
-                decision_data = LLMOutput.from_json(require_json_value(json.loads(raw)))
+                decision_data = LLMOutput.parse_json(raw)
             return decision_model.validate(decision_data, tool_call_ids)
         except UnknownToolDecisionError as error:
             raise InvalidInferenceResponseError(

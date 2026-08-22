@@ -23,6 +23,17 @@ def test_from_json_builds_nested_llm_output() -> None:
     }
 
 
+def test_parse_json_builds_validated_llm_output() -> None:
+    value = LLMOutput.parse_json('{"items": [1, true, null]}')
+
+    assert value.data == {"items": [1, True, None]}
+
+
+def test_parse_json_rejects_invalid_json() -> None:
+    with pytest.raises(ValueError):
+        LLMOutput.parse_json("not json")
+
+
 @pytest.mark.parametrize(
     ("method", "message"),
     [

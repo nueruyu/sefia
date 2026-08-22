@@ -19,12 +19,6 @@ def is_json_value(value: object) -> TypeGuard[JsonValue]:
     return False
 
 
-def require_json_value(value: object) -> JsonValue:
-    if not is_json_value(value):
-        raise TypeError("value is not JSON-compatible")
-    return value
-
-
 def require_json_object(value: Mapping[str, object] | object) -> JsonObject:
     if not isinstance(value, dict):
         raise TypeError("value is not a JSON object")

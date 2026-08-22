@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from typing import TYPE_CHECKING, Any, Coroutine, cast
 
 from sefia.llm import LLMResponse, ToolCall
-from sefia.llm.json_schema import require_json_value
 from sefia.llm.streaming import OutputCallback
 
 from ._schema import CompiledOutputSchema
@@ -114,8 +112,8 @@ def _decode_output(response: LLMResponse, output: CompiledOutputSchema | None) -
         lines = raw.splitlines()
         raw = "\n".join(lines[1:-1]).strip()
     try:
-        response.structured_output = output.decode(require_json_value(json.loads(raw)))
-    except (json.JSONDecodeError, ValueError):
+        response.structured_output = output.decode_json(raw)
+    except ValueError:
         return
 
 

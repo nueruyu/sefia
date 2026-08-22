@@ -4,8 +4,6 @@ from ._json import (
     JsonObject,
     JsonScalar,
     JsonValue,
-    require_json_object,
-    require_json_value,
 )
 from ._path import SchemaPath
 from ._reference import LocalDefinitionRef
@@ -23,6 +21,4 @@ __all__ = [
     "SchemaPath",
     "SchemaType",
     "SchemaKeyword",
-    "require_json_object",
-    "require_json_value",
 ]

@@ -5,7 +5,6 @@ from sefia.llm.json_schema import (
     DefinitionRegistry,
     JsonObject,
     JsonSchemaDocument,
-    JsonValue,
     SchemaKeyword,
     SchemaNode,
     SchemaPath,
@@ -34,8 +33,7 @@ class DecisionEnvelope:
         root.set_description("The model for the LLM's decision on the next action.")
         return root.value
 
-    def decode(self, data: JsonValue) -> LLMOutput:
-        output = LLMOutput.from_json(data)
+    def decode(self, output: LLMOutput) -> LLMOutput:
         try:
             envelope = output.to_object()
         except ValueError:

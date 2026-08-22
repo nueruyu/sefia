@@ -19,7 +19,10 @@ class CompiledOutputSchema:
     envelope: DecisionEnvelope
 
     def decode(self, data: JsonValue) -> LLMOutput:
-        return self.envelope.decode(data)
+        return self.envelope.decode(LLMOutput.from_json(data))
+
+    def decode_json(self, text: str) -> LLMOutput:
+        return self.envelope.decode(LLMOutput.parse_json(text))
 
     def logical_path(self, path: SchemaPath) -> SchemaPath | None:
         return self.envelope.logical_path(path)
