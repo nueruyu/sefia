@@ -174,8 +174,7 @@ def _payload_schema(
         branches.append(_tool_calls_schema(tool_argument_formats, registry))
     if mode is not StepDecisionMode.TOOLS_REQUIRED:
         assert result_format is not None
-        schema = JsonSchemaDocument(result_format.schema).mutable_copy()
-        imported = registry.import_schema(schema, namespace="result")
+        imported = registry.import_schema(result_format.schema, namespace="result")
         branches.append(
             _closed_object({"decision": _literal("result"), "result": imported})
         )
@@ -195,9 +194,11 @@ def _tool_calls_schema(
     registry: DefinitionRegistry,
 ) -> JsonObject:
     calls: list[JsonObject] = []
-    for name, value_format in tool_argument_formats.items():
-        schema = JsonSchemaDocument(value_format.schema).mutable_copy()
-        imported = registry.import_schema(schema, namespace=name)
+    for index, (name, value_format) in enumerate(tool_argument_formats.items()):
+        imported = registry.import_schema(
+            value_format.schema,
+            namespace=f"tool_{index}",
+        )
         calls.append(_closed_object({"name": _literal(name), "arguments": imported}))
     items: JsonObject = (
         calls[0]

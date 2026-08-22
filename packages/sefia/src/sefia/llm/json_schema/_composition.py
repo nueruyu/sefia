@@ -12,44 +12,35 @@ class DefinitionRegistry:
         self._definitions = definitions
 
     def import_schema(self, schema: JsonObject, *, namespace: str) -> JsonObject:
-        local = SchemaNode(schema).take_definitions()
-        names = {
-            name: self._target_name(namespace, name, definition)
-            for name, definition in local.items()
-        }
-        _rewrite_references(schema, names)
+        imported = deepcopy(schema)
+        local = SchemaNode(imported).take_definitions()
+        names = {name: f"{namespace}__{name}" for name in local}
+        _rewrite_references(imported, names)
 
         for name, definition in local.items():
             target = names[name]
             if target in self._definitions:
-                continue
+                raise ValueError(f"duplicate JSON Schema namespace: {namespace!r}")
             rewritten = deepcopy(definition)
             _rewrite_references(rewritten, names)
             self._definitions[target] = rewritten
-        return schema
-
-    def _target_name(self, namespace: str, name: str, definition: JsonValue) -> str:
-        if name not in self._definitions:
-            return name
-        if self._definitions[name] == definition:
-            return name
-
-        base = f"{namespace}__{name}"
-        candidate = base
-        suffix = 2
-        while candidate in self._definitions:
-            candidate = f"{base}_{suffix}"
-            suffix += 1
-        return candidate
+        return imported
 
 
 def _rewrite_references(node: JsonValue, names: dict[str, str]) -> None:
     if not isinstance(node, dict):
         return
     for cursor in SchemaNode(node).walk():
-        reference = cursor.node.local_reference
-        if reference is None or reference.definition not in names:
+        raw_reference = cursor.node.reference
+        if raw_reference is None:
             continue
+        reference = cursor.node.local_reference
+        if reference is None:
+            raise ValueError(f"unsupported JSON Schema reference: {raw_reference!r}")
+        if reference.definition not in names:
+            raise ValueError(
+                f"unresolved local JSON Schema reference: {raw_reference!r}"
+            )
         cursor.node.set_local_reference(
             reference.with_definition(names[reference.definition])
         )

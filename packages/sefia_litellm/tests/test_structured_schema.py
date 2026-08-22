@@ -147,11 +147,11 @@ def _signature_tool(function: Any, *, name: str) -> ToolEntry:
     )
 
 
-def _raw_tool(schema: dict[str, Any]) -> ToolEntry:
+def _raw_tool(schema: dict[str, Any], *, name: str = "raw_tool") -> ToolEntry:
     async def handler(**kwargs: Any) -> str:
         return str(kwargs)
 
-    return JsonSchemaToolEntry(handler, name="raw_tool", parameters=schema)
+    return JsonSchemaToolEntry(handler, name=name, parameters=schema)
 
 
 def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
@@ -273,8 +273,8 @@ def test_raw_tool_schema_hoists_local_definitions() -> None:
     arguments = _resolve(_tool_call_item(schema)["properties"]["arguments"], schema)
 
     assert "$defs" not in arguments
-    assert arguments["properties"]["item"]["$ref"] == "#/$defs/Item"
-    item = SchemaNode(schema).definitions()["Item"]
+    assert arguments["properties"]["item"]["$ref"] == "#/$defs/tool_0__Item"
+    item = SchemaNode(schema).definitions()["tool_0__Item"]
     assert item.properties()["name"].type == "string"
     assert item.strings("required") == ("name",)
 
@@ -331,9 +331,8 @@ def test_conflicting_tool_definition_names_are_renamed() -> None:
     schema = _prepare(definition).schema.to_dict()
 
     shared_definitions = {
-        name: definition
-        for name, definition in SchemaNode(schema).definitions().items()
-        if name == "Shared" or name.startswith("second__Shared")
+        name: SchemaNode(schema).definitions()[name]
+        for name in ("tool_0__Shared", "tool_1__Shared")
     }
     assert len(shared_definitions) == 2
     assert {
@@ -360,9 +359,102 @@ def _assert_local_references_resolve(
     node_dict = cast(dict[str, Any], node)
     reference = node_dict.get("$ref")
     if isinstance(reference, str) and reference.startswith("#/$defs/"):
-        assert reference.removeprefix("#/$defs/") in root["$defs"]
+        assert (
+            SchemaNode(node_dict).resolve_local_reference(SchemaNode(root)) is not None
+        )
     for value in node_dict.values():
         _assert_local_references_resolve(value, root)
+
+
+def test_transitive_definition_collisions_remain_fragment_local() -> None:
+    def fragment(value_type: str) -> dict[str, Any]:
+        return {
+            "$ref": "#/$defs/A",
+            "$defs": {
+                "A": {
+                    "type": "object",
+                    "properties": {"value": {"$ref": "#/$defs/B"}},
+                    "required": ["value"],
+                    "additionalProperties": False,
+                },
+                "B": {"$ref": "#/$defs/C"},
+                "C": {"type": value_type},
+            },
+        }
+
+    definition = _decision_model(
+        Never,
+        [
+            _raw_tool(fragment("string"), name="first"),
+            _raw_tool(fragment("integer"), name="second"),
+        ],
+    )
+
+    schema = _prepare(definition).schema.to_dict()
+    definitions = SchemaNode(schema).definitions()
+
+    assert definitions["tool_0__A"].properties()["value"].reference == (
+        "#/$defs/tool_0__B"
+    )
+    assert definitions["tool_0__B"].reference == "#/$defs/tool_0__C"
+    assert definitions["tool_0__C"].type == "string"
+    assert definitions["tool_1__A"].properties()["value"].reference == (
+        "#/$defs/tool_1__B"
+    )
+    assert definitions["tool_1__B"].reference == "#/$defs/tool_1__C"
+    assert definitions["tool_1__C"].type == "integer"
+    _assert_local_references_resolve(schema)
+
+    first = _process(
+        definition,
+        {
+            "payload": {
+                "decision": "tool_calls",
+                "tool_calls": [{"name": "first", "arguments": {"value": "one"}}],
+            }
+        },
+        ToolCallIdRegistry(),
+    )
+    second = _process(
+        definition,
+        {
+            "payload": {
+                "decision": "tool_calls",
+                "tool_calls": [{"name": "second", "arguments": {"value": 2}}],
+            }
+        },
+        ToolCallIdRegistry(),
+    )
+    assert isinstance(first, ToolCallsDecision)
+    assert first.calls[0].arguments == {"value": "one"}
+    assert isinstance(second, ToolCallsDecision)
+    assert second.calls[0].arguments == {"value": 2}
+
+
+def test_identical_definitions_are_namespaced_deterministically() -> None:
+    fragment = {
+        "$ref": "#/$defs/Item",
+        "$defs": {"Item": {"type": "string"}},
+    }
+    definition = _decision_model(
+        Never,
+        [
+            _raw_tool(fragment, name="first"),
+            _raw_tool(fragment, name="second"),
+        ],
+    )
+
+    first_schema = _prepare(definition).schema.to_dict()
+    second_schema = _prepare(definition).schema.to_dict()
+
+    assert first_schema == second_schema
+    definitions = SchemaNode(first_schema).definitions()
+    assert definitions["tool_0__Item"].type == "string"
+    assert definitions["tool_1__Item"].type == "string"
+    assert fragment == {
+        "$ref": "#/$defs/Item",
+        "$defs": {"Item": {"type": "string"}},
+    }
 
 
 def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
@@ -527,6 +619,59 @@ def test_mapping_result_is_lowered_and_decoded() -> None:
     }
 
 
+def test_mapping_values_can_be_mappings() -> None:
+    definition = _decision_model(dict[str, dict[str, int]], [])
+
+    result_schema = _result_schema(_prepare(definition).schema.to_dict())
+    value_schema = result_schema["items"]["properties"]["value"]
+    assert value_schema["type"] == "array"
+
+    decision = _process(
+        definition,
+        {
+            "payload": {
+                "decision": "result",
+                "result": [
+                    {
+                        "key": "outer",
+                        "value": [{"key": "inner", "value": 1}],
+                    }
+                ],
+            }
+        },
+    )
+
+    assert isinstance(decision, ResultDecision)
+    assert decision.result == {"outer": {"inner": 1}}
+
+
+def test_mapping_values_can_be_nested_to_arbitrary_depth() -> None:
+    definition = _decision_model(dict[str, dict[str, dict[str, int]]], [])
+
+    decision = _process(
+        definition,
+        {
+            "payload": {
+                "decision": "result",
+                "result": [
+                    {
+                        "key": "outer",
+                        "value": [
+                            {
+                                "key": "middle",
+                                "value": [{"key": "inner", "value": 1}],
+                            }
+                        ],
+                    }
+                ],
+            }
+        },
+    )
+
+    assert isinstance(decision, ResultDecision)
+    assert decision.result == {"outer": {"middle": {"inner": 1}}}
+
+
 def test_mapping_constraints_are_lowered_to_entry_constraints() -> None:
     output_type = Annotated[dict[str, str], Field(min_length=1, max_length=2)]
     definition = _decision_model(output_type, [])
@@ -664,6 +809,10 @@ async def _categorize(labels: dict[str, int]) -> None:
     pass
 
 
+async def _categorize_nested(values: dict[str, dict[str, int]]) -> None:
+    pass
+
+
 def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
     definition = _decision_model(
         Never,
@@ -692,6 +841,39 @@ def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
 
     assert isinstance(decision, ToolCallsDecision)
     assert decision.calls[0].arguments == {"labels": {"important": 2}}
+
+
+def test_nested_mapping_tool_argument_is_lowered_and_decoded() -> None:
+    definition = _decision_model(
+        Never,
+        [_signature_tool(_categorize_nested, name="categorize_nested")],
+    )
+
+    decision = _process(
+        definition,
+        {
+            "payload": {
+                "decision": "tool_calls",
+                "tool_calls": [
+                    {
+                        "name": "categorize_nested",
+                        "arguments": {
+                            "values": [
+                                {
+                                    "key": "outer",
+                                    "value": [{"key": "inner", "value": 1}],
+                                }
+                            ]
+                        },
+                    }
+                ],
+            }
+        },
+        ToolCallIdRegistry(),
+    )
+
+    assert isinstance(decision, ToolCallsDecision)
+    assert decision.calls[0].arguments == {"values": {"outer": {"inner": 1}}}
 
 
 def test_step_decision_spec_rejects_tool_modes_without_tools() -> None:

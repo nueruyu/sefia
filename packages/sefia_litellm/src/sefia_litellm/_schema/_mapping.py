@@ -88,11 +88,8 @@ class MappingTransform:
     @classmethod
     def lower(cls, schema: JsonObject) -> "MappingTransform":
         mapping_paths: set[SchemaPath] = set()
-        for cursor in list(SchemaNode(schema).walk()):
-            path, node = cursor.path, cursor.node
-            mapping = MappingSchema.from_node(node)
-            if mapping is None:
-                continue
+        while cursor := _next_mapping(schema):
+            path, node, mapping = cursor
             replacement = mapping.to_entry_list().to_json_schema()
             node.value.clear()
             node.value.update(replacement)
@@ -106,3 +103,13 @@ class MappingTransform:
             schema=self.schema,
             mapping_paths=self.mapping_paths,
         )
+
+
+def _next_mapping(
+    schema: JsonObject,
+) -> tuple[SchemaPath, SchemaNode, MappingSchema] | None:
+    for cursor in SchemaNode(schema).walk():
+        mapping = MappingSchema.from_node(cursor.node)
+        if mapping is not None:
+            return cursor.path, cursor.node, mapping
+    return None
