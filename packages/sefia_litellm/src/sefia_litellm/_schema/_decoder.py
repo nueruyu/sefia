@@ -9,7 +9,7 @@ from sefia.llm.json_schema import (
     SchemaPath,
     SchemaKeyword,
 )
-from sefia.llm.structured_output import StructuredValue
+from sefia.llm.structured_value import StructuredValue
 
 from ._normalization import SchemaEncodingPlan
 from ._traversal import matches, resolve
@@ -42,14 +42,18 @@ class _ObjectDecoder:
         self._properties = properties
 
     def decode(self, data: StructuredValue) -> StructuredValue:
-        if not isinstance(data, dict):
+        try:
+            fields = data.as_object()
+        except ValueError:
             return data
-        return {
-            key: self._properties[key].decode(value)
-            if isinstance(key, str) and key in self._properties
-            else value
-            for key, value in data.items()
-        }
+        return StructuredValue.object(
+            {
+                key: self._properties[key].decode(value)
+                if isinstance(key, str) and key in self._properties
+                else value
+                for key, value in fields.items()
+            }
+        )
 
 
 @final
@@ -58,9 +62,11 @@ class _ArrayDecoder:
         self._item = item
 
     def decode(self, data: StructuredValue) -> StructuredValue:
-        if not isinstance(data, list):
+        try:
+            values = data.as_array()
+        except ValueError:
             return data
-        return [self._item.decode(item) for item in data]
+        return StructuredValue.array(self._item.decode(item) for item in values)
 
 
 @final
@@ -70,21 +76,20 @@ class _MappingDecoder:
         self._value = value
 
     def decode(self, data: StructuredValue) -> StructuredValue:
-        if not isinstance(data, list):
+        try:
+            entries = data.as_array()
+        except ValueError:
             return data
         result: dict[JsonScalar, StructuredValue] = {}
-        for entry in data:
-            if not isinstance(entry, dict):
-                raise ValueError("mapping entries must be objects")
-            if set(entry) != {"key", "value"}:
+        for entry in entries:
+            fields = entry.as_record("mapping entry")
+            if set(fields) != {"key", "value"}:
                 raise ValueError("mapping entries must contain only key and value")
-            key = self._key.decode(entry["key"])
-            if isinstance(key, list | dict):
-                raise ValueError("mapping keys must be scalar values")
+            key = self._key.decode(fields["key"]).as_scalar("mapping key")
             if key in result:
                 raise ValueError(f"duplicate mapping key: {key!r}")
-            result[key] = self._value.decode(entry["value"])
-        return result
+            result[key] = self._value.decode(fields["value"])
+        return StructuredValue.object(result)
 
 
 @final
@@ -97,7 +102,7 @@ class _UnionDecoder:
 
     def decode(self, data: StructuredValue) -> StructuredValue:
         for schema, decoder in self._choices:
-            if matches(data, schema, self._root):
+            if matches(data.to_python(), schema, self._root):
                 return decoder.decode(data)
         return data
 

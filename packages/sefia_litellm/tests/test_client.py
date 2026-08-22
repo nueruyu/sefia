@@ -47,7 +47,9 @@ class _CityResult:
 
 
 def _decision_model() -> StepDecisionModel:
-    spec = StepDecisionSpec.result_only(name="StepDecision", output_type=_CityResult)
+    spec = StepDecisionSpec.for_inference(
+        name="StepDecision", output_type=_CityResult, tools=[]
+    )
     return StepDecisionModel.from_spec(spec, PydanticModelBackend())
 
 
@@ -120,7 +122,8 @@ class TestLiteLLMClient:
         system_prompt = call_args["messages"][0]["content"]
         assert "Follow the task." in system_prompt
         assert '"payload"' in system_prompt
-        assert response.structured_output == {
+        assert response.structured_output is not None
+        assert response.structured_output.to_python() == {
             "decision": "result",
             "result": {"city": "Tokyo"},
         }

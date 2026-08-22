@@ -1,5 +1,4 @@
 from copy import deepcopy
-from dataclasses import dataclass
 
 from typing_extensions import final
 
@@ -8,18 +7,11 @@ from ._json import JsonObject, JsonValue
 
 
 @final
-@dataclass(frozen=True)
-class ImportedSchema:
-    schema: JsonObject
-    definitions: JsonObject
-
-
-@final
 class DefinitionRegistry:
     def __init__(self, definitions: JsonObject):
         self._definitions = definitions
 
-    def import_schema(self, schema: JsonObject, *, namespace: str) -> ImportedSchema:
+    def import_schema(self, schema: JsonObject, *, namespace: str) -> JsonObject:
         local = SchemaNode(schema).take_definitions()
         names = {
             name: self._target_name(namespace, name, definition)
@@ -27,7 +19,6 @@ class DefinitionRegistry:
         }
         _rewrite_references(schema, names)
 
-        imported: JsonObject = {}
         for name, definition in local.items():
             target = names[name]
             if target in self._definitions:
@@ -35,8 +26,7 @@ class DefinitionRegistry:
             rewritten = deepcopy(definition)
             _rewrite_references(rewritten, names)
             self._definitions[target] = rewritten
-            imported[target] = rewritten
-        return ImportedSchema(schema, imported)
+        return schema
 
     def _target_name(self, namespace: str, name: str, definition: JsonValue) -> str:
         if name not in self._definitions:

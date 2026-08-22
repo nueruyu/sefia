@@ -21,7 +21,8 @@ from sefia.llm.step_decision import (
     StepDecisionModel,
     StepDecisionSpec,
 )
-from sefia.llm.structured_output import StructuredValue
+from sefia.llm.json_schema import JsonValue
+from sefia.llm.structured_value import StructuredValue
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -74,10 +75,15 @@ class _StepDecisionFixture:
 
     def validate(
         self,
-        data: StructuredValue,
+        data: StructuredValue | JsonValue,
         tool_call_ids: ToolCallIdRegistry | None = None,
     ):
-        return self.decision_model.validate(data, tool_call_ids)
+        value = (
+            data
+            if isinstance(data, StructuredValue)
+            else StructuredValue.from_json(data)
+        )
+        return self.decision_model.validate(value, tool_call_ids)
 
 
 def _step(output_type: Any, tools: list[ToolEntry]) -> _StepDecisionFixture:
@@ -116,7 +122,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        structured_value_schema_factory=PydanticModelBackend(),
+        result_schema_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,
@@ -169,10 +175,12 @@ class TestToolsRequiredDecision:
     def test_process_decision_accepts_tool_calls(self):
         step = _step(Never, [_tool(chat_tool)])
 
-        data: StructuredValue = {
-            "decision": "tool_calls",
-            "tool_calls": [{"name": "chat_tool", "arguments": {}}],
-        }
+        data = StructuredValue.from_json(
+            {
+                "decision": "tool_calls",
+                "tool_calls": [{"name": "chat_tool", "arguments": {}}],
+            }
+        )
         result = step.validate(data, ToolCallIdRegistry())
 
         assert isinstance(result, ToolCallsDecision)

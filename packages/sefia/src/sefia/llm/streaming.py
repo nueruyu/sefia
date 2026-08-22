@@ -8,35 +8,33 @@ from .json_schema import SchemaPath
 
 @final
 @dataclass(frozen=True)
-class StructuredStringDelta:
+class StringDelta:
     path: SchemaPath
     text: str
 
 
 @final
 @dataclass(frozen=True)
-class StructuredStringEnd:
+class StringEnd:
     path: SchemaPath
     value: str
 
 
 @final
 @dataclass(frozen=True)
-class StructuredScalar:
+class Scalar:
     path: SchemaPath
     value: int | float | bool | None
 
 
-StructuredOutputEvent: TypeAlias = (
-    StructuredStringDelta | StructuredStringEnd | StructuredScalar
-)
-StructuredOutputCallback: TypeAlias = Callable[[StructuredOutputEvent], Awaitable[None]]
+OutputEvent: TypeAlias = StringDelta | StringEnd | Scalar
+OutputCallback: TypeAlias = Callable[[OutputEvent], Awaitable[None]]
 
 
 __all__ = [
-    "StructuredOutputCallback",
-    "StructuredOutputEvent",
-    "StructuredScalar",
-    "StructuredStringDelta",
-    "StructuredStringEnd",
+    "OutputCallback",
+    "OutputEvent",
+    "Scalar",
+    "StringDelta",
+    "StringEnd",
 ]

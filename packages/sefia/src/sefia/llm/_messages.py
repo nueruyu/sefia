@@ -1,7 +1,7 @@
 from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Any, Literal, cast
 
-from .structured_output import StructuredValue
+from .structured_value import StructuredValue
 
 
 def _to_serializable(value: Any, exclude_none: bool) -> Any:

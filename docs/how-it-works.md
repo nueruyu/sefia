@@ -89,7 +89,7 @@ A `StepDecisionSpec` selects one of three shapes:
 | no tools | `RESULT_ONLY` | `{ decision: "result", result: T }` only |
 
 `llm/step_decision.py` owns this logical shape. It retains tools and the result's
-`StructuredValueSchema` as separate components and validates decoded values as
+`ResultSchema` as separate components and validates decoded values as
 `StepDecision`s. `llm/json_schema` imports `$defs`, resolves name collisions, and
 rewrites local references without knowing about tools or Pydantic. Recursive JSON
 value types and `SchemaNode` accessors keep schema traversal out of `dict[str, Any]`.
@@ -101,18 +101,19 @@ Typed mappings are reversibly encoded as arrays of `{key, value}` entries. Raw J
 Schema tool arguments are validated without semantic rewriting.
 
 The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
-reflects callable parameters, while `_structured_value.py` produces a JSON Schema and
-restores a decoded structured value to its declared Python type. It does not know the
-step-decision shape. Provider-side response decoding and stream-path normalization
-stay inside the client implementation.
+reflects callable parameters, while `_result_schema.py` produces a JSON Schema and
+restores a decoded result to its declared Python type. Generic decoded-value shape
+operations live on `StructuredValue`; the backend does not know the step-decision
+shape. Provider-side response decoding and stream-path normalization stay inside the
+client implementation.
 
 `StepDecisionModel.from_spec()` composes these leaves into a model. It exposes the
 decision mode, result model, and tools, and validates the returned value as the
 corresponding `StepDecision`. An `LLMClient`
 owns decision-envelope composition, schema encoding, prompt fallback, response
 decoding, and structured-stream decoding needed by its model. Step-decision models
-live in `sefia.llm.step_decision`; Python-value schema interfaces and decoded value
-types live in `sefia.llm.structured_output`.
+live in `sefia.llm.step_decision`; result schema interfaces and decoded values live
+in `sefia.llm.result_schema` and `sefia.llm.structured_value`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 The core system prompt is `docstring + decision semantics + tool definitions`; the

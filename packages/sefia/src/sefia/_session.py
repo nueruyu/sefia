@@ -6,10 +6,10 @@ from typing_extensions import final
 
 from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import Policy
-from .llm.structured_output import StructuredValueSchemaFactory
+from .llm.model_backend import ModelBackend
 from ._interfaces.history_storage import HistoryStorage
 from ._profiles import Profile
-from ._tool_system import ToolCollector, ToolFunctionInspector
+from ._tool_system import ToolCollector
 from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
@@ -33,8 +33,7 @@ class Session:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
-        inspector: ToolFunctionInspector | None = None,
-        structured_value_schema_factory: StructuredValueSchemaFactory | None = None,
+        model_backend: ModelBackend | None = None,
         stream: bool = False,
         history_storage: HistoryStorage | None = None,
         max_repair_attempts: int = 2,
@@ -45,17 +44,10 @@ class Session:
         self._policies: list[Policy] = list(policies) if policies is not None else []
         self._history_storage = history_storage or GlyffHistoryStorage()
 
-        # One Pydantic backend supplies callable inspection and result schemas
-        # for whichever default seam the caller did not replace.
-        if inspector is None or structured_value_schema_factory is None:
-            default_backend = PydanticModelBackend()
-            inspector = inspector or default_backend
-            structured_value_schema_factory = (
-                structured_value_schema_factory or default_backend
-            )
+        model_backend = model_backend or PydanticModelBackend()
 
         self._tool_collector = tool_collector or DefaultToolCollector(
-            inspector=inspector
+            inspector=model_backend
         )
         prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
 
@@ -63,7 +55,7 @@ class Session:
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
-                structured_value_schema_factory=structured_value_schema_factory,
+                result_schema_factory=model_backend,
                 prompt_formatter=prompt_formatter,
                 json_default=pydantic_json_default,
                 stream=stream,

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Never, Protocol, cast
+from typing import Any, Never, cast
 
 import jsonschema.validators
 from typing_extensions import final
@@ -9,11 +9,9 @@ from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCallsDecision
 from .json_schema import JsonSchemaDocument
-from .structured_output import (
-    StructuredValue,
-    StructuredValueSchema,
-    StructuredValueSchemaFactory,
-)
+from ._tool_call_ids import ToolCallIdRegistry
+from .result_schema import ResultSchema, ResultSchemaFactory
+from .structured_value import StructuredValue
 
 
 class StepDecisionMode(Enum):
@@ -45,22 +43,6 @@ class StepDecisionSpec:
             raise ValueError(f"Unsupported step decision mode: {self.mode!r}")
 
     @classmethod
-    def tools_required(
-        cls, *, name: str, output_type: Any, tools: list[ToolEntry]
-    ) -> "StepDecisionSpec":
-        return cls(name, output_type, tools, StepDecisionMode.TOOLS_REQUIRED)
-
-    @classmethod
-    def tools_or_result(
-        cls, *, name: str, output_type: Any, tools: list[ToolEntry]
-    ) -> "StepDecisionSpec":
-        return cls(name, output_type, tools, StepDecisionMode.TOOLS_OR_RESULT)
-
-    @classmethod
-    def result_only(cls, *, name: str, output_type: Any) -> "StepDecisionSpec":
-        return cls(name, output_type, [], StepDecisionMode.RESULT_ONLY)
-
-    @classmethod
     def for_inference(
         cls, *, name: str, output_type: Any, tools: list[ToolEntry]
     ) -> "StepDecisionSpec":
@@ -70,14 +52,10 @@ class StepDecisionSpec:
                     "An @infer function returning Never must have tools available, "
                     "otherwise the inference loop can never make progress."
                 )
-            return cls.tools_required(name=name, output_type=output_type, tools=tools)
+            return cls(name, output_type, tools, StepDecisionMode.TOOLS_REQUIRED)
         if tools:
-            return cls.tools_or_result(name=name, output_type=output_type, tools=tools)
-        return cls.result_only(name=name, output_type=output_type)
-
-
-class ToolCallIdSource(Protocol):
-    def get_or_create(self, index: int) -> str: ...
+            return cls(name, output_type, tools, StepDecisionMode.TOOLS_OR_RESULT)
+        return cls(name, output_type, [], StepDecisionMode.RESULT_ONLY)
 
 
 @dataclass(frozen=True)
@@ -111,11 +89,8 @@ class _ToolModel:
         self._validator = validator_cls(schema)
 
     def validate(self, value: StructuredValue) -> dict[str, Any]:
-        if not isinstance(value, dict) or not all(
-            isinstance(key, str) for key in value
-        ):
-            raise ValueError("arguments must be an object with string keys")
-        value_dict = cast(dict[str, Any], value)
+        value.as_record("arguments")
+        value_dict = cast(dict[str, Any], value.to_python())
         errors = sorted(
             self._validator.iter_errors(value_dict),
             key=lambda error: list(error.path),
@@ -131,7 +106,7 @@ class StepDecisionModel:
     def from_spec(
         cls,
         spec: StepDecisionSpec,
-        value_schema_factory: StructuredValueSchemaFactory,
+        result_schema_factory: ResultSchemaFactory,
     ) -> "StepDecisionModel":
         tools = {
             tool.name: _ToolModel(
@@ -157,7 +132,7 @@ class StepDecisionModel:
         result = (
             None
             if spec.mode is StepDecisionMode.TOOLS_REQUIRED
-            else value_schema_factory.create(spec.output_type)
+            else result_schema_factory.create(spec.output_type)
         )
         return cls(spec, tools, result)
 
@@ -165,7 +140,7 @@ class StepDecisionModel:
         self,
         spec: StepDecisionSpec,
         tools: dict[str, _ToolModel],
-        result: StructuredValueSchema | None,
+        result: ResultSchema | None,
     ):
         self._spec = spec
         self._tools = tools
@@ -180,20 +155,23 @@ class StepDecisionModel:
         return tuple(tool.schema for tool in self._tools.values())
 
     @property
-    def result(self) -> StructuredValueSchema | None:
+    def result(self) -> ResultSchema | None:
         return self._result
 
     def validate(
-        self, value: StructuredValue, tool_call_ids: ToolCallIdSource | None
+        self, value: StructuredValue, tool_call_ids: ToolCallIdRegistry | None
     ) -> StepDecision:
         try:
-            data = _require_record(value, "step decision")
+            data = value.as_record("step decision")
             decision = data.get("decision")
-            if decision == "tool_calls":
+            decision_name = (
+                decision.as_string("decision") if decision is not None else None
+            )
+            if decision_name == "tool_calls":
                 if self._spec.mode is StepDecisionMode.RESULT_ONLY:
                     raise ValueError("tool_calls is not allowed")
                 return self._validate_tool_calls(data, tool_call_ids)
-            if decision == "result":
+            if decision_name == "result":
                 if self._spec.mode is StepDecisionMode.TOOLS_REQUIRED:
                     raise ValueError("result is not allowed")
                 return self._validate_result(data)
@@ -206,22 +184,20 @@ class StepDecisionModel:
     def _validate_tool_calls(
         self,
         data: dict[str, StructuredValue],
-        tool_call_ids: ToolCallIdSource | None,
+        tool_call_ids: ToolCallIdRegistry | None,
     ) -> ToolCallsDecision:
         _require_fields(data, {"decision", "tool_calls"})
-        calls = data["tool_calls"]
-        if not isinstance(calls, list) or not calls:
+        calls = data["tool_calls"].as_array("tool_calls")
+        if not calls:
             raise ValueError("tool_calls must be a non-empty array")
         if tool_call_ids is None:
             raise RuntimeError("Tool call ids are required for tool calls.")
 
         requests: list[ToolCallRequest] = []
         for index, value in enumerate(calls):
-            call = _require_record(value, "tool call")
+            call = value.as_record("tool call")
             _require_fields(call, {"name", "arguments"})
-            name = call["name"]
-            if not isinstance(name, str):
-                raise ValueError("tool name must be a string")
+            name = call["name"].as_string("tool name")
             tool = self._tools.get(name)
             if tool is None:
                 raise UnknownToolDecisionError(name)
@@ -239,14 +215,6 @@ class StepDecisionModel:
         if self._result is None:
             raise ValueError("result is not allowed")
         return ResultDecision(self._result.validate(data["result"]))
-
-
-def _require_record(
-    value: StructuredValue, description: str
-) -> dict[str, StructuredValue]:
-    if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
-        raise ValueError(f"{description} must be an object with string keys")
-    return cast(dict[str, StructuredValue], value)
 
 
 def _require_fields(value: dict[str, StructuredValue], expected: set[str]) -> None:
@@ -268,6 +236,5 @@ __all__ = [
     "StepDecisionModel",
     "StepDecisionSpec",
     "StepTool",
-    "ToolCallIdSource",
     "TypedToolArguments",
 ]

@@ -2,21 +2,21 @@ from jsonweir import IncrementalJsonParser
 from jsonweir import events as js
 
 from sefia.llm.streaming import (
-    StructuredOutputCallback,
-    StructuredOutputEvent,
-    StructuredScalar,
-    StructuredStringDelta,
-    StructuredStringEnd,
+    OutputCallback,
+    OutputEvent,
+    Scalar,
+    StringDelta,
+    StringEnd,
 )
 
 from ._adapter import LiteLLMPreparedSchema
 
 
-class StructuredOutputStreamer:
+class OutputEventStreamer:
     def __init__(
         self,
         prepared: LiteLLMPreparedSchema,
-        callback: StructuredOutputCallback,
+        callback: OutputCallback,
     ) -> None:
         self._prepared = prepared
         self._callback = callback
@@ -28,7 +28,7 @@ class StructuredOutputStreamer:
             if converted is not None:
                 await self._callback(converted)
 
-    def _convert(self, event: js.Event) -> StructuredOutputEvent | None:
+    def _convert(self, event: js.Event) -> OutputEvent | None:
         path = getattr(event, "path", None)
         if path is None:
             return None
@@ -36,11 +36,11 @@ class StructuredOutputStreamer:
         if logical_path is None:
             return None
         if isinstance(event, js.StringDelta):
-            return StructuredStringDelta(logical_path, event.text)
+            return StringDelta(logical_path, event.text)
         if isinstance(event, js.EndString):
-            return StructuredStringEnd(logical_path, event.value)
+            return StringEnd(logical_path, event.value)
         if isinstance(event, js.Scalar):
             if isinstance(event.value, str):
                 return None
-            return StructuredScalar(logical_path, event.value)
+            return Scalar(logical_path, event.value)
         return None

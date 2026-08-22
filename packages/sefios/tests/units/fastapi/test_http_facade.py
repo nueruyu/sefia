@@ -8,9 +8,9 @@ from sefia import Tools
 from sefia.llm import LLMClient, LLMResponse, Message
 from sefia.llm.step_decision import StepDecisionModel
 from sefia.llm.streaming import (
-    StructuredOutputCallback,
-    StructuredStringDelta,
-    StructuredStringEnd,
+    OutputCallback,
+    StringDelta,
+    StringEnd,
 )
 from sefia_fastapi.events import _SessionEvent
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
@@ -34,30 +34,30 @@ class StreamingClient(LLMClient):
         tools: list[dict[str, Any]] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[Any, Any, None]] | None = None,
-        structured_output_callback: StructuredOutputCallback | None = None,
+        output_callback: OutputCallback | None = None,
         reasoning_callback: (Callable[[str], Coroutine[Any, Any, None]] | None) = None,
     ) -> LLMResponse:
         content = self.responses.pop(0)
         if stream_callback is not None:
             for character in content:
                 await stream_callback(character)
-        if structured_output_callback is not None:
+        if output_callback is not None:
             payload = json.loads(content)
             for index, call in enumerate(payload.get("tool_calls", [])):
-                await structured_output_callback(
-                    StructuredStringEnd(("tool_calls", index, "name"), call["name"])
+                await output_callback(
+                    StringEnd(("tool_calls", index, "name"), call["name"])
                 )
                 for name, value in call["arguments"].items():
                     if isinstance(value, str):
                         for character in value:
-                            await structured_output_callback(
-                                StructuredStringDelta(
+                            await output_callback(
+                                StringDelta(
                                     ("tool_calls", index, "arguments", name),
                                     character,
                                 )
                             )
-                        await structured_output_callback(
-                            StructuredStringEnd(
+                        await output_callback(
+                            StringEnd(
                                 ("tool_calls", index, "arguments", name),
                                 value,
                             )

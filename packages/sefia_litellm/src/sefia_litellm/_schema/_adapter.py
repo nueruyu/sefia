@@ -18,7 +18,7 @@ from sefia.llm.step_decision import (
     StepTool,
     TypedToolArguments,
 )
-from sefia.llm.structured_output import StructuredValue, to_structured_value
+from sefia.llm.structured_value import StructuredValue
 
 from ._decoder import Decoder, DecoderFactory
 from ._normalization import CompatibilityValidator, MappingLowerer, SchemaNormalizer
@@ -33,10 +33,14 @@ class LiteLLMPreparedSchema:
     _decoder: Decoder
 
     def decode(self, data: JsonValue) -> StructuredValue:
-        value = to_structured_value(data)
-        if not isinstance(value, dict) or set(value) != {"payload"}:
+        value = StructuredValue.from_json(data)
+        try:
+            fields = value.as_record()
+        except ValueError:
             return value
-        return self._decoder.decode(value["payload"])
+        if set(fields) != {"payload"}:
+            return value
+        return self._decoder.decode(fields["payload"])
 
     def normalize_stream_path(self, path: SchemaPath) -> SchemaPath | None:
         return path[1:] if path and path[0] == "payload" else path
@@ -55,26 +59,56 @@ class _StepDecisionDecoder:
         self._tools = tools
 
     def decode(self, data: StructuredValue) -> StructuredValue:
-        if not isinstance(data, dict):
+        try:
+            fields = data.as_record()
+        except ValueError:
             return data
-        decision = data.get("decision")
-        if decision == "result" and self._result is not None and "result" in data:
-            return {**data, "result": self._result.decode(data["result"])}
-        tool_calls = data.get("tool_calls")
-        if decision != "tool_calls" or not isinstance(tool_calls, list):
+        decision = fields.get("decision")
+        if decision is None:
+            return data
+        try:
+            decision_name = decision.as_string()
+        except ValueError:
+            return data
+        if (
+            decision_name == "result"
+            and self._result is not None
+            and "result" in fields
+        ):
+            return StructuredValue.object(
+                {**fields, "result": self._result.decode(fields["result"])}
+            )
+        tool_calls = fields.get("tool_calls")
+        if decision_name != "tool_calls" or tool_calls is None:
+            return data
+        try:
+            values = tool_calls.as_array()
+        except ValueError:
             return data
         calls: list[StructuredValue] = []
-        for value in tool_calls:
-            if not isinstance(value, dict):
+        for value in values:
+            try:
+                call = value.as_record()
+            except ValueError:
                 calls.append(value)
                 continue
-            name = value.get("name")
-            decoder = self._tools.get(name) if isinstance(name, str) else None
-            if decoder is None or "arguments" not in value:
+            name = call.get("name")
+            try:
+                tool_name = name.as_string() if name is not None else None
+            except ValueError:
+                tool_name = None
+            decoder = self._tools.get(tool_name) if tool_name is not None else None
+            if decoder is None or "arguments" not in call:
                 calls.append(value)
                 continue
-            calls.append({**value, "arguments": decoder.decode(value["arguments"])})
-        return {**data, "tool_calls": calls}
+            calls.append(
+                StructuredValue.object(
+                    {**call, "arguments": decoder.decode(call["arguments"])}
+                )
+            )
+        return StructuredValue.object(
+            {**fields, "tool_calls": StructuredValue.array(calls)}
+        )
 
 
 @dataclass(frozen=True)
@@ -138,7 +172,7 @@ def _compose_decision(
         assert result is not None
         imported = registry.import_schema(result.schema, namespace="result")
         branches.append(
-            _closed_object({"decision": _literal("result"), "result": imported.schema})
+            _closed_object({"decision": _literal("result"), "result": imported})
         )
     if len(branches) == 1:
         return branches[0]
@@ -157,9 +191,7 @@ def _tool_calls_branch(
     calls: list[JsonObject] = []
     for name, fragment in tools.items():
         imported = registry.import_schema(fragment.schema, namespace=name)
-        calls.append(
-            _closed_object({"name": _literal(name), "arguments": imported.schema})
-        )
+        calls.append(_closed_object({"name": _literal(name), "arguments": imported}))
     items: JsonObject = (
         calls[0]
         if len(calls) == 1

@@ -8,6 +8,7 @@ from sefia import Policy, Tools, policy
 from sefia._authoring.metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.llm import LLMResponse
+from sefia.llm.step_decision import StepDecisionMode, StepDecisionModel
 from sefia.testing import (
     MockLLMClient,
     memory_session,
@@ -272,10 +273,10 @@ async def test_inference_on_standalone_function():
 
     assert summary == "This is a summary."
     assert len(mock_llm.requests) == 1
-    # Check that the schema passed to the LLM does not include the optional `tool_calls`
     decision_model = mock_llm.requests[0].get("decision_model")
-    assert decision_model is not None
-    assert "tool_calls" not in decision_model.document.to_dict().get("properties", {})
+    assert isinstance(decision_model, StepDecisionModel)
+    assert decision_model.mode is StepDecisionMode.RESULT_ONLY
+    assert decision_model.tools == ()
 
 
 def test_policy_attaches_metadata():

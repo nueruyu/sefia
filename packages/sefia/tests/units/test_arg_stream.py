@@ -18,10 +18,10 @@ from sefia.llm._arg_stream import (
 from sefia.llm._client import LLMClient
 from sefia.llm.step_decision import StepDecisionModel
 from sefia.llm.streaming import (
-    StructuredOutputCallback,
-    StructuredScalar,
-    StructuredStringDelta,
-    StructuredStringEnd,
+    OutputCallback,
+    Scalar as OutputScalar,
+    StringDelta as OutputStringDelta,
+    StringEnd as OutputStringEnd,
 )
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import (
@@ -84,7 +84,7 @@ def _feed_events(streamer: ToolArgStreamer, text: str, chunk_size: int) -> None:
         for field, field_value in call.items():
             if field == "name":
                 streamer.on_event(
-                    StructuredStringEnd(("tool_calls", index, "name"), field_value)
+                    OutputStringEnd(("tool_calls", index, "name"), field_value)
                 )
             elif field == "arguments":
                 for name, value in field_value.items():
@@ -92,13 +92,13 @@ def _feed_events(streamer: ToolArgStreamer, text: str, chunk_size: int) -> None:
                     if isinstance(value, str):
                         for start in range(0, len(value), chunk_size):
                             streamer.on_event(
-                                StructuredStringDelta(
+                                OutputStringDelta(
                                     path, value[start : start + chunk_size]
                                 )
                             )
-                        streamer.on_event(StructuredStringEnd(path, value))
+                        streamer.on_event(OutputStringEnd(path, value))
                     else:
-                        streamer.on_event(StructuredScalar(path, value))
+                        streamer.on_event(OutputScalar(path, value))
 
 
 # --- router unit tests --------------------------------------------------------
@@ -180,7 +180,7 @@ async def test_logs_token_processing_exception_and_closes_channels(
     streamer._dispatch = Mock(side_effect=RuntimeError("boom"))
 
     with caplog.at_level(logging.ERROR, logger="sefia.llm._arg_stream"):
-        streamer.on_event(StructuredScalar(("tool_calls",), None))
+        streamer.on_event(OutputScalar(("tool_calls",), None))
 
     assert streamer._channels == {}
     assert "Error processing event in ToolArgStreamer" in caplog.text
@@ -269,30 +269,26 @@ class StreamingClient(LLMClient):
         tools: list[dict[str, Any]] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
-        structured_output_callback: StructuredOutputCallback | None = None,
+        output_callback: OutputCallback | None = None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMResponse:
         if stream_callback is not None:
             for char in self.content:
                 await stream_callback(char)
-        if structured_output_callback is not None:
+        if output_callback is not None:
             payload = json.loads(self.content)
             for index, call in enumerate(payload.get("tool_calls", [])):
-                await structured_output_callback(
-                    StructuredStringEnd(("tool_calls", index, "name"), call["name"])
+                await output_callback(
+                    OutputStringEnd(("tool_calls", index, "name"), call["name"])
                 )
                 for name, value in call["arguments"].items():
                     path = ("tool_calls", index, "arguments", name)
                     if isinstance(value, str):
                         for character in value:
-                            await structured_output_callback(
-                                StructuredStringDelta(path, character)
-                            )
-                        await structured_output_callback(
-                            StructuredStringEnd(path, value)
-                        )
+                            await output_callback(OutputStringDelta(path, character))
+                        await output_callback(OutputStringEnd(path, value))
                     else:
-                        await structured_output_callback(StructuredScalar(path, value))
+                        await output_callback(OutputScalar(path, value))
         return LLMResponse(content=self.content)
 
 
@@ -317,7 +313,7 @@ async def test_arguments_stream_through_a_real_strategy():
     formatter.format_arguments.return_value = "<arguments/>"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
-        structured_value_schema_factory=PydanticModelBackend(),
+        result_schema_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         stream=True,
     )

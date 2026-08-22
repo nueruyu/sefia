@@ -18,14 +18,19 @@ from sefia.inference import FunctionInfo, StepDecision, ToolCallsDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm.json_schema import SchemaNode
-from sefia.llm.streaming import StructuredOutputEvent
-from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
+from sefia.llm.streaming import OutputEvent
+from sefia.llm.structured_value import StructuredValue
+from sefia.llm.step_decision import (
+    StepDecisionMode,
+    StepDecisionModel,
+    StepDecisionSpec,
+)
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import ArgStream, StringEnd
 from sefia_litellm._schema import LiteLLMStructuredOutputAdapter
-from sefia_litellm._schema._streaming import StructuredOutputStreamer
+from sefia_litellm._schema._streaming import OutputEventStreamer
 
 
 def _decision_model(output_type: Any, tools: list[ToolEntry]) -> StepDecisionModel:
@@ -68,7 +73,7 @@ async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
         {"ask_user": collect},
         lambda index: f"call-{index}",
     )
-    wire_streamer = StructuredOutputStreamer(
+    wire_streamer = OutputEventStreamer(
         prepared, lambda event: _dispatch_event(streamer, event)
     )
     await wire_streamer.feed(
@@ -80,9 +85,7 @@ async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
     assert StringEnd(name="question", value="Hello") in events
 
 
-async def _dispatch_event(
-    streamer: ToolArgStreamer, event: StructuredOutputEvent
-) -> None:
+async def _dispatch_event(streamer: ToolArgStreamer, event: OutputEvent) -> None:
     streamer.on_event(event)
 
 
@@ -640,17 +643,19 @@ def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
 
 def test_step_decision_spec_rejects_tool_modes_without_tools() -> None:
     with pytest.raises(ValueError, match="require at least one tool"):
-        StepDecisionSpec.tools_required(
-            name="StepDecision",
-            output_type=Never,
-            tools=[],
+        StepDecisionSpec(
+            "StepDecision",
+            Never,
+            [],
+            StepDecisionMode.TOOLS_REQUIRED,
         )
 
     with pytest.raises(ValueError, match="require at least one tool"):
-        StepDecisionSpec.tools_or_result(
-            name="StepDecision",
-            output_type=str,
-            tools=[],
+        StepDecisionSpec(
+            "StepDecision",
+            str,
+            [],
+            StepDecisionMode.TOOLS_OR_RESULT,
         )
 
 
@@ -661,13 +666,15 @@ class TestToolCallValidation:
         client = Mock(spec=LLMClient)
         client.complete.return_value = LLMResponse(
             content=content,
-            structured_output=cast(dict[str, Any], json.loads(content))["payload"],
+            structured_output=StructuredValue.from_json(
+                cast(dict[str, Any], json.loads(content))["payload"]
+            ),
         )
         formatter = Mock()
         formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=client,
-            structured_value_schema_factory=PydanticModelBackend(),
+            result_schema_factory=PydanticModelBackend(),
             prompt_formatter=formatter,
         )
 

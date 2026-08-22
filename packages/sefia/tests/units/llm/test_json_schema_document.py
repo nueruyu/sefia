@@ -89,9 +89,8 @@ def test_definition_registry_imports_definitions_and_rewrites_references() -> No
 
     imported = registry.import_schema(fragment, namespace="search")
 
-    assert imported.schema == {"$ref": "#/$defs/Item"}
-    assert imported.definitions == {"Item": {"type": "string"}}
-    assert definitions == imported.definitions
+    assert imported == {"$ref": "#/$defs/Item"}
+    assert definitions == {"Item": {"type": "string"}}
 
 
 def test_definition_registry_renames_conflicting_definitions() -> None:
@@ -104,8 +103,7 @@ def test_definition_registry_renames_conflicting_definitions() -> None:
 
     imported = registry.import_schema(fragment, namespace="search")
 
-    assert imported.schema == {"$ref": "#/$defs/search__Item"}
-    assert imported.definitions == {"search__Item": {"type": "integer"}}
+    assert imported == {"$ref": "#/$defs/search__Item"}
     assert definitions == {
         "Item": {"type": "string"},
         "search__Item": {"type": "integer"},

@@ -10,9 +10,9 @@ from typing import Literal
 
 from sefia.streaming import ArgStream
 from sefia.llm.streaming import (
-    StructuredOutputEvent,
-    StructuredStringDelta,
-    StructuredStringEnd,
+    OutputEvent,
+    StringDelta as OutputStringDelta,
+    StringEnd as OutputStringEnd,
 )
 
 from ..streaming import (
@@ -121,7 +121,7 @@ class ToolArgStreamer:
         self._channels: dict[int, _ArgStreamChannel] = {}
         self._tasks: list[asyncio.Task[None]] = []
 
-    def on_event(self, event: StructuredOutputEvent) -> None:
+    def on_event(self, event: OutputEvent) -> None:
         try:
             self._dispatch(event)
         except Exception:
@@ -142,13 +142,13 @@ class ToolArgStreamer:
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
-    def _dispatch(self, event: StructuredOutputEvent) -> None:
+    def _dispatch(self, event: OutputEvent) -> None:
         tool_path = parse_tool_call_path(event.path)
         if tool_path is None:
             return
 
         if tool_path.field == "name":
-            if isinstance(event, StructuredStringEnd):
+            if isinstance(event, OutputStringEnd):
                 self._resolve_tool_name(tool_path.index, event.value)
             return
 
@@ -199,15 +199,13 @@ class ToolArgStreamer:
             )
 
 
-def _to_arg_event(
-    tool_path: ToolCallPath, event: StructuredOutputEvent
-) -> ArgEvent | None:
+def _to_arg_event(tool_path: ToolCallPath, event: OutputEvent) -> ArgEvent | None:
     name = tool_path.argument_name
     if name is None:
         return None
 
-    if isinstance(event, StructuredStringDelta):
+    if isinstance(event, OutputStringDelta):
         return StringDelta(name=name, text=event.text)
-    if isinstance(event, StructuredStringEnd):
+    if isinstance(event, OutputStringEnd):
         return StringEnd(name=name, value=event.value)
     return Scalar(name=name, value=event.value)

@@ -3,7 +3,7 @@ from typing import Any, Callable, Coroutine
 
 from sefia.llm._messages import LLMResponse, Message
 from sefia.llm.step_decision import StepDecisionModel
-from sefia.llm.streaming import StructuredOutputCallback
+from sefia.llm.streaming import OutputCallback
 
 
 class LLMClient(ABC):
@@ -18,7 +18,7 @@ class LLMClient(ABC):
         tools: list[dict[str, Any]] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
-        structured_output_callback: StructuredOutputCallback | None = None,
+        output_callback: OutputCallback | None = None,
         reasoning_callback: (
             Callable[[str], Coroutine[None, None, None]] | None
         ) = None,

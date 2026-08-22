@@ -12,7 +12,7 @@ from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
 from sefia.llm.json_schema import JsonObject, require_json_value
 from sefia.llm.step_decision import StepDecisionModel
-from sefia.llm.streaming import StructuredOutputCallback
+from sefia.llm.streaming import OutputCallback
 
 from .exceptions import (
     InferenceConnectionError,
@@ -21,7 +21,7 @@ from .exceptions import (
     InferenceTimeoutError,
 )
 from ._schema import LiteLLMPreparedSchema, LiteLLMStructuredOutputAdapter
-from ._schema._streaming import StructuredOutputStreamer
+from ._schema._streaming import OutputEventStreamer
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage
@@ -173,7 +173,7 @@ class LiteLLMClient(LLMClient):
         tools: list[dict[str, Any]] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
-        structured_output_callback: StructuredOutputCallback | None = None,
+        output_callback: OutputCallback | None = None,
         reasoning_callback: (
             Callable[[str], Coroutine[None, None, None]] | None
         ) = None,
@@ -209,7 +209,7 @@ class LiteLLMClient(LLMClient):
                 raw_messages, prepared.wire_schema.to_dict()
             )
 
-        if stream_callback or structured_output_callback or reasoning_callback:
+        if stream_callback or output_callback or reasoning_callback:
             kwargs["stream"] = True
 
         try:
@@ -230,7 +230,7 @@ class LiteLLMClient(LLMClient):
                 return await self._handle_stream(
                     stream,
                     stream_callback,
-                    structured_output_callback,
+                    output_callback,
                     reasoning_callback,
                     raw_messages,
                     prepared,
@@ -251,7 +251,7 @@ class LiteLLMClient(LLMClient):
         self,
         stream: AsyncIterator[Any],
         callback: Callable[[str], Coroutine[None, None, None]] | None,
-        structured_output_callback: StructuredOutputCallback | None,
+        output_callback: OutputCallback | None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
         raw_messages: list[dict[str, Any]],
         prepared: LiteLLMPreparedSchema | None,
@@ -265,9 +265,9 @@ class LiteLLMClient(LLMClient):
         # so we accumulate reasoning deltas ourselves and attach them to the final
         # response below.
         reasoning_parts: list[str] = []
-        structured_streamer = (
-            StructuredOutputStreamer(prepared, structured_output_callback)
-            if prepared is not None and structured_output_callback is not None
+        output_event_streamer = (
+            OutputEventStreamer(prepared, output_callback)
+            if prepared is not None and output_callback is not None
             else None
         )
         async for chunk in stream:
@@ -285,8 +285,8 @@ class LiteLLMClient(LLMClient):
             if content:
                 if callback:
                     await callback(content)
-                if structured_streamer is not None:
-                    await structured_streamer.feed(content)
+                if output_event_streamer is not None:
+                    await output_event_streamer.feed(content)
 
         build_stream_response = cast(
             Callable[..., ModelResponse | None],
