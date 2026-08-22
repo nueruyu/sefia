@@ -1,16 +1,16 @@
 from dataclasses import dataclass
+from typing import cast
+
 from typing_extensions import final
 
 from sefia.llm.json_schema import (
     JsonObject,
-    JsonSchemaDocument,
+    JsonScalar,
     SchemaKeyword,
     SchemaNode,
     SchemaPath,
 )
 from sefia.llm.llm_output import LLMOutput
-
-from ._mapping_restoration import restore_mappings
 
 K = SchemaKeyword
 
@@ -23,14 +23,14 @@ _PROPERTY_TO_ITEM_CONSTRAINT = {
 
 @final
 @dataclass(frozen=True)
-class DictionarySchema:
+class UniformDictionarySchema:
     key_schema: JsonObject
     value_schema: JsonObject
     annotations: JsonObject
     entry_array_constraints: JsonObject
 
     @classmethod
-    def from_node(cls, node: SchemaNode) -> "DictionarySchema":
+    def from_node(cls, node: SchemaNode) -> "UniformDictionarySchema":
         values = node.additional_properties()
         if node.type != "object" or not isinstance(values, SchemaNode):
             raise ValueError("node is not a dictionary schema")
@@ -69,39 +69,34 @@ class DictionarySchema:
 
 @final
 @dataclass(frozen=True)
-class LoweredMappingSchema:
-    wire_schema: JsonObject
+class UniformDictionaryFormat:
+    schema: JsonObject
     restoration_paths: frozenset[SchemaPath]
 
+    @classmethod
+    def from_schema(cls, schema: JsonObject) -> "UniformDictionaryFormat":
+        restoration_paths: set[SchemaPath] = set()
+        while cursor := _find_dictionary_schema(schema):
+            path, node, dictionary = cursor
+            replacement = dictionary.to_entry_array_schema()
+            node.value.clear()
+            node.value.update(replacement)
+            restoration_paths.add(path)
+        return cls(schema, frozenset(restoration_paths))
+
     def decode(self, output: LLMOutput) -> LLMOutput:
-        return restore_mappings(
-            output,
-            schema=self.wire_schema,
-            restoration_paths=self.restoration_paths,
-        )
-
-
-def lower_mapping_schemas(schema: JsonObject) -> LoweredMappingSchema:
-    restoration_paths: set[SchemaPath] = set()
-    while cursor := _find_dictionary_schema(schema):
-        path, node, dictionary = cursor
-        replacement = dictionary.to_entry_array_schema()
-        node.value.clear()
-        node.value.update(replacement)
-        restoration_paths.add(path)
-    wire_schema = JsonSchemaDocument(schema).mutable_copy()
-    return LoweredMappingSchema(wire_schema, frozenset(restoration_paths))
+        return _decode(output, self.schema, self.schema, self.restoration_paths, ())
 
 
 def _find_dictionary_schema(
     schema: JsonObject,
-) -> tuple[SchemaPath, SchemaNode, DictionarySchema] | None:
+) -> tuple[SchemaPath, SchemaNode, UniformDictionarySchema] | None:
     for cursor in SchemaNode(schema).walk():
         if _is_dictionary_schema(cursor.node):
             return (
                 cursor.path,
                 cursor.node,
-                DictionarySchema.from_node(cursor.node),
+                UniformDictionarySchema.from_node(cursor.node),
             )
     return None
 
@@ -110,3 +105,155 @@ def _is_dictionary_schema(node: SchemaNode) -> bool:
     return node.type == "object" and isinstance(
         node.additional_properties(), SchemaNode
     )
+
+
+def _decode(
+    output: LLMOutput,
+    schema: JsonObject,
+    root: JsonObject,
+    restoration_paths: frozenset[SchemaPath],
+    path: SchemaPath,
+) -> LLMOutput:
+    schema, path = _resolve(schema, root, path)
+    node = SchemaNode(schema)
+    if path in restoration_paths:
+        return _decode_dictionary(output, node, root, restoration_paths, path)
+
+    for index, alternative in enumerate(node.any_of()):
+        if _matches(output.data, alternative.value, root):
+            return _decode(
+                output,
+                alternative.value,
+                root,
+                restoration_paths,
+                (*path, K.ANY_OF, index),
+            )
+
+    if node.type == "object":
+        return _decode_object(output, node, root, restoration_paths, path)
+    if node.type == "array":
+        return _decode_array(output, node, root, restoration_paths, path)
+    return output
+
+
+def _resolve(
+    schema: JsonObject,
+    root: JsonObject,
+    path: SchemaPath,
+) -> tuple[JsonObject, SchemaPath]:
+    node = SchemaNode(schema)
+    reference = node.local_reference
+    if reference is None:
+        return schema, path
+    resolved = node.resolve_local_reference(SchemaNode(root))
+    if resolved is None:
+        return schema, path
+    return resolved.value, (K.DEFINITIONS, reference.definition, *reference.path)
+
+
+def _matches(data: object, schema: JsonObject, root: JsonObject) -> bool:
+    schema, _ = _resolve(schema, root, ())
+    node = SchemaNode(schema)
+    if K.CONST in schema and data != schema[K.CONST]:
+        return False
+    if node.type == "null":
+        return data is None
+    if node.type == "object":
+        if not isinstance(data, dict):
+            return False
+        required_names = set(node.required() or ())
+        return required_names <= set(cast(dict[object, object], data).keys())
+    if node.type == "array":
+        return isinstance(data, list)
+    if node.type == "string":
+        return isinstance(data, str)
+    if node.type == "integer":
+        return isinstance(data, int) and not isinstance(data, bool)
+    if node.type == "number":
+        return isinstance(data, int | float) and not isinstance(data, bool)
+    if node.type == "boolean":
+        return isinstance(data, bool)
+    return True
+
+
+def _decode_object(
+    output: LLMOutput,
+    node: SchemaNode,
+    root: JsonObject,
+    restoration_paths: frozenset[SchemaPath],
+    path: SchemaPath,
+) -> LLMOutput:
+    try:
+        fields = output.to_object()
+    except ValueError:
+        return output
+    properties = node.properties()
+    return LLMOutput.from_object(
+        {
+            name: _decode(
+                value,
+                properties[name].value,
+                root,
+                restoration_paths,
+                (*path, K.PROPERTIES, name),
+            )
+            if name in properties
+            else value
+            for name, value in fields.items()
+        }
+    )
+
+
+def _decode_array(
+    output: LLMOutput,
+    node: SchemaNode,
+    root: JsonObject,
+    restoration_paths: frozenset[SchemaPath],
+    path: SchemaPath,
+) -> LLMOutput:
+    items = node.items()
+    if items is None:
+        return output
+    try:
+        values = output.to_array()
+    except ValueError:
+        return output
+    return LLMOutput.from_array(
+        _decode(value, items.value, root, restoration_paths, (*path, K.ITEMS))
+        for value in values
+    )
+
+
+def _decode_dictionary(
+    output: LLMOutput,
+    node: SchemaNode,
+    root: JsonObject,
+    restoration_paths: frozenset[SchemaPath],
+    path: SchemaPath,
+) -> LLMOutput:
+    items = node.items()
+    properties = items.properties() if items is not None else {}
+    if set(properties) != {"key", "value"}:
+        raise ValueError("lowered mapping schema is missing key/value entries")
+    result: dict[JsonScalar, LLMOutput] = {}
+    for output_entry in output.to_array():
+        fields = output_entry.to_object("mapping entry")
+        if set(fields) != {"key", "value"}:
+            raise ValueError("mapping entries must contain only key and value")
+        key = _decode(
+            fields["key"],
+            properties["key"].value,
+            root,
+            restoration_paths,
+            (*path, K.ITEMS, K.PROPERTIES, "key"),
+        ).to_scalar("mapping key")
+        if key in result:
+            raise ValueError(f"duplicate mapping key: {key!r}")
+        result[key] = _decode(
+            fields["value"],
+            properties["value"].value,
+            root,
+            restoration_paths,
+            (*path, K.ITEMS, K.PROPERTIES, "value"),
+        )
+    return LLMOutput.from_mapping(result)

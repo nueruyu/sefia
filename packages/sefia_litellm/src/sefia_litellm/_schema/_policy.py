@@ -5,7 +5,7 @@ from typing_extensions import final
 
 from sefia.llm.json_schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
 
-from ._mapping import LoweredMappingSchema, lower_mapping_schemas
+from ._mapping import UniformDictionaryFormat
 
 K = SchemaKeyword
 
@@ -80,18 +80,18 @@ USER_DEFINED_SCHEMA_POLICY = SchemaPolicy(
 @dataclass(frozen=True)
 class PreparedSchema:
     wire_schema: JsonObject
-    lowered_mappings: LoweredMappingSchema | None
+    dictionary_format: UniformDictionaryFormat | None
 
 
 def prepare_schema(schema: JsonObject, policy: SchemaPolicy) -> PreparedSchema:
     _apply_corrections(schema, policy)
-    lowered_mappings = (
-        lower_mapping_schemas(schema)
+    dictionary_format = (
+        UniformDictionaryFormat.from_schema(schema)
         if policy.mappings is MappingAction.LOWER_TO_ENTRIES
         else None
     )
     _validate(schema, policy.constraints)
-    return PreparedSchema(schema, lowered_mappings)
+    return PreparedSchema(schema, dictionary_format)
 
 
 def _apply_corrections(schema: JsonObject, policy: SchemaPolicy) -> None:

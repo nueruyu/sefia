@@ -6,7 +6,7 @@ from sefia.llm.json_schema import JsonObject, JsonSchemaDocument
 from sefia.llm.llm_output import LLMOutput
 from sefia.llm.step_decision import StepTool, TypedToolArguments
 
-from ._mapping import LoweredMappingSchema
+from ._mapping import UniformDictionaryFormat
 from ._policy import (
     GENERATED_SCHEMA_POLICY,
     USER_DEFINED_SCHEMA_POLICY,
@@ -19,7 +19,7 @@ from ._policy import (
 @dataclass(frozen=True)
 class StructuredValueFormat:
     schema: JsonObject
-    lowered_mappings: LoweredMappingSchema | None
+    dictionary_format: UniformDictionaryFormat | None
 
     @classmethod
     def from_generated_schema(
@@ -42,9 +42,9 @@ class StructuredValueFormat:
         cls, document: JsonSchemaDocument, policy: SchemaPolicy
     ) -> "StructuredValueFormat":
         prepared = prepare_schema(document.mutable_copy(), policy)
-        return cls(prepared.wire_schema, prepared.lowered_mappings)
+        return cls(prepared.wire_schema, prepared.dictionary_format)
 
     def decode(self, output: LLMOutput) -> LLMOutput:
-        if self.lowered_mappings is None:
+        if self.dictionary_format is None:
             return output
-        return self.lowered_mappings.decode(output)
+        return self.dictionary_format.decode(output)
