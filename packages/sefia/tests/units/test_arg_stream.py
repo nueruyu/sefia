@@ -1,4 +1,5 @@
 import logging
+import json
 from collections.abc import Callable, Coroutine
 from typing import Any
 from unittest.mock import Mock
@@ -7,7 +8,7 @@ import pytest
 
 from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
-from sefia.inference import FunctionInfo, ToolCallDecision
+from sefia.inference import FunctionInfo, ToolCallsDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse, Message
 from sefia.llm._arg_stream import (
     ToolArgStreamer,
@@ -15,6 +16,13 @@ from sefia.llm._arg_stream import (
     parse_tool_call_path,
 )
 from sefia.llm._client import LLMClient
+from sefia.llm.step_decision import StepDecisionModel
+from sefia.llm.streaming import (
+    OutputStreamCallback,
+    Scalar as OutputScalar,
+    StringDelta as OutputStringDelta,
+    StringEnd as OutputStringEnd,
+)
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import (
     ArgStream,
@@ -47,8 +55,7 @@ async def run_router(
     collector = Collector()
     streamer = ToolArgStreamer({tool: collector}, _tool_call_id)
 
-    for start in range(0, len(json_text), chunk_size):
-        streamer.on_token(json_text[start : start + chunk_size])
+    _feed_events(streamer, json_text, chunk_size)
     await streamer.close()
     return collector.events
 
@@ -59,14 +66,39 @@ async def run_router_handlers(
     collectors = {name: Collector() for name in tools}
     streamer = ToolArgStreamer(dict(collectors), _tool_call_id)
 
-    for start in range(0, len(json_text), chunk_size):
-        streamer.on_token(json_text[start : start + chunk_size])
+    _feed_events(streamer, json_text, chunk_size)
     await streamer.close()
     return {name: collector.events for name, collector in collectors.items()}
 
 
 def _delta_text(events: list[Any]) -> str:
     return "".join(e.text for e in events if isinstance(e, StringDelta))
+
+
+def _feed_events(streamer: ToolArgStreamer, text: str, chunk_size: int) -> None:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return
+    for index, call in enumerate(payload.get("tool_calls", [])):
+        for field, field_value in call.items():
+            if field == "name":
+                streamer.on_event(
+                    OutputStringEnd(("tool_calls", index, "name"), field_value)
+                )
+            elif field == "arguments":
+                for name, value in field_value.items():
+                    path = ("tool_calls", index, "arguments", name)
+                    if isinstance(value, str):
+                        for start in range(0, len(value), chunk_size):
+                            streamer.on_event(
+                                OutputStringDelta(
+                                    path, value[start : start + chunk_size]
+                                )
+                            )
+                        streamer.on_event(OutputStringEnd(path, value))
+                    else:
+                        streamer.on_event(OutputScalar(path, value))
 
 
 # --- router unit tests --------------------------------------------------------
@@ -148,11 +180,10 @@ async def test_logs_token_processing_exception_and_closes_channels(
     streamer._dispatch = Mock(side_effect=RuntimeError("boom"))
 
     with caplog.at_level(logging.ERROR, logger="sefia.llm._arg_stream"):
-        streamer.on_token('{"tool_calls":[]}')
+        streamer.on_event(OutputScalar(("tool_calls",), None))
 
-    assert streamer._stopped is True
     assert streamer._channels == {}
-    assert "Error processing token in ToolArgStreamer" in caplog.text
+    assert "Error processing event in ToolArgStreamer" in caplog.text
     with pytest.raises(StopAsyncIteration):
         await anext(channel)
 
@@ -236,13 +267,28 @@ class StreamingClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
-        output_schema: dict[str, Any] | None = None,
+        decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
+        output_callback: OutputStreamCallback | None = None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMResponse:
         if stream_callback is not None:
             for char in self.content:
                 await stream_callback(char)
+        if output_callback is not None:
+            payload = json.loads(self.content)
+            for index, call in enumerate(payload.get("tool_calls", [])):
+                await output_callback(
+                    OutputStringEnd(("tool_calls", index, "name"), call["name"])
+                )
+                for name, value in call["arguments"].items():
+                    path = ("tool_calls", index, "arguments", name)
+                    if isinstance(value, str):
+                        for character in value:
+                            await output_callback(OutputStringDelta(path, character))
+                        await output_callback(OutputStringEnd(path, value))
+                    else:
+                        await output_callback(OutputScalar(path, value))
         return LLMResponse(content=self.content)
 
 
@@ -267,7 +313,7 @@ async def test_arguments_stream_through_a_real_strategy():
     formatter.format_arguments.return_value = "<arguments/>"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
-        decision_builder=PydanticModelBackend(),
+        result_format_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         stream=True,
     )
@@ -287,7 +333,7 @@ async def test_arguments_stream_through_a_real_strategy():
         publisher=publisher,
     )
 
-    assert isinstance(decision, ToolCallDecision)
+    assert isinstance(decision, ToolCallsDecision)
     assert collector.tool_call_ids == [decision.calls[0].id]
     assert (
         "".join(e.text for e in collector.events if isinstance(e, StringDelta))

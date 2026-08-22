@@ -34,7 +34,8 @@ sefios ─┬▶ sefia
         └▶ sefia_fastapi        (optional: sefios[fastapi])
 
 sefia_litellm ─┬▶ sefia
-               └▶ litellm
+               ├▶ litellm
+               └▶ jsonweir
 
 sefia_typer ─┬▶ sefia
              └▶ typer / rich
@@ -43,8 +44,7 @@ sefia_fastapi ─┬▶ sefia
                └▶ fastapi
 
 sefia ─┬▶ pydantic
-       ├▶ glyff / glyff-file-store / glyff-pydantic
-       └▶ jsonweir
+       └▶ glyff / glyff-file-store / glyff-pydantic
 
 jsonweir is a separate package published on PyPI, not a workspace member.
 ```
@@ -78,7 +78,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `_authoring/` | Authoring API split by responsibility: domain ownership and runtime engraving, inference assembly, profile/policy selection, tool markers, and decorator metadata. | `Domain`, `concurrent`, `preview`, `policy`, `profile` |
 | `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
 | `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
-| `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallDecision`, `FinalAnswerDecision` |
+| `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallsDecision`, `ResultDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |
 | `_history.py` | The run's conversation history as pure in-memory state (loading/persistence/step-count live on the executor). | `StepHistory` |
@@ -90,8 +90,8 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: `_strategy.py` orchestrates calls and repair, `_execution_directors.py` owns execution modes and decision conversion, `_message_builder.py` serializes calls/history, and `_tool_call_ids.py` keeps streamed and final tool-call identities stable. | `LLMInferenceStrategy`, `LLMClient`, prompt formatters |
-| `pydantic/` | The **default** `ToolFunctionInspector` + `DecisionModelBuilder`: schema gen & validation via Pydantic. | `PydanticModelBackend` |
+| `llm/` | The **default** `InferenceStrategy`: `step_decision.py` owns the provider-neutral step-decision model and validation, `llm_output.py` owns generic output-shape operations, `result_format.py` defines result schema generation/restoration, `json_schema/` contains only JSON Schema concepts, and `_strategy.py` orchestrates calls and repair. | `LLMInferenceStrategy`, `LLMClient`, `StepDecisionSpec`, `StepDecisionModel`, `LLMOutput`, `LLMOutputData`, `ResultFormat`, `JsonSchemaDocument`, prompt formatters |
+| `pydantic/` | The default `ModelBackend`: callable inspection plus result JSON Schema generation and restoration. It does not know the logical step-decision shape. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
 
 ### The seams (`_interfaces/`) — the extension ports
@@ -103,7 +103,7 @@ implementation noted in parentheses.
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
-| `ToolFunctionInspector` / `DecisionModelBuilder` | non-Pydantic schema gen & validation | `pydantic/PydanticModelBackend` |
+| `ModelBackend` | replace callable inspection and result schema generation/restoration together | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
 | `HistoryStorage` | where a run's history is persisted (enables compaction) | `GlyffHistoryStorage` (glyff metadata) |
@@ -130,12 +130,28 @@ implementation noted in parentheses.
 | `_state_store.py` / `_session_state.py` | Typed `StateStore`; the session-state binding and its accessors (`get_state`'s type-keyed tier sits on top; `get_call_state_store` / `get_session_storage` are the tool-facing tier). |
 | `state.py` | App-level state helpers: `StateRegistry`, `StateContainer`, `state`, `get_state`. |
 
+## Inside `sefia_litellm` (the provider adapter)
+
+| Path | Responsibility |
+| --- | --- |
+| `_client.py` | `LiteLLMClient` orchestration, runtime logging configuration, and LiteLLM exception mapping. |
+| `_request.py` | Converts core messages and a logical decision model into LiteLLM messages, kwargs, native `response_format`, or prompt fallback instructions. |
+| `_response.py` | Converts completed responses and streams into `LLMResponse`, including callbacks, usage, cost, and final output decoding. |
+| `_output_stream.py` | Parses incremental wire JSON and converts its payload events into core `OutputStreamEvent`s. |
+| `_schema/_decision_envelope.py` | Models the wire decision envelope and builds its schema format, output decoding, and path translation from `StepDecisionModel`. |
+| `_schema/_policy.py` | Declares independent generated/user-defined schema policies, applies permitted corrections, and validates the shared strict-output constraints. |
+| `_schema/_uniform_dictionary.py` | Define uniform-dictionary entry-array encoding and decoding. |
+| `_schema/_value_format.py` | Defines how each result or tool-argument value is represented on the wire and restored at runtime. |
+
 ## Where to change what
 
 | Goal | Where |
 | --- | --- |
 | Add an LLM provider | implement `LLMClient`; mirror `packages/sefia_litellm/src/sefia_litellm/_client.py` |
-| Change how the prompt / decision schema is built | `llm/_strategy.py` (the `_ExecutionDirector`s), `llm/_xml_prompt_formatter.py` |
+| Change the logical step-decision shape or validation | `llm/step_decision.py` |
+| Change Pydantic result schema generation or restoration | `pydantic/_result_format.py` |
+| Change generic `$defs` import or `$ref` rewriting | `llm/json_schema/_composition.py` |
+| Change LiteLLM's decision envelope or structured-output wire format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
@@ -147,7 +163,7 @@ implementation noted in parentheses.
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |
 | Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role alias in `_tool_system.py`, scanners in `_introspection.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
-| Support a new output type system | `ToolFunctionInspector` / `DecisionModelBuilder` in `pydantic/_model_backend.py` |
+| Support a new authoring type system | implement `ModelBackend`; reference `pydantic/_model_backend.py` and `_result_format.py` |
 | Register a tool from a raw JSON Schema (no signature) | `JsonSchemaToolEntry` / `ToolRegistry.add_json_tool` in `_tool_system/` |
 | Read the serving call's id inside a tool body | `current_tool_call_id` / `current_tool_call_id_for` in `_tool_context.py` |
 | Install a whole tool-discovery rule for a run (e.g. client-defined tools) | pass `tool_collector=` to `SessionScope`/`SessionScope.session()`/`Session` (seam: `ToolCollector`) |

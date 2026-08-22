@@ -12,7 +12,7 @@ from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
     FunctionInfo,
     ResultDecision,
-    ToolCallDecision,
+    ToolCallsDecision,
     ToolCallRequest,
     ToolCallResult,
 )
@@ -22,6 +22,7 @@ from sefia.llm.events import (
     LLMResponseRepairAttempt,
     LLMTokenReceived,
 )
+from sefia.llm.llm_output import LLMOutput
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -76,18 +77,16 @@ def mock_llm_client() -> AsyncMock:
     return AsyncMock()
 
 
-DUMMY_SCHEMA: dict[str, Any] = {}
-
-
 def _make_strategy(
     llm_client: Any = None, *, stream: bool = False, max_repair_attempts: int = 2
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
     formatter.format_arguments.return_value = "<arguments/>"
+    client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
-        llm_client=llm_client if llm_client is not None else AsyncMock(),
-        decision_builder=PydanticModelBackend(),
+        llm_client=client,
+        result_format_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,
@@ -132,7 +131,7 @@ class TestLLMInferenceStrategy:
             MockEventPublisher(),
         )
 
-        assert isinstance(decision, ToolCallDecision)
+        assert isinstance(decision, ToolCallsDecision)
         assert len(decision.calls) == 1
         assert decision.calls[0].name == "my_tool"
         assert decision.calls[0].arguments == {"param": 1}
@@ -173,6 +172,26 @@ class TestLLMInferenceStrategy:
             isinstance(event, LLMTokenReceived) and event.token == "tok"
             for event in publisher.events
         )
+
+    async def test_decide_next_step_accepts_client_decoded_output(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.return_value = LLMResponse(
+            structured_output=LLMOutput.from_json(
+                {"decision": "result", "result": "done"}
+            )
+        )
+        strategy = _make_strategy(mock_llm_client)
+
+        decision = await strategy.decide_next_step(
+            _function_info(instructions="do it"),
+            [],
+            _tool_registry(),
+            MockEventPublisher(),
+        )
+
+        assert isinstance(decision, ResultDecision)
+        assert decision.result == "done"
 
     async def test_decide_next_step_publishes_reasoning_tokens(
         self, mock_llm_client: AsyncMock
@@ -402,7 +421,7 @@ class TestResponseRepair:
             _function_info(), [], _tool_registry(my_tool), MockEventPublisher()
         )
 
-        assert isinstance(decision, ToolCallDecision)
+        assert isinstance(decision, ToolCallsDecision)
         assert decision.calls[0].name == "my_tool"
         assert client.complete.await_count == 2
 
@@ -414,7 +433,7 @@ class TestResponseRepair:
         ]
         strategy = _make_strategy(client)
         history = [
-            ToolCallDecision(
+            ToolCallsDecision(
                 calls=[ToolCallRequest(id="1", name="search", arguments={"q": "x"})]
             ),
             ToolCallResult(tool_call_id="1", result="found"),

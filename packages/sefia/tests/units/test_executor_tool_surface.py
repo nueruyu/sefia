@@ -7,7 +7,7 @@ from typing import Any, Protocol
 from sefia._executor import InferenceExecutor
 from sefia._interfaces import InferenceStrategy
 from sefia.event_system import EventPublisher
-from sefia.inference import FunctionInfo, HistoryItem, InferenceDecision
+from sefia.inference import FunctionInfo, HistoryItem, StepDecision
 from sefia.tool_collectors import DefaultToolCollector
 
 from sefia.testing import MemoryHistoryStorage
@@ -24,7 +24,7 @@ class _StubStrategy(InferenceStrategy):
         history: Sequence[HistoryItem],
         tools: sefia.ToolRegistry,
         publisher: EventPublisher,
-    ) -> InferenceDecision:
+    ) -> StepDecision:
         raise AssertionError("not driven in this test")
 
 

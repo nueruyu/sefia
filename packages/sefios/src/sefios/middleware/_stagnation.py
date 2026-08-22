@@ -4,7 +4,7 @@ from typing import Any, Awaitable, Callable
 
 from sefia._interfaces.middleware import StepContext, StepMiddleware
 from sefia.exceptions import SefiaError
-from sefia.inference import InferenceDecision, ToolCallDecision
+from sefia.inference import StepDecision, ToolCallsDecision
 from typing_extensions import final, override
 
 
@@ -56,10 +56,10 @@ class StagnationDetector(StepMiddleware):
     async def wrap(
         self,
         ctx: StepContext,
-        nxt: Callable[[], Awaitable[InferenceDecision]],
-    ) -> InferenceDecision:
+        nxt: Callable[[], Awaitable[StepDecision]],
+    ) -> StepDecision:
         decision = await nxt()
-        if isinstance(decision, ToolCallDecision):
+        if isinstance(decision, ToolCallsDecision):
             for call in decision.calls:
                 self._record_and_check(call.name, call.arguments)
         return decision

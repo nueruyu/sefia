@@ -3,8 +3,7 @@ from collections.abc import Sequence
 from typing import Any, Callable
 
 from ..exceptions import InvalidInferenceResponseError
-from ..inference import FunctionInfo, HistoryItem, ToolCallDecision
-from ._execution_directors import ExecutionDirector
+from ..inference import FunctionInfo, HistoryItem, ToolCallsDecision
 from ._messages import Message
 from ._prompt_formatter import PromptFormatter
 
@@ -14,12 +13,10 @@ JsonDefault = Callable[[Any], Any]
 def build_messages(
     function_info: FunctionInfo,
     history: Sequence[HistoryItem],
-    output_schema: dict[str, Any],
-    director: ExecutionDirector,
+    system_prompt_addition: str,
     prompt_formatter: PromptFormatter,
     json_default: JsonDefault | None,
 ) -> list[Message]:
-    system_prompt_addition = director.build_system_prompt_addition(output_schema)
     messages = [
         Message(
             role="system",
@@ -42,7 +39,7 @@ def build_messages(
     messages.append(Message(role="user", content=user_prompt))
 
     for item in history:
-        if isinstance(item, ToolCallDecision):
+        if isinstance(item, ToolCallsDecision):
             messages.append(
                 Message(
                     role="assistant",
@@ -90,7 +87,7 @@ def build_repair_messages(error: InvalidInferenceResponseError) -> list[Message]
         f"Error: {error.detail}\n"
         f"{content_note}"
         "Respond again with exactly one valid raw JSON object matching the "
-        "decision schema in the system instructions. Do not include prose, "
+        "step-decision schema in the system instructions. Do not include prose, "
         "markdown, or code fences."
     )
     messages.append(Message(role="user", content=feedback))

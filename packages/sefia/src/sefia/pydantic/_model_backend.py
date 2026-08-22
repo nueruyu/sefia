@@ -2,13 +2,9 @@ from typing import Any, Callable
 
 from typing_extensions import final, override
 
-from .._interfaces.decision_model import (
-    DecisionModel,
-    DecisionModelBuilder,
-    DecisionModelSpec,
-)
-from .._tool_system import ToolDefinition, ToolFunctionInspector
-from ._decision_model import PydanticDecisionModelFactory
+from ..llm.model_backend import ModelBackend
+from ..llm.result_format import ResultFormat
+from .._tool_system import ToolDefinition
 from ._function_models import (
     PydanticFunctionModelFactory,
     cache_key,
@@ -16,12 +12,13 @@ from ._function_models import (
     get_callable_qualname,
     sanitize_function_name,
 )
+from ._result_format import PydanticResultFormatFactory
 
 
 @final
-class PydanticModelBackend(ToolFunctionInspector, DecisionModelBuilder):
+class PydanticModelBackend(ModelBackend):
     """
-    Pydantic-backed tool-function inspector and decision-model builder.
+    Pydantic-backed tool-function inspector and structured-value schema factory.
     Supports dataclasses, Pydantic models, primitives, and typing constructs.
     """
 
@@ -32,7 +29,7 @@ class PydanticModelBackend(ToolFunctionInspector, DecisionModelBuilder):
         self._function_model_factory = (
             function_model_factory or PydanticFunctionModelFactory()
         )
-        self._decision_model_factory = PydanticDecisionModelFactory()
+        self._result_format_factory = PydanticResultFormatFactory()
         self._definition_cache: dict[Any, ToolDefinition] = {}
 
     @override
@@ -70,7 +67,7 @@ class PydanticModelBackend(ToolFunctionInspector, DecisionModelBuilder):
         func: Callable[..., Any],
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        # Shape is already enforced upstream by the decision model; this only
+        # Shape is already enforced by the step-decision validator; this only
         # coerces values to the callable's declared types. ``extra="allow"``
         # passes any additional keys through (e.g. for ``**kwargs`` handlers).
         param_model = self._function_model_factory.params_model(
@@ -85,5 +82,5 @@ class PydanticModelBackend(ToolFunctionInspector, DecisionModelBuilder):
         return {**dict(validated), **(validated.model_extra or {})}
 
     @override
-    def build(self, spec: DecisionModelSpec) -> DecisionModel:
-        return self._decision_model_factory.build(spec)
+    def create(self, python_type: Any) -> ResultFormat:
+        return self._result_format_factory.create(python_type)

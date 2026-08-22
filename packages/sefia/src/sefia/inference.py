@@ -38,7 +38,7 @@ class ToolCallResult:
 
 
 @dataclass
-class ToolCallDecision:
+class ToolCallsDecision:
     """A decision to call one or more tools."""
 
     calls: list[ToolCallRequest]
@@ -51,8 +51,8 @@ class ResultDecision:
     result: Any
 
 
-InferenceDecision = ToolCallDecision | ResultDecision
-HistoryItem = ToolCallDecision | ToolCallResult
+StepDecision = ToolCallsDecision | ResultDecision
+HistoryItem = ToolCallsDecision | ToolCallResult
 
 
 @dataclass(frozen=True)
@@ -117,9 +117,9 @@ __all__ = [
     "Capability",
     "ToolCallRequest",
     "ToolCallResult",
-    "ToolCallDecision",
+    "ToolCallsDecision",
     "ResultDecision",
-    "InferenceDecision",
+    "StepDecision",
     "HistoryItem",
     "FunctionInfo",
 ]

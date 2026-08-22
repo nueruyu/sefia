@@ -1,5 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Never, Self
 from unittest.mock import AsyncMock
@@ -20,6 +21,8 @@ from litellm.exceptions import (
 )
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
+from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
+from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
     LiteLLMClient,
@@ -31,6 +34,7 @@ from sefia_litellm.exceptions import (
     InferenceTemporarilyUnavailableError,
     InferenceTimeoutError,
 )
+from sefia_litellm._response import handle_stream
 
 
 @pytest.fixture
@@ -38,19 +42,53 @@ def mock_acompletion(mocker: MockerFixture) -> AsyncMock:
     return mocker.patch("litellm.acompletion", new_callable=AsyncMock)
 
 
+@dataclass
+class _CityResult:
+    city: str
+
+
+def _decision_model() -> StepDecisionModel:
+    spec = StepDecisionSpec.for_inference(
+        name="StepDecision", output_type=_CityResult, tools=[]
+    )
+    return StepDecisionModel.from_spec(spec, PydanticModelBackend())
+
+
 class TestLiteLLMClient:
+    async def test_complete_skips_structured_output_without_decision_model(
+        self, mock_acompletion: AsyncMock, mocker: MockerFixture
+    ) -> None:
+        supports_response_schema = mocker.patch("litellm.supports_response_schema")
+        mock_acompletion.return_value = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(role="assistant", content="Hi"),
+                )
+            ]
+        )
+
+        await LiteLLMClient(model="gpt-4o").complete(
+            [Message(role="user", content="Hello")]
+        )
+
+        call_args = mock_acompletion.call_args.kwargs
+        assert "response_format" not in call_args
+        assert call_args["messages"] == [{"role": "user", "content": "Hello"}]
+        supports_response_schema.assert_not_called()
+
     async def test_complete_sends_correct_request_to_litellm(
         self, mock_acompletion: AsyncMock
     ):
-        client = LiteLLMClient(model="gpt-4o", temperature=0.5)
+        client = LiteLLMClient(
+            model="gpt-4o", native_structured_output=True, temperature=0.5
+        )
         messages = [Message(role="user", content="Hello")]
         tools: list[dict[str, Any]] = [
             {"type": "function", "function": {"name": "get_weather"}}
         ]
-        output_schema: dict[str, Any] = {
-            "type": "object",
-            "properties": {"city": {"type": "string"}},
-        }
+        decision_model = _decision_model()
 
         mock_acompletion.return_value = ModelResponse(
             choices=[
@@ -62,7 +100,7 @@ class TestLiteLLMClient:
             ]
         )
 
-        await client.complete(messages, tools=tools, output_schema=output_schema)
+        await client.complete(messages, tools=tools, decision_model=decision_model)
 
         mock_acompletion.assert_called_once()
         call_args = mock_acompletion.call_args[1]
@@ -70,8 +108,49 @@ class TestLiteLLMClient:
         assert call_args["messages"] == [{"role": "user", "content": "Hello"}]
         assert call_args["tools"] == tools
         assert call_args["response_format"]["type"] == "json_schema"
-        assert call_args["response_format"]["json_schema"]["schema"] == output_schema
+        wire_schema = call_args["response_format"]["json_schema"]["schema"]
+        city_schema = wire_schema["properties"]["payload"]["properties"]["result"][
+            "properties"
+        ]["city"]
+        assert city_schema["type"] == "string"
         assert call_args["temperature"] == 0.5
+
+    async def test_complete_uses_prompt_fallback_and_decodes_response(
+        self, mock_acompletion: AsyncMock
+    ) -> None:
+        client = LiteLLMClient(model="legacy-model", native_structured_output=False)
+        model = _decision_model()
+        mock_acompletion.return_value = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant",
+                        content=(
+                            '{"payload":{"decision":"result",'
+                            '"result":{"city":"Tokyo"}}}'
+                        ),
+                    ),
+                )
+            ]
+        )
+
+        response = await client.complete(
+            [Message(role="system", content="Follow the task.")],
+            decision_model=model,
+        )
+
+        call_args = mock_acompletion.call_args.kwargs
+        assert "response_format" not in call_args
+        system_prompt = call_args["messages"][0]["content"]
+        assert "Follow the task." in system_prompt
+        assert '"payload"' in system_prompt
+        assert response.structured_output is not None
+        assert response.structured_output.data == {
+            "decision": "result",
+            "result": {"city": "Tokyo"},
+        }
 
     async def test_complete_parses_litellm_response_and_calculates_cost(
         self, mock_acompletion: AsyncMock, mocker: MockerFixture
@@ -280,9 +359,8 @@ class TestLiteLLMClient:
         stream = FakeStream()
         client = LiteLLMClient(model="gpt-4o")
         stream_response = LLMResponse(content="streamed")
-        handle_stream = mocker.patch.object(
-            client,
-            "_handle_stream",
+        stream_handler = mocker.patch(
+            "sefia_litellm._client.handle_stream",
             new_callable=AsyncMock,
             return_value=stream_response,
         )
@@ -296,11 +374,14 @@ class TestLiteLLMClient:
         assert response == stream_response
         call_args = mock_acompletion.call_args[1]
         assert call_args["stream"] is True
-        handle_stream.assert_awaited_once_with(
+        stream_handler.assert_awaited_once_with(
             stream,
-            callback,
-            None,
-            [{"role": "user", "content": "Hello"}],
+            content_callback=callback,
+            output_callback=None,
+            reasoning_callback=None,
+            messages=[{"role": "user", "content": "Hello"}],
+            output=None,
+            requested_model="gpt-4o",
         )
 
     async def test_complete_streams_when_only_reasoning_callback_is_provided(
@@ -316,9 +397,8 @@ class TestLiteLLMClient:
         stream = FakeStream()
         client = LiteLLMClient(model="gpt-4o")
         stream_response = LLMResponse(content="streamed")
-        handle_stream = mocker.patch.object(
-            client,
-            "_handle_stream",
+        stream_handler = mocker.patch(
+            "sefia_litellm._client.handle_stream",
             new_callable=AsyncMock,
             return_value=stream_response,
         )
@@ -329,11 +409,14 @@ class TestLiteLLMClient:
         await client.complete(messages, reasoning_callback=reasoning_callback)
 
         assert mock_acompletion.call_args[1]["stream"] is True
-        handle_stream.assert_awaited_once_with(
+        stream_handler.assert_awaited_once_with(
             stream,
-            None,
-            reasoning_callback,
-            [{"role": "user", "content": "Hello"}],
+            content_callback=None,
+            output_callback=None,
+            reasoning_callback=reasoning_callback,
+            messages=[{"role": "user", "content": "Hello"}],
+            output=None,
+            requested_model="gpt-4o",
         )
 
     async def test_handle_stream_routes_reasoning_and_content_separately(
@@ -351,7 +434,6 @@ class TestLiteLLMClient:
             yield chunk(content='{"decision"')
             yield chunk(content=":...}")
 
-        client = LiteLLMClient(model="gpt-4o")
         built = ModelResponse(
             choices=[
                 Choices(
@@ -377,8 +459,14 @@ class TestLiteLLMClient:
         async def on_reasoning(token: str) -> None:
             reasoning_tokens.append(token)
 
-        response = await client._handle_stream(
-            fake_stream(), on_content, on_reasoning, []
+        response = await handle_stream(
+            fake_stream(),
+            content_callback=on_content,
+            output_callback=None,
+            reasoning_callback=on_reasoning,
+            messages=[],
+            output=None,
+            requested_model="gpt-4o",
         )
 
         assert reasoning_tokens == ["Let me ", "think."]

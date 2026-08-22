@@ -18,8 +18,8 @@ from .exceptions import PauseException
 from .inference import (
     ResultDecision,
     FunctionInfo,
-    InferenceDecision,
-    ToolCallDecision,
+    StepDecision,
+    ToolCallsDecision,
     ToolCallRequest,
     ToolCallResult,
 )
@@ -37,8 +37,8 @@ def _compose(
 def _compose(
     middlewares: Sequence[StepMiddleware],
     ctx: StepContext,
-    core: Callable[[], Awaitable[InferenceDecision]],
-) -> Callable[[], Awaitable[InferenceDecision]]: ...
+    core: Callable[[], Awaitable[StepDecision]],
+) -> Callable[[], Awaitable[StepDecision]]: ...
 
 
 def _compose(
@@ -76,8 +76,8 @@ def _layer(
     return call
 
 
-def _require_tool_call_decision(decision: object) -> ToolCallDecision:
-    if isinstance(decision, ToolCallDecision):
+def _require_tool_calls_decision(decision: object) -> ToolCallsDecision:
+    if isinstance(decision, ToolCallsDecision):
         return decision
     raise TypeError(f"Unknown decision type: {type(decision)}")
 
@@ -118,7 +118,7 @@ class InferenceExecutor:
         )
 
         self._next_step_engraved = cast(
-            Callable[[int], Awaitable[InferenceDecision]],
+            Callable[[int], Awaitable[StepDecision]],
             engrave("inference.step", self._next_step),
         )
         self._call_tools_engraved = cast(
@@ -126,7 +126,7 @@ class InferenceExecutor:
             engrave("inference.tool_calls", self._call_tools),
         )
 
-    async def _next_step(self, step: int) -> InferenceDecision:
+    async def _next_step(self, step: int) -> StepDecision:
         """One engraved inference-strategy call, keyed on the step index (not
         the history) so the durable key stays O(1) and survives compaction."""
         history = self._history.items
@@ -215,7 +215,7 @@ class InferenceExecutor:
                 tool_registry=self._tool_registry,
             )
 
-            async def core() -> InferenceDecision:
+            async def core() -> StepDecision:
                 # Persist a compaction before the model call, so a resume loads
                 # it instead of re-running the compactor.
                 await self._save_history()
@@ -228,7 +228,7 @@ class InferenceExecutor:
             if isinstance(decision, ResultDecision):
                 return decision.result
 
-            decision = _require_tool_call_decision(decision)
+            decision = _require_tool_calls_decision(decision)
             if decision.calls:
                 tool_results = await self._call_tools_engraved(decision.calls)
             else:

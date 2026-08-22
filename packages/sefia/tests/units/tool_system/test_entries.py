@@ -1,12 +1,15 @@
 import jsonschema
 import pytest
-from pydantic import TypeAdapter, ValidationError
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Never
 
 from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import ToolConflictError
-from sefia.pydantic._function_models import json_schema_argument_type
+from sefia.inference import ToolCallsDecision
+from sefia.llm._tool_call_ids import ToolCallIdRegistry
+from sefia.llm.llm_output import LLMOutput
+from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
+from sefia.pydantic import PydanticModelBackend
 
 _SEARCH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -91,8 +94,18 @@ def test_registration_shares_the_namespace_with_introspected_tools():
 
 
 def test_a_malformed_schema_is_rejected_up_front():
+    tool = JsonSchemaToolEntry(
+        _noop,
+        name="invalid",
+        parameters={"type": "not-a-type"},
+    )
     with pytest.raises(jsonschema.SchemaError):
-        json_schema_argument_type({"type": "not-a-type"})
+        StepDecisionModel.from_spec(
+            StepDecisionSpec.for_inference(
+                name="StepDecision", output_type=Never, tools=[tool]
+            ),
+            PydanticModelBackend(),
+        )
 
 
 def test_a_schema_is_validated_under_its_declared_dialect():
@@ -107,8 +120,34 @@ def test_a_schema_is_validated_under_its_declared_dialect():
         "required": ["pair"],
     }
 
-    adapter = TypeAdapter(json_schema_argument_type(schema))
+    tool = JsonSchemaToolEntry(_noop, name="pair", parameters=schema)
+    decision_model = StepDecisionModel.from_spec(
+        StepDecisionSpec.for_inference(
+            name="StepDecision", output_type=Never, tools=[tool]
+        ),
+        PydanticModelBackend(),
+    )
+    tool_call_ids = ToolCallIdRegistry()
 
-    assert adapter.validate_python({"pair": ["a", 1]}) == {"pair": ["a", 1]}
-    with pytest.raises(ValidationError):
-        adapter.validate_python({"pair": [1, "a"]})
+    valid = decision_model.validate(
+        LLMOutput.from_json(
+            {
+                "decision": "tool_calls",
+                "tool_calls": [{"name": "pair", "arguments": {"pair": ["a", 1]}}],
+            }
+        ),
+        tool_call_ids,
+    )
+    assert isinstance(valid, ToolCallsDecision)
+    assert valid.calls[0].arguments == {"pair": ["a", 1]}
+
+    with pytest.raises(ValueError, match="Step decision validation failed"):
+        decision_model.validate(
+            LLMOutput.from_json(
+                {
+                    "decision": "tool_calls",
+                    "tool_calls": [{"name": "pair", "arguments": {"pair": [1, "a"]}}],
+                }
+            ),
+            tool_call_ids,
+        )

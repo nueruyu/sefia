@@ -4,7 +4,7 @@ from typing import Any, Awaitable, Callable
 
 from .._history import StepHistory
 from .._tool_system import ToolRegistry
-from ..inference import InferenceDecision
+from ..inference import StepDecision
 
 
 @dataclass
@@ -64,7 +64,7 @@ class StepMiddleware(ABC):
     async def wrap(
         self,
         ctx: StepContext,
-        nxt: Callable[[], Awaitable[InferenceDecision]],
-    ) -> InferenceDecision:
+        nxt: Callable[[], Awaitable[StepDecision]],
+    ) -> StepDecision:
         """Run the wrapped step (via ``nxt``) and return its decision."""
         ...

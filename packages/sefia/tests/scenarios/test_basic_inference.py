@@ -8,6 +8,7 @@ from sefia import Policy, Tools, policy
 from sefia._authoring.metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.llm import LLMResponse
+from sefia.llm.step_decision import StepDecisionMode, StepDecisionModel
 from sefia.testing import (
     MockLLMClient,
     memory_session,
@@ -214,7 +215,7 @@ async def test_inference_with_nonexistent_tool_call():
     assert len(mock_llm.requests) == 1
 
 
-async def test_inference_with_invalid_output_schema():
+async def test_inference_with_invalid_decision_model():
     # Scenario: The LLM returns a result that doesn't match the schema.
     # An invalid response is recoverable, so it is NOT engraved as a permanent
     # failure: it surfaces as an InvalidInferenceResponseError (a PauseException),
@@ -272,10 +273,10 @@ async def test_inference_on_standalone_function():
 
     assert summary == "This is a summary."
     assert len(mock_llm.requests) == 1
-    # Check that the schema passed to the LLM does not include the optional `tool_calls`
-    output_schema = mock_llm.requests[0].get("output_schema")
-    assert output_schema is not None
-    assert "tool_calls" not in output_schema.get("properties", {})
+    decision_model = mock_llm.requests[0].get("decision_model")
+    assert isinstance(decision_model, StepDecisionModel)
+    assert decision_model.mode is StepDecisionMode.RESULT_ONLY
+    assert decision_model.tools == ()
 
 
 def test_policy_attaches_metadata():

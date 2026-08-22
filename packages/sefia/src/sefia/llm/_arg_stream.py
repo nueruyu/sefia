@@ -1,4 +1,4 @@
-"""Routes streamed LLM response tokens into tool argument-stream handlers."""
+"""Routes logical structured-output events into tool argument stream handlers."""
 
 from __future__ import annotations
 
@@ -6,12 +6,14 @@ import asyncio
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Literal, cast
-
-from jsonweir import IncrementalJsonParser
-from jsonweir import events as js
+from typing import Literal
 
 from sefia.streaming import ArgStream
+from sefia.llm.streaming import (
+    OutputStreamEvent,
+    StringDelta as OutputStringDelta,
+    StringEnd as OutputStringEnd,
+)
 
 from ..streaming import (
     ArgEvent,
@@ -33,7 +35,7 @@ class ToolCallPath:
     argument_name: str | None = None
 
 
-def parse_tool_call_path(path: js.JsonPath) -> ToolCallPath | None:
+def parse_tool_call_path(path: tuple[str | int, ...]) -> ToolCallPath | None:
     if len(path) < 3 or path[0] != "tool_calls":
         return None
 
@@ -114,26 +116,16 @@ class ToolArgStreamer:
         self._reset()
 
     def _reset(self) -> None:
-        self._parser = IncrementalJsonParser()
-        self._stopped = False
         self._index_to_name: dict[int, str] = {}
         self._buffers: dict[int, list[ArgEvent]] = {}
         self._channels: dict[int, _ArgStreamChannel] = {}
         self._tasks: list[asyncio.Task[None]] = []
 
-    def on_token(self, token: str) -> None:
-        if self._stopped:
-            return
-
+    def on_event(self, event: OutputStreamEvent) -> None:
         try:
-            for event in self._parser.feed(token):
-                self._dispatch(event)
-                if self._stopped:
-                    self._close_all_channels()
-                    break
+            self._dispatch(event)
         except Exception:
-            logger.exception("Error processing token in ToolArgStreamer")
-            self._stopped = True
+            logger.exception("Error processing event in ToolArgStreamer")
             self._close_all_channels()
 
     async def close(self) -> None:
@@ -150,22 +142,13 @@ class ToolArgStreamer:
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
-    def _dispatch(self, event: js.Event) -> None:
-        if isinstance(event, js.JsonParseError):
-            if event.fatal:
-                self._stopped = True
-            return
-
-        path = getattr(event, "path", None)
-        if path is None:
-            return
-
-        tool_path = parse_tool_call_path(path)
+    def _dispatch(self, event: OutputStreamEvent) -> None:
+        tool_path = parse_tool_call_path(event.path)
         if tool_path is None:
             return
 
         if tool_path.field == "name":
-            if isinstance(event, js.EndString):
+            if isinstance(event, OutputStringEnd):
                 self._resolve_tool_name(tool_path.index, event.value)
             return
 
@@ -216,15 +199,13 @@ class ToolArgStreamer:
             )
 
 
-def _to_arg_event(tool_path: ToolCallPath, event: js.Event) -> ArgEvent | None:
+def _to_arg_event(tool_path: ToolCallPath, event: OutputStreamEvent) -> ArgEvent | None:
     name = tool_path.argument_name
     if name is None:
         return None
 
-    if isinstance(event, js.StringDelta):
+    if isinstance(event, OutputStringDelta):
         return StringDelta(name=name, text=event.text)
-    if isinstance(event, js.EndString):
+    if isinstance(event, OutputStringEnd):
         return StringEnd(name=name, value=event.value)
-    if isinstance(event, js.Scalar):
-        return Scalar(name=name, value=cast("int | float | bool | None", event.value))
-    return None
+    return Scalar(name=name, value=event.value)

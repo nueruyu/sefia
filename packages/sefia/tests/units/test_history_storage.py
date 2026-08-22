@@ -1,10 +1,10 @@
 from sefia import HistorySnapshot
 from sefia._history import StepHistory
-from sefia.inference import ToolCallDecision, ToolCallRequest, ToolCallResult
+from sefia.inference import ToolCallsDecision, ToolCallRequest, ToolCallResult
 
 
-def _decision(i: int) -> ToolCallDecision:
-    return ToolCallDecision(
+def _decision(i: int) -> ToolCallsDecision:
+    return ToolCallsDecision(
         calls=[ToolCallRequest(id=str(i), name="a_tool", arguments={"i": i})]
     )
 

@@ -66,7 +66,7 @@ loop:
   re-run on resume. Within a batch, calls run serially unless their tools are
   marked `@concurrent`; results always land in history in request order (see
   [Tools](#tools-discovery-schema-execution)).
-- **History** is the accumulating list of `ToolCallDecision` / `ToolCallResult`
+- **History** is the accumulating list of `ToolCallsDecision` / `ToolCallResult`
   (`inference.py`), held in-memory by `StepHistory` and persisted by the executor
   through a `HistoryStorage` seam — see "History storage and compaction" below.
 - **Two seams, kept apart:** *middleware* wraps the loop and can retry or
@@ -80,28 +80,52 @@ loop:
 translation. Instead of provider-native tool-calling, it asks the model for one
 unified structured-output schema.
 
-A `create_model`-built decision model is the schema, picked by an
-`_ExecutionDirector`:
+A `StepDecisionSpec` selects one of three shapes:
 
-| Return type | Director | Decision schema |
+| Return type | Mode | Step-decision shape |
 | --- | --- | --- |
-| `Never` | `_ToolOnlyDirector` | `{ payload: { decision: "tool_calls", tool_calls: [...] } }` only |
-| has tools | `_ToolEnabledDirector` | `{ payload: anyOf(tool_calls decision, result decision) }` |
-| no tools | `_OutputOnlyDirector` | `{ payload: { decision: "result", result: T } }` only |
+| `Never` | `TOOLS_REQUIRED` | `{ decision: "tool_calls", tool_calls: [...] }` only |
+| has tools | `TOOLS_OR_RESULT` | tool-calls or result decision |
+| no tools | `RESULT_ONLY` | `{ decision: "result", result: T }` only |
 
-The outer object keeps the provider-facing schema portable: unions are nested under
-`payload`, rendered as `anyOf`, and generated object schemas are closed with
-`additionalProperties: false`. The original Pydantic decision model remains the
-local validation authority after `payload` is unwrapped.
+`llm/step_decision.py` owns this logical shape. It retains tools and the result's
+`ResultFormat` as separate components and validates decoded values as
+`StepDecision`s. `llm/json_schema` imports `$defs`, resolves name collisions, and
+rewrites local references without knowing about tools or Pydantic. Recursive JSON
+value types and `SchemaNode` accessors keep schema traversal out of `dict[str, Any]`.
+The logical `StepDecisionModel` crosses the `LLMClient` boundary without first being
+flattened into one JSON Schema document. In `sefia_litellm`, the request adapter
+prepares the result and each tool-argument schema separately, while the schema
+adapter composes the decision and `payload` envelopes. The request uses that wire
+schema as native structured output or a prompt instruction. Typed mappings are
+reversibly encoded as arrays of `{key, value}` entries; the output codec restores
+them while removing the provider envelope. Raw JSON Schema tool arguments are
+validated without semantic rewriting.
 
-The system prompt is `docstring + response-instructions + the tool definitions (as
-JSON) + the decision JSON Schema`. The user message is the call's arguments rendered
-as XML (`_build_messages`); prior steps are replayed as ordinary
-assistant/tool messages. The client is always called with `tools=None` and the
-unified `output_schema` — provider native tool-calling is never used. The reply is
-stripped of any ``` fence, `json.loads`-ed, validated into the decision model, and
-`process_decision` validates `result` against the declared return type
-(`InvalidInferenceResponseError` if it doesn't conform).
+The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
+reflects callable parameters, while `_result_format.py` produces a JSON Schema and
+restores a decoded result to its declared Python type. Generic decoded-value shape
+operations live on `LLMOutput`; the backend does not know the step-decision
+shape. Provider-side response decoding and stream-path normalization stay inside the
+client implementation.
+
+`StepDecisionModel.from_spec()` composes these leaves into a model. It exposes the
+decision mode, result model, and tools, and validates the returned value as the
+corresponding `StepDecision`. An `LLMClient`
+owns decision-envelope composition, schema encoding, prompt fallback, response
+decoding, and structured-stream decoding needed by its model. Step-decision models
+live in `sefia.llm.step_decision`; result schema interfaces and decoded values live
+in `sefia.llm.result_format` and `sefia.llm.llm_output`.
+`sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
+
+The core system prompt is `docstring + decision semantics + tool definitions`; the
+client adds output-format instructions when the model needs a schema in its prompt.
+The user message is the call's arguments rendered as XML (`_build_messages`); prior
+steps are replayed as ordinary assistant/tool messages. The client is always called
+with `tools=None` and the logical `decision_model` — provider native tool-calling is
+never used. The client returns logical structured data when it adapts the wire format;
+the strategy falls back to parsing plain client responses before the step-decision
+validator validates the value (`InvalidInferenceResponseError` if it doesn't conform).
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
 first **repaired in place**: the strategy appends the invalid output and the
@@ -183,13 +207,15 @@ keyword arguments, so a `Protocol` and the implementation it narrows must agree 
 parameter names, not just behavior — nothing checks this at runtime, so a mismatch
 surfaces as a tool-execution error on the first call rather than at discovery time.
 A `JsonSchemaToolEntry` instead carries its parameters as a raw JSON Schema (no
-signature to introspect) and passes that schema through verbatim. Because that
-schema is also used for local argument validation, Sefia does not rewrite it for
-provider compatibility. It must already use the strict structured-output subset
+signature to introspect) and passes that schema through verbatim. Provider encoding
+is applied only to schemas derived from Python types, where Sefia retains the
+original Pydantic validation model and can decode the representation safely. A raw
+schema has no equivalent typed contract, so Sefia does not rewrite it for provider
+compatibility. It must already use the strict structured-output subset
 supported by the verified providers: object properties are required, objects set
 `additionalProperties` to `false`, unions use `anyOf` rather than `oneOf`, and
 unsupported composition keywords such as `allOf` and conditional schemas are
-omitted. Incompatible schemas fail when the provider-facing decision schema is
+omitted. Incompatible schemas fail when the provider-facing step-decision schema is
 built, before an LLM request is made.
 
 **Execution** (`_tool_execution.py`, engraved through
@@ -214,7 +240,7 @@ inside another dispatched tool; they do not mint or inherit a second identity.
 
 An `@preview` handler receives that same id before its `ArgStream`:
 `handler(tool_call_id, events)`. A step-scoped registry in the inference strategy
-allocates one id per tool-call index; both the streaming router and decision builder
+allocates one id per tool-call index; both the streaming router and decision schema
 request the id from that registry. Preview deltas and the authoritative tool result
 can therefore refer to the same interaction even though the preview runs before tool
 execution.
