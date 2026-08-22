@@ -130,6 +130,18 @@ implementation noted in parentheses.
 | `_state_store.py` / `_session_state.py` | Typed `StateStore`; the session-state binding and its accessors (`get_state`'s type-keyed tier sits on top; `get_call_state_store` / `get_session_storage` are the tool-facing tier). |
 | `state.py` | App-level state helpers: `StateRegistry`, `StateContainer`, `state`, `get_state`. |
 
+## Inside `sefia_litellm` (the provider adapter)
+
+| Path | Responsibility |
+| --- | --- |
+| `_client.py` | `LiteLLMClient` orchestration, runtime logging configuration, and LiteLLM exception mapping. |
+| `_request.py` | Converts core messages and a logical decision model into LiteLLM messages, kwargs, native `response_format`, or prompt fallback instructions. |
+| `_response.py` | Converts completed responses and streams into `LLMResponse`, including callbacks, usage, cost, and final output decoding. |
+| `_schema/_adapter.py` | Composes a provider-compatible wire schema from `StepDecisionModel` and its typed or raw schema fragments. |
+| `_schema/_normalization.py` | Normalizes generated schemas, lowers mappings, and records the mapping paths needed for restoration. |
+| `_schema/_codec.py` | Removes the provider envelope and restores lowered mappings in final LLM output. |
+| `_schema/_streaming.py` | Converts incremental wire JSON events and paths into core `OutputEvent`s. |
+
 ## Where to change what
 
 | Goal | Where |

@@ -1,3 +1,4 @@
-from ._adapter import LiteLLMPreparedSchema, LiteLLMStructuredOutputAdapter
+from ._adapter import LiteLLMStructuredOutputAdapter
+from ._codec import PreparedOutput
 
-__all__ = ["LiteLLMPreparedSchema", "LiteLLMStructuredOutputAdapter"]
+__all__ = ["LiteLLMStructuredOutputAdapter", "PreparedOutput"]

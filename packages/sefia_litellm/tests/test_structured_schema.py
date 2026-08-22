@@ -56,7 +56,7 @@ def _process(
 def test_prepared_schema_removes_payload_from_stream_paths() -> None:
     prepared = _prepare(_decision_model(str, []))
 
-    assert prepared.normalize_stream_path(
+    assert prepared.logical_path(
         ("payload", "tool_calls", 0, "arguments", "question")
     ) == ("tool_calls", 0, "arguments", "question")
 
@@ -557,7 +557,7 @@ def test_nested_mapping_result_is_lowered_and_decoded() -> None:
     )
 
 
-def test_mapping_decoder_rejects_duplicate_keys() -> None:
+def test_mapping_restoration_rejects_duplicate_keys() -> None:
     definition = _decision_model(dict[str, str], [])
 
     with pytest.raises(ValueError, match="duplicate mapping key"):
@@ -575,7 +575,7 @@ def test_mapping_decoder_rejects_duplicate_keys() -> None:
         )
 
 
-def test_mapping_decoder_rejects_malformed_entries() -> None:
+def test_mapping_restoration_rejects_malformed_entries() -> None:
     definition = _decision_model(dict[str, str], [])
 
     with pytest.raises(ValueError, match="contain only key and value"):
@@ -605,6 +605,35 @@ def test_mapping_nested_in_list_is_lowered_and_decoded() -> None:
 
     assert isinstance(decision, ResultDecision)
     assert decision.result == [{"count": 3}]
+
+
+@dataclass
+class _MappedBranch:
+    labels: dict[str, int]
+
+
+@dataclass
+class _TextBranch:
+    text: str
+
+
+def test_mapping_nested_in_union_is_lowered_and_decoded() -> None:
+    definition = _decision_model(_MappedBranch | _TextBranch, [])
+
+    decision = _process(
+        definition,
+        {
+            "payload": {
+                "decision": "result",
+                "result": {
+                    "labels": [{"key": "important", "value": 2}],
+                },
+            }
+        },
+    )
+
+    assert isinstance(decision, ResultDecision)
+    assert decision.result == _MappedBranch(labels={"important": 2})
 
 
 async def _categorize(labels: dict[str, int]) -> None:

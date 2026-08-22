@@ -7,10 +7,8 @@ from sefia.llm.json_schema import (
     DefinitionRegistry,
     JsonObject,
     JsonSchemaDocument,
-    JsonValue,
     SchemaKeyword,
     SchemaNode,
-    SchemaPath,
 )
 from sefia.llm.step_decision import (
     StepDecisionMode,
@@ -18,108 +16,22 @@ from sefia.llm.step_decision import (
     StepTool,
     TypedToolArguments,
 )
-from sefia.llm.llm_output import LLMOutput
 
-from ._decoder import Decoder, DecoderFactory
+from ._codec import OutputCodec, PreparedOutput, MappingRestorer
 from ._normalization import CompatibilityValidator, MappingLowerer, SchemaNormalizer
 
 K = SchemaKeyword
 
 
-@final
-@dataclass
-class LiteLLMPreparedSchema:
-    wire_schema: JsonSchemaDocument
-    _decoder: Decoder
-
-    def decode(self, data: JsonValue) -> LLMOutput:
-        value = LLMOutput.from_json(data)
-        try:
-            fields = value.to_object()
-        except ValueError:
-            return value
-        if set(fields) != {"payload"}:
-            return value
-        return self._decoder.decode(fields["payload"])
-
-    def normalize_stream_path(self, path: SchemaPath) -> SchemaPath | None:
-        return path[1:] if path and path[0] == "payload" else path
-
-
-@final
-class _IdentityDecoder:
-    def decode(self, data: LLMOutput) -> LLMOutput:
-        return data
-
-
-@final
-class _StepDecisionDecoder:
-    def __init__(self, result: Decoder | None, tools: dict[str, Decoder]):
-        self._result = result
-        self._tools = tools
-
-    def decode(self, data: LLMOutput) -> LLMOutput:
-        try:
-            fields = data.to_object()
-        except ValueError:
-            return data
-        decision = fields.get("decision")
-        if decision is None:
-            return data
-        try:
-            decision_name = decision.to_string()
-        except ValueError:
-            return data
-        if (
-            decision_name == "result"
-            and self._result is not None
-            and "result" in fields
-        ):
-            return LLMOutput.from_object(
-                {**fields, "result": self._result.decode(fields["result"])}
-            )
-        tool_calls = fields.get("tool_calls")
-        if decision_name != "tool_calls" or tool_calls is None:
-            return data
-        try:
-            values = tool_calls.to_array()
-        except ValueError:
-            return data
-        calls: list[LLMOutput] = []
-        for value in values:
-            try:
-                call = value.to_object()
-            except ValueError:
-                calls.append(value)
-                continue
-            name = call.get("name")
-            try:
-                tool_name = name.to_string() if name is not None else None
-            except ValueError:
-                tool_name = None
-            decoder = self._tools.get(tool_name) if tool_name is not None else None
-            if decoder is None or "arguments" not in call:
-                calls.append(value)
-                continue
-            calls.append(
-                LLMOutput.from_object(
-                    {**call, "arguments": decoder.decode(call["arguments"])}
-                )
-            )
-        return LLMOutput.from_object(
-            {**fields, "tool_calls": LLMOutput.from_array(calls)}
-        )
-
-
 @dataclass(frozen=True)
 class _PreparedFragment:
     schema: JsonObject
-    decoder: Decoder
+    restorer: MappingRestorer | None
 
 
 @final
 class LiteLLMStructuredOutputAdapter:
-    def build(self, model: StepDecisionModel) -> LiteLLMPreparedSchema:
+    def build(self, model: StepDecisionModel) -> PreparedOutput:
         result = (
             _prepare_typed(model.result.json_schema)
             if model.result is not None
@@ -134,11 +46,11 @@ class LiteLLMStructuredOutputAdapter:
             root.set_definitions(definitions)
         root.set_description("The model for the LLM's decision on the next action.")
         CompatibilityValidator().validate(root.value)
-        return LiteLLMPreparedSchema(
+        return PreparedOutput(
             JsonSchemaDocument(root.value),
-            _StepDecisionDecoder(
-                result.decoder if result is not None else None,
-                {name: fragment.decoder for name, fragment in tools.items()},
+            OutputCodec(
+                result.restorer if result is not None else None,
+                {name: fragment.restorer for name, fragment in tools.items()},
             ),
         )
 
@@ -148,7 +60,7 @@ def _prepare_tool(tool: StepTool) -> _PreparedFragment:
         return _prepare_typed(tool.arguments.json_schema)
     schema = tool.arguments.json_schema.mutable_copy()
     CompatibilityValidator().validate(schema)
-    return _PreparedFragment(schema, _IdentityDecoder())
+    return _PreparedFragment(schema, None)
 
 
 def _prepare_typed(document: JsonSchemaDocument) -> _PreparedFragment:
@@ -156,7 +68,8 @@ def _prepare_typed(document: JsonSchemaDocument) -> _PreparedFragment:
     SchemaNormalizer().normalize(schema)
     plan = MappingLowerer().lower(schema)
     CompatibilityValidator().validate(schema)
-    return _PreparedFragment(schema, DecoderFactory(schema, plan).build(schema))
+    restoration_schema = JsonSchemaDocument(schema).mutable_copy()
+    return _PreparedFragment(schema, MappingRestorer(restoration_schema, plan))
 
 
 def _compose_decision(

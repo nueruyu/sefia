@@ -9,13 +9,13 @@ from sefia.llm.streaming import (
     StringEnd,
 )
 
-from ._adapter import LiteLLMPreparedSchema
+from ._codec import PreparedOutput
 
 
 class OutputEventStreamer:
     def __init__(
         self,
-        prepared: LiteLLMPreparedSchema,
+        prepared: PreparedOutput,
         callback: OutputCallback,
     ) -> None:
         self._prepared = prepared
@@ -32,7 +32,7 @@ class OutputEventStreamer:
         path = getattr(event, "path", None)
         if path is None:
             return None
-        logical_path = self._prepared.normalize_stream_path(path)
+        logical_path = self._prepared.logical_path(path)
         if logical_path is None:
             return None
         if isinstance(event, js.StringDelta):

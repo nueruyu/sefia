@@ -2,124 +2,54 @@ from __future__ import annotations
 
 import logging
 import os
-import json
-from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Literal, TypedDict, cast
+from collections.abc import AsyncIterator, Callable
+from typing import Any, Coroutine, cast
 
 from typing_extensions import final, override
 
 from sefia.exceptions import InferenceError
-from sefia.llm import LLMClient, LLMResponse, Message, ToolCall
-from sefia.llm.json_schema import JsonObject, require_json_value
+from sefia.llm import LLMClient, LLMResponse, Message
 from sefia.llm.step_decision import StepDecisionModel
 from sefia.llm.streaming import OutputCallback
 
+from ._request import prepare_request
+from ._response import handle_response, handle_stream
 from .exceptions import (
     InferenceConnectionError,
     InferenceRateLimitError,
     InferenceTemporarilyUnavailableError,
     InferenceTimeoutError,
 )
-from ._schema import LiteLLMPreparedSchema, LiteLLMStructuredOutputAdapter
-from ._schema._streaming import OutputEventStreamer
 
-if TYPE_CHECKING:
-    from litellm import Choices, ModelResponse, Usage
-
-logger = logging.getLogger(__name__)
-
-# Set before litellm is imported (it is imported lazily, well after this module
-# loads). Forces litellm to use its bundled model cost map instead of fetching it
-# from the network at import time, which speeds up the import and keeps it working
-# offline. A user who has already set this explicitly is respected.
+# Prevent LiteLLM from fetching its cost map during lazy import.
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
 _LOG_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
-
-# A level above CRITICAL drops every record, fully silencing the logger. LiteLLM
-# surfaces real failures as exceptions (see ``_to_inference_error``), so its
-# log output is noise that can be turned off entirely without hiding errors.
-_SILENCE_LEVEL = logging.CRITICAL + 1
-
-_SCHEMA_PROMPT = """
-### Response Format
-Return exactly one raw JSON object matching this schema. Do not include prose,
-markdown, or code fences.
-
-{schema}
-"""
-
-
-class _JsonSchemaResponseDefinition(TypedDict):
-    name: str
-    schema: JsonObject
-    strict: bool
-
-
-class _JsonSchemaResponseFormat(TypedDict):
-    type: Literal["json_schema"]
-    json_schema: _JsonSchemaResponseDefinition
-
-
-def _with_schema_instruction(
-    messages: list[dict[str, Any]], schema: JsonObject
-) -> list[dict[str, Any]]:
-    instruction = _SCHEMA_PROMPT.format(
-        schema=json.dumps(schema, indent=2, ensure_ascii=False)
-    ).strip()
-    result = [message.copy() for message in messages]
-    for message in result:
-        if message.get("role") != "system":
-            continue
-        content = message.get("content")
-        if isinstance(content, str):
-            message["content"] = f"{content}\n\n{instruction}"
-            return result
-    result.insert(0, {"role": "system", "content": instruction})
-    return result
+_SILENCE_LEVEL = logging.CRITICAL + 1  # Disable every LiteLLM log record.
 
 
 def _env_suppress_logs_default() -> bool:
-    """Resolves the default for ``suppress_logs`` from the environment.
-
-    Reads ``SEFIA_LITELLM_SUPPRESS_LOGS``; when unset or empty, logs are
-    suppressed by default. Any of ``0/false/no/off`` (case-insensitive) disables
-    suppression.
-    """
     raw = os.environ.get("SEFIA_LITELLM_SUPPRESS_LOGS", "").strip().lower()
     return raw not in _LOG_FALSE_VALUES
 
 
 def _apply_litellm_log_level(suppress: bool) -> None:
-    """Set the LiteLLM logger without importing LiteLLM."""
     logging.getLogger("LiteLLM").setLevel(
         _SILENCE_LEVEL if suppress else logging.NOTSET
     )
 
 
 def _configure_litellm_logging(suppress: bool) -> None:
-    """Apply process-global LiteLLM logging; the last client call wins."""
     import litellm
 
     _apply_litellm_log_level(suppress)
     litellm.suppress_debug_info = suppress
 
 
-# Silence LiteLLM as early as possible — before it is imported (lazily, on the
-# first request) — so its import-time warnings are suppressed too when the
-# resolved default is "suppress". An explicit per-client ``suppress_logs`` still
-# takes effect later via ``_configure_litellm_logging``.
 _apply_litellm_log_level(_env_suppress_logs_default())
 
 
 def _to_inference_error(error: Exception) -> InferenceError | None:
-    """Maps a LiteLLM exception to a sefia InferenceError, if recognized."""
-    # Imported here rather than at module load to keep LiteLLM out of the import
-    # path; this is only reached after a request has already imported it. Order
-    # matters: Timeout subclasses APIConnectionError, so it must be checked
-    # first. Errors not listed here (AuthenticationError, BadRequestError,
-    # ContextWindowExceededError, ContentPolicyViolationError, ...) are
-    # deterministic and propagate unchanged as genuine failures.
     from litellm.exceptions import (
         APIConnectionError,
         InternalServerError,
@@ -128,6 +58,7 @@ def _to_inference_error(error: Exception) -> InferenceError | None:
         Timeout,
     )
 
+    # Timeout subclasses APIConnectionError, so ordering is significant.
     error_mapping: tuple[tuple[type[Exception], type[InferenceError]], ...] = (
         (Timeout, InferenceTimeoutError),
         (APIConnectionError, InferenceConnectionError),
@@ -135,20 +66,14 @@ def _to_inference_error(error: Exception) -> InferenceError | None:
         (InternalServerError, InferenceTemporarilyUnavailableError),
         (ServiceUnavailableError, InferenceTemporarilyUnavailableError),
     )
-
-    for provider_exc, inference_error in error_mapping:
-        if isinstance(error, provider_exc):
+    for provider_error, inference_error in error_mapping:
+        if isinstance(error, provider_error):
             return inference_error(str(error))
     return None
 
 
 @final
 class LiteLLMClient(LLMClient):
-    """
-    An LLMClient implementation that uses LiteLLM to interact with
-    various LLM providers.
-    """
-
     def __init__(
         self,
         model: str,
@@ -159,8 +84,6 @@ class LiteLLMClient(LLMClient):
     ):
         self.model = model
         self._kwargs = kwargs
-        # ``None`` defers to SEFIA_LITELLM_SUPPRESS_LOGS (default: suppress);
-        # an explicit bool overrides the environment.
         self._suppress_logs = (
             _env_suppress_logs_default() if suppress_logs is None else suppress_logs
         )
@@ -178,39 +101,27 @@ class LiteLLMClient(LLMClient):
             Callable[[str], Coroutine[None, None, None]] | None
         ) = None,
     ) -> LLMResponse:
-        """Sends a completion request using LiteLLM."""
         import litellm
         from litellm import ModelResponse
 
         _configure_litellm_logging(self._suppress_logs)
-
-        raw_messages = [msg.to_dict(exclude_none=True) for msg in messages]
-        prepared = (
-            LiteLLMStructuredOutputAdapter().build(decision_model)
-            if decision_model is not None
-            else None
+        prepared = prepare_request(
+            model=self.model,
+            messages=messages,
+            tools=tools,
+            decision_model=decision_model,
+            client_kwargs=self._kwargs,
+            native_structured_output=self._native_structured_output,
+            supports_response_schema=litellm.supports_response_schema,
+            stream=any(
+                callback is not None
+                for callback in (
+                    stream_callback,
+                    output_callback,
+                    reasoning_callback,
+                )
+            ),
         )
-
-        kwargs = self._kwargs.copy()
-        if tools:
-            kwargs["tools"] = tools
-        if prepared is not None and self._uses_native_structured_output(litellm):
-            response_format: _JsonSchemaResponseFormat = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "structured_output",
-                    "schema": prepared.wire_schema.to_dict(),
-                    "strict": True,
-                },
-            }
-            kwargs["response_format"] = response_format
-        elif prepared is not None:
-            raw_messages = _with_schema_instruction(
-                raw_messages, prepared.wire_schema.to_dict()
-            )
-
-        if stream_callback or output_callback or reasoning_callback:
-            kwargs["stream"] = True
 
         try:
             complete = cast(
@@ -219,166 +130,34 @@ class LiteLLMClient(LLMClient):
             )
             response = await complete(
                 model=self.model,
-                messages=raw_messages,
-                **kwargs,
+                messages=prepared.messages,
+                **prepared.kwargs,
             )
-
             if hasattr(response, "__aiter__") and not isinstance(
                 response, ModelResponse
             ):
-                stream = cast(AsyncIterator[Any], response)
-                return await self._handle_stream(
-                    stream,
-                    stream_callback,
-                    output_callback,
-                    reasoning_callback,
-                    raw_messages,
-                    prepared,
+                return await handle_stream(
+                    cast(AsyncIterator[Any], response),
+                    content_callback=stream_callback,
+                    output_callback=output_callback,
+                    reasoning_callback=reasoning_callback,
+                    messages=prepared.messages,
+                    output=prepared.output,
+                    requested_model=self.model,
                 )
-        except Exception as e:
-            inference_error = _to_inference_error(e)
+        except Exception as error:
+            inference_error = _to_inference_error(error)
             if inference_error is not None:
-                raise inference_error from e
+                raise inference_error from error
             raise
 
         if not isinstance(response, ModelResponse):
             raise RuntimeError("Invalid model response")
-        result = self._handle_response(response)
-        self._decode_structured_output(result, prepared)
-        return result
-
-    async def _handle_stream(
-        self,
-        stream: AsyncIterator[Any],
-        callback: Callable[[str], Coroutine[None, None, None]] | None,
-        output_callback: OutputCallback | None,
-        reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
-        raw_messages: list[dict[str, Any]],
-        prepared: LiteLLMPreparedSchema | None,
-    ) -> LLMResponse:
-        """Processes a streaming response."""
-        import litellm
-        from litellm import ModelResponse
-
-        chunks: list[Any] = []
-        # ``stream_chunk_builder`` does not reliably reassemble reasoning content,
-        # so we accumulate reasoning deltas ourselves and attach them to the final
-        # response below.
-        reasoning_parts: list[str] = []
-        output_event_streamer = (
-            OutputEventStreamer(prepared, output_callback)
-            if prepared is not None and output_callback is not None
-            else None
+        return handle_response(
+            response,
+            requested_model=self.model,
+            output=prepared.output,
         )
-        async for chunk in stream:
-            chunks.append(chunk)
-            choices = getattr(chunk, "choices", None)
-            if not choices:
-                continue
-            delta = getattr(choices[0], "delta", None)
-            reasoning = getattr(delta, "reasoning_content", None)
-            if reasoning:
-                reasoning_parts.append(reasoning)
-                if reasoning_callback:
-                    await reasoning_callback(reasoning)
-            content = getattr(delta, "content", None)
-            if content:
-                if callback:
-                    await callback(content)
-                if output_event_streamer is not None:
-                    await output_event_streamer.feed(content)
 
-        build_stream_response = cast(
-            Callable[..., ModelResponse | None],
-            getattr(cast(object, litellm), "stream_chunk_builder"),
-        )
-        response = build_stream_response(chunks=chunks, messages=raw_messages)
-        if not isinstance(response, ModelResponse):
-            raise RuntimeError("Invalid model response")
 
-        result = self._handle_response(response)
-        self._decode_structured_output(result, prepared)
-        if reasoning_parts and result.reasoning_content is None:
-            result.reasoning_content = "".join(reasoning_parts)
-        return result
-
-    def _uses_native_structured_output(self, litellm: Any) -> bool:
-        if self._native_structured_output is not None:
-            return self._native_structured_output
-        supports = cast(Callable[..., bool], litellm.supports_response_schema)
-        return supports(model=self.model)
-
-    @staticmethod
-    def _decode_structured_output(
-        response: LLMResponse, prepared: LiteLLMPreparedSchema | None
-    ) -> None:
-        if prepared is None or response.content is None:
-            return
-        raw = response.content.strip()
-        if raw.startswith("```"):
-            lines = raw.splitlines()
-            raw = "\n".join(lines[1:-1]).strip()
-        try:
-            response.structured_output = prepared.decode(
-                require_json_value(json.loads(raw))
-            )
-        except (json.JSONDecodeError, ValueError):
-            return
-
-    def _calculate_cost(self, response: ModelResponse) -> float | None:
-        """Calculates the cost of a response, if usage data is available."""
-        from litellm import cost_per_token
-
-        usage = cast("Usage | None", cast(dict[str, Any], response).get("usage"))
-        model = response.model
-
-        if not (usage and model):
-            return None
-        try:
-            prompt_tokens = usage.prompt_tokens or 0
-            completion_tokens = usage.completion_tokens or 0
-            prompt_cost, completion_cost = cost_per_token(
-                model=model,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-            )
-            return prompt_cost + completion_cost
-        except Exception:
-            logger.warning(
-                "Failed to calculate cost for model %s",
-                model,
-                exc_info=True,
-            )
-            return None
-
-    def _handle_response(self, response: ModelResponse) -> LLMResponse:
-        """Processes a non-streaming or completed stream response."""
-        if not response.choices:
-            raise RuntimeError(
-                f"LLM returned empty choices (model={self.model}). "
-                "This may indicate a content filter, provider error, or a LiteLLM bug."
-            )
-
-        choice: Choices = response.choices[0]
-        message = choice.message
-
-        tool_calls = [
-            ToolCall(
-                id=tc.id,
-                function=tc.function.model_dump(),
-            )
-            for tc in (message.tool_calls or [])
-        ]
-
-        usage = cast("Usage | None", cast(dict[str, Any], response).get("usage"))
-        cost = self._calculate_cost(response)
-
-        return LLMResponse(
-            model=response.model,
-            content=message.content,
-            reasoning_content=getattr(message, "reasoning_content", None),
-            tool_calls=tool_calls,
-            usage=usage.model_dump() if usage else None,
-            stop_reason=choice.finish_reason,
-            cost=cost,
-        )
+__all__ = ["LiteLLMClient"]

@@ -94,11 +94,13 @@ A `StepDecisionSpec` selects one of three shapes:
 rewrites local references without knowing about tools or Pydantic. Recursive JSON
 value types and `SchemaNode` accessors keep schema traversal out of `dict[str, Any]`.
 The logical `StepDecisionModel` crosses the `LLMClient` boundary without first being
-flattened into one JSON Schema document. `LiteLLMClient` prepares the result and each
-tool-argument schema separately, composes the decision and `payload` envelopes, and
-uses the resulting wire schema as native structured output or a prompt instruction.
-Typed mappings are reversibly encoded as arrays of `{key, value}` entries. Raw JSON
-Schema tool arguments are validated without semantic rewriting.
+flattened into one JSON Schema document. In `sefia_litellm`, the request adapter
+prepares the result and each tool-argument schema separately, while the schema
+adapter composes the decision and `payload` envelopes. The request uses that wire
+schema as native structured output or a prompt instruction. Typed mappings are
+reversibly encoded as arrays of `{key, value}` entries; the output codec restores
+them while removing the provider envelope. Raw JSON Schema tool arguments are
+validated without semantic rewriting.
 
 The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
 reflects callable parameters, while `_result_schema.py` produces a JSON Schema and

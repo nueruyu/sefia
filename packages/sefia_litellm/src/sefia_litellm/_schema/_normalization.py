@@ -29,24 +29,14 @@ class SchemaNormalizer:
 
 @final
 @dataclass(frozen=True)
-class MappingEncoding:
-    path: SchemaPath
-
-
-@final
-@dataclass(frozen=True)
-class SchemaEncodingPlan:
-    mappings: tuple[MappingEncoding, ...] = ()
-
-    @property
-    def mapping_paths(self) -> frozenset[SchemaPath]:
-        return frozenset(encoding.path for encoding in self.mappings)
+class MappingPlan:
+    mapping_paths: frozenset[SchemaPath] = frozenset()
 
 
 @final
 class MappingLowerer:
-    def lower(self, schema: JsonObject) -> SchemaEncodingPlan:
-        mappings: list[MappingEncoding] = []
+    def lower(self, schema: JsonObject) -> MappingPlan:
+        mapping_paths: set[SchemaPath] = set()
         for path, node in list(walk(schema)):
             additional = node.additional_properties()
             if node.type != "object" or not isinstance(additional, SchemaNode):
@@ -58,8 +48,8 @@ class MappingLowerer:
                 else {K.TYPE: "string"}
             )
             _replace_with_mapping_entries(node, key_schema, additional.value)
-            mappings.append(MappingEncoding(path))
-        return SchemaEncodingPlan(tuple(mappings))
+            mapping_paths.add(path)
+        return MappingPlan(frozenset(mapping_paths))
 
 
 @final
