@@ -9,7 +9,7 @@ from sefia.llm import LLMResponse, ToolCall
 from sefia.llm.json_schema import require_json_value
 from sefia.llm.streaming import OutputCallback
 
-from ._schema import PreparedOutput
+from ._schema import CompiledOutputSchema
 from ._schema._streaming import OutputEventStreamer
 
 if TYPE_CHECKING:
@@ -22,7 +22,7 @@ def handle_response(
     response: ModelResponse,
     *,
     requested_model: str,
-    output: PreparedOutput | None,
+    output: CompiledOutputSchema | None,
 ) -> LLMResponse:
     if not response.choices:
         raise RuntimeError(
@@ -57,7 +57,7 @@ async def handle_stream(
     output_callback: OutputCallback | None,
     reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
     messages: list[dict[str, Any]],
-    output: PreparedOutput | None,
+    output: CompiledOutputSchema | None,
     requested_model: str,
 ) -> LLMResponse:
     import litellm
@@ -106,7 +106,7 @@ async def handle_stream(
     return result
 
 
-def _decode_output(response: LLMResponse, output: PreparedOutput | None) -> None:
+def _decode_output(response: LLMResponse, output: CompiledOutputSchema | None) -> None:
     if output is None or response.content is None:
         return
     raw = response.content.strip()

@@ -9,7 +9,7 @@ from sefia.llm import Message
 from sefia.llm.json_schema import JsonObject
 from sefia.llm.step_decision import StepDecisionModel
 
-from ._schema import LiteLLMStructuredOutputAdapter, PreparedOutput
+from ._schema import CompiledOutputSchema, OutputSchemaCompiler
 
 _SCHEMA_PROMPT = """
 ### Response Format
@@ -36,7 +36,7 @@ class _JsonSchemaResponseFormat(TypedDict):
 class PreparedRequest:
     messages: list[dict[str, Any]]
     kwargs: dict[str, Any]
-    output: PreparedOutput | None
+    output: CompiledOutputSchema | None
 
 
 def prepare_request(
@@ -52,7 +52,7 @@ def prepare_request(
 ) -> PreparedRequest:
     raw_messages = [message.to_dict(exclude_none=True) for message in messages]
     output = (
-        LiteLLMStructuredOutputAdapter().build(decision_model)
+        OutputSchemaCompiler().compile(decision_model)
         if decision_model is not None
         else None
     )
@@ -76,7 +76,7 @@ def prepare_request(
     return PreparedRequest(raw_messages, kwargs, output)
 
 
-def _response_format(output: PreparedOutput) -> _JsonSchemaResponseFormat:
+def _response_format(output: CompiledOutputSchema) -> _JsonSchemaResponseFormat:
     return {
         "type": "json_schema",
         "json_schema": {

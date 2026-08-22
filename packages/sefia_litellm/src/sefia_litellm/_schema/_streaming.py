@@ -9,16 +9,16 @@ from sefia.llm.streaming import (
     StringEnd,
 )
 
-from ._codec import PreparedOutput
+from ._compiler import CompiledOutputSchema
 
 
 class OutputEventStreamer:
     def __init__(
         self,
-        prepared: PreparedOutput,
+        schema: CompiledOutputSchema,
         callback: OutputCallback,
     ) -> None:
-        self._prepared = prepared
+        self._schema = schema
         self._callback = callback
         self._parser = IncrementalJsonParser()
 
@@ -32,7 +32,7 @@ class OutputEventStreamer:
         path = getattr(event, "path", None)
         if path is None:
             return None
-        logical_path = self._prepared.logical_path(path)
+        logical_path = self._schema.logical_path(path)
         if logical_path is None:
             return None
         if isinstance(event, js.StringDelta):

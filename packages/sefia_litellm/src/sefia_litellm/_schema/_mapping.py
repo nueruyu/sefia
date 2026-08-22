@@ -7,128 +7,74 @@ from sefia.llm.json_schema import (
     JsonObject,
     JsonScalar,
     JsonSchemaDocument,
-    JsonValue,
     SchemaKeyword,
     SchemaNode,
     SchemaPath,
 )
 from sefia.llm.llm_output import LLMOutput
 
-from ._normalization import MappingPlan
-
 K = SchemaKeyword
 
 
 @final
 @dataclass(frozen=True)
-class MappingRestorer:
+class MappingTransform:
     schema: JsonObject
-    plan: MappingPlan
+    mapping_paths: frozenset[SchemaPath]
 
-    def decode(self, output: LLMOutput) -> LLMOutput:
-        return _decode(output, self.schema, self.schema, self.plan.mapping_paths, ())
+    @classmethod
+    def lower(cls, schema: JsonObject) -> "MappingTransform":
+        mapping_paths: set[SchemaPath] = set()
+        for cursor in list(SchemaNode(schema).walk()):
+            path, node = cursor.path, cursor.node
+            additional = node.additional_properties()
+            if node.type != "object" or not isinstance(additional, SchemaNode):
+                continue
+            property_names = node.property_names()
+            key_schema: JsonObject = (
+                property_names.value
+                if property_names is not None
+                else {K.TYPE: "string"}
+            )
+            _replace_with_entries(node, key_schema, additional.value)
+            mapping_paths.add(path)
+        restoration_schema = JsonSchemaDocument(schema).mutable_copy()
+        return cls(restoration_schema, frozenset(mapping_paths))
 
-
-@final
-class OutputCodec:
-    def __init__(
-        self,
-        result: MappingRestorer | None,
-        tools: dict[str, MappingRestorer | None],
-    ) -> None:
-        self._result = result
-        self._tools = tools
-
-    def decode(self, data: JsonValue) -> LLMOutput:
-        output = LLMOutput.from_json(data)
-        try:
-            envelope = output.to_object()
-        except ValueError:
-            return output
-        if set(envelope) != {"payload"}:
-            return output
-        return self._decode_decision(envelope["payload"])
-
-    @staticmethod
-    def logical_path(path: SchemaPath) -> SchemaPath | None:
-        return path[1:] if path and path[0] == "payload" else path
-
-    def _decode_decision(self, output: LLMOutput) -> LLMOutput:
-        try:
-            fields = output.to_object()
-        except ValueError:
-            return output
-        decision = fields.get("decision")
-        try:
-            decision_name = decision.to_string() if decision is not None else None
-        except ValueError:
-            return output
-        if decision_name == "result":
-            return self._decode_result(output, fields)
-        if decision_name == "tool_calls":
-            return self._decode_tool_calls(output, fields)
-        return output
-
-    def _decode_result(
-        self, output: LLMOutput, fields: dict[str, LLMOutput]
-    ) -> LLMOutput:
-        if self._result is None or "result" not in fields:
-            return output
-        return LLMOutput.from_object(
-            {**fields, "result": self._result.decode(fields["result"])}
-        )
-
-    def _decode_tool_calls(
-        self, output: LLMOutput, fields: dict[str, LLMOutput]
-    ) -> LLMOutput:
-        tool_calls = fields.get("tool_calls")
-        if tool_calls is None:
-            return output
-        try:
-            calls = tool_calls.to_array()
-        except ValueError:
-            return output
-        return LLMOutput.from_object(
-            {
-                **fields,
-                "tool_calls": LLMOutput.from_array(
-                    self._decode_tool_call(call) for call in calls
-                ),
-            }
-        )
-
-    def _decode_tool_call(self, output: LLMOutput) -> LLMOutput:
-        try:
-            fields = output.to_object()
-        except ValueError:
-            return output
-        name = fields.get("name")
-        try:
-            tool_name = name.to_string() if name is not None else None
-        except ValueError:
-            return output
-        codec = self._tools.get(tool_name) if tool_name is not None else None
-        if codec is None or "arguments" not in fields:
-            return output
-        return LLMOutput.from_object(
-            {**fields, "arguments": codec.decode(fields["arguments"])}
-        )
+    def restore(self, output: LLMOutput) -> LLMOutput:
+        return _restore(output, self.schema, self.schema, self.mapping_paths, ())
 
 
-@final
-@dataclass(frozen=True)
-class PreparedOutput:
-    wire_schema: JsonSchemaDocument
-    codec: OutputCodec
+def _replace_with_entries(
+    node: SchemaNode, key_schema: JsonObject, value_schema: JsonObject
+) -> None:
+    replacement: JsonObject = {
+        keyword: node.value[keyword]
+        for keyword in (K.TITLE, K.DESCRIPTION)
+        if keyword in node.value
+    }
+    for source, target in (
+        (K.MIN_PROPERTIES, K.MIN_ITEMS),
+        (K.MAX_PROPERTIES, K.MAX_ITEMS),
+    ):
+        if source in node.value:
+            replacement[target] = node.value[source]
+    replacement.update(
+        {
+            K.TYPE: "array",
+            K.ITEMS: {
+                K.TYPE: "object",
+                K.PROPERTIES: {"key": key_schema, "value": value_schema},
+                K.REQUIRED: ["key", "value"],
+                K.ADDITIONAL_PROPERTIES: False,
+            },
+        }
+    )
+    node.value.clear()
+    node.value.update(replacement)
 
-    def decode(self, data: JsonValue) -> LLMOutput:
-        return self.codec.decode(data)
 
-    def logical_path(self, path: SchemaPath) -> SchemaPath | None:
-        return self.codec.logical_path(path)
-
-
-def _decode(
+def _restore(
     output: LLMOutput,
     schema: JsonObject,
     root: JsonObject,
@@ -138,13 +84,13 @@ def _decode(
     schema, path = _resolve(schema, root, path)
     node = SchemaNode(schema)
     if path in mapping_paths:
-        return _decode_mapping(output, node, root, mapping_paths, path)
+        return _restore_mapping(output, node, root, mapping_paths, path)
 
     alternatives = node.any_of()
     if alternatives:
         for index, alternative in enumerate(alternatives):
             if _matches(output.data, alternative.value, root):
-                return _decode(
+                return _restore(
                     output,
                     alternative.value,
                     root,
@@ -154,9 +100,9 @@ def _decode(
         return output
 
     if node.type == "object":
-        return _decode_object(output, node, root, mapping_paths, path)
+        return _restore_object(output, node, root, mapping_paths, path)
     if node.type == "array":
-        return _decode_array(output, node, root, mapping_paths, path)
+        return _restore_array(output, node, root, mapping_paths, path)
     return output
 
 
@@ -200,7 +146,7 @@ def _matches(data: object, schema: JsonObject, root: JsonObject) -> bool:
     return True
 
 
-def _decode_object(
+def _restore_object(
     output: LLMOutput,
     node: SchemaNode,
     root: JsonObject,
@@ -214,7 +160,7 @@ def _decode_object(
     properties = node.properties()
     return LLMOutput.from_object(
         {
-            name: _decode(
+            name: _restore(
                 value,
                 properties[name].value,
                 root,
@@ -228,7 +174,7 @@ def _decode_object(
     )
 
 
-def _decode_array(
+def _restore_array(
     output: LLMOutput,
     node: SchemaNode,
     root: JsonObject,
@@ -243,12 +189,12 @@ def _decode_array(
     except ValueError:
         return output
     return LLMOutput.from_array(
-        _decode(value, items.value, root, mapping_paths, (*path, K.ITEMS))
+        _restore(value, items.value, root, mapping_paths, (*path, K.ITEMS))
         for value in values
     )
 
 
-def _decode_mapping(
+def _restore_mapping(
     output: LLMOutput,
     node: SchemaNode,
     root: JsonObject,
@@ -265,7 +211,7 @@ def _decode_mapping(
         fields = entry.to_object("mapping entry")
         if set(fields) != {"key", "value"}:
             raise ValueError("mapping entries must contain only key and value")
-        key = _decode(
+        key = _restore(
             fields["key"],
             properties["key"].value,
             root,
@@ -274,7 +220,7 @@ def _decode_mapping(
         ).to_scalar("mapping key")
         if key in result:
             raise ValueError(f"duplicate mapping key: {key!r}")
-        result[key] = _decode(
+        result[key] = _restore(
             fields["value"],
             properties["value"].value,
             root,
@@ -282,6 +228,3 @@ def _decode_mapping(
             (*path, K.ITEMS, K.PROPERTIES, "value"),
         )
     return LLMOutput.from_mapping(result)
-
-
-__all__ = ["OutputCodec", "PreparedOutput", "MappingRestorer"]

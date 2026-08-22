@@ -29,7 +29,7 @@ from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import ArgStream, StringEnd
-from sefia_litellm._schema import LiteLLMStructuredOutputAdapter
+from sefia_litellm._schema import OutputSchemaCompiler
 from sefia_litellm._schema._streaming import OutputEventStreamer
 
 
@@ -41,7 +41,7 @@ def _decision_model(output_type: Any, tools: list[ToolEntry]) -> StepDecisionMod
 
 
 def _prepare(decision: StepDecisionModel):
-    return LiteLLMStructuredOutputAdapter().build(decision)
+    return OutputSchemaCompiler().compile(decision)
 
 
 def _process(
@@ -53,12 +53,19 @@ def _process(
     return decision.validate(prepared.decode(data), tool_call_ids)
 
 
-def test_prepared_schema_removes_payload_from_stream_paths() -> None:
-    prepared = _prepare(_decision_model(str, []))
+def test_compiled_schema_removes_payload_from_stream_paths() -> None:
+    compiled = _prepare(_decision_model(str, []))
 
-    assert prepared.logical_path(
+    assert compiled.logical_path(
         ("payload", "tool_calls", 0, "arguments", "question")
     ) == ("tool_calls", 0, "arguments", "question")
+
+
+def test_decision_envelope_builds_schema_without_consuming_fragments() -> None:
+    compiled = _prepare(_decision_model(str, [_tool()]))
+
+    assert compiled.envelope.build_schema() == compiled.wire_schema.to_dict()
+    assert compiled.envelope.build_schema() == compiled.wire_schema.to_dict()
 
 
 async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
@@ -281,7 +288,7 @@ def test_raw_definition_is_not_normalized_with_typed_decision_model() -> None:
     )
 
     with pytest.raises(ValueError, match=r"missing \['name'\]"):
-        LiteLLMStructuredOutputAdapter().build(definition)
+        OutputSchemaCompiler().compile(definition)
 
 
 def test_conflicting_tool_definition_names_are_renamed() -> None:
