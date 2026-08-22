@@ -9,7 +9,7 @@ from sefia.llm.streaming import (
     StringEnd,
 )
 
-from ._decision_envelope import DecisionEnvelopeFormat
+from ._schema import DecisionEnvelopeFormat
 
 
 class OutputEventStreamer:
@@ -32,15 +32,15 @@ class OutputEventStreamer:
         path = getattr(event, "path", None)
         if path is None:
             return None
-        logical_path = self._schema.logical_path(path)
-        if logical_path is None:
+        payload_path = self._schema.to_payload_path(path)
+        if payload_path is None:
             return None
         if isinstance(event, js.StringDelta):
-            return StringDelta(logical_path, event.text)
+            return StringDelta(payload_path, event.text)
         if isinstance(event, js.EndString):
-            return StringEnd(logical_path, event.value)
+            return StringEnd(payload_path, event.value)
         if isinstance(event, js.Scalar):
             if isinstance(event.value, str):
                 return None
-            return Scalar(logical_path, event.value)
+            return Scalar(payload_path, event.value)
         return None

@@ -30,7 +30,7 @@ from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import ArgStream, StringEnd
 from sefia_litellm._schema import DecisionEnvelope, DecisionEnvelopeFormat
-from sefia_litellm._schema._streaming import OutputEventStreamer
+from sefia_litellm._output_stream import OutputEventStreamer
 
 
 def _decision_model(output_type: Any, tools: list[ToolEntry]) -> StepDecisionModel:
@@ -53,10 +53,10 @@ def _process(
     return decision.validate(prepared.decode(data), tool_call_ids)
 
 
-def test_compiled_schema_removes_payload_from_stream_paths() -> None:
-    compiled = _prepare(_decision_model(str, []))
+def test_envelope_format_removes_payload_from_stream_paths() -> None:
+    envelope_format = _prepare(_decision_model(str, []))
 
-    assert compiled.logical_path(
+    assert envelope_format.to_payload_path(
         ("payload", "tool_calls", 0, "arguments", "question")
     ) == ("tool_calls", 0, "arguments", "question")
 

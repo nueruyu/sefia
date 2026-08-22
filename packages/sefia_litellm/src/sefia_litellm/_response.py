@@ -8,7 +8,7 @@ from sefia.llm import LLMResponse, ToolCall
 from sefia.llm.streaming import OutputCallback
 
 from ._schema import DecisionEnvelopeFormat
-from ._schema._streaming import OutputEventStreamer
+from ._output_stream import OutputEventStreamer
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage

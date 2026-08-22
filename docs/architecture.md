@@ -137,11 +137,11 @@ implementation noted in parentheses.
 | `_client.py` | `LiteLLMClient` orchestration, runtime logging configuration, and LiteLLM exception mapping. |
 | `_request.py` | Converts core messages and a logical decision model into LiteLLM messages, kwargs, native `response_format`, or prompt fallback instructions. |
 | `_response.py` | Converts completed responses and streams into `LLMResponse`, including callbacks, usage, cost, and final output decoding. |
+| `_output_stream.py` | Parses incremental wire JSON and converts its payload events into core `OutputEvent`s. |
 | `_schema/_decision_envelope.py` | Models the wire decision envelope and builds its schema format, output decoding, and path translation from `StepDecisionModel`. |
 | `_schema/_policy.py` | Declares independent generated/user-defined schema policies, applies permitted corrections, and validates the shared strict-output constraints. |
 | `_schema/_mapping.py` | Owns the reversible mapping-to-entry-list schema transformation and output restoration. |
-| `_schema/_fragment.py` | Couples each result or tool-argument wire schema with its runtime transformation. |
-| `_schema/_streaming.py` | Converts incremental wire JSON events and paths into core `OutputEvent`s. |
+| `_schema/_value_format.py` | Defines how each result or tool-argument value is represented on the wire and restored at runtime. |
 
 ## Where to change what
 

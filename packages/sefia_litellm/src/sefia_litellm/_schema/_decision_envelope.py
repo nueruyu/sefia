@@ -16,17 +16,9 @@ from sefia.llm.llm_output import LLMOutput
 from sefia.llm.step_decision import (
     StepDecisionMode,
     StepDecisionModel,
-    StepTool,
-    TypedToolArguments,
 )
 
-from ._fragment import CompiledFragment
-from ._policy import (
-    GENERATED_SCHEMA_POLICY,
-    USER_DEFINED_SCHEMA_POLICY,
-    SchemaPolicy,
-    prepare_schema,
-)
+from ._value_format import StructuredValueFormat
 
 K = SchemaKeyword
 
@@ -49,23 +41,25 @@ class DecisionEnvelopeFormat:
     def __init__(
         self,
         schema: JsonSchemaDocument,
-        result: CompiledFragment | None,
-        tools: dict[str, CompiledFragment],
+        result_format: StructuredValueFormat | None,
+        tool_argument_formats: dict[str, StructuredValueFormat],
     ) -> None:
         self._schema = schema
-        self._result = result
-        self._tools = tools
+        self._result_format = result_format
+        self._tool_argument_formats = tool_argument_formats
 
     @classmethod
     def from_model(cls, model: StepDecisionModel) -> "DecisionEnvelopeFormat":
-        result = (
-            _compile_fragment(model.result.json_schema, GENERATED_SCHEMA_POLICY)
+        result_format = (
+            StructuredValueFormat.from_generated_schema(model.result.json_schema)
             if model.result is not None
             else None
         )
-        tools = {tool.name: _compile_tool_fragment(tool) for tool in model.tools}
-        schema = _build_schema(model.mode, result, tools)
-        return cls(JsonSchemaDocument(schema), result, tools)
+        tool_argument_formats = {
+            tool.name: StructuredValueFormat.from_tool(tool) for tool in model.tools
+        }
+        schema = _build_schema(model.mode, result_format, tool_argument_formats)
+        return cls(JsonSchemaDocument(schema), result_format, tool_argument_formats)
 
     @property
     def schema(self) -> JsonSchemaDocument:
@@ -85,7 +79,7 @@ class DecisionEnvelopeFormat:
         return self._decode_payload(envelope.payload)
 
     @staticmethod
-    def logical_path(path: SchemaPath) -> SchemaPath | None:
+    def to_payload_path(path: SchemaPath) -> SchemaPath | None:
         return path[1:] if path and path[0] == "payload" else path
 
     def _decode_payload(self, output: LLMOutput) -> LLMOutput:
@@ -107,10 +101,10 @@ class DecisionEnvelopeFormat:
     def _decode_result(
         self, output: LLMOutput, fields: dict[str, LLMOutput]
     ) -> LLMOutput:
-        if self._result is None or "result" not in fields:
+        if self._result_format is None or "result" not in fields:
             return output
         return LLMOutput.from_object(
-            {**fields, "result": self._result.decode(fields["result"])}
+            {**fields, "result": self._result_format.decode(fields["result"])}
         )
 
     def _decode_tool_calls(
@@ -142,35 +136,26 @@ class DecisionEnvelopeFormat:
             tool_name = name.to_string() if name is not None else None
         except ValueError:
             return output
-        fragment = self._tools.get(tool_name) if tool_name is not None else None
-        if fragment is None or "arguments" not in fields:
+        value_format = (
+            self._tool_argument_formats.get(tool_name)
+            if tool_name is not None
+            else None
+        )
+        if value_format is None or "arguments" not in fields:
             return output
         return LLMOutput.from_object(
-            {**fields, "arguments": fragment.decode(fields["arguments"])}
+            {**fields, "arguments": value_format.decode(fields["arguments"])}
         )
-
-
-def _compile_tool_fragment(tool: StepTool) -> CompiledFragment:
-    if isinstance(tool.arguments, TypedToolArguments):
-        return _compile_fragment(tool.arguments.json_schema, GENERATED_SCHEMA_POLICY)
-    return _compile_fragment(tool.arguments.json_schema, USER_DEFINED_SCHEMA_POLICY)
-
-
-def _compile_fragment(
-    document: JsonSchemaDocument, policy: SchemaPolicy
-) -> CompiledFragment:
-    prepared = prepare_schema(document.mutable_copy(), policy)
-    return CompiledFragment(prepared.wire_schema, prepared.mapping)
 
 
 def _build_schema(
     mode: StepDecisionMode,
-    result: CompiledFragment | None,
-    tools: dict[str, CompiledFragment],
+    result_format: StructuredValueFormat | None,
+    tool_argument_formats: dict[str, StructuredValueFormat],
 ) -> JsonObject:
     definitions: JsonObject = {}
     registry = DefinitionRegistry(definitions)
-    payload = _payload_schema(mode, result, tools, registry)
+    payload = _payload_schema(mode, result_format, tool_argument_formats, registry)
     root = SchemaNode.object_schema({"payload": payload})
     if definitions:
         root.set_definitions(definitions)
@@ -180,16 +165,16 @@ def _build_schema(
 
 def _payload_schema(
     mode: StepDecisionMode,
-    result: CompiledFragment | None,
-    tools: dict[str, CompiledFragment],
+    result_format: StructuredValueFormat | None,
+    tool_argument_formats: dict[str, StructuredValueFormat],
     registry: DefinitionRegistry,
 ) -> JsonObject:
     branches: list[JsonObject] = []
     if mode is not StepDecisionMode.RESULT_ONLY:
-        branches.append(_tool_calls_schema(tools, registry))
+        branches.append(_tool_calls_schema(tool_argument_formats, registry))
     if mode is not StepDecisionMode.TOOLS_REQUIRED:
-        assert result is not None
-        schema = JsonSchemaDocument(result.wire_schema).mutable_copy()
+        assert result_format is not None
+        schema = JsonSchemaDocument(result_format.schema).mutable_copy()
         imported = registry.import_schema(schema, namespace="result")
         branches.append(
             _closed_object({"decision": _literal("result"), "result": imported})
@@ -206,11 +191,12 @@ def _payload_schema(
 
 
 def _tool_calls_schema(
-    tools: dict[str, CompiledFragment], registry: DefinitionRegistry
+    tool_argument_formats: dict[str, StructuredValueFormat],
+    registry: DefinitionRegistry,
 ) -> JsonObject:
     calls: list[JsonObject] = []
-    for name, fragment in tools.items():
-        schema = JsonSchemaDocument(fragment.wire_schema).mutable_copy()
+    for name, value_format in tool_argument_formats.items():
+        schema = JsonSchemaDocument(value_format.schema).mutable_copy()
         imported = registry.import_schema(schema, namespace=name)
         calls.append(_closed_object({"name": _literal(name), "arguments": imported}))
     items: JsonObject = (
