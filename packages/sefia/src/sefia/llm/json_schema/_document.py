@@ -177,6 +177,14 @@ class SchemaNode:
         self.value[K.DEFINITIONS] = definitions
 
     def take_definitions(self) -> JsonObject:
+        modern = self.value.get(K.DEFINITIONS)
+        legacy = self.value.get(K.LEGACY_DEFINITIONS)
+        if isinstance(modern, dict) and isinstance(legacy, dict):
+            overlapping = sorted(set(modern) & set(legacy))
+            if overlapping:
+                raise ValueError(
+                    f"$defs and definitions contain the same names: {overlapping}"
+                )
         definitions: JsonObject = {}
         for keyword in (K.DEFINITIONS, K.LEGACY_DEFINITIONS):
             value = self.value.pop(keyword, None)

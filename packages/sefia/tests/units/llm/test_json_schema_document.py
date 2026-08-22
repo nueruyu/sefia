@@ -190,6 +190,28 @@ def test_definition_registry_imports_legacy_definitions() -> None:
     assert definitions == {"legacy__Item": {"type": "string"}}
 
 
+def test_definition_registry_rejects_overlapping_definition_keywords() -> None:
+    registry = DefinitionRegistry({})
+    fragment: JsonObject = {
+        "type": "object",
+        "properties": {
+            "modern": {"$ref": "#/$defs/Item"},
+            "legacy": {"$ref": "#/definitions/Item"},
+        },
+        "$defs": {"Item": {"type": "string"}},
+        "definitions": {"Item": {"type": "integer"}},
+    }
+
+    with pytest.raises(
+        ValueError,
+        match=r"\$defs and definitions contain the same names: \['Item'\]",
+    ):
+        registry.import_schema(fragment, namespace="fragment")
+
+    assert fragment["$defs"] == {"Item": {"type": "string"}}
+    assert fragment["definitions"] == {"Item": {"type": "integer"}}
+
+
 @pytest.mark.parametrize(
     ("reference", "message"),
     [

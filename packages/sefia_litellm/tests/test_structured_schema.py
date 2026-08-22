@@ -822,6 +822,37 @@ def test_mapping_nested_in_union_is_lowered_and_decoded() -> None:
     assert decision.result == _MappedBranch(labels={"important": 2})
 
 
+@dataclass
+class _DictionaryBranch:
+    x: dict[str, int]
+
+
+@dataclass
+class _LaterDictionaryBranch:
+    x: list[int]
+    y: dict[str, int]
+
+
+def test_mapping_union_selects_the_fully_valid_wire_branch() -> None:
+    definition = _decision_model(_DictionaryBranch | _LaterDictionaryBranch, [])
+
+    decision = _process(
+        definition,
+        {
+            "payload": {
+                "decision": "result",
+                "result": {
+                    "x": [1],
+                    "y": [{"key": "n", "value": 2}],
+                },
+            }
+        },
+    )
+
+    assert isinstance(decision, ResultDecision)
+    assert decision.result == _LaterDictionaryBranch(x=[1], y={"n": 2})
+
+
 async def _categorize(labels: dict[str, int]) -> None:
     pass
 

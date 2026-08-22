@@ -1,16 +1,19 @@
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import cast
 
+import jsonschema.validators
 from typing_extensions import final
 
 from sefia.llm.json_schema import (
     JsonObject,
     JsonScalar,
+    JsonValue,
     SchemaKeyword,
     SchemaNode,
     SchemaPath,
 )
-from sefia.llm.llm_output import LLMOutput
+from sefia.llm.llm_output import LLMOutput, LLMOutputData
 
 K = SchemaKeyword
 
@@ -151,29 +154,15 @@ def _resolve(
     return resolved.value, (K.DEFINITIONS, reference.definition, *reference.path)
 
 
-def _matches(data: object, schema: JsonObject, root: JsonObject) -> bool:
-    schema, _ = _resolve(schema, root, ())
-    node = SchemaNode(schema)
-    if K.CONST in schema and data != schema[K.CONST]:
-        return False
-    if node.type == "null":
-        return data is None
-    if node.type == "object":
-        if not isinstance(data, dict):
-            return False
-        required_names = set(node.required() or ())
-        return required_names <= set(cast(dict[object, object], data).keys())
-    if node.type == "array":
-        return isinstance(data, list)
-    if node.type == "string":
-        return isinstance(data, str)
-    if node.type == "integer":
-        return isinstance(data, int) and not isinstance(data, bool)
-    if node.type == "number":
-        return isinstance(data, int | float) and not isinstance(data, bool)
-    if node.type == "boolean":
-        return isinstance(data, bool)
-    return True
+def _matches(data: LLMOutputData, schema: JsonObject, root: JsonObject) -> bool:
+    candidate = deepcopy(schema)
+    for keyword in (K.DEFINITIONS, K.LEGACY_DEFINITIONS):
+        if keyword in root:
+            candidate[keyword] = deepcopy(root[keyword])
+    validator_cls = jsonschema.validators.validator_for(
+        root, default=jsonschema.Draft202012Validator
+    )
+    return validator_cls(candidate).is_valid(cast(JsonValue, data))
 
 
 def _decode_object(
