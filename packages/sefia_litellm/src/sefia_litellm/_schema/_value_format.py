@@ -6,7 +6,7 @@ from sefia.llm.json_schema import JsonObject, JsonSchemaDocument
 from sefia.llm.llm_output import LLMOutput
 from sefia.llm.step_decision import StepTool, TypedToolArguments
 
-from ._mapping import UniformDictionaryFormat
+from ._uniform_dictionary import UniformDictionaryFormat
 from ._policy import (
     GENERATED_SCHEMA_POLICY,
     USER_DEFINED_SCHEMA_POLICY,
