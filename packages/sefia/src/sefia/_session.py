@@ -55,7 +55,7 @@ class Session:
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
-                result_schema_factory=model_backend,
+                result_format_factory=model_backend,
                 prompt_formatter=prompt_formatter,
                 json_default=pydantic_json_default,
                 stream=stream,

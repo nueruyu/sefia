@@ -18,7 +18,7 @@ from sefia.inference import FunctionInfo, StepDecision, ToolCallsDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm.json_schema import SchemaNode
-from sefia.llm.streaming import OutputEvent
+from sefia.llm.streaming import OutputStreamEvent
 from sefia.llm.llm_output import LLMOutput
 from sefia.llm.step_decision import (
     StepDecisionMode,
@@ -109,7 +109,7 @@ async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
     assert StringEnd(name="question", value="Hello") in events
 
 
-async def _dispatch_event(streamer: ToolArgStreamer, event: OutputEvent) -> None:
+async def _dispatch_event(streamer: ToolArgStreamer, event: OutputStreamEvent) -> None:
     streamer.on_event(event)
 
 
@@ -957,7 +957,7 @@ class TestToolCallValidation:
         formatter.format_arguments.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=client,
-            result_schema_factory=PydanticModelBackend(),
+            result_format_factory=PydanticModelBackend(),
             prompt_formatter=formatter,
         )
 

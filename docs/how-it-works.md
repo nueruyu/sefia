@@ -89,7 +89,7 @@ A `StepDecisionSpec` selects one of three shapes:
 | no tools | `RESULT_ONLY` | `{ decision: "result", result: T }` only |
 
 `llm/step_decision.py` owns this logical shape. It retains tools and the result's
-`ResultSchema` as separate components and validates decoded values as
+`ResultFormat` as separate components and validates decoded values as
 `StepDecision`s. `llm/json_schema` imports `$defs`, resolves name collisions, and
 rewrites local references without knowing about tools or Pydantic. Recursive JSON
 value types and `SchemaNode` accessors keep schema traversal out of `dict[str, Any]`.
@@ -103,7 +103,7 @@ them while removing the provider envelope. Raw JSON Schema tool arguments are
 validated without semantic rewriting.
 
 The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
-reflects callable parameters, while `_result_schema.py` produces a JSON Schema and
+reflects callable parameters, while `_result_format.py` produces a JSON Schema and
 restores a decoded result to its declared Python type. Generic decoded-value shape
 operations live on `LLMOutput`; the backend does not know the step-decision
 shape. Provider-side response decoding and stream-path normalization stay inside the
@@ -115,7 +115,7 @@ corresponding `StepDecision`. An `LLMClient`
 owns decision-envelope composition, schema encoding, prompt fallback, response
 decoding, and structured-stream decoding needed by its model. Step-decision models
 live in `sefia.llm.step_decision`; result schema interfaces and decoded values live
-in `sefia.llm.result_schema` and `sefia.llm.llm_output`.
+in `sefia.llm.result_format` and `sefia.llm.llm_output`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 The core system prompt is `docstring + decision semantics + tool definitions`; the

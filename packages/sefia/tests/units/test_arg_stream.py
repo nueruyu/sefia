@@ -18,7 +18,7 @@ from sefia.llm._arg_stream import (
 from sefia.llm._client import LLMClient
 from sefia.llm.step_decision import StepDecisionModel
 from sefia.llm.streaming import (
-    OutputCallback,
+    OutputStreamCallback,
     Scalar as OutputScalar,
     StringDelta as OutputStringDelta,
     StringEnd as OutputStringEnd,
@@ -269,7 +269,7 @@ class StreamingClient(LLMClient):
         tools: list[dict[str, Any]] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
-        output_callback: OutputCallback | None = None,
+        output_callback: OutputStreamCallback | None = None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMResponse:
         if stream_callback is not None:
@@ -313,7 +313,7 @@ async def test_arguments_stream_through_a_real_strategy():
     formatter.format_arguments.return_value = "<arguments/>"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
-        result_schema_factory=PydanticModelBackend(),
+        result_format_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         stream=True,
     )

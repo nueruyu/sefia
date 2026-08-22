@@ -8,7 +8,7 @@ from sefia import Tools
 from sefia.llm import LLMClient, LLMResponse, Message
 from sefia.llm.step_decision import StepDecisionModel
 from sefia.llm.streaming import (
-    OutputCallback,
+    OutputStreamCallback,
     StringDelta,
     StringEnd,
 )
@@ -34,7 +34,7 @@ class StreamingClient(LLMClient):
         tools: list[dict[str, Any]] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[Any, Any, None]] | None = None,
-        output_callback: OutputCallback | None = None,
+        output_callback: OutputStreamCallback | None = None,
         reasoning_callback: (Callable[[str], Coroutine[Any, Any, None]] | None) = None,
     ) -> LLMResponse:
         content = self.responses.pop(0)

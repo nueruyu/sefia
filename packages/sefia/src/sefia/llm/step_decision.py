@@ -10,7 +10,7 @@ from ..exceptions import UnknownToolDecisionError
 from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCallsDecision
 from .json_schema import JsonSchemaDocument
 from ._tool_call_ids import ToolCallIdRegistry
-from .result_schema import ResultSchema, ResultSchemaFactory
+from .result_format import ResultFormat, ResultFormatFactory
 from .llm_output import LLMOutput
 
 
@@ -106,7 +106,7 @@ class StepDecisionModel:
     def from_spec(
         cls,
         spec: StepDecisionSpec,
-        result_schema_factory: ResultSchemaFactory,
+        result_format_factory: ResultFormatFactory,
     ) -> "StepDecisionModel":
         tools = {
             tool.name: _ToolModel(
@@ -132,7 +132,7 @@ class StepDecisionModel:
         result = (
             None
             if spec.mode is StepDecisionMode.TOOLS_REQUIRED
-            else result_schema_factory.create(spec.output_type)
+            else result_format_factory.create(spec.output_type)
         )
         return cls(spec, tools, result)
 
@@ -140,7 +140,7 @@ class StepDecisionModel:
         self,
         spec: StepDecisionSpec,
         tools: dict[str, _ToolModel],
-        result: ResultSchema | None,
+        result: ResultFormat | None,
     ):
         self._spec = spec
         self._tools = tools
@@ -155,7 +155,7 @@ class StepDecisionModel:
         return tuple(tool.schema for tool in self._tools.values())
 
     @property
-    def result(self) -> ResultSchema | None:
+    def result(self) -> ResultFormat | None:
         return self._result
 
     def validate(

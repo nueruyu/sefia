@@ -2,8 +2,8 @@ from jsonweir import IncrementalJsonParser
 from jsonweir import events as js
 
 from sefia.llm.streaming import (
-    OutputCallback,
-    OutputEvent,
+    OutputStreamCallback,
+    OutputStreamEvent,
     Scalar,
     StringDelta,
     StringEnd,
@@ -16,7 +16,7 @@ class OutputEventStreamer:
     def __init__(
         self,
         schema: DecisionEnvelopeFormat,
-        callback: OutputCallback,
+        callback: OutputStreamCallback,
     ) -> None:
         self._schema = schema
         self._callback = callback
@@ -28,7 +28,7 @@ class OutputEventStreamer:
             if converted is not None:
                 await self._callback(converted)
 
-    def _convert(self, event: js.Event) -> OutputEvent | None:
+    def _convert(self, event: js.Event) -> OutputStreamEvent | None:
         path = getattr(event, "path", None)
         if path is None:
             return None

@@ -27,13 +27,13 @@ class Scalar:
     value: int | float | bool | None
 
 
-OutputEvent: TypeAlias = StringDelta | StringEnd | Scalar
-OutputCallback: TypeAlias = Callable[[OutputEvent], Awaitable[None]]
+OutputStreamEvent: TypeAlias = StringDelta | StringEnd | Scalar
+OutputStreamCallback: TypeAlias = Callable[[OutputStreamEvent], Awaitable[None]]
 
 
 __all__ = [
-    "OutputCallback",
-    "OutputEvent",
+    "OutputStreamCallback",
+    "OutputStreamEvent",
     "Scalar",
     "StringDelta",
     "StringEnd",

@@ -36,7 +36,7 @@ from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._session import Session
 from .llm import LLMClient, LLMResponse, Message
 from .llm.step_decision import StepDecisionModel
-from .llm.streaming import OutputCallback
+from .llm.streaming import OutputStreamCallback
 from .pydantic._json_utils import pydantic_json_default
 
 
@@ -57,7 +57,7 @@ class MockLLMClient(LLMClient):
         tools: list[dict[str, Any]] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
-        output_callback: OutputCallback | None = None,
+        output_callback: OutputStreamCallback | None = None,
         reasoning_callback: (
             Callable[[str], Coroutine[None, None, None]] | None
         ) = None,

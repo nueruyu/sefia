@@ -10,7 +10,7 @@ from typing import Literal
 
 from sefia.streaming import ArgStream
 from sefia.llm.streaming import (
-    OutputEvent,
+    OutputStreamEvent,
     StringDelta as OutputStringDelta,
     StringEnd as OutputStringEnd,
 )
@@ -121,7 +121,7 @@ class ToolArgStreamer:
         self._channels: dict[int, _ArgStreamChannel] = {}
         self._tasks: list[asyncio.Task[None]] = []
 
-    def on_event(self, event: OutputEvent) -> None:
+    def on_event(self, event: OutputStreamEvent) -> None:
         try:
             self._dispatch(event)
         except Exception:
@@ -142,7 +142,7 @@ class ToolArgStreamer:
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
-    def _dispatch(self, event: OutputEvent) -> None:
+    def _dispatch(self, event: OutputStreamEvent) -> None:
         tool_path = parse_tool_call_path(event.path)
         if tool_path is None:
             return
@@ -199,7 +199,7 @@ class ToolArgStreamer:
             )
 
 
-def _to_arg_event(tool_path: ToolCallPath, event: OutputEvent) -> ArgEvent | None:
+def _to_arg_event(tool_path: ToolCallPath, event: OutputStreamEvent) -> ArgEvent | None:
     name = tool_path.argument_name
     if name is None:
         return None

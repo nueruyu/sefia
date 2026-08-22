@@ -78,7 +78,7 @@ def _make_strategy(
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
-        result_schema_factory=PydanticModelBackend(),
+        result_format_factory=PydanticModelBackend(),
         prompt_formatter=formatter,
         json_default=pydantic_json_default,
         stream=stream,

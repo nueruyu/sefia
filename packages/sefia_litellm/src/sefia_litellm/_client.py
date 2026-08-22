@@ -10,7 +10,7 @@ from typing_extensions import final, override
 from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message
 from sefia.llm.step_decision import StepDecisionModel
-from sefia.llm.streaming import OutputCallback
+from sefia.llm.streaming import OutputStreamCallback
 
 from ._request import prepare_request
 from ._response import handle_response, handle_stream
@@ -96,7 +96,7 @@ class LiteLLMClient(LLMClient):
         tools: list[dict[str, Any]] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
-        output_callback: OutputCallback | None = None,
+        output_callback: OutputStreamCallback | None = None,
         reasoning_callback: (
             Callable[[str], Coroutine[None, None, None]] | None
         ) = None,

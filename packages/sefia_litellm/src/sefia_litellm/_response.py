@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import TYPE_CHECKING, Any, Coroutine, cast
 
 from sefia.llm import LLMResponse, ToolCall
-from sefia.llm.streaming import OutputCallback
+from sefia.llm.streaming import OutputStreamCallback
 
 from ._schema import DecisionEnvelopeFormat
 from ._output_stream import OutputEventStreamer
@@ -52,7 +52,7 @@ async def handle_stream(
     stream: AsyncIterator[Any],
     *,
     content_callback: Callable[[str], Coroutine[None, None, None]] | None,
-    output_callback: OutputCallback | None,
+    output_callback: OutputStreamCallback | None,
     reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
     messages: list[dict[str, Any]],
     output: DecisionEnvelopeFormat | None,

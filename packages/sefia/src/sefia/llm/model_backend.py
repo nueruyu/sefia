@@ -1,8 +1,8 @@
 from .._tool_system import ToolFunctionInspector
-from .result_schema import ResultSchemaFactory
+from .result_format import ResultFormatFactory
 
 
-class ModelBackend(ToolFunctionInspector, ResultSchemaFactory):
+class ModelBackend(ToolFunctionInspector, ResultFormatFactory):
     pass
 
 

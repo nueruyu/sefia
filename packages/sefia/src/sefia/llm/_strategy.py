@@ -24,9 +24,9 @@ from .step_decision import (
     StepDecisionModel,
     StepDecisionSpec,
 )
-from .result_schema import ResultSchemaFactory
+from .result_format import ResultFormatFactory
 from .llm_output import LLMOutput
-from .streaming import OutputEvent
+from .streaming import OutputStreamEvent
 
 JsonDefault = Callable[[Any], Any]
 
@@ -43,7 +43,7 @@ class LLMInferenceStrategy(InferenceStrategy):
     def __init__(
         self,
         llm_client: LLMClient,
-        result_schema_factory: ResultSchemaFactory,
+        result_format_factory: ResultFormatFactory,
         prompt_formatter: PromptFormatter,
         json_default: JsonDefault | None = None,
         stream: bool = False,
@@ -52,7 +52,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         if max_repair_attempts < 0:
             raise ValueError("max_repair_attempts must be non-negative")
         self.llm_client = llm_client
-        self._result_schema_factory = result_schema_factory
+        self._result_format_factory = result_format_factory
         self._prompt_formatter = prompt_formatter
         self._json_default = json_default
         self._stream = stream
@@ -71,7 +71,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             output_type=function_info.return_type,
             tools=tools.get_all(),
         )
-        decision_model = StepDecisionModel.from_spec(spec, self._result_schema_factory)
+        decision_model = StepDecisionModel.from_spec(spec, self._result_format_factory)
         messages = self._build_messages(function_info, history, spec)
 
         attempt = 0
@@ -122,7 +122,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             async def on_token(token: str):
                 await publisher.publish(events.LLMTokenReceived(token=token))
 
-            async def on_output(event: OutputEvent) -> None:
+            async def on_output(event: OutputStreamEvent) -> None:
                 if tool_arg_streamer is not None:
                     tool_arg_streamer.on_event(event)
 

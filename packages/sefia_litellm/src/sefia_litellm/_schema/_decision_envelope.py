@@ -51,7 +51,7 @@ class DecisionEnvelopeFormat:
     @classmethod
     def from_model(cls, model: StepDecisionModel) -> "DecisionEnvelopeFormat":
         result_format = (
-            StructuredValueFormat.from_generated_schema(model.result.json_schema)
+            StructuredValueFormat.from_generated_schema(model.result.schema)
             if model.result is not None
             else None
         )
