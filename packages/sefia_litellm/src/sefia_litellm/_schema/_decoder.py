@@ -43,13 +43,13 @@ class _ObjectDecoder:
 
     def decode(self, data: StructuredValue) -> StructuredValue:
         try:
-            fields = data.as_object()
+            fields = data.to_object()
         except ValueError:
             return data
         return StructuredValue.object(
             {
                 key: self._properties[key].decode(value)
-                if isinstance(key, str) and key in self._properties
+                if key in self._properties
                 else value
                 for key, value in fields.items()
             }
@@ -63,7 +63,7 @@ class _ArrayDecoder:
 
     def decode(self, data: StructuredValue) -> StructuredValue:
         try:
-            values = data.as_array()
+            values = data.to_array()
         except ValueError:
             return data
         return StructuredValue.array(self._item.decode(item) for item in values)
@@ -77,19 +77,19 @@ class _MappingDecoder:
 
     def decode(self, data: StructuredValue) -> StructuredValue:
         try:
-            entries = data.as_array()
+            entries = data.to_array()
         except ValueError:
             return data
         result: dict[JsonScalar, StructuredValue] = {}
         for entry in entries:
-            fields = entry.as_record("mapping entry")
+            fields = entry.to_object("mapping entry")
             if set(fields) != {"key", "value"}:
                 raise ValueError("mapping entries must contain only key and value")
-            key = self._key.decode(fields["key"]).as_scalar("mapping key")
+            key = self._key.decode(fields["key"]).to_scalar("mapping key")
             if key in result:
                 raise ValueError(f"duplicate mapping key: {key!r}")
             result[key] = self._value.decode(fields["value"])
-        return StructuredValue.object(result)
+        return StructuredValue.mapping(result)
 
 
 @final
@@ -102,7 +102,7 @@ class _UnionDecoder:
 
     def decode(self, data: StructuredValue) -> StructuredValue:
         for schema, decoder in self._choices:
-            if matches(data.to_python(), schema, self._root):
+            if matches(data.value, schema, self._root):
                 return decoder.decode(data)
         return data
 

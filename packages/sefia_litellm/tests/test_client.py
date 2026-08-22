@@ -123,7 +123,7 @@ class TestLiteLLMClient:
         assert "Follow the task." in system_prompt
         assert '"payload"' in system_prompt
         assert response.structured_output is not None
-        assert response.structured_output.to_python() == {
+        assert response.structured_output.value == {
             "decision": "result",
             "result": {"city": "Tokyo"},
         }

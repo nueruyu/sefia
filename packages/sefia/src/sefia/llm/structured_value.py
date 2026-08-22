@@ -1,33 +1,33 @@
+import builtins
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from collections.abc import Iterable
 from typing import cast
 
-from typing_extensions import TypeAlias, final
+from typing_extensions import final
 
 from .json_schema import JsonScalar, JsonValue
-
-_StructuredData: TypeAlias = (
-    JsonScalar | list["StructuredValue"] | dict[JsonScalar, "StructuredValue"]
-)
-StructuredPythonValue: TypeAlias = (
-    JsonScalar
-    | list["StructuredPythonValue"]
-    | dict[JsonScalar, "StructuredPythonValue"]
-)
 
 
 @final
 @dataclass(frozen=True)
 class StructuredValue:
-    _data: _StructuredData
+    _value: JsonScalar | list[builtins.object] | dict[builtins.object, builtins.object]
 
     @classmethod
     def from_json(cls, value: JsonValue) -> "StructuredValue":
+        return cls._from_value(value)
+
+    @classmethod
+    def _from_value(cls, value: builtins.object) -> "StructuredValue":
         if isinstance(value, list):
-            return cls.array(cls.from_json(item) for item in value)
+            items = cast(list[builtins.object], value)
+            return cls(list(items))
         if isinstance(value, dict):
-            return cls.object({key: cls.from_json(item) for key, item in value.items()})
-        return cls.scalar(value)
+            fields = cast(dict[builtins.object, builtins.object], value)
+            return cls(dict(fields))
+        if value is None or isinstance(value, str | int | float | bool):
+            return cls(value)
+        raise ValueError(f"Unsupported structured value: {value!r}")
 
     @classmethod
     def scalar(cls, value: JsonScalar) -> "StructuredValue":
@@ -35,46 +35,48 @@ class StructuredValue:
 
     @classmethod
     def array(cls, values: Iterable["StructuredValue"]) -> "StructuredValue":
-        return cls(list(values))
+        return cls([value.value for value in values])
 
     @classmethod
-    def object(cls, fields: dict[JsonScalar, "StructuredValue"]) -> "StructuredValue":
-        return cls(dict(fields))
+    def object(cls, fields: Mapping[str, "StructuredValue"]) -> "StructuredValue":
+        return cls({name: value.value for name, value in fields.items()})
 
-    def as_object(
-        self, description: str = "value"
-    ) -> dict[JsonScalar, "StructuredValue"]:
-        if not isinstance(self._data, dict):
+    @classmethod
+    def mapping(
+        cls, entries: Mapping[JsonScalar, "StructuredValue"]
+    ) -> "StructuredValue":
+        return cls({key: value.value for key, value in entries.items()})
+
+    @property
+    def value(self) -> builtins.object:
+        return self._value
+
+    def to_object(self, description: str = "value") -> dict[str, "StructuredValue"]:
+        if type(self._value) is not dict:
             raise ValueError(f"{description} must be an object")
-        return dict(self._data)
-
-    def as_record(self, description: str = "value") -> dict[str, "StructuredValue"]:
-        fields = self.as_object(description)
-        if not all(isinstance(key, str) for key in fields):
+        raw_fields = self._value
+        if not all(isinstance(key, str) for key in raw_fields):
             raise ValueError(f"{description} must have string keys")
-        return cast(dict[str, StructuredValue], fields)
+        return {
+            key: StructuredValue._from_value(value)
+            for key, value in raw_fields.items()
+            if isinstance(key, str)
+        }
 
-    def as_array(self, description: str = "value") -> list["StructuredValue"]:
-        if not isinstance(self._data, list):
+    def to_array(self, description: str = "value") -> list["StructuredValue"]:
+        if type(self._value) is not list:
             raise ValueError(f"{description} must be an array")
-        return list(self._data)
+        return [StructuredValue._from_value(value) for value in self._value]
 
-    def as_string(self, description: str = "value") -> str:
-        if not isinstance(self._data, str):
+    def to_string(self, description: str = "value") -> str:
+        if not isinstance(self._value, str):
             raise ValueError(f"{description} must be a string")
-        return self._data
+        return self._value
 
-    def as_scalar(self, description: str = "value") -> JsonScalar:
-        if isinstance(self._data, list | dict):
-            raise ValueError(f"{description} must be a scalar")
-        return self._data
-
-    def to_python(self) -> StructuredPythonValue:
-        if isinstance(self._data, list):
-            return [item.to_python() for item in self._data]
-        if isinstance(self._data, dict):
-            return {key: item.to_python() for key, item in self._data.items()}
-        return self._data
+    def to_scalar(self, description: str = "value") -> JsonScalar:
+        if self._value is None or isinstance(self._value, str | int | float | bool):
+            return self._value
+        raise ValueError(f"{description} must be a scalar")
 
 
-__all__ = ["StructuredPythonValue", "StructuredValue"]
+__all__ = ["StructuredValue"]

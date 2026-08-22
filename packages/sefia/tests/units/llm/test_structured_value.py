@@ -8,15 +8,15 @@ def test_from_json_builds_nested_structured_value() -> None:
         {"name": "report", "items": [1, True, None], "metadata": {"count": 3}}
     )
 
-    fields = value.as_record()
-    assert fields["name"].as_string() == "report"
-    assert [item.as_scalar() for item in fields["items"].as_array()] == [
+    fields = value.to_object()
+    assert fields["name"].to_string() == "report"
+    assert [item.to_scalar() for item in fields["items"].to_array()] == [
         1,
         True,
         None,
     ]
-    assert fields["metadata"].as_record()["count"].as_scalar() == 3
-    assert value.to_python() == {
+    assert fields["metadata"].to_object()["count"].to_scalar() == 3
+    assert value.value == {
         "name": "report",
         "items": [1, True, None],
         "metadata": {"count": 3},
@@ -26,9 +26,9 @@ def test_from_json_builds_nested_structured_value() -> None:
 @pytest.mark.parametrize(
     ("method", "message"),
     [
-        ("as_object", "must be an object"),
-        ("as_array", "must be an array"),
-        ("as_string", "must be a string"),
+        ("to_object", "must be an object"),
+        ("to_array", "must be an array"),
+        ("to_string", "must be a string"),
     ],
 )
 def test_shape_accessors_reject_wrong_shape(method: str, message: str) -> None:
@@ -38,13 +38,13 @@ def test_shape_accessors_reject_wrong_shape(method: str, message: str) -> None:
         getattr(value, method)()
 
 
-def test_as_record_rejects_non_string_keys() -> None:
-    value = StructuredValue.object({1: StructuredValue.scalar("one")})
+def test_to_object_rejects_mapping_keys() -> None:
+    value = StructuredValue.mapping({1: StructuredValue.scalar("one")})
 
     with pytest.raises(ValueError, match="must have string keys"):
-        value.as_record("record")
+        value.to_object("record")
 
 
-def test_as_scalar_rejects_container() -> None:
+def test_to_scalar_rejects_container() -> None:
     with pytest.raises(ValueError, match="must be a scalar"):
-        StructuredValue.array([]).as_scalar()
+        StructuredValue.array([]).to_scalar()

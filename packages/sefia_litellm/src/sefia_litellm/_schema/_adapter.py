@@ -35,7 +35,7 @@ class LiteLLMPreparedSchema:
     def decode(self, data: JsonValue) -> StructuredValue:
         value = StructuredValue.from_json(data)
         try:
-            fields = value.as_record()
+            fields = value.to_object()
         except ValueError:
             return value
         if set(fields) != {"payload"}:
@@ -60,14 +60,14 @@ class _StepDecisionDecoder:
 
     def decode(self, data: StructuredValue) -> StructuredValue:
         try:
-            fields = data.as_record()
+            fields = data.to_object()
         except ValueError:
             return data
         decision = fields.get("decision")
         if decision is None:
             return data
         try:
-            decision_name = decision.as_string()
+            decision_name = decision.to_string()
         except ValueError:
             return data
         if (
@@ -82,19 +82,19 @@ class _StepDecisionDecoder:
         if decision_name != "tool_calls" or tool_calls is None:
             return data
         try:
-            values = tool_calls.as_array()
+            values = tool_calls.to_array()
         except ValueError:
             return data
         calls: list[StructuredValue] = []
         for value in values:
             try:
-                call = value.as_record()
+                call = value.to_object()
             except ValueError:
                 calls.append(value)
                 continue
             name = call.get("name")
             try:
-                tool_name = name.as_string() if name is not None else None
+                tool_name = name.to_string() if name is not None else None
             except ValueError:
                 tool_name = None
             decoder = self._tools.get(tool_name) if tool_name is not None else None

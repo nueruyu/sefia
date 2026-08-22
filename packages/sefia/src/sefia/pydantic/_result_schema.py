@@ -22,7 +22,7 @@ class PydanticResultSchema(ResultSchema):
     @override
     def validate(self, value: StructuredValue) -> Any:
         try:
-            return self._adapter.validate_python(value.to_python())
+            return self._adapter.validate_python(value.value)
         except ValidationError as error:
             raise ValueError(str(error)) from error
 

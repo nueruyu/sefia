@@ -89,8 +89,8 @@ class _ToolModel:
         self._validator = validator_cls(schema)
 
     def validate(self, value: StructuredValue) -> dict[str, Any]:
-        value.as_record("arguments")
-        value_dict = cast(dict[str, Any], value.to_python())
+        value.to_object("arguments")
+        value_dict = cast(dict[str, Any], value.value)
         errors = sorted(
             self._validator.iter_errors(value_dict),
             key=lambda error: list(error.path),
@@ -162,10 +162,10 @@ class StepDecisionModel:
         self, value: StructuredValue, tool_call_ids: ToolCallIdRegistry | None
     ) -> StepDecision:
         try:
-            data = value.as_record("step decision")
+            data = value.to_object("step decision")
             decision = data.get("decision")
             decision_name = (
-                decision.as_string("decision") if decision is not None else None
+                decision.to_string("decision") if decision is not None else None
             )
             if decision_name == "tool_calls":
                 if self._spec.mode is StepDecisionMode.RESULT_ONLY:
@@ -187,7 +187,7 @@ class StepDecisionModel:
         tool_call_ids: ToolCallIdRegistry | None,
     ) -> ToolCallsDecision:
         _require_fields(data, {"decision", "tool_calls"})
-        calls = data["tool_calls"].as_array("tool_calls")
+        calls = data["tool_calls"].to_array("tool_calls")
         if not calls:
             raise ValueError("tool_calls must be a non-empty array")
         if tool_call_ids is None:
@@ -195,9 +195,9 @@ class StepDecisionModel:
 
         requests: list[ToolCallRequest] = []
         for index, value in enumerate(calls):
-            call = value.as_record("tool call")
+            call = value.to_object("tool call")
             _require_fields(call, {"name", "arguments"})
-            name = call["name"].as_string("tool name")
+            name = call["name"].to_string("tool name")
             tool = self._tools.get(name)
             if tool is None:
                 raise UnknownToolDecisionError(name)
