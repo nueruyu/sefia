@@ -143,7 +143,7 @@ class TestLLMInferenceStrategy:
         assert "\\u898b" not in str(messages[3].content)
         assert json.loads(str(messages[3].content)) == "見つかりました"
 
-    def test_build_messages_tells_no_tool_agent_to_return_empty_collection(self):
+    def test_build_messages_adds_only_result_field_instructions(self):
         strategy = _make_strategy()
 
         spec = StepDecisionSpec.for_inference(
@@ -155,4 +155,7 @@ class TestLLMInferenceStrategy:
             spec,
         )
 
-        assert "empty collection instead of null" in str(messages[0].content)
+        assert messages[0].content == (
+            "instructions\n\nSet `decision` to `result` and populate `result` "
+            "with the non-null task result."
+        )
