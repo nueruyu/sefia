@@ -78,7 +78,10 @@ loop:
 
 `LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) does the core
 translation. Instead of provider-native tool-calling, it asks the model for one
-unified structured-output schema.
+unified decision shape. The default `STRUCTURED_OUTPUT` mode sends that shape through
+the client's structured-output support. `JSON` mode describes the same logical shape,
+tool arguments, and result schemas in the prompt and validates the returned raw JSON
+inside Sefia.
 
 A `StepDecisionSpec` selects one of three shapes:
 
@@ -93,8 +96,9 @@ A `StepDecisionSpec` selects one of three shapes:
 `StepDecision`s. `llm/json_schema` imports `$defs`, resolves name collisions, and
 rewrites local references without knowing about tools or Pydantic. Recursive JSON
 value types and `SchemaNode` accessors keep schema traversal out of `dict[str, Any]`.
-The logical `StepDecisionModel` crosses the `LLMClient` boundary without first being
-flattened into one JSON Schema document. In `sefia_litellm`, the request adapter
+In structured-output mode, the logical `StepDecisionModel` crosses the `LLMClient`
+boundary without first being flattened into one JSON Schema document. In
+`sefia_litellm`, the request adapter
 prepares the result and each tool-argument schema separately, while the schema
 adapter composes the decision and `payload` envelopes. The request uses that wire
 schema as native structured output or a prompt instruction. Typed mappings are
@@ -118,16 +122,20 @@ live in `sefia.llm.step_decision`; result schema interfaces and decoded values l
 in `sefia.llm.result_format` and `sefia.llm.llm_output`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
-The core system prompt is `docstring + decision semantics + tool definitions`; the
-client adds output-format instructions when the model needs a schema in its prompt.
-The user message is the call's arguments rendered as XML (`_build_messages`); prior
+The core system prompt is `docstring + decision semantics`; in JSON mode it also
+contains compact tool and result schemas, while in structured-output mode the client
+owns their wire representation. The user message is the call's arguments rendered as
+JSON in a Markdown code block (`_build_messages`); prior
 steps are replayed as JSON in ordinary assistant/user messages. They deliberately do
 not use native tool-call message fields or the `tool` role. The client is always
-called with `tools=None` and the logical `decision_model` — provider native
-tool-calling is never used. The client returns logical structured data when it adapts
-the wire format; the strategy falls back to parsing plain client responses before the
-step-decision validator validates the value (`InvalidInferenceResponseError` if it
-doesn't conform).
+called with `tools=None`; provider native tool-calling is never used.
+Structured-output mode passes the logical `decision_model` to the client. JSON mode
+passes no decision model, parses the raw JSON response in the strategy, and uses the
+same step-decision validator and repair loop. Streamed tool-argument previews require
+structured-output mode. In JSON mode, `RESULT_ONLY` calls return the final JSON value
+directly; the strategy adds the internal result decision before validation. JSON-mode
+history also omits internal call IDs and associates each result with the tool name and
+arguments so models do not copy framework-owned IDs into new calls.
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
 first **repaired in place**: the strategy appends the invalid output and the

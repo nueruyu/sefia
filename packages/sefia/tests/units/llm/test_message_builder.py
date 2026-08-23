@@ -12,7 +12,7 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMClient, LLMInferenceStrategy
+from sefia.llm import LLMClient, LLMDecisionMode, LLMInferenceStrategy
 from sefia.llm.step_decision import StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
@@ -71,6 +71,7 @@ def _make_strategy(
     *,
     stream: bool = False,
     max_repair_attempts: int = 2,
+    decision_mode: LLMDecisionMode = LLMDecisionMode.STRUCTURED_OUTPUT,
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
@@ -83,6 +84,7 @@ def _make_strategy(
         json_default=pydantic_json_default,
         stream=stream,
         max_repair_attempts=max_repair_attempts,
+        decision_mode=decision_mode,
     )
 
 
@@ -170,6 +172,38 @@ class TestLLMInferenceStrategy:
         )
 
         assert messages[1].content == "formatted arguments"
+
+    def test_json_mode_hides_internal_call_ids_from_history(self):
+        strategy = _make_strategy(decision_mode=LLMDecisionMode.JSON)
+        history = [
+            ToolCallsDecision(
+                calls=[
+                    ToolCallRequest(
+                        id="internal-id",
+                        name="search",
+                        arguments={"q": "query"},
+                    )
+                ]
+            ),
+            ToolCallResult(tool_call_id="internal-id", result="found"),
+        ]
+        spec = StepDecisionSpec.for_inference(
+            name="StepDecision", output_type=str, tools=[_tool(search)]
+        )
+
+        messages = strategy._build_messages(_function_info(), history, spec)
+
+        assert json.loads(str(messages[2].content)) == {
+            "decision": "tool_calls",
+            "tool_calls": [{"name": "search", "arguments": {"q": "query"}}],
+        }
+        assert json.loads(str(messages[3].content)) == {
+            "tool_call_result": {
+                "name": "search",
+                "arguments": {"q": "query"},
+                "result": "found",
+            }
+        }
 
     def test_build_messages_adds_only_result_field_instructions(self):
         strategy = _make_strategy()

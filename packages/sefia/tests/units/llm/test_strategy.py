@@ -16,7 +16,7 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMInferenceStrategy, LLMResponse
+from sefia.llm import LLMDecisionMode, LLMInferenceStrategy, LLMResponse
 from sefia.llm.events import (
     LLMReasoningTokenReceived,
     LLMResponseRepairAttempt,
@@ -62,6 +62,10 @@ def chat_tool() -> str:
     raise NotImplementedError
 
 
+def streaming_tool(param: str) -> str:
+    raise NotImplementedError
+
+
 _BACKEND = PydanticModelBackend()
 
 
@@ -78,7 +82,11 @@ def mock_llm_client() -> AsyncMock:
 
 
 def _make_strategy(
-    llm_client: Any = None, *, stream: bool = False, max_repair_attempts: int = 2
+    llm_client: Any = None,
+    *,
+    stream: bool = False,
+    max_repair_attempts: int = 2,
+    decision_mode: LLMDecisionMode = LLMDecisionMode.STRUCTURED_OUTPUT,
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
@@ -91,6 +99,7 @@ def _make_strategy(
         json_default=pydantic_json_default,
         stream=stream,
         max_repair_attempts=max_repair_attempts,
+        decision_mode=decision_mode,
     )
 
 
@@ -112,6 +121,92 @@ def _function_info(
 
 
 class TestLLMInferenceStrategy:
+    async def test_structured_output_mode_passes_decision_model_to_client(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.return_value = LLMResponse(
+            content='{"decision":"result","result":"done"}'
+        )
+
+        await _make_strategy(mock_llm_client).decide_next_step(
+            _function_info(), [], _tool_registry(), MockEventPublisher()
+        )
+
+        assert mock_llm_client.complete.await_args.kwargs["decision_model"] is not None
+
+    async def test_json_mode_uses_prompt_contract_without_client_schema(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.return_value = LLMResponse(
+            content=(
+                '{"decision":"tool_calls","tool_calls":'
+                '[{"name":"my_tool","arguments":{"param":1}}]}'
+            )
+        )
+        strategy = _make_strategy(mock_llm_client, decision_mode=LLMDecisionMode.JSON)
+
+        decision = await strategy.decide_next_step(
+            _function_info(),
+            [],
+            _tool_registry(my_tool),
+            MockEventPublisher(),
+        )
+
+        assert isinstance(decision, ToolCallsDecision)
+        request = mock_llm_client.complete.await_args.kwargs
+        assert request["decision_model"] is None
+        system_prompt = str(request["messages"][0].content)
+        assert "Return exactly one raw JSON object" in system_prompt
+        assert "Available tools:" in system_prompt
+        assert "`my_tool`" in system_prompt
+        assert "never native tool-call syntax" in system_prompt
+        assert '"param"' in system_prompt
+        assert "Final result JSON Schema:" in system_prompt
+
+    async def test_json_mode_accepts_direct_result_without_decision_envelope(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.return_value = LLMResponse(
+            content='{"name":"test","value":42}'
+        )
+        strategy = _make_strategy(mock_llm_client, decision_mode=LLMDecisionMode.JSON)
+
+        decision = await strategy.decide_next_step(
+            _function_info(return_type=MyOutput),
+            [],
+            _tool_registry(),
+            MockEventPublisher(),
+        )
+
+        assert decision == ResultDecision(MyOutput(name="test", value=42))
+        system_prompt = str(
+            mock_llm_client.complete.await_args.kwargs["messages"][0].content
+        )
+        assert "without a decision envelope" in system_prompt
+        assert '"decision":"result"' not in system_prompt
+
+    async def test_json_mode_rejects_streamed_tool_arguments(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        registry = ToolRegistry()
+        registry.add(
+            streaming_tool,
+            name="streaming_tool",
+            stream_handler=AsyncMock(),
+        )
+        strategy = _make_strategy(
+            mock_llm_client,
+            stream=True,
+            decision_mode=LLMDecisionMode.JSON,
+        )
+
+        with pytest.raises(ValueError, match="streamed tool arguments"):
+            await strategy.decide_next_step(
+                _function_info(), [], registry, MockEventPublisher()
+            )
+
+        mock_llm_client.complete.assert_not_awaited()
+
     async def test_decide_next_step_handles_tool_calls(
         self, mock_llm_client: AsyncMock
     ):

@@ -15,12 +15,17 @@ from ..streaming import StreamHandler
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
+from ._decision_mode import LLMDecisionMode
 from ._message_builder import build_messages, build_repair_messages
 from ._messages import Message
 from ._prompt_formatter import PromptFormatter
-from ._step_decision_prompt import build_step_decision_prompt
+from ._step_decision_prompt import (
+    build_json_decision_prompt,
+    build_step_decision_prompt,
+)
 from ._tool_call_ids import ToolCallIdRegistry
 from .step_decision import (
+    StepDecisionMode,
     StepDecisionModel,
     StepDecisionSpec,
 )
@@ -35,9 +40,9 @@ JsonDefault = Callable[[Any], Any]
 class LLMInferenceStrategy(InferenceStrategy):
     """Uses an LLM to decide the next inference step.
 
-    Tool calls and results share one structured output schema. Invalid
-    structured responses may be retried with corrective feedback before
-    ``InvalidInferenceResponseError`` propagates.
+    Tool calls and results share one decision shape, generated through provider
+    structured output or prompt-described JSON. Invalid responses may be retried
+    with corrective feedback before ``InvalidInferenceResponseError`` propagates.
     """
 
     def __init__(
@@ -48,6 +53,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         json_default: JsonDefault | None = None,
         stream: bool = False,
         max_repair_attempts: int = 2,
+        decision_mode: LLMDecisionMode = LLMDecisionMode.STRUCTURED_OUTPUT,
     ):
         if max_repair_attempts < 0:
             raise ValueError("max_repair_attempts must be non-negative")
@@ -57,6 +63,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self._json_default = json_default
         self._stream = stream
         self._max_repair_attempts = max_repair_attempts
+        self._decision_mode = decision_mode
 
     @override
     async def decide_next_step(
@@ -72,7 +79,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             tools=tools.get_all(),
         )
         decision_model = StepDecisionModel.from_spec(spec, self._result_format_factory)
-        messages = self._build_messages(function_info, history, spec)
+        messages = self._build_messages(function_info, history, spec, decision_model)
 
         attempt = 0
         while True:
@@ -110,6 +117,14 @@ class LLMInferenceStrategy(InferenceStrategy):
         stream_callback = None
         reasoning_callback = None
         tool_stream_handlers = _tool_stream_handlers(tools)
+        if (
+            self._decision_mode is LLMDecisionMode.JSON
+            and self._stream
+            and tool_stream_handlers
+        ):
+            raise ValueError(
+                "JSON decision mode does not support streamed tool arguments."
+            )
         tool_arg_streamer = None
         tool_call_ids = ToolCallIdRegistry()
         if self._stream and tool_stream_handlers:
@@ -139,7 +154,11 @@ class LLMInferenceStrategy(InferenceStrategy):
             response = await self.llm_client.complete(
                 messages=messages,
                 tools=None,
-                decision_model=decision_model,
+                decision_model=(
+                    decision_model
+                    if self._decision_mode is LLMDecisionMode.STRUCTURED_OUTPUT
+                    else None
+                ),
                 stream_callback=stream_callback,
                 output_callback=output_callback,
                 reasoning_callback=reasoning_callback,
@@ -163,6 +182,16 @@ class LLMInferenceStrategy(InferenceStrategy):
                     lines = raw.splitlines()
                     raw = "\n".join(lines[1:-1]).strip()
                 decision_data = LLMOutput.parse_json(raw)
+            if (
+                self._decision_mode is LLMDecisionMode.JSON
+                and decision_model.mode is StepDecisionMode.RESULT_ONLY
+            ):
+                decision_data = LLMOutput.from_object(
+                    {
+                        "decision": LLMOutput.from_scalar("result"),
+                        "result": decision_data,
+                    }
+                )
             return decision_model.validate(decision_data, tool_call_ids)
         except UnknownToolDecisionError as error:
             raise InvalidInferenceResponseError(
@@ -180,13 +209,25 @@ class LLMInferenceStrategy(InferenceStrategy):
         function_info: FunctionInfo,
         history: Sequence[HistoryItem],
         spec: StepDecisionSpec,
+        decision_model: StepDecisionModel | None = None,
     ) -> list[Message]:
+        decision_model = decision_model or StepDecisionModel.from_spec(
+            spec, self._result_format_factory
+        )
+        decision_prompt = (
+            build_step_decision_prompt(spec)
+            if self._decision_mode is LLMDecisionMode.STRUCTURED_OUTPUT
+            else build_json_decision_prompt(spec, decision_model)
+        )
         return build_messages(
             function_info,
             history,
-            build_step_decision_prompt(spec),
+            decision_prompt,
             self._prompt_formatter,
             self._json_default,
+            include_tool_call_ids=(
+                self._decision_mode is LLMDecisionMode.STRUCTURED_OUTPUT
+            ),
         )
 
 

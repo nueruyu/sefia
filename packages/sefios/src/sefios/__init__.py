@@ -10,6 +10,7 @@ from sefia import (
     preview,
     profile,
 )
+from sefia.llm import LLMDecisionMode
 
 from ._domain import domain
 from ._scope import SessionScope
@@ -45,6 +46,7 @@ __all__ = [
     "Profile",
     "Tools",
     "AsRawText",
+    "LLMDecisionMode",
     "domain",
     # sefios' own front door and batteries.
     "SessionScope",

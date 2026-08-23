@@ -138,6 +138,21 @@ for durable execution and session state; drop to
 `sefia.Session` directly when you want full control. The **[tutorial](./docs/tutorial.md)**
 builds this into a human-in-the-loop service that resumes over HTTP.
 
+Structured output is the default. To avoid provider-side response-schema handling,
+select the prompt-described JSON mode; Sefia still validates every decision, tool
+argument, and final result:
+
+```python
+from sefios import LLMDecisionMode
+
+scope = SessionScope(
+    model="gpt-4o",
+    decision_mode=LLMDecisionMode.JSON,
+)
+```
+
+JSON mode supports token streaming but not streamed tool-argument previews.
+
 ## Pause for a human, resume after a restart
 
 A turn that pauses for a human and resumes after a restart, served on an ordinary

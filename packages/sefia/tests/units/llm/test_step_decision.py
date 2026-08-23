@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from sefia._tool_system import SignatureToolEntry, ToolEntry, ToolRegistry
+from sefia._tool_system import (
+    JsonSchemaToolEntry,
+    SignatureToolEntry,
+    ToolEntry,
+    ToolRegistry,
+)
 from sefia.event_system import Event, EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import (
@@ -14,7 +19,10 @@ from sefia.inference import (
     ToolCallsDecision,
 )
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
-from sefia.llm._step_decision_prompt import build_step_decision_prompt
+from sefia.llm._step_decision_prompt import (
+    build_json_decision_prompt,
+    build_step_decision_prompt,
+)
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.step_decision import (
     StepDecisionMode,
@@ -72,6 +80,9 @@ class _StepDecisionFixture:
 
     def prompt(self) -> str:
         return build_step_decision_prompt(self.spec)
+
+    def json_prompt(self) -> str:
+        return build_json_decision_prompt(self.spec, self.decision_model)
 
     def validate(
         self,
@@ -249,6 +260,34 @@ class TestToolsOrResultDecision:
             "independent tool calls with known arguments. Never guess arguments or "
             "use placeholders; defer calls that depend on another tool's result."
         )
+
+    def test_json_prompt_omits_generated_titles(self):
+        prompt = self._step(output_type=MyOutput).json_prompt()
+
+        assert '"title"' not in prompt
+        assert '"q":{"type":"string"}' in prompt
+        assert "Final result JSON Schema:" in prompt
+
+    def test_json_prompt_preserves_raw_tool_schema_metadata(self):
+        def raw_tool(value: str) -> str:
+            return value
+
+        tool = JsonSchemaToolEntry(
+            raw_tool,
+            name="raw_tool",
+            description="Raw tool",
+            parameters={
+                "type": "object",
+                "title": "Raw parameters",
+                "properties": {"value": {"type": "string", "title": "Value"}},
+                "required": ["value"],
+            },
+        )
+
+        prompt = _step(str, [tool]).json_prompt()
+
+        assert '"title":"Raw parameters"' in prompt
+        assert '"title":"Value"' in prompt
 
     def test_process_decision_returns_tool_call_decision(self):
         step = self._step()

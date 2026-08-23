@@ -16,6 +16,7 @@ def build_messages(
     system_prompt_addition: str,
     prompt_formatter: PromptFormatter,
     json_default: JsonDefault | None,
+    include_tool_call_ids: bool = True,
 ) -> list[Message]:
     messages = [
         Message(
@@ -36,38 +37,47 @@ def build_messages(
     )
     messages.append(Message(role="user", content=user_prompt))
 
+    calls_by_id: dict[str, dict[str, Any]] = {}
     for item in history:
         if isinstance(item, ToolCallsDecision):
+            calls = [
+                {"name": call.name, "arguments": call.arguments} for call in item.calls
+            ]
+            for call, rendered in zip(item.calls, calls, strict=True):
+                calls_by_id[call.id] = rendered
             messages.append(
                 Message(
                     role="assistant",
                     content=json.dumps(
                         {
                             "decision": "tool_calls",
-                            "tool_calls": [
-                                {
-                                    "id": call.id,
-                                    "name": call.name,
-                                    "arguments": call.arguments,
-                                }
-                                for call in item.calls
-                            ],
+                            "tool_calls": (
+                                [
+                                    {"id": call.id, **rendered}
+                                    for call, rendered in zip(
+                                        item.calls, calls, strict=True
+                                    )
+                                ]
+                                if include_tool_call_ids
+                                else calls
+                            ),
                         },
                         ensure_ascii=False,
                     ),
                 )
             )
         else:
+            call = calls_by_id.get(item.tool_call_id)
+            tool_result = (
+                {"tool_call_id": item.tool_call_id, "result": item.result}
+                if include_tool_call_ids or call is None
+                else {**call, "result": item.result}
+            )
             messages.append(
                 Message(
                     role="user",
                     content=json.dumps(
-                        {
-                            "tool_call_result": {
-                                "tool_call_id": item.tool_call_id,
-                                "result": item.result,
-                            }
-                        },
+                        {"tool_call_result": tool_result},
                         default=json_default,
                         ensure_ascii=False,
                     ),
