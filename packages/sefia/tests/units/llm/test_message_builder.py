@@ -132,16 +132,29 @@ class TestLLMInferenceStrategy:
         assert messages[0].role == "system"
         assert messages[1].role == "user"
         assert messages[2].role == "assistant"
-        assert messages[3].role == "tool"
-        tool_calls = messages[2].tool_calls
-        assert tool_calls is not None
-        tool_arguments = tool_calls[0]["function"]["arguments"]
-        assert "日本語の検索クエリ" in tool_arguments
-        assert "\\u65e5" not in tool_arguments
-        assert json.loads(tool_arguments) == {"q": "日本語の検索クエリ"}
+        assert messages[3].role == "user"
+        assert messages[2].tool_calls is None
+        decision = json.loads(str(messages[2].content))
+        assert decision == {
+            "decision": "tool_calls",
+            "tool_calls": [
+                {
+                    "id": "1",
+                    "name": "search",
+                    "arguments": {"q": "日本語の検索クエリ"},
+                }
+            ],
+        }
+        assert "日本語の検索クエリ" in str(messages[2].content)
+        assert "\\u65e5" not in str(messages[2].content)
         assert "見つかりました" in str(messages[3].content)
         assert "\\u898b" not in str(messages[3].content)
-        assert json.loads(str(messages[3].content)) == "見つかりました"
+        assert json.loads(str(messages[3].content)) == {
+            "tool_call_result": {
+                "tool_call_id": "1",
+                "result": "見つかりました",
+            }
+        }
 
     def test_build_messages_adds_only_result_field_instructions(self):
         strategy = _make_strategy()

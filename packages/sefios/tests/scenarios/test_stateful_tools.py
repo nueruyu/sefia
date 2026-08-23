@@ -154,7 +154,10 @@ class TestStatefulTool:
         assert len(mock_llm.requests) == 2
         final_messages = mock_llm.requests[1]["messages"]
         assert len(final_messages) == 4
-        assert json.loads(final_messages[3]["content"]) == "Alice"
+        assert (
+            json.loads(final_messages[3]["content"])["tool_call_result"]["result"]
+            == "Alice"
+        )
 
     async def test_multiple_ask_user_calls_are_independent(
         self,
