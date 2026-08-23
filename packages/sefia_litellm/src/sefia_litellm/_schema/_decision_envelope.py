@@ -202,10 +202,7 @@ def _payload_schema(
         return branches[0]
     return cast(
         JsonObject,
-        {
-            K.ANY_OF: branches,
-            "discriminator": {"propertyName": "decision"},
-        },
+        {K.ANY_OF: branches},
     )
 
 
@@ -230,7 +227,7 @@ def _tool_calls_schema(
         if len(calls) == 1
         else cast(
             JsonObject,
-            {K.ANY_OF: calls, "discriminator": {"propertyName": "name"}},
+            {K.ANY_OF: calls},
         )
     )
     return _closed_object(
