@@ -63,6 +63,7 @@ def build_messages(
                             ),
                         },
                         ensure_ascii=False,
+                        separators=(",", ":"),
                     ),
                 )
             )
@@ -80,6 +81,7 @@ def build_messages(
                         {"tool_call_result": tool_result},
                         default=json_default,
                         ensure_ascii=False,
+                        separators=(",", ":"),
                     ),
                 )
             )
