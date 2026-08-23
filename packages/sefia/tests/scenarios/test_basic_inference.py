@@ -127,11 +127,10 @@ async def test_inference_with_tool_calls():
     # LLM was called 3 times (search, fetch, result)
     assert len(mock_llm.requests) == 3
 
-    # 3rd call receives 6 messages: system, user, assistant(search), tool(search result),
-    # assistant(fetch), tool(fetch result)
+    # 3rd call receives 6 messages: system, task, assistant decisions, and results.
     final_messages = mock_llm.requests[2]["messages"]
     assert len(final_messages) == 6
-    assert final_messages[3]["role"] == "tool"
+    assert final_messages[3]["role"] == "user"
     assert "sefia framework" in final_messages[3]["content"]
 
 
@@ -191,8 +190,8 @@ async def test_inference_with_tool_exception():
     assert len(mock_llm.requests) == 2
     # Check that the tool error was passed to the second LLM call
     messages = mock_llm.requests[1]["messages"]
-    assert len(messages) == 4  # system, user, assistant, tool
-    assert messages[3]["role"] == "tool"
+    assert len(messages) == 4  # system, task, assistant decision, tool result
+    assert messages[3]["role"] == "user"
     assert "Error executing tool" in messages[3]["content"]
     assert "ValueError(Failed because: test)" in messages[3]["content"]
 

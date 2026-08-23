@@ -121,11 +121,13 @@ in `sefia.llm.result_format` and `sefia.llm.llm_output`.
 The core system prompt is `docstring + decision semantics + tool definitions`; the
 client adds output-format instructions when the model needs a schema in its prompt.
 The user message is the call's arguments rendered as XML (`_build_messages`); prior
-steps are replayed as ordinary assistant/tool messages. The client is always called
-with `tools=None` and the logical `decision_model` — provider native tool-calling is
-never used. The client returns logical structured data when it adapts the wire format;
-the strategy falls back to parsing plain client responses before the step-decision
-validator validates the value (`InvalidInferenceResponseError` if it doesn't conform).
+steps are replayed as JSON in ordinary assistant/user messages. They deliberately do
+not use native tool-call message fields or the `tool` role. The client is always
+called with `tools=None` and the logical `decision_model` — provider native
+tool-calling is never used. The client returns logical structured data when it adapts
+the wire format; the strategy falls back to parsing plain client responses before the
+step-decision validator validates the value (`InvalidInferenceResponseError` if it
+doesn't conform).
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
 first **repaired in place**: the strategy appends the invalid output and the

@@ -92,5 +92,5 @@ async def test_json_schema_tool_reaches_the_llm_and_is_dispatched():
 
     # The result step received the tool result in history.
     tool_message = mock_llm.requests[1]["messages"][3]
-    assert tool_message["role"] == "tool"
+    assert tool_message["role"] == "user"
     assert "framework" in tool_message["content"]
