@@ -53,6 +53,25 @@ def build_json_decision_prompt(spec: StepDecisionSpec, model: StepDecisionModel)
     return "\n\n" + "\n\n".join(sections)
 
 
+def build_native_tool_prompt(
+    mode: StepDecisionMode, result_tool_name: str | None
+) -> str:
+    if mode is StepDecisionMode.TOOLS_REQUIRED:
+        instruction = "Call one or more available tools. Do not answer with text."
+    elif mode is StepDecisionMode.RESULT_ONLY:
+        assert result_tool_name is not None
+        instruction = (
+            f"Call `{result_tool_name}` with the final result. Do not answer with text."
+        )
+    else:
+        assert result_tool_name is not None
+        instruction = (
+            "Call available tools when needed. When the task is complete, call "
+            f"`{result_tool_name}` with the final result. Do not answer with text."
+        )
+    return f"\n\n{instruction}"
+
+
 def _json_response_format(mode: StepDecisionMode) -> str:
     header = "## Response\nReturn JSON only. No prose, code fences, or XML."
     tool_shape = (

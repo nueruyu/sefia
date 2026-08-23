@@ -16,7 +16,7 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMDecisionMode, LLMInferenceStrategy, LLMResponse
+from sefia.llm import LLMDecisionMode, LLMInferenceStrategy, LLMResponse, ToolCall
 from sefia.llm.events import (
     LLMReasoningTokenReceived,
     LLMResponseRepairAttempt,
@@ -164,6 +164,197 @@ class TestLLMInferenceStrategy:
         assert "never native tool-call syntax" in system_prompt
         assert '"param"' in system_prompt
         assert "## Result schema" in system_prompt
+
+    async def test_native_mode_uses_real_and_result_tools(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.return_value = LLMResponse(
+            tool_calls=[
+                ToolCall(
+                    id="provider-call-1",
+                    function={"name": "my_tool", "arguments": '{"param":1}'},
+                )
+            ]
+        )
+        strategy = _make_strategy(
+            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+        )
+
+        decision = await strategy.decide_next_step(
+            _function_info(return_type=MyOutput),
+            [],
+            _tool_registry(my_tool),
+            MockEventPublisher(),
+        )
+
+        assert decision == ToolCallsDecision(
+            [ToolCallRequest("provider-call-1", "my_tool", {"param": 1})]
+        )
+        request = mock_llm_client.complete.await_args.kwargs
+        assert request["decision_model"] is None
+        assert [tool["function"]["name"] for tool in request["tools"]] == [
+            "my_tool",
+            "return_result",
+        ]
+        assert "title" not in json.dumps(request["tools"])
+        assert "Do not answer with text" in str(request["messages"][0].content)
+
+    async def test_native_mode_accepts_result_tool_call(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.return_value = LLMResponse(
+            tool_calls=[
+                ToolCall(
+                    id="result-call",
+                    function={
+                        "name": "return_result",
+                        "arguments": '{"result":{"name":"test","value":42}}',
+                    },
+                )
+            ]
+        )
+        strategy = _make_strategy(
+            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+        )
+
+        decision = await strategy.decide_next_step(
+            _function_info(return_type=MyOutput),
+            [],
+            _tool_registry(my_tool),
+            MockEventPublisher(),
+        )
+
+        assert decision == ResultDecision(MyOutput(name="test", value=42))
+
+    async def test_native_mode_uses_structured_output_without_real_tools(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.return_value = LLMResponse(
+            structured_output=LLMOutput.from_json(
+                {
+                    "decision": "result",
+                    "result": {"name": "test", "value": 42},
+                }
+            )
+        )
+        strategy = _make_strategy(
+            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+        )
+
+        decision = await strategy.decide_next_step(
+            _function_info(return_type=MyOutput),
+            [],
+            _tool_registry(),
+            MockEventPublisher(),
+        )
+
+        assert decision == ResultDecision(MyOutput(name="test", value=42))
+        request = mock_llm_client.complete.await_args.kwargs
+        assert request["tools"] is None
+        assert request["decision_model"] is not None
+
+    async def test_native_mode_renders_provider_native_history(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.return_value = LLMResponse(
+            tool_calls=[
+                ToolCall(
+                    id="result-call",
+                    function={
+                        "name": "return_result",
+                        "arguments": '{"result":"done"}',
+                    },
+                )
+            ]
+        )
+        strategy = _make_strategy(
+            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+        )
+        history = [
+            ToolCallsDecision([ToolCallRequest("call-1", "my_tool", {"param": 1})]),
+            ToolCallResult("call-1", "found"),
+        ]
+
+        await strategy.decide_next_step(
+            _function_info(), history, _tool_registry(my_tool), MockEventPublisher()
+        )
+
+        messages = mock_llm_client.complete.await_args.kwargs["messages"]
+        assert messages[2].role == "assistant"
+        assert messages[2].content is None
+        assert messages[2].tool_calls == [
+            ToolCall(
+                id="call-1",
+                function={"name": "my_tool", "arguments": '{"param":1}'},
+            )
+        ]
+        assert messages[3].role == "tool"
+        assert messages[3].tool_call_id == "call-1"
+        assert messages[3].content == '"found"'
+
+    async def test_native_mode_repairs_a_text_response(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.side_effect = [
+            LLMResponse(content="The result is ready."),
+            LLMResponse(
+                tool_calls=[
+                    ToolCall(
+                        id="result-call",
+                        function={
+                            "name": "return_result",
+                            "arguments": '{"result":"done"}',
+                        },
+                    )
+                ]
+            ),
+        ]
+        strategy = _make_strategy(
+            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+        )
+
+        decision = await strategy.decide_next_step(
+            _function_info(),
+            [],
+            _tool_registry(my_tool),
+            MockEventPublisher(),
+        )
+
+        assert decision == ResultDecision("done")
+        assert mock_llm_client.complete.await_count == 2
+        repair = mock_llm_client.complete.await_args_list[1].kwargs["messages"][-1]
+        assert "calling exactly the appropriate available tool" in str(repair.content)
+
+    async def test_native_mode_avoids_result_tool_name_collisions(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        registry = ToolRegistry()
+        registry.add(my_tool, name="return_result")
+        mock_llm_client.complete.return_value = LLMResponse(
+            tool_calls=[
+                ToolCall(
+                    id="result-call",
+                    function={
+                        "name": "return_result_2",
+                        "arguments": '{"result":"done"}',
+                    },
+                )
+            ]
+        )
+        strategy = _make_strategy(
+            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+        )
+
+        decision = await strategy.decide_next_step(
+            _function_info(), [], registry, MockEventPublisher()
+        )
+
+        assert decision == ResultDecision("done")
+        tools = mock_llm_client.complete.await_args.kwargs["tools"]
+        assert [tool["function"]["name"] for tool in tools] == [
+            "return_result",
+            "return_result_2",
+        ]
 
     async def test_json_mode_accepts_direct_result_without_decision_envelope(
         self, mock_llm_client: AsyncMock

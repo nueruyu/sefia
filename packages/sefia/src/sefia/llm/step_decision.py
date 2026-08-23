@@ -156,6 +156,14 @@ class StepDecisionModel:
     def result(self) -> ResultFormat | None:
         return self._result
 
+    def validate_tool_arguments(
+        self, name: str, arguments: LLMOutput
+    ) -> dict[str, Any]:
+        tool = self._tools.get(name)
+        if tool is None:
+            raise UnknownToolDecisionError(name)
+        return tool.validate(arguments)
+
     def validate(
         self, value: LLMOutput, tool_call_ids: ToolCallIdRegistry | None
     ) -> StepDecision:
@@ -196,14 +204,11 @@ class StepDecisionModel:
             call = value.to_object("tool call")
             _require_fields(call, {"name", "arguments"})
             name = call["name"].to_string("tool name")
-            tool = self._tools.get(name)
-            if tool is None:
-                raise UnknownToolDecisionError(name)
             requests.append(
                 ToolCallRequest(
                     id=tool_call_ids.get_or_create(index),
                     name=name,
-                    arguments=tool.validate(call["arguments"]),
+                    arguments=self.validate_tool_arguments(name, call["arguments"]),
                 )
             )
         return ToolCallsDecision(requests)

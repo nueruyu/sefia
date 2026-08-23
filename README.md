@@ -153,6 +153,19 @@ scope = SessionScope(
 
 JSON mode supports token streaming but not streamed tool-argument previews.
 
+To use provider-native function calling, select native-tools mode. Calls with tools
+expose the application tools plus a synthetic result tool; calls without application
+tools continue to use structured output:
+
+```python
+scope = SessionScope(
+    model="gpt-4o",
+    decision_mode=LLMDecisionMode.NATIVE_TOOLS,
+)
+```
+
+Native-tools mode does not support streamed tool-argument previews.
+
 ## Pause for a human, resume after a restart
 
 A turn that pauses for a human and resumes after a restart, served on an ordinary

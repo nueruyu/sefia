@@ -118,11 +118,10 @@ tradeoffs behind the design are in [docs/tradeoffs.md](./docs/tradeoffs.md).
 
 ## Non-goals & tradeoffs
 
-- **Not native tool-calling.** A single unified schema (`final_answer |
-  tool_calls`) plus strict structured output where supported → provider-portable,
-  full return-type expressiveness; at the cost of native parallel tools and some
-  frontier-model tuning on complex agents. Concurrency and prompt caching are tracked
-  on the issue tracker, not guaranteed. Full argument:
+- **Uniform decisions remain the default.** The default uses a single schema
+  (`final_answer | tool_calls`) for provider portability and full return-type
+  expressiveness. Native tool calling is an explicit alternative mode that represents
+  the final value as a synthetic tool call. Full argument:
   [tradeoffs.md](./docs/tradeoffs.md).
 - **Lighter than Temporal, not a replacement.** Single-process /
   resume-on-fresh-request, plus horizontal scale across independent sessions.

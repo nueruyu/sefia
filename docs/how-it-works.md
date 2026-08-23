@@ -77,11 +77,11 @@ loop:
 ## Turning a function into a prompt
 
 `LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) does the core
-translation. Instead of provider-native tool-calling, it asks the model for one
-unified decision shape. The default `STRUCTURED_OUTPUT` mode sends that shape through
-the client's structured-output support. `JSON` mode describes the same logical shape,
-tool arguments, and result schemas in the prompt and validates the returned raw JSON
-inside Sefia.
+translation. The default `STRUCTURED_OUTPUT` mode sends one unified decision shape
+through the client's structured-output support. `JSON` mode describes the same
+logical shape, tool arguments, and result schemas in the prompt and validates the
+returned raw JSON inside Sefia. `NATIVE_TOOLS` instead uses provider-native tools when
+the call has application tools.
 
 A `StepDecisionSpec` selects one of three shapes:
 
@@ -125,17 +125,23 @@ in `sefia.llm.result_format` and `sefia.llm.llm_output`.
 The core system prompt is `docstring + decision semantics`; in JSON mode it also
 contains compact tool and result schemas, while in structured-output mode the client
 owns their wire representation. The user message is the call's arguments rendered as
-JSON in a Markdown code block (`_build_messages`); prior
-steps are replayed as JSON in ordinary assistant/user messages. They deliberately do
-not use native tool-call message fields or the `tool` role. The client is always
-called with `tools=None`; provider native tool-calling is never used.
-Structured-output mode passes the logical `decision_model` to the client. JSON mode
-passes no decision model, parses the raw JSON response in the strategy, and uses the
-same step-decision validator and repair loop. Streamed tool-argument previews require
-structured-output mode. In JSON mode, `RESULT_ONLY` calls return the final JSON value
-directly; the strategy adds the internal result decision before validation. JSON-mode
-history also omits internal call IDs and associates each result with the tool name and
-arguments so models do not copy framework-owned IDs into new calls.
+JSON in a Markdown code block (`_build_messages`). Structured-output and JSON history
+use ordinary assistant/user JSON messages. Structured-output mode passes the logical
+`decision_model` to the client. JSON mode passes no decision model, parses the raw
+JSON response in the strategy, and uses the same step-decision validator and repair
+loop. In JSON mode, `RESULT_ONLY` calls return the final JSON value directly; the
+strategy adds the internal result decision before validation. JSON-mode history also
+omits internal call IDs and associates each result with the tool name and arguments so
+models do not copy framework-owned IDs into new calls.
+
+Native-tools mode is selected explicitly. For a call with application tools,
+`_native_tools.py` exposes those tools plus a synthetic `return_result` tool, and the
+strategy converts their calls into the same internal `ToolCallsDecision` and
+`ResultDecision` types. History remains provider-neutral in durable storage but is
+rendered as native assistant tool calls and `tool` messages at the client boundary.
+A call without application tools falls back to structured output rather than exposing
+only a synthetic tool. Streamed tool-argument previews require structured-output
+mode; JSON and native-tools modes reject them.
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
 first **repaired in place**: the strategy appends the invalid output and the

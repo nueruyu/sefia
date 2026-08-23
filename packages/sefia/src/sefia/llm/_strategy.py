@@ -17,11 +17,18 @@ from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
 from ._decision_mode import LLMDecisionMode
 from ._json_response import parse_json_response
-from ._message_builder import build_messages, build_repair_messages
+from ._message_builder import (
+    build_messages,
+    build_native_messages,
+    build_native_repair_messages,
+    build_repair_messages,
+)
 from ._messages import Message
+from ._native_tools import NativeToolSet
 from ._prompt_formatter import PromptFormatter
 from ._step_decision_prompt import (
     build_json_decision_prompt,
+    build_native_tool_prompt,
     build_step_decision_prompt,
 )
 from ._tool_call_ids import ToolCallIdRegistry
@@ -80,7 +87,14 @@ class LLMInferenceStrategy(InferenceStrategy):
             tools=tools.get_all(),
         )
         decision_model = StepDecisionModel.from_spec(spec, self._result_format_factory)
-        messages = self._build_messages(function_info, history, spec, decision_model)
+        native_tools = (
+            NativeToolSet.from_model(decision_model)
+            if self._decision_mode is LLMDecisionMode.NATIVE_TOOLS and spec.tools
+            else None
+        )
+        messages = self._build_messages(
+            function_info, history, spec, decision_model, native_tools
+        )
 
         attempt = 0
         while True:
@@ -90,6 +104,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                     decision_model,
                     tools,
                     publisher,
+                    native_tools,
                 )
             except InvalidInferenceResponseError as error:
                 if attempt >= self._max_repair_attempts:
@@ -98,7 +113,12 @@ class LLMInferenceStrategy(InferenceStrategy):
                 await publisher.publish(
                     events.LLMResponseRepairAttempt(error=error, attempt=attempt)
                 )
-                messages = messages + build_repair_messages(error)
+                repair_messages = (
+                    build_native_repair_messages(error)
+                    if native_tools is not None
+                    else build_repair_messages(error)
+                )
+                messages = messages + repair_messages
 
     async def _complete_once(
         self,
@@ -106,12 +126,13 @@ class LLMInferenceStrategy(InferenceStrategy):
         decision_model: StepDecisionModel,
         tools: ToolRegistry,
         publisher: EventPublisher,
+        native_tools: NativeToolSet | None,
     ) -> StepDecision:
         await publisher.publish(
             events.BeforeLLMCall(
                 messages=messages,
-                tools=None,
-                decision_model=decision_model,
+                tools=native_tools.definitions if native_tools is not None else None,
+                decision_model=decision_model if native_tools is None else None,
             )
         )
 
@@ -119,12 +140,13 @@ class LLMInferenceStrategy(InferenceStrategy):
         reasoning_callback = None
         tool_stream_handlers = _tool_stream_handlers(tools)
         if (
-            self._decision_mode is LLMDecisionMode.JSON
+            self._decision_mode in {LLMDecisionMode.JSON, LLMDecisionMode.NATIVE_TOOLS}
             and self._stream
             and tool_stream_handlers
         ):
             raise ValueError(
-                "JSON decision mode does not support streamed tool arguments."
+                f"{self._decision_mode.value} decision mode does not support "
+                "streamed tool arguments."
             )
         tool_arg_streamer = None
         tool_call_ids = ToolCallIdRegistry()
@@ -154,10 +176,14 @@ class LLMInferenceStrategy(InferenceStrategy):
         try:
             response = await self.llm_client.complete(
                 messages=messages,
-                tools=None,
+                tools=native_tools.definitions if native_tools is not None else None,
                 decision_model=(
                     decision_model
                     if self._decision_mode is LLMDecisionMode.STRUCTURED_OUTPUT
+                    or (
+                        self._decision_mode is LLMDecisionMode.NATIVE_TOOLS
+                        and native_tools is None
+                    )
                     else None
                 ),
                 stream_callback=stream_callback,
@@ -168,6 +194,20 @@ class LLMInferenceStrategy(InferenceStrategy):
             if tool_arg_streamer is not None:
                 await tool_arg_streamer.close()
         await publisher.publish(events.AfterLLMCall(response))
+
+        if native_tools is not None:
+            try:
+                return native_tools.validate_calls(response.tool_calls, decision_model)
+            except UnknownToolDecisionError as error:
+                raise InvalidInferenceResponseError(
+                    f"LLM output requested an unknown tool: {error.tool_name!r}",
+                    raw_content=response.content,
+                ) from error
+            except (json.JSONDecodeError, TypeError, ValueError) as error:
+                raise InvalidInferenceResponseError(
+                    f"LLM native tool output failed validation: {error}",
+                    raw_content=response.content,
+                ) from error
 
         if response.content is None and response.structured_output is None:
             raise InvalidInferenceResponseError(
@@ -212,13 +252,24 @@ class LLMInferenceStrategy(InferenceStrategy):
         history: Sequence[HistoryItem],
         spec: StepDecisionSpec,
         decision_model: StepDecisionModel | None = None,
+        native_tools: NativeToolSet | None = None,
     ) -> list[Message]:
         decision_model = decision_model or StepDecisionModel.from_spec(
             spec, self._result_format_factory
         )
+        if self._decision_mode is LLMDecisionMode.NATIVE_TOOLS and spec.tools:
+            native_tools = native_tools or NativeToolSet.from_model(decision_model)
+            return build_native_messages(
+                function_info,
+                history,
+                build_native_tool_prompt(spec.mode, native_tools.result_tool_name),
+                self._prompt_formatter,
+                self._json_default,
+            )
         decision_prompt = (
             build_step_decision_prompt(spec)
-            if self._decision_mode is LLMDecisionMode.STRUCTURED_OUTPUT
+            if self._decision_mode
+            in {LLMDecisionMode.STRUCTURED_OUTPUT, LLMDecisionMode.NATIVE_TOOLS}
             else build_json_decision_prompt(spec, decision_model)
         )
         return build_messages(
@@ -228,7 +279,8 @@ class LLMInferenceStrategy(InferenceStrategy):
             self._prompt_formatter,
             self._json_default,
             include_tool_call_ids=(
-                self._decision_mode is LLMDecisionMode.STRUCTURED_OUTPUT
+                self._decision_mode
+                in {LLMDecisionMode.STRUCTURED_OUTPUT, LLMDecisionMode.NATIVE_TOOLS}
             ),
         )
 

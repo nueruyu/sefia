@@ -87,6 +87,12 @@ then describes the compact JSON contract in the prompt and performs the same run
 validation and repair locally. Streamed tool-argument previews remain available only
 in the default structured-output mode.
 
+`LLMDecisionMode.NATIVE_TOOLS` instead exposes provider-native function tools. When
+the inferred function has tools, Sefia adds a synthetic `return_result` tool for the
+typed final value and replays prior calls with native assistant/tool messages. Calls
+without application tools continue to use structured output. Native-tools mode does
+not support streamed tool-argument previews.
+
 ## 2. Give it a tool
 
 Tools are the **public methods of fields granted with the `Tools[...]` annotation**

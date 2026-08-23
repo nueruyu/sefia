@@ -18,6 +18,7 @@ from typing import Any, Protocol
 
 import pytest
 from sefia import Tools
+from sefia.llm import LLMDecisionMode
 
 from sefia_litellm import LiteLLMClient
 
@@ -122,4 +123,16 @@ async def test_tool_call_round_trip(
     # The tool was actually dispatched with the decoded arguments...
     assert "launch-code" in vault.calls
     # ...and its result flowed back through the history into the final answer.
+    assert _SENTINEL in answer
+
+
+async def test_native_tool_call_round_trip(
+    provider: Provider, live_session: LiveSessionFactory
+) -> None:
+    vault = VaultToolkit()
+
+    async with live_session(provider, decision_mode=LLMDecisionMode.NATIVE_TOOLS):
+        answer = await VaultAgent(vault).fetch_launch_code()
+
+    assert "launch-code" in vault.calls
     assert _SENTINEL in answer

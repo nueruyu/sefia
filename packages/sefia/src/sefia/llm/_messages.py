@@ -44,6 +44,7 @@ class ToolCall:
 
     id: str
     function: dict[str, Any]  # {"name": "...", "arguments": "..."}
+    type: Literal["function"] = "function"
 
 
 @dataclass
