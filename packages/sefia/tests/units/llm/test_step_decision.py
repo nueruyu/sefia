@@ -167,9 +167,9 @@ class TestToolsRequiredDecision:
             "\n\nCall one or more tools by setting `decision` to `tool_calls` and "
             "populating `tool_calls`; do not return a final result. Treat all tool "
             "interactions in the conversation history as part of this decision "
-            "protocol. Request new tool calls only through this response schema."
-            "\n\nAvailable tools:\n"
-            "- `chat_tool`: A tool taking no arguments."
+            "protocol. Request new tool calls only through this response schema. Batch "
+            "only independent tool calls with known arguments. Never guess arguments "
+            "or use placeholders; defer calls that depend on another tool's result."
         )
 
     def test_process_decision_accepts_tool_calls(self):
@@ -245,9 +245,9 @@ class TestToolsOrResultDecision:
             "are needed; otherwise, set `decision` to `result` and populate "
             "`result` only when the task is complete. Treat all tool interactions "
             "in the conversation history as part of this decision protocol. "
-            "Request new tool calls only through this response schema."
-            "\n\nAvailable tools:\n"
-            "- `search`: Search for something."
+            "Request new tool calls only through this response schema. Batch only "
+            "independent tool calls with known arguments. Never guess arguments or "
+            "use placeholders; defer calls that depend on another tool's result."
         )
 
     def test_process_decision_returns_tool_call_decision(self):

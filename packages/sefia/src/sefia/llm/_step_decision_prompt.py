@@ -18,15 +18,12 @@ def build_step_decision_prompt(spec: StepDecisionSpec) -> str:
             "Set `decision` to `result` and populate `result` with the non-null "
             "task result."
         )
-    tools = ""
     if spec.tools:
         instruction += (
             " Treat all tool interactions in the conversation history as part of "
             "this decision protocol. Request new tool calls only through this "
-            "response schema."
+            "response schema. Batch only independent tool calls with known arguments. "
+            "Never guess arguments or use placeholders; defer calls that depend on "
+            "another tool's result."
         )
-        descriptions = [
-            f"- `{tool.name}`: {tool.definition().description}" for tool in spec.tools
-        ]
-        tools = "\n\nAvailable tools:\n" + "\n".join(descriptions)
-    return f"\n\n{instruction}{tools}"
+    return f"\n\n{instruction}"

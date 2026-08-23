@@ -41,6 +41,7 @@ class SchemaPolicy:
     missing_required_properties: MissingFieldAction
     one_of: OneOfAction
     mappings: MappingAction
+    strip_titles: bool
 
 
 STRICT_OUTPUT_CONSTRAINTS = SchemaConstraints(
@@ -65,6 +66,7 @@ GENERATED_SCHEMA_POLICY = SchemaPolicy(
     missing_required_properties=MissingFieldAction.ADD,
     one_of=OneOfAction.REWRITE_AS_ANY_OF,
     mappings=MappingAction.LOWER_TO_ENTRIES,
+    strip_titles=True,
 )
 
 USER_DEFINED_SCHEMA_POLICY = SchemaPolicy(
@@ -73,6 +75,7 @@ USER_DEFINED_SCHEMA_POLICY = SchemaPolicy(
     missing_required_properties=MissingFieldAction.REJECT,
     one_of=OneOfAction.REJECT,
     mappings=MappingAction.REJECT,
+    strip_titles=False,
 )
 
 
@@ -97,6 +100,8 @@ def prepare_schema(schema: JsonObject, policy: SchemaPolicy) -> PreparedSchema:
 def _apply_corrections(schema: JsonObject, policy: SchemaPolicy) -> None:
     for cursor in SchemaNode(schema).walk():
         node = cursor.node
+        if policy.strip_titles:
+            node.value.pop(K.TITLE, None)
         if node.type == "object":
             _apply_object_corrections(node, policy)
         if policy.one_of is OneOfAction.REWRITE_AS_ANY_OF:
