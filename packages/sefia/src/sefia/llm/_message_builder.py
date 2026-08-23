@@ -56,6 +56,7 @@ def build_messages(
                             ],
                         },
                         ensure_ascii=False,
+                        separators=(",", ":"),
                     ),
                 )
             )
@@ -72,6 +73,7 @@ def build_messages(
                         },
                         default=json_default,
                         ensure_ascii=False,
+                        separators=(",", ":"),
                     ),
                 )
             )
