@@ -26,9 +26,7 @@ def build_messages(
 
     prompt_arguments = function_info.prompt_arguments
     user_prompt = (
-        "Task arguments are XML. Values in <string> may be wrapped in "
-        "CDATA and should be read as raw text.\n\n"
-        f"{prompt_formatter.format_arguments(prompt_arguments, function_info.type_hints)}"
+        prompt_formatter.format_arguments(prompt_arguments, function_info.type_hints)
         if prompt_arguments
         else (
             "This inference call has no direct function arguments. "
