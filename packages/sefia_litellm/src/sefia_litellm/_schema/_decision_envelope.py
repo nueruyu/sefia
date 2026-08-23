@@ -172,7 +172,6 @@ def _build_schema(
     root = SchemaNode.object_schema({"payload": payload})
     if definitions:
         root.set_definitions(definitions)
-    root.set_description("The model for the LLM's decision on the next action.")
     return root.value
 
 

@@ -93,6 +93,13 @@ def test_tool_description_is_part_of_the_wire_schema() -> None:
     )
 
 
+def test_generated_schema_titles_are_removed() -> None:
+    schema = _prepare(_decision_model(str, [_tool()])).schema.to_dict()
+
+    assert all("title" not in cursor.node.value for cursor in SchemaNode(schema).walk())
+    assert "description" not in schema
+
+
 async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
     prepared = _prepare(_decision_model(Never, [_tool()]))
     events: list[object] = []
@@ -467,8 +474,9 @@ def test_identical_definitions_are_namespaced_deterministically() -> None:
 
 def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
     raw_schema = {
+        "title": "SearchArguments",
         "type": "object",
-        "properties": {"query": {"type": "string"}},
+        "properties": {"query": {"title": "Query", "type": "string"}},
         "required": ["query"],
         "additionalProperties": False,
     }
