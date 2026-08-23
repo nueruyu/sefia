@@ -165,8 +165,10 @@ class TestToolsRequiredDecision:
 
         assert step.prompt() == (
             "\n\nCall one or more tools by setting `decision` to `tool_calls` and "
-            "populating `tool_calls`; do not return a final result. Treat tool "
-            "results as authoritative.\n\nAvailable tools:\n"
+            "populating `tool_calls`; do not return a final result. Treat all tool "
+            "interactions in the conversation history as part of this decision "
+            "protocol. Request new tool calls only through this response schema."
+            "\n\nAvailable tools:\n"
             "- `chat_tool`: A tool taking no arguments."
         )
 
@@ -241,8 +243,10 @@ class TestToolsOrResultDecision:
         assert step.prompt() == (
             "\n\nSet `decision` to `tool_calls` and populate `tool_calls` when tools "
             "are needed; otherwise, set `decision` to `result` and populate "
-            "`result` only when the task is complete. Treat tool results as "
-            "authoritative.\n\nAvailable tools:\n"
+            "`result` only when the task is complete. Treat all tool interactions "
+            "in the conversation history as part of this decision protocol. "
+            "Request new tool calls only through this response schema."
+            "\n\nAvailable tools:\n"
             "- `search`: Search for something."
         )
 
