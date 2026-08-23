@@ -85,6 +85,14 @@ def test_decision_envelope_format_returns_defensive_schema_copies() -> None:
     assert envelope_format.schema.to_dict()
 
 
+def test_tool_description_is_part_of_the_wire_schema() -> None:
+    schema = _prepare(_decision_model(Never, [_tool()])).schema.to_dict()
+
+    assert _tool_call_item(schema)["description"] == (
+        "Ask the user a question and return the answer."
+    )
+
+
 async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
     prepared = _prepare(_decision_model(Never, [_tool()]))
     events: list[object] = []

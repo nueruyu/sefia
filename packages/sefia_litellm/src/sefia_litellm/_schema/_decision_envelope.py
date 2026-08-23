@@ -58,7 +58,13 @@ class DecisionEnvelopeFormat:
         tool_argument_formats = {
             tool.name: StructuredValueFormat.from_tool(tool) for tool in model.tools
         }
-        schema = _build_schema(model.mode, result_format, tool_argument_formats)
+        tool_descriptions = {tool.name: tool.description for tool in model.tools}
+        schema = _build_schema(
+            model.mode,
+            result_format,
+            tool_argument_formats,
+            tool_descriptions,
+        )
         return cls(JsonSchemaDocument(schema), result_format, tool_argument_formats)
 
     @property
@@ -152,10 +158,17 @@ def _build_schema(
     mode: StepDecisionMode,
     result_format: StructuredValueFormat | None,
     tool_argument_formats: dict[str, StructuredValueFormat],
+    tool_descriptions: dict[str, str],
 ) -> JsonObject:
     definitions: JsonObject = {}
     registry = DefinitionRegistry(definitions)
-    payload = _payload_schema(mode, result_format, tool_argument_formats, registry)
+    payload = _payload_schema(
+        mode,
+        result_format,
+        tool_argument_formats,
+        tool_descriptions,
+        registry,
+    )
     root = SchemaNode.object_schema({"payload": payload})
     if definitions:
         root.set_definitions(definitions)
@@ -167,11 +180,18 @@ def _payload_schema(
     mode: StepDecisionMode,
     result_format: StructuredValueFormat | None,
     tool_argument_formats: dict[str, StructuredValueFormat],
+    tool_descriptions: dict[str, str],
     registry: DefinitionRegistry,
 ) -> JsonObject:
     branches: list[JsonObject] = []
     if mode is not StepDecisionMode.RESULT_ONLY:
-        branches.append(_tool_calls_schema(tool_argument_formats, registry))
+        branches.append(
+            _tool_calls_schema(
+                tool_argument_formats,
+                tool_descriptions,
+                registry,
+            )
+        )
     if mode is not StepDecisionMode.TOOLS_REQUIRED:
         assert result_format is not None
         imported = registry.import_schema(result_format.schema, namespace="result")
@@ -191,6 +211,7 @@ def _payload_schema(
 
 def _tool_calls_schema(
     tool_argument_formats: dict[str, StructuredValueFormat],
+    tool_descriptions: dict[str, str],
     registry: DefinitionRegistry,
 ) -> JsonObject:
     calls: list[JsonObject] = []
@@ -199,7 +220,11 @@ def _tool_calls_schema(
             value_format.schema,
             namespace=f"tool_{index}",
         )
-        calls.append(_closed_object({"name": _literal(name), "arguments": imported}))
+        call = _closed_object({"name": _literal(name), "arguments": imported})
+        description = tool_descriptions[name]
+        if description:
+            call[K.DESCRIPTION] = description
+        calls.append(call)
     items: JsonObject = (
         calls[0]
         if len(calls) == 1
