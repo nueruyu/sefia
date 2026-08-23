@@ -16,6 +16,7 @@ from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
 from ._decision_mode import LLMDecisionMode
+from ._json_response import parse_json_response
 from ._message_builder import build_messages, build_repair_messages
 from ._messages import Message
 from ._prompt_formatter import PromptFormatter
@@ -177,11 +178,12 @@ class LLMInferenceStrategy(InferenceStrategy):
             decision_data = response.structured_output
             if decision_data is None:
                 assert response.content is not None
-                raw = response.content.strip()
-                if raw.startswith("```"):
-                    lines = raw.splitlines()
-                    raw = "\n".join(lines[1:-1]).strip()
-                decision_data = LLMOutput.parse_json(raw)
+                decision_data = parse_json_response(
+                    response.content,
+                    allow_surrounding_text=(
+                        self._decision_mode is LLMDecisionMode.JSON
+                    ),
+                )
             if (
                 self._decision_mode is LLMDecisionMode.JSON
                 and decision_model.mode is StepDecisionMode.RESULT_ONLY

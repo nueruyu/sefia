@@ -39,46 +39,42 @@ def build_step_decision_prompt(spec: StepDecisionSpec) -> str:
 
 
 def build_json_decision_prompt(spec: StepDecisionSpec, model: StepDecisionModel) -> str:
-    sections = [_json_response_instruction(spec.mode)]
+    sections = [_json_response_format(spec.mode)]
     if model.tools:
+        sections.append(_TOOL_RULES)
         sections.append(
-            "History contains prior tool calls and results. Call only listed tools. "
-            "Represent tool calls only with the JSON form above, never native tool-call "
-            "syntax. Batch independent calls whose arguments are known; never guess "
-            "arguments. Wait for a later step when arguments depend on a tool result; "
-            "placeholders are invalid. A tool runs only after you return its JSON "
-            "call; never continue to its result in the same response."
-        )
-        sections.append(
-            "Available tools:\n" + "\n".join(_format_tool(tool) for tool in model.tools)
+            "## Tools\n" + "\n".join(_format_tool(tool) for tool in model.tools)
         )
     if model.result is not None:
         sections.append(
-            "Final result JSON Schema:\n"
+            "## Result schema\n"
             + _compact_schema(model.result.schema.to_dict(), remove_titles=True)
         )
     return "\n\n" + "\n\n".join(sections)
 
 
-def _json_response_instruction(mode: StepDecisionMode) -> str:
-    header = "Return exactly one raw JSON object without prose or code fences."
+def _json_response_format(mode: StepDecisionMode) -> str:
+    header = "## Response\nReturn JSON only. No prose, code fences, or XML."
     tool_shape = (
-        "Tool call response:\n"
+        "Tool call:\n"
         '{"decision":"tool_calls","tool_calls":'
         '[{"name":"<tool name>","arguments":{}}]}'
     )
-    result_shape = 'Final response:\n{"decision":"result","result":<final value>}'
+    result_shape = 'Result:\n{"decision":"result","result":<final value>}'
     if mode is StepDecisionMode.TOOLS_REQUIRED:
-        return f"{header} Call one or more tools; do not return a final result.\n\n{tool_shape}"
+        return f"{header}\n\n{tool_shape}"
     if mode is StepDecisionMode.RESULT_ONLY:
-        return (
-            "Return only the non-null final JSON value without a decision envelope, "
-            "prose, or code fences."
-        )
-    return (
-        f"{header} Call tools when needed; return the result only when complete."
-        f"\n\n{tool_shape}\n\n{result_shape}"
-    )
+        return f"{header}\nReturn the non-null final value without an envelope."
+    return f"{header}\n\n{tool_shape}\n\n{result_shape}"
+
+
+_TOOL_RULES = """## Rules
+- Use exact tool names from `Tools`.
+- History contains previous calls and results.
+- Use only the JSON forms above, never native tool-call syntax.
+- Batch only independent calls with known arguments.
+- Wait for dependent results; never guess or use placeholders.
+- A call runs after your response. Do not return its result in the same response."""
 
 
 def _format_tool(tool: StepTool) -> str:

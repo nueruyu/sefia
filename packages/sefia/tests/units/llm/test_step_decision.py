@@ -266,7 +266,7 @@ class TestToolsOrResultDecision:
 
         assert '"title"' not in prompt
         assert '"q":{"type":"string"}' in prompt
-        assert "Final result JSON Schema:" in prompt
+        assert "## Result schema" in prompt
 
     def test_json_prompt_preserves_raw_tool_schema_metadata(self):
         def raw_tool(value: str) -> str:

@@ -156,12 +156,14 @@ class TestLLMInferenceStrategy:
         request = mock_llm_client.complete.await_args.kwargs
         assert request["decision_model"] is None
         system_prompt = str(request["messages"][0].content)
-        assert "Return exactly one raw JSON object" in system_prompt
-        assert "Available tools:" in system_prompt
+        assert "## Response" in system_prompt
+        assert "Return JSON only" in system_prompt
+        assert "## Rules" in system_prompt
+        assert "## Tools" in system_prompt
         assert "`my_tool`" in system_prompt
         assert "never native tool-call syntax" in system_prompt
         assert '"param"' in system_prompt
-        assert "Final result JSON Schema:" in system_prompt
+        assert "## Result schema" in system_prompt
 
     async def test_json_mode_accepts_direct_result_without_decision_envelope(
         self, mock_llm_client: AsyncMock
@@ -182,8 +184,32 @@ class TestLLMInferenceStrategy:
         system_prompt = str(
             mock_llm_client.complete.await_args.kwargs["messages"][0].content
         )
-        assert "without a decision envelope" in system_prompt
+        assert "without an envelope" in system_prompt
         assert '"decision":"result"' not in system_prompt
+
+    async def test_json_mode_extracts_a_tool_decision_surrounded_by_prose(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.return_value = LLMResponse(
+            content=(
+                "I will call the tool.\n```json\n"
+                '{"decision":"tool_calls","tool_calls":'
+                '[{"name":"my_tool","arguments":{"param":1}}]}'
+                "\n```\nWaiting for the result."
+            )
+        )
+        strategy = _make_strategy(mock_llm_client, decision_mode=LLMDecisionMode.JSON)
+
+        decision = await strategy.decide_next_step(
+            _function_info(),
+            [],
+            _tool_registry(my_tool),
+            MockEventPublisher(),
+        )
+
+        assert isinstance(decision, ToolCallsDecision)
+        assert decision.calls[0].arguments == {"param": 1}
+        assert mock_llm_client.complete.await_count == 1
 
     async def test_json_mode_rejects_streamed_tool_arguments(
         self, mock_llm_client: AsyncMock
