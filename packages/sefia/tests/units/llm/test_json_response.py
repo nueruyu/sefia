@@ -28,22 +28,16 @@ def test_extracts_fenced_json_surrounded_by_prose():
     assert output.data == {"decision": "tool_calls"}
 
 
-def test_extracts_json_wrapped_in_xml():
-    output = parse_json_response(
+@pytest.mark.parametrize(
+    "text",
+    [
         '<function_calls>\n{"decision":"tool_calls"}\n</function_calls>',
-        allow_surrounding_text=True,
-    )
-
-    assert output.data == {"decision": "tool_calls"}
-
-
-def test_uses_only_the_first_complete_json_value():
-    output = parse_json_response(
         'first {"decision":"tool_calls"} then {"decision":"result"}',
-        allow_surrounding_text=True,
-    )
-
-    assert output.data == {"decision": "tool_calls"}
+    ],
+)
+def test_does_not_guess_json_boundaries_in_surrounding_text(text: str):
+    with pytest.raises(json.JSONDecodeError):
+        parse_json_response(text, allow_surrounding_text=True)
 
 
 def test_does_not_extract_scalar_values_from_prose():

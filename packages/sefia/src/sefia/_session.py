@@ -12,12 +12,12 @@ from ._profiles import Profile
 from ._tool_system import ToolCollector
 from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
-from .llm._decision_mode import LLMDecisionMode
 from .llm._strategy import LLMInferenceStrategy
 from .llm._markdown_prompt_formatter import MarkdownPromptFormatter
 from .pydantic._json_utils import pydantic_json_default
 from .pydantic._model_backend import PydanticModelBackend
 from .tool_collectors import DefaultToolCollector
+from .llm.transports import ResultTransport, ToolCallTransport
 
 
 @final
@@ -38,7 +38,8 @@ class Session:
         stream: bool = False,
         history_storage: HistoryStorage | None = None,
         max_repair_attempts: int = 2,
-        decision_mode: LLMDecisionMode = LLMDecisionMode.STRUCTURED_OUTPUT,
+        tool_transport: ToolCallTransport | None = None,
+        result_transport: ResultTransport | None = None,
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
@@ -62,7 +63,8 @@ class Session:
                 json_default=pydantic_json_default,
                 stream=stream,
                 max_repair_attempts=max_repair_attempts,
-                decision_mode=decision_mode,
+                tool_transport=tool_transport,
+                result_transport=result_transport,
             )
 
         self._inference_strategy = make_strategy(llm_client)

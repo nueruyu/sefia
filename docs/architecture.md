@@ -89,8 +89,8 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `_introspection.py` | Sefia-agnostic reflection: annotation unwrapping, method/field scanning for classes and `Protocol`s. | `unwrap_annotation`, `declared_methods`, `declared_fields`, `is_protocol` |
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
-| `_markers.py` / `streaming.py` | `AsRawText`; the tool-arg streaming side channel (`preview`). | `AsRawText`, `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: `step_decision.py` owns the provider-neutral step-decision model and validation, `_native_tools.py` maps it to native application/result tools, `llm_output.py` owns generic output-shape operations, `result_format.py` defines result schema generation/restoration, `json_schema/` contains only JSON Schema concepts, and `_strategy.py` orchestrates structured-output, prompt-described JSON, or native-tool calls and repair. | `LLMInferenceStrategy`, `LLMDecisionMode`, `LLMClient`, `StepDecisionSpec`, `StepDecisionModel`, `LLMOutput`, `LLMOutputData`, `ResultFormat`, `JsonSchemaDocument`, prompt formatters |
+| `streaming.py` | The tool-argument streaming side channel (`preview`). | `ArgStream`, `StringDelta` |
+| `llm/` | The default LLM strategy and provider-neutral decision transports. Tool-call and result encoding are independent axes; `json_schema/` contains only JSON Schema concepts. | `LLMInferenceStrategy`, `ToolCallTransport`, `ResultTransport`, `StepDecisionModel`, prompt formatters |
 | `pydantic/` | The default `ModelBackend`: callable inspection plus result JSON Schema generation and restoration. It does not know the logical step-decision shape. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
 
@@ -112,7 +112,7 @@ implementation noted in parentheses.
 
 | Path | Responsibility |
 | --- | --- |
-| `__init__.py` | Re-exports the everyday authoring surface (`domain`, `concurrent`, `preview`, `policy`, `profile`, `Tools`, `AsRawText`, `Policy`, `Profile`) so application code imports only from `sefios`. |
+| `__init__.py` | Re-exports the everyday authoring surface (`domain`, `concurrent`, `preview`, `policy`, `profile`, `Tools`, `Policy`, `Profile`) so application code imports only from `sefios`. |
 | `_domain.py` | Convenience constructor for an application-owned `sefia.Domain`. |
 | `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
@@ -135,6 +135,7 @@ implementation noted in parentheses.
 | Path | Responsibility |
 | --- | --- |
 | `_client.py` | `LiteLLMClient` orchestration, runtime logging configuration, and LiteLLM exception mapping. |
+| `_native_transport.py` | Encodes provider-native tool definitions/history and decodes native calls, including the optional synthetic result tool. |
 | `_request.py` | Converts core messages and a logical decision model into LiteLLM messages, kwargs, native `response_format`, or prompt fallback instructions. |
 | `_response.py` | Converts completed responses and streams into `LLMResponse`, including callbacks, usage, cost, and final output decoding. |
 | `_output_stream.py` | Parses incremental wire JSON and converts its payload events into core `OutputStreamEvent`s. |
@@ -182,7 +183,7 @@ implementation noted in parentheses.
   remain at the root (for example, `Policy`).
 - **Import from `sefios`.** It re-exports the everyday authoring surface
   (`domain` / `concurrent` / `preview` / `policy` / `profile`, `Tools`,
-  `AsRawText`, `Policy` / `Profile`), so application code
+  `Policy` / `Profile`), so application code
   touches one package. Low-level contracts intended mainly for extension-library
   authors come from their specialized `sefia` submodules instead.
 - **Interfaces live in `_interfaces/`** as ABCs; concrete defaults live in feature

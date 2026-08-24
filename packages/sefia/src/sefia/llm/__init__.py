@@ -1,5 +1,10 @@
 from ._client import LLMClient
-from ._decision_mode import LLMDecisionMode
+from ._default_transports import (
+    EnvelopeToolCallTransport,
+    PromptJsonResultTransport,
+    PromptJsonToolCallTransport,
+    StructuredResultTransport,
+)
 from ._markdown_prompt_formatter import MarkdownPromptFormatter
 from ._messages import LLMResponse, Message, ToolCall
 from ._prompt_formatter import PromptFormatter
@@ -13,7 +18,10 @@ __all__ = [
     "ToolCall",
     "LLMResponse",
     "LLMInferenceStrategy",
-    "LLMDecisionMode",
+    "EnvelopeToolCallTransport",
+    "PromptJsonResultTransport",
+    "PromptJsonToolCallTransport",
+    "StructuredResultTransport",
     "LLMOutput",
     "LLMOutputData",
     "MarkdownPromptFormatter",

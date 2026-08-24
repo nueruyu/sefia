@@ -49,7 +49,11 @@ def _function_tool_call(call: Any) -> ToolCall:
     function = getattr(call, "function", None)
     if function is None:
         raise RuntimeError("LLM returned an unsupported custom tool call")
-    return ToolCall(id=call.id, function=function.model_dump())
+    return ToolCall(
+        id=call.id,
+        name=function.name,
+        arguments=function.arguments,
+    )
 
 
 async def handle_stream(

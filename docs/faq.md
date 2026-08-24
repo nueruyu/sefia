@@ -126,9 +126,9 @@ model for one result shape (`final_answer | tool_calls`) with strict structured 
 lets sefia treat the **Python return type as the primary output contract** — any
 nested/union/collection type — independent of a provider's native tool-call format.
 The cost is real: some frontier-model tuning and caching advantages favor native
-tools. `LLMDecisionMode.NATIVE_TOOLS` is available for that tradeoff; it represents
-the typed final value as a synthetic result tool while keeping the same internal
-decision model and durable history. Full treatment:
+tools. `sefia_litellm.NativeToolCallTransport` is available for that tradeoff, and
+`NativeResultTransport` can represent the typed final value as a synthetic result
+tool while keeping the same internal decision model and durable history. Full treatment:
 [tradeoffs.md](./tradeoffs.md).
 
 ### Does it scale?

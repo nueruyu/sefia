@@ -1,6 +1,6 @@
 import json
 
-from .json_schema import JsonValue
+from .json_schema import JsonValue, without_titles
 from .step_decision import (
     JsonToolArguments,
     StepDecisionMode,
@@ -53,25 +53,6 @@ def build_json_decision_prompt(spec: StepDecisionSpec, model: StepDecisionModel)
     return "\n\n" + "\n\n".join(sections)
 
 
-def build_native_tool_prompt(
-    mode: StepDecisionMode, result_tool_name: str | None
-) -> str:
-    if mode is StepDecisionMode.TOOLS_REQUIRED:
-        instruction = "Call one or more available tools. Do not answer with text."
-    elif mode is StepDecisionMode.RESULT_ONLY:
-        assert result_tool_name is not None
-        instruction = (
-            f"Call `{result_tool_name}` with the final result. Do not answer with text."
-        )
-    else:
-        assert result_tool_name is not None
-        instruction = (
-            "Call available tools when needed. When the task is complete, call "
-            f"`{result_tool_name}` with the final result. Do not answer with text."
-        )
-    return f"\n\n{instruction}"
-
-
 def _json_response_format(mode: StepDecisionMode) -> str:
     header = "## Response\nReturn JSON only. No prose, code fences, or XML."
     tool_shape = (
@@ -109,14 +90,4 @@ def _compact_json(value: JsonValue) -> str:
 
 
 def _compact_schema(value: JsonValue, *, remove_titles: bool) -> str:
-    return _compact_json(_without_titles(value) if remove_titles else value)
-
-
-def _without_titles(value: JsonValue) -> JsonValue:
-    if isinstance(value, dict):
-        return {
-            key: _without_titles(item) for key, item in value.items() if key != "title"
-        }
-    if isinstance(value, list):
-        return [_without_titles(item) for item in value]
-    return value
+    return _compact_json(without_titles(value) if remove_titles else value)

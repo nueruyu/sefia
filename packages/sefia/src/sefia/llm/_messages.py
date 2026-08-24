@@ -40,11 +40,11 @@ class Message:
 
 @dataclass
 class ToolCall:
-    """Represents a tool call requested by the LLM."""
+    """Provider-neutral tool call requested by the LLM."""
 
     id: str
-    function: dict[str, Any]  # {"name": "...", "arguments": "..."}
-    type: Literal["function"] = "function"
+    name: str
+    arguments: str | dict[str, Any]
 
 
 @dataclass

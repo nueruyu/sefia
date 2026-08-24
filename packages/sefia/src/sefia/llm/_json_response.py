@@ -1,8 +1,5 @@
 import json
 import re
-from typing import cast
-
-from .json_schema import JsonValue
 from .llm_output import LLMOutput
 
 _FENCED_JSON = re.compile(
@@ -31,16 +28,6 @@ def parse_json_response(text: str, *, allow_surrounding_text: bool) -> LLMOutput
                 return LLMOutput.parse_json(match.group("content").strip())
             except json.JSONDecodeError:
                 continue
-
-        decoder = json.JSONDecoder()
-        for index, character in enumerate(raw):
-            if character not in "{[":
-                continue
-            try:
-                value, _ = decoder.raw_decode(raw, index)
-            except json.JSONDecodeError:
-                continue
-            return LLMOutput.from_json(cast(JsonValue, value))
 
         raise strict_error
 

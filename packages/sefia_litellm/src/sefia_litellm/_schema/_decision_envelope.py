@@ -58,7 +58,11 @@ class DecisionEnvelopeFormat:
         tool_argument_formats = {
             tool.name: StructuredValueFormat.from_tool(tool) for tool in model.tools
         }
-        tool_descriptions = {tool.name: tool.description for tool in model.tools}
+        tool_descriptions = {
+            tool.name: tool.description
+            for tool in model.tools
+            if tool.description is not None
+        }
         schema = _build_schema(
             model.mode,
             result_format,

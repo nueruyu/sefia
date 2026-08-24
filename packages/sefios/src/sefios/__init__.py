@@ -1,7 +1,6 @@
 """Opinionated stack for building applications with the Sefia framework."""
 
 from sefia import (
-    AsRawText,
     Policy,
     Profile,
     Tools,
@@ -10,7 +9,6 @@ from sefia import (
     preview,
     profile,
 )
-from sefia.llm import LLMDecisionMode
 
 from ._domain import domain
 from ._scope import SessionScope
@@ -45,8 +43,6 @@ __all__ = [
     "Policy",
     "Profile",
     "Tools",
-    "AsRawText",
-    "LLMDecisionMode",
     "domain",
     # sefios' own front door and batteries.
     "SessionScope",

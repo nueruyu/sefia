@@ -122,26 +122,19 @@ live in `sefia.llm.step_decision`; result schema interfaces and decoded values l
 in `sefia.llm.result_format` and `sefia.llm.llm_output`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
-The core system prompt is `docstring + decision semantics`; in JSON mode it also
-contains compact tool and result schemas, while in structured-output mode the client
-owns their wire representation. The user message is the call's arguments rendered as
-JSON in a Markdown code block (`_build_messages`). Structured-output and JSON history
-use ordinary assistant/user JSON messages. Structured-output mode passes the logical
-`decision_model` to the client. JSON mode passes no decision model, parses the raw
-JSON response in the strategy, and uses the same step-decision validator and repair
-loop. In JSON mode, `RESULT_ONLY` calls return the final JSON value directly; the
-strategy adds the internal result decision before validation. JSON-mode history also
-omits internal call IDs and associates each result with the tool name and arguments so
-models do not copy framework-owned IDs into new calls.
+The core system prompt is the docstring plus contributions from two independent
+transports: `ToolCallTransport` defines how tools, calls, and tool history cross the
+LLM boundary; `ResultTransport` defines how the result schema and final value cross
+it. `LLMInferenceStrategy` retains the shared spec construction, repair loop, events,
+stream callbacks, and validation error conversion.
 
-Native-tools mode is selected explicitly. For a call with application tools,
-`_native_tools.py` exposes those tools plus a synthetic `return_result` tool, and the
-strategy converts their calls into the same internal `ToolCallsDecision` and
-`ResultDecision` types. History remains provider-neutral in durable storage but is
-rendered as native assistant tool calls and `tool` messages at the client boundary.
-A call without application tools falls back to structured output rather than exposing
-only a synthetic tool. Streamed tool-argument previews require structured-output
-mode; JSON and native-tools modes reject them.
+The defaults use one structured decision envelope. Prompt-JSON transports instead
+put compact contracts in the prompt and parse raw JSON locally. LiteLLM's native tool
+transport lives in `sefia_litellm`, where provider-shaped function definitions and
+assistant/tool messages are encoded. Its native result transport adds the synthetic
+`return_result` tool. Because the axes are independent, native tool calls can be
+combined with structured results. Durable history remains provider-neutral and is
+rendered only when a request is built.
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
 first **repaired in place**: the strategy appends the invalid output and the

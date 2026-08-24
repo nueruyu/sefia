@@ -12,7 +12,6 @@ def test_reexports_are_the_source_objects():
     assert sefios.Policy is sefia.Policy
     assert sefios.Profile is sefia.Profile
     assert sefios.Tools is sefia.Tools
-    assert sefios.AsRawText is sefia.AsRawText
 
 
 def test_authoring_surface_is_public():
@@ -26,7 +25,6 @@ def test_authoring_surface_is_public():
         "Policy",
         "Profile",
         "Tools",
-        "AsRawText",
     ):
         assert name in sefios.__all__
 

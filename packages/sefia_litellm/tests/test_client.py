@@ -2,7 +2,7 @@ import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Never, Self
+from typing import Never, Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -22,6 +22,7 @@ from litellm.exceptions import (
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
 from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
+from sefia.llm.transports import ToolDefinition
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
@@ -85,9 +86,7 @@ class TestLiteLLMClient:
             model="gpt-4o", native_structured_output=True, temperature=0.5
         )
         messages = [Message(role="user", content="Hello")]
-        tools: list[dict[str, Any]] = [
-            {"type": "function", "function": {"name": "get_weather"}}
-        ]
+        tools = [ToolDefinition(name="get_weather", parameters={"type": "object"})]
         decision_model = _decision_model()
 
         mock_acompletion.return_value = ModelResponse(
@@ -106,7 +105,15 @@ class TestLiteLLMClient:
         call_args = mock_acompletion.call_args[1]
         assert call_args["model"] == "gpt-4o"
         assert call_args["messages"] == [{"role": "user", "content": "Hello"}]
-        assert call_args["tools"] == tools
+        assert call_args["tools"] == [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "parameters": {"type": "object"},
+                },
+            }
+        ]
         assert call_args["response_format"]["type"] == "json_schema"
         wire_schema = call_args["response_format"]["json_schema"]["schema"]
         city_schema = wire_schema["properties"]["payload"]["properties"]["result"][

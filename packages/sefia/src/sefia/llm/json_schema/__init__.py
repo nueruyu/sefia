@@ -7,6 +7,7 @@ from ._json import (
 )
 from ._path import SchemaPath
 from ._reference import LocalDefinitionRef
+from ._transform import without_titles
 from ._vocabulary import SchemaKeyword
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
     "SchemaPath",
     "SchemaType",
     "SchemaKeyword",
+    "without_titles",
 ]

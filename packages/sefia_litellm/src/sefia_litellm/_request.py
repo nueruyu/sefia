@@ -8,6 +8,7 @@ from typing_extensions import final
 from sefia.llm import Message
 from sefia.llm.json_schema import JsonObject
 from sefia.llm.step_decision import StepDecisionModel
+from sefia.llm.transports import ToolDefinition
 
 from ._schema import DecisionEnvelopeFormat
 
@@ -43,14 +44,14 @@ def prepare_request(
     *,
     model: str,
     messages: list[Message],
-    tools: list[dict[str, Any]] | None,
+    tools: list[ToolDefinition] | None,
     decision_model: StepDecisionModel | None,
     client_kwargs: dict[str, Any],
     native_structured_output: bool | None,
     supports_response_schema: Callable[..., bool],
     stream: bool,
 ) -> PreparedRequest:
-    raw_messages = [message.to_dict(exclude_none=True) for message in messages]
+    raw_messages = [_message(message) for message in messages]
     output = (
         DecisionEnvelopeFormat.from_model(decision_model)
         if decision_model is not None
@@ -58,7 +59,7 @@ def prepare_request(
     )
     kwargs = client_kwargs.copy()
     if tools:
-        kwargs["tools"] = tools
+        kwargs["tools"] = [_tool_definition(tool) for tool in tools]
     if output is not None:
         native = (
             native_structured_output
@@ -74,6 +75,30 @@ def prepare_request(
     if stream:
         kwargs["stream"] = True
     return PreparedRequest(raw_messages, kwargs, output)
+
+
+def _message(message: Message) -> dict[str, Any]:
+    raw = message.to_dict(exclude_none=True)
+    if message.tool_calls is not None:
+        raw["tool_calls"] = [
+            {
+                "id": call.id,
+                "type": "function",
+                "function": {"name": call.name, "arguments": call.arguments},
+            }
+            for call in message.tool_calls
+        ]
+    return raw
+
+
+def _tool_definition(tool: ToolDefinition) -> dict[str, Any]:
+    function: dict[str, Any] = {
+        "name": tool.name,
+        "parameters": tool.parameters,
+    }
+    if tool.description:
+        function["description"] = tool.description
+    return {"type": "function", "function": function}
 
 
 def _response_format(output: DecisionEnvelopeFormat) -> _JsonSchemaResponseFormat:

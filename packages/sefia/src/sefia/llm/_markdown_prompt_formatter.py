@@ -17,10 +17,7 @@ class MarkdownPromptFormatter(PromptFormatter):
         self._json_default = json_default
 
     @override
-    def format_arguments(
-        self, arguments: dict[str, Any], type_hints: dict[str, Any]
-    ) -> str:
-        del type_hints
+    def format_arguments(self, arguments: dict[str, Any]) -> str:
         content = json.dumps(
             arguments,
             default=self._serialize,

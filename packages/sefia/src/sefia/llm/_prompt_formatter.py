@@ -8,8 +8,6 @@ class PromptFormatter(ABC):
     """
 
     @abstractmethod
-    def format_arguments(
-        self, arguments: dict[str, Any], type_hints: dict[str, Any]
-    ) -> str:
+    def format_arguments(self, arguments: dict[str, Any]) -> str:
         """Serialize prompt arguments into a string."""
         ...

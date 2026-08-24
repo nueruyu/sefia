@@ -11,6 +11,7 @@ from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message
 from sefia.llm.step_decision import StepDecisionModel
 from sefia.llm.streaming import OutputStreamCallback
+from sefia.llm.transports import ToolDefinition
 
 from ._request import prepare_request
 from ._response import handle_response, handle_stream
@@ -93,7 +94,7 @@ class LiteLLMClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[ToolDefinition] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,

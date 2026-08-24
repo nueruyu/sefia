@@ -37,6 +37,7 @@ from ._session import Session
 from .llm import LLMClient, LLMResponse, Message
 from .llm.step_decision import StepDecisionModel
 from .llm.streaming import OutputStreamCallback
+from .llm.transports import ToolDefinition
 from .pydantic._json_utils import pydantic_json_default
 
 
@@ -54,7 +55,7 @@ class MockLLMClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[ToolDefinition] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,

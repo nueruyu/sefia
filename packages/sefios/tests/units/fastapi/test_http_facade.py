@@ -12,6 +12,7 @@ from sefia.llm.streaming import (
     StringDelta,
     StringEnd,
 )
+from sefia.llm.transports import ToolDefinition
 from sefia_fastapi.events import _SessionEvent
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 from sefios import MemoryPersistence, domain
@@ -31,7 +32,7 @@ class StreamingClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[ToolDefinition] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[Any, Any, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,

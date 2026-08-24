@@ -16,13 +16,23 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMDecisionMode, LLMInferenceStrategy, LLMResponse, ToolCall
+from sefia.llm import (
+    LLMInferenceStrategy,
+    LLMResponse,
+    PromptJsonResultTransport,
+    PromptJsonToolCallTransport,
+    ToolCall,
+)
+from sefia.llm.transports import ResultTransport, ToolCallTransport
+from sefia_litellm import NativeResultTransport, NativeToolCallTransport
 from sefia.llm.events import (
+    BeforeLLMCall,
     LLMReasoningTokenReceived,
     LLMResponseRepairAttempt,
     LLMTokenReceived,
 )
 from sefia.llm.llm_output import LLMOutput
+from sefia.llm.step_decision import StepDecisionMode
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -86,7 +96,8 @@ def _make_strategy(
     *,
     stream: bool = False,
     max_repair_attempts: int = 2,
-    decision_mode: LLMDecisionMode = LLMDecisionMode.STRUCTURED_OUTPUT,
+    tool_transport: ToolCallTransport | None = None,
+    result_transport: ResultTransport | None = None,
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
@@ -99,7 +110,8 @@ def _make_strategy(
         json_default=pydantic_json_default,
         stream=stream,
         max_repair_attempts=max_repair_attempts,
-        decision_mode=decision_mode,
+        tool_transport=tool_transport,
+        result_transport=result_transport,
     )
 
 
@@ -143,18 +155,28 @@ class TestLLMInferenceStrategy:
                 '[{"name":"my_tool","arguments":{"param":1}}]}'
             )
         )
-        strategy = _make_strategy(mock_llm_client, decision_mode=LLMDecisionMode.JSON)
+        strategy = _make_strategy(
+            mock_llm_client,
+            tool_transport=PromptJsonToolCallTransport(),
+            result_transport=PromptJsonResultTransport(),
+        )
 
+        publisher = MockEventPublisher()
         decision = await strategy.decide_next_step(
             _function_info(),
             [],
             _tool_registry(my_tool),
-            MockEventPublisher(),
+            publisher,
         )
 
         assert isinstance(decision, ToolCallsDecision)
         request = mock_llm_client.complete.await_args.kwargs
         assert request["decision_model"] is None
+        before = next(
+            event for event in publisher.events if isinstance(event, BeforeLLMCall)
+        )
+        assert before.decision_model is request["decision_model"]
+        assert before.tools is request["tools"]
         system_prompt = str(request["messages"][0].content)
         assert "## Response" in system_prompt
         assert "Return JSON only" in system_prompt
@@ -172,12 +194,15 @@ class TestLLMInferenceStrategy:
             tool_calls=[
                 ToolCall(
                     id="provider-call-1",
-                    function={"name": "my_tool", "arguments": '{"param":1}'},
+                    name="my_tool",
+                    arguments='{"param":1}',
                 )
             ]
         )
         strategy = _make_strategy(
-            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+            mock_llm_client,
+            tool_transport=NativeToolCallTransport(),
+            result_transport=NativeResultTransport(),
         )
 
         decision = await strategy.decide_next_step(
@@ -192,12 +217,16 @@ class TestLLMInferenceStrategy:
         )
         request = mock_llm_client.complete.await_args.kwargs
         assert request["decision_model"] is None
-        assert [tool["function"]["name"] for tool in request["tools"]] == [
+        assert [tool.name for tool in request["tools"]] == [
             "my_tool",
             "return_result",
         ]
-        assert "title" not in json.dumps(request["tools"])
-        assert "Do not answer with text" in str(request["messages"][0].content)
+        assert all(
+            "title" not in json.dumps(tool.parameters) for tool in request["tools"]
+        )
+        assert "Do not describe a tool call in text" in str(
+            request["messages"][0].content
+        )
 
     async def test_native_mode_accepts_result_tool_call(
         self, mock_llm_client: AsyncMock
@@ -206,15 +235,15 @@ class TestLLMInferenceStrategy:
             tool_calls=[
                 ToolCall(
                     id="result-call",
-                    function={
-                        "name": "return_result",
-                        "arguments": '{"result":{"name":"test","value":42}}',
-                    },
+                    name="return_result",
+                    arguments='{"result":{"name":"test","value":42}}',
                 )
             ]
         )
         strategy = _make_strategy(
-            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+            mock_llm_client,
+            tool_transport=NativeToolCallTransport(),
+            result_transport=NativeResultTransport(),
         )
 
         decision = await strategy.decide_next_step(
@@ -238,7 +267,8 @@ class TestLLMInferenceStrategy:
             )
         )
         strategy = _make_strategy(
-            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+            mock_llm_client,
+            tool_transport=NativeToolCallTransport(),
         )
 
         decision = await strategy.decide_next_step(
@@ -253,6 +283,28 @@ class TestLLMInferenceStrategy:
         assert request["tools"] is None
         assert request["decision_model"] is not None
 
+    async def test_native_tools_can_use_a_structured_result(
+        self, mock_llm_client: AsyncMock
+    ) -> None:
+        mock_llm_client.complete.return_value = LLMResponse(
+            structured_output=LLMOutput.from_json(
+                {"decision": "result", "result": "done"}
+            )
+        )
+        strategy = _make_strategy(
+            mock_llm_client,
+            tool_transport=NativeToolCallTransport(),
+        )
+
+        decision = await strategy.decide_next_step(
+            _function_info(), [], _tool_registry(my_tool), MockEventPublisher()
+        )
+
+        assert decision == ResultDecision("done")
+        request = mock_llm_client.complete.await_args.kwargs
+        assert [tool.name for tool in request["tools"]] == ["my_tool"]
+        assert request["decision_model"].mode is StepDecisionMode.RESULT_ONLY
+
     async def test_native_mode_renders_provider_native_history(
         self, mock_llm_client: AsyncMock
     ) -> None:
@@ -260,15 +312,15 @@ class TestLLMInferenceStrategy:
             tool_calls=[
                 ToolCall(
                     id="result-call",
-                    function={
-                        "name": "return_result",
-                        "arguments": '{"result":"done"}',
-                    },
+                    name="return_result",
+                    arguments='{"result":"done"}',
                 )
             ]
         )
         strategy = _make_strategy(
-            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+            mock_llm_client,
+            tool_transport=NativeToolCallTransport(),
+            result_transport=NativeResultTransport(),
         )
         history = [
             ToolCallsDecision([ToolCallRequest("call-1", "my_tool", {"param": 1})]),
@@ -285,7 +337,8 @@ class TestLLMInferenceStrategy:
         assert messages[2].tool_calls == [
             ToolCall(
                 id="call-1",
-                function={"name": "my_tool", "arguments": '{"param":1}'},
+                name="my_tool",
+                arguments='{"param":1}',
             )
         ]
         assert messages[3].role == "tool"
@@ -301,16 +354,16 @@ class TestLLMInferenceStrategy:
                 tool_calls=[
                     ToolCall(
                         id="result-call",
-                        function={
-                            "name": "return_result",
-                            "arguments": '{"result":"done"}',
-                        },
+                        name="return_result",
+                        arguments='{"result":"done"}',
                     )
                 ]
             ),
         ]
         strategy = _make_strategy(
-            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+            mock_llm_client,
+            tool_transport=NativeToolCallTransport(),
+            result_transport=NativeResultTransport(),
         )
 
         decision = await strategy.decide_next_step(
@@ -334,15 +387,15 @@ class TestLLMInferenceStrategy:
             tool_calls=[
                 ToolCall(
                     id="result-call",
-                    function={
-                        "name": "return_result_2",
-                        "arguments": '{"result":"done"}',
-                    },
+                    name="return_result_2",
+                    arguments='{"result":"done"}',
                 )
             ]
         )
         strategy = _make_strategy(
-            mock_llm_client, decision_mode=LLMDecisionMode.NATIVE_TOOLS
+            mock_llm_client,
+            tool_transport=NativeToolCallTransport(),
+            result_transport=NativeResultTransport(),
         )
 
         decision = await strategy.decide_next_step(
@@ -351,7 +404,7 @@ class TestLLMInferenceStrategy:
 
         assert decision == ResultDecision("done")
         tools = mock_llm_client.complete.await_args.kwargs["tools"]
-        assert [tool["function"]["name"] for tool in tools] == [
+        assert [tool.name for tool in tools] == [
             "return_result",
             "return_result_2",
         ]
@@ -362,7 +415,11 @@ class TestLLMInferenceStrategy:
         mock_llm_client.complete.return_value = LLMResponse(
             content='{"name":"test","value":42}'
         )
-        strategy = _make_strategy(mock_llm_client, decision_mode=LLMDecisionMode.JSON)
+        strategy = _make_strategy(
+            mock_llm_client,
+            tool_transport=PromptJsonToolCallTransport(),
+            result_transport=PromptJsonResultTransport(),
+        )
 
         decision = await strategy.decide_next_step(
             _function_info(return_type=MyOutput),
@@ -389,7 +446,11 @@ class TestLLMInferenceStrategy:
                 "\n```\nWaiting for the result."
             )
         )
-        strategy = _make_strategy(mock_llm_client, decision_mode=LLMDecisionMode.JSON)
+        strategy = _make_strategy(
+            mock_llm_client,
+            tool_transport=PromptJsonToolCallTransport(),
+            result_transport=PromptJsonResultTransport(),
+        )
 
         decision = await strategy.decide_next_step(
             _function_info(),
@@ -414,7 +475,8 @@ class TestLLMInferenceStrategy:
         strategy = _make_strategy(
             mock_llm_client,
             stream=True,
-            decision_mode=LLMDecisionMode.JSON,
+            tool_transport=PromptJsonToolCallTransport(),
+            result_transport=PromptJsonResultTransport(),
         )
 
         with pytest.raises(ValueError, match="streamed tool arguments"):

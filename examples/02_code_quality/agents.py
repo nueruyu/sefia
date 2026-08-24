@@ -1,7 +1,5 @@
 from pathlib import Path
-from typing import Annotated
-
-from sefios import AsRawText, Tools
+from sefios import Tools
 from sefios.tools import Input
 
 from .authoring import infer
@@ -13,7 +11,7 @@ from .models import (
 )
 from .tools import Files
 
-RawCode = Annotated[str, AsRawText]
+RawCode = str
 
 
 class ScopingAgent:

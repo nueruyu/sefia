@@ -86,7 +86,7 @@ and selects `SQLitePersistence` explicitly so its sessions survive restarts.
 
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
 `domain` / `concurrent` / `preview` / `policy` / `profile` decorators,
-`Tools`, `AsRawText`, and `Policy` / `Profile` — alongside its own `SessionScope` and
+`Tools` and `Policy` / `Profile` — alongside its own `SessionScope` and
 batteries, so application code needs only `sefios`. Reach into `sefia` directly for the
 extension seams (a custom policy, strategy, client, or tool collector) and tool-call
 context helpers such as `current_tool_call_id_for`.
@@ -138,33 +138,36 @@ for durable execution and session state; drop to
 `sefia.Session` directly when you want full control. The **[tutorial](./docs/tutorial.md)**
 builds this into a human-in-the-loop service that resumes over HTTP.
 
-Structured output is the default. To avoid provider-side response-schema handling,
-select the prompt-described JSON mode; Sefia still validates every decision, tool
-argument, and final result:
+Structured output is the default. Tool-call and result transports are independent.
+To describe both sides as prompt JSON instead, inject the core transports:
 
 ```python
-from sefios import LLMDecisionMode
+from sefia.llm import PromptJsonResultTransport, PromptJsonToolCallTransport
 
 scope = SessionScope(
     model="gpt-4o",
-    decision_mode=LLMDecisionMode.JSON,
+    tool_transport=PromptJsonToolCallTransport(),
+    result_transport=PromptJsonResultTransport(),
 )
 ```
 
 JSON mode supports token streaming but not streamed tool-argument previews.
 
-To use provider-native function calling, select native-tools mode. Calls with tools
-expose the application tools plus a synthetic result tool; calls without application
-tools continue to use structured output:
+LiteLLM's native transports expose application tools and represent the final value
+with a synthetic result tool:
 
 ```python
+from sefia_litellm import NativeResultTransport, NativeToolCallTransport
+
 scope = SessionScope(
     model="gpt-4o",
-    decision_mode=LLMDecisionMode.NATIVE_TOOLS,
+    tool_transport=NativeToolCallTransport(),
+    result_transport=NativeResultTransport(),
 )
 ```
 
-Native-tools mode does not support streamed tool-argument previews.
+Native tool calls do not support streamed tool-argument previews. The two axes can
+also be mixed, for example native tool calls with the default structured result.
 
 ## Pause for a human, resume after a restart
 

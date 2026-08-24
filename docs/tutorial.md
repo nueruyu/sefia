@@ -80,18 +80,13 @@ records, Sefia session state, and the session registry survive restarts in one d
 JSON files remain available for debugging with `FilePersistence` from the
 `sefios[file-store]` extra.
 
-By default, the provider constrains the decision with structured output. To trade
-that provider-side guarantee for a prompt-described JSON contract, pass
-`decision_mode=LLMDecisionMode.JSON` to `SessionScope` (imported from `sefios`). Sefia
-then describes the compact JSON contract in the prompt and performs the same runtime
-validation and repair locally. Streamed tool-argument previews remain available only
-in the default structured-output mode.
-
-`LLMDecisionMode.NATIVE_TOOLS` instead exposes provider-native function tools. When
-the inferred function has tools, Sefia adds a synthetic `return_result` tool for the
-typed final value and replays prior calls with native assistant/tool messages. Calls
-without application tools continue to use structured output. Native-tools mode does
-not support streamed tool-argument previews.
+By default, the provider constrains the decision with structured output. Tool calls
+and final results have independent transports. `PromptJsonToolCallTransport` and
+`PromptJsonResultTransport` describe their contracts in the prompt and validate them
+locally. `sefia_litellm.NativeToolCallTransport` uses provider-native function calls;
+`NativeResultTransport` optionally represents the typed final value as a synthetic
+`return_result` tool. Native and prompt-JSON tool transports do not support streamed
+tool-argument previews.
 
 ## 2. Give it a tool
 

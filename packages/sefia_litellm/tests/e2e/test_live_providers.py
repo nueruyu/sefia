@@ -18,7 +18,7 @@ from typing import Any, Protocol
 
 import pytest
 from sefia import Tools
-from sefia.llm import LLMDecisionMode
+from sefia_litellm import NativeResultTransport, NativeToolCallTransport
 
 from sefia_litellm import LiteLLMClient
 
@@ -131,7 +131,11 @@ async def test_native_tool_call_round_trip(
 ) -> None:
     vault = VaultToolkit()
 
-    async with live_session(provider, decision_mode=LLMDecisionMode.NATIVE_TOOLS):
+    async with live_session(
+        provider,
+        tool_transport=NativeToolCallTransport(),
+        result_transport=NativeResultTransport(),
+    ):
         answer = await VaultAgent(vault).fetch_launch_code()
 
     assert "launch-code" in vault.calls

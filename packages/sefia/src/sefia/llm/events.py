@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
-
 from ..event_system import Event
 from ..exceptions import InvalidInferenceResponseError
 from ._messages import LLMResponse, Message
 from .step_decision import StepDecisionModel
+from .transports import ToolDefinition
 
 
 @dataclass(frozen=True)
@@ -14,7 +13,7 @@ class BeforeLLMCall(Event):
     """Event fired just before a call to the LLM."""
 
     messages: list[Message]
-    tools: list[dict[str, Any]] | None
+    tools: list[ToolDefinition] | None
     decision_model: StepDecisionModel | None
 
 

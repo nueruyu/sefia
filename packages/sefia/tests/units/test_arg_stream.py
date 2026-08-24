@@ -23,6 +23,7 @@ from sefia.llm.streaming import (
     StringDelta as OutputStringDelta,
     StringEnd as OutputStringEnd,
 )
+from sefia.llm.transports import ToolDefinition
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import (
     ArgStream,
@@ -266,7 +267,7 @@ class StreamingClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[ToolDefinition] | None = None,
         decision_model: StepDecisionModel | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,

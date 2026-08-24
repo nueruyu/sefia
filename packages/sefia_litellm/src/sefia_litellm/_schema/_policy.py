@@ -3,7 +3,13 @@ from enum import StrEnum
 
 from typing_extensions import final
 
-from sefia.llm.json_schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
+from sefia.llm.json_schema import (
+    JsonObject,
+    SchemaKeyword,
+    SchemaNode,
+    SchemaPath,
+    without_titles,
+)
 
 from ._uniform_dictionary import UniformDictionaryFormat
 
@@ -98,10 +104,13 @@ def prepare_schema(schema: JsonObject, policy: SchemaPolicy) -> PreparedSchema:
 
 
 def _apply_corrections(schema: JsonObject, policy: SchemaPolicy) -> None:
+    if policy.strip_titles:
+        stripped = without_titles(schema)
+        assert isinstance(stripped, dict)
+        schema.clear()
+        schema.update(stripped)
     for cursor in SchemaNode(schema).walk():
         node = cursor.node
-        if policy.strip_titles:
-            node.value.pop(K.TITLE, None)
         if node.type == "object":
             _apply_object_corrections(node, policy)
         if policy.one_of is OneOfAction.REWRITE_AS_ANY_OF:

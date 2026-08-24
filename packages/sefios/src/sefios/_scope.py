@@ -12,7 +12,8 @@ from glyff_pydantic import (
     PydanticSerializer,
 )
 from sefia import HistoryStorage, Policy, Profile, ToolCollector
-from sefia.llm import LLMClient, LLMDecisionMode
+from sefia.llm import LLMClient
+from sefia.llm.transports import ResultTransport, ToolCallTransport
 
 from ._session_state import bind_session_storage
 from .persistence import MemoryPersistence, PersistenceProvider
@@ -51,7 +52,8 @@ class SessionScope:
         persistence: PersistenceProvider | None = None,
         history_storage: HistoryStorage | None = None,
         tool_collector: ToolCollector | None = None,
-        decision_mode: LLMDecisionMode = LLMDecisionMode.STRUCTURED_OUTPUT,
+        tool_transport: ToolCallTransport | None = None,
+        result_transport: ResultTransport | None = None,
     ):
         self.model = model
         self.llm_client = llm_client
@@ -63,7 +65,8 @@ class SessionScope:
         self.persistence = persistence or MemoryPersistence()
         self.history_storage = history_storage
         self.tool_collector = tool_collector
-        self.decision_mode = decision_mode
+        self.tool_transport = tool_transport
+        self.result_transport = result_transport
 
     @asynccontextmanager
     async def session(
@@ -75,7 +78,8 @@ class SessionScope:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
-        decision_mode: LLMDecisionMode | None = None,
+        tool_transport: ToolCallTransport | None = None,
+        result_transport: ResultTransport | None = None,
     ) -> AsyncGenerator[sefia.Session]:
         """Run code within a configured Sefia session context."""
         llm_client = self.llm_client
@@ -84,9 +88,8 @@ class SessionScope:
         resolved_tool_collector = (
             self.tool_collector if tool_collector is None else tool_collector
         )
-        resolved_decision_mode = (
-            self.decision_mode if decision_mode is None else decision_mode
-        )
+        resolved_tool_transport = tool_transport or self.tool_transport
+        resolved_result_transport = result_transport or self.result_transport
 
         if llm_client is None:
             if resolved_model is None:
@@ -133,6 +136,7 @@ class SessionScope:
                     tool_collector=resolved_tool_collector,
                     history_storage=self.history_storage,
                     max_repair_attempts=self.max_repair_attempts,
-                    decision_mode=resolved_decision_mode,
+                    tool_transport=resolved_tool_transport,
+                    result_transport=resolved_result_transport,
                 ) as session:
                     yield session

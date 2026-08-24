@@ -74,7 +74,7 @@ ToolArguments = TypedToolArguments | JsonToolArguments
 @dataclass(frozen=True)
 class StepTool:
     name: str
-    description: str
+    description: str | None
     arguments: ToolArguments
 
 
@@ -155,6 +155,17 @@ class StepDecisionModel:
     @property
     def result(self) -> ResultFormat | None:
         return self._result
+
+    def result_only(self) -> "StepDecisionModel":
+        if self._result is None:
+            return self
+        spec = StepDecisionSpec(
+            name=self._spec.name,
+            output_type=self._spec.output_type,
+            tools=[],
+            mode=StepDecisionMode.RESULT_ONLY,
+        )
+        return StepDecisionModel(spec, {}, self._result)
 
     def validate_tool_arguments(
         self, name: str, arguments: LLMOutput

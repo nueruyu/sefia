@@ -120,8 +120,8 @@ tradeoffs behind the design are in [docs/tradeoffs.md](./docs/tradeoffs.md).
 
 - **Uniform decisions remain the default.** The default uses a single schema
   (`final_answer | tool_calls`) for provider portability and full return-type
-  expressiveness. Native tool calling is an explicit alternative mode that represents
-  the final value as a synthetic tool call. Full argument:
+  expressiveness. Native tool calling is an explicit transport; the independently
+  selected result transport may use structured output or a synthetic tool call. Full argument:
   [tradeoffs.md](./docs/tradeoffs.md).
 - **Lighter than Temporal, not a replacement.** Single-process /
   resume-on-fresh-request, plus horizontal scale across independent sessions.

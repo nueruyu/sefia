@@ -12,8 +12,9 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMClient, LLMDecisionMode, LLMInferenceStrategy
-from sefia.llm.step_decision import StepDecisionSpec
+from sefia.llm import LLMClient, LLMInferenceStrategy, PromptJsonToolCallTransport
+from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
+from sefia.llm.transports import ResultTransport, ToolCallTransport
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -71,7 +72,8 @@ def _make_strategy(
     *,
     stream: bool = False,
     max_repair_attempts: int = 2,
-    decision_mode: LLMDecisionMode = LLMDecisionMode.STRUCTURED_OUTPUT,
+    tool_transport: ToolCallTransport | None = None,
+    result_transport: ResultTransport | None = None,
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt formatter."""
     formatter = Mock()
@@ -84,7 +86,8 @@ def _make_strategy(
         json_default=pydantic_json_default,
         stream=stream,
         max_repair_attempts=max_repair_attempts,
-        decision_mode=decision_mode,
+        tool_transport=tool_transport,
+        result_transport=result_transport,
     )
 
 
@@ -124,10 +127,13 @@ class TestLLMInferenceStrategy:
         spec = StepDecisionSpec.for_inference(
             name="StepDecision", output_type=str, tools=[_tool(search)]
         )
+        model = StepDecisionModel.from_spec(spec, _BACKEND)
         messages = strategy._build_messages(
             _function_info(arguments={"arg": "val"}),
             history,
             spec,
+            model,
+            strategy._tool_transport,
         )
 
         assert len(messages) == 4
@@ -163,18 +169,22 @@ class TestLLMInferenceStrategy:
         formatter = cast(Any, strategy._prompt_formatter)
         formatter.format_arguments.return_value = "formatted arguments"
 
+        spec = StepDecisionSpec.for_inference(
+            name="StepDecision", output_type=str, tools=[]
+        )
+        model = StepDecisionModel.from_spec(spec, _BACKEND)
         messages = strategy._build_messages(
             _function_info(arguments={"arg": "val"}),
             [],
-            StepDecisionSpec.for_inference(
-                name="StepDecision", output_type=str, tools=[]
-            ),
+            spec,
+            model,
+            None,
         )
 
         assert messages[1].content == "formatted arguments"
 
     def test_json_mode_hides_internal_call_ids_from_history(self):
-        strategy = _make_strategy(decision_mode=LLMDecisionMode.JSON)
+        strategy = _make_strategy(tool_transport=PromptJsonToolCallTransport())
         history = [
             ToolCallsDecision(
                 calls=[
@@ -191,7 +201,10 @@ class TestLLMInferenceStrategy:
             name="StepDecision", output_type=str, tools=[_tool(search)]
         )
 
-        messages = strategy._build_messages(_function_info(), history, spec)
+        model = StepDecisionModel.from_spec(spec, _BACKEND)
+        messages = strategy._build_messages(
+            _function_info(), history, spec, model, strategy._tool_transport
+        )
 
         assert json.loads(str(messages[2].content)) == {
             "decision": "tool_calls",
@@ -211,10 +224,13 @@ class TestLLMInferenceStrategy:
         spec = StepDecisionSpec.for_inference(
             name="StepDecision", output_type=list[MyIssue], tools=[]
         )
+        model = StepDecisionModel.from_spec(spec, _BACKEND)
         messages = strategy._build_messages(
             _function_info(return_type=list[MyIssue]),
             [],
             spec,
+            model,
+            None,
         )
 
         assert messages[0].content == (
