@@ -118,8 +118,9 @@ live in `sefia.llm.step_decision`; result schema interfaces and decoded values l
 in `sefia.llm.result_format` and `sefia.llm.llm_output`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
-The core system prompt is `docstring + decision semantics + tool definitions`; the
-client adds output-format instructions when the model needs a schema in its prompt.
+The core system prompt is `docstring + decision semantics`; tool definitions are
+carried by the decision schema. The client adds output-format instructions when the
+model needs that schema in its prompt.
 The user message is the call's arguments rendered as XML (`_build_messages`); prior
 steps are replayed as JSON in ordinary assistant/user messages. They deliberately do
 not use native tool-call message fields or the `tool` role. The client is always

@@ -90,7 +90,7 @@ async def test_json_schema_tool_reaches_the_llm_and_is_dispatched():
     assert tool.description == "Search the corpus for a query."
     assert tool.arguments.json_schema.to_dict() == _SEARCH_SCHEMA
 
-    # The result step received the tool result in history.
-    tool_message = mock_llm.requests[1]["messages"][3]
-    assert tool_message["role"] == "user"
-    assert "framework" in tool_message["content"]
+    history = "\n".join(
+        str(message["content"]) for message in mock_llm.requests[1]["messages"]
+    )
+    assert "framework" in history

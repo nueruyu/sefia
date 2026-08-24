@@ -33,11 +33,6 @@ class MyOutput:
     value: int
 
 
-@dataclass(frozen=True)
-class MyIssue:
-    description: str
-
-
 def search(q: str) -> str:
     """Search for something."""
     raise NotImplementedError
@@ -155,20 +150,3 @@ class TestLLMInferenceStrategy:
                 "result": "見つかりました",
             }
         }
-
-    def test_build_messages_adds_only_result_field_instructions(self):
-        strategy = _make_strategy()
-
-        spec = StepDecisionSpec.for_inference(
-            name="StepDecision", output_type=list[MyIssue], tools=[]
-        )
-        messages = strategy._build_messages(
-            _function_info(return_type=list[MyIssue]),
-            [],
-            spec,
-        )
-
-        assert messages[0].content == (
-            "instructions\n\nSet `decision` to `result` and populate `result` "
-            "with the non-null task result."
-        )

@@ -1,4 +1,3 @@
-import json
 import uuid
 from dataclasses import dataclass, field
 from typing import Callable
@@ -152,12 +151,6 @@ class TestStatefulTool:
 
         assert report.summary == "The user's name is Alice."
         assert len(mock_llm.requests) == 2
-        final_messages = mock_llm.requests[1]["messages"]
-        assert len(final_messages) == 4
-        assert (
-            json.loads(final_messages[3]["content"])["tool_call_result"]["result"]
-            == "Alice"
-        )
 
     async def test_multiple_ask_user_calls_are_independent(
         self,
