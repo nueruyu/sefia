@@ -37,16 +37,23 @@ class DecisionEnvelope:
 
 
 @final
+@dataclass(frozen=True)
+class _ToolFormat:
+    arguments: StructuredValueFormat
+    description: str | None
+
+
+@final
 class DecisionEnvelopeFormat:
     def __init__(
         self,
         schema: JsonSchemaDocument,
         result_format: StructuredValueFormat | None,
-        tool_argument_formats: dict[str, StructuredValueFormat],
+        tool_formats: dict[str, _ToolFormat],
     ) -> None:
         self._schema = schema
         self._result_format = result_format
-        self._tool_argument_formats = tool_argument_formats
+        self._tool_formats = tool_formats
 
     @classmethod
     def from_model(cls, model: StepDecisionModel) -> "DecisionEnvelopeFormat":
@@ -55,17 +62,15 @@ class DecisionEnvelopeFormat:
             if model.result is not None
             else None
         )
-        tool_argument_formats = {
-            tool.name: StructuredValueFormat.from_tool(tool) for tool in model.tools
+        tool_formats = {
+            tool.name: _ToolFormat(
+                arguments=StructuredValueFormat.from_tool(tool),
+                description=tool.description,
+            )
+            for tool in model.tools
         }
-        tool_descriptions = {tool.name: tool.description for tool in model.tools}
-        schema = _build_schema(
-            model.mode,
-            result_format,
-            tool_argument_formats,
-            tool_descriptions,
-        )
-        return cls(JsonSchemaDocument(schema), result_format, tool_argument_formats)
+        schema = _build_schema(model.mode, result_format, tool_formats)
+        return cls(JsonSchemaDocument(schema), result_format, tool_formats)
 
     @property
     def schema(self) -> JsonSchemaDocument:
@@ -142,31 +147,30 @@ class DecisionEnvelopeFormat:
             tool_name = name.to_string() if name is not None else None
         except ValueError:
             return output
-        value_format = (
-            self._tool_argument_formats.get(tool_name)
-            if tool_name is not None
-            else None
+        tool_format = (
+            self._tool_formats.get(tool_name) if tool_name is not None else None
         )
-        if value_format is None or "arguments" not in fields:
+        if tool_format is None or "arguments" not in fields:
             return output
         return LLMOutput.from_object(
-            {**fields, "arguments": value_format.decode(fields["arguments"])}
+            {
+                **fields,
+                "arguments": tool_format.arguments.decode(fields["arguments"]),
+            }
         )
 
 
 def _build_schema(
     mode: StepDecisionMode,
     result_format: StructuredValueFormat | None,
-    tool_argument_formats: dict[str, StructuredValueFormat],
-    tool_descriptions: dict[str, str],
+    tool_formats: dict[str, _ToolFormat],
 ) -> JsonObject:
     definitions: JsonObject = {}
     registry = DefinitionRegistry(definitions)
     payload = _payload_schema(
         mode,
         result_format,
-        tool_argument_formats,
-        tool_descriptions,
+        tool_formats,
         registry,
     )
     root = SchemaNode.object_schema({"payload": payload})
@@ -178,16 +182,14 @@ def _build_schema(
 def _payload_schema(
     mode: StepDecisionMode,
     result_format: StructuredValueFormat | None,
-    tool_argument_formats: dict[str, StructuredValueFormat],
-    tool_descriptions: dict[str, str],
+    tool_formats: dict[str, _ToolFormat],
     registry: DefinitionRegistry,
 ) -> JsonObject:
     branches: list[JsonObject] = []
     if mode is not StepDecisionMode.RESULT_ONLY:
         branches.append(
             _tool_calls_schema(
-                tool_argument_formats,
-                tool_descriptions,
+                tool_formats,
                 registry,
             )
         )
@@ -209,20 +211,18 @@ def _payload_schema(
 
 
 def _tool_calls_schema(
-    tool_argument_formats: dict[str, StructuredValueFormat],
-    tool_descriptions: dict[str, str],
+    tool_formats: dict[str, _ToolFormat],
     registry: DefinitionRegistry,
 ) -> JsonObject:
     calls: list[JsonObject] = []
-    for index, (name, value_format) in enumerate(tool_argument_formats.items()):
+    for index, (name, tool_format) in enumerate(tool_formats.items()):
         imported = registry.import_schema(
-            value_format.schema,
+            tool_format.arguments.schema,
             namespace=f"tool_{index}",
         )
         call = _closed_object({"name": _literal(name), "arguments": imported})
-        description = tool_descriptions[name]
-        if description:
-            call[K.DESCRIPTION] = description
+        if tool_format.description:
+            call[K.DESCRIPTION] = tool_format.description
         calls.append(call)
     items: JsonObject = (
         calls[0]

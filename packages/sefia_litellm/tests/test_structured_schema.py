@@ -93,6 +93,21 @@ def test_tool_description_is_part_of_the_wire_schema() -> None:
     )
 
 
+def test_tool_without_description_omits_wire_schema_description() -> None:
+    tool = _raw_tool(
+        {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        }
+    )
+
+    schema = _prepare(_decision_model(Never, [tool])).schema.to_dict()
+
+    assert "description" not in _tool_call_item(schema)
+
+
 def test_generated_schema_titles_are_removed() -> None:
     schema = _prepare(_decision_model(str, [_tool()])).schema.to_dict()
 
