@@ -1007,12 +1007,12 @@ class TestToolCallValidation:
                 cast(dict[str, Any], json.loads(content))["payload"]
             ),
         )
-        formatter = Mock()
-        formatter.format_arguments.return_value = "<arguments/>"
+        renderer = Mock()
+        renderer.render.return_value = "<arguments/>"
         return LLMInferenceStrategy(
             llm_client=client,
             result_format_factory=PydanticModelBackend(),
-            prompt_formatter=formatter,
+            arguments_renderer=renderer,
         )
 
     def _registry(self) -> ToolRegistry:

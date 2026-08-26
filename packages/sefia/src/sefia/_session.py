@@ -13,7 +13,7 @@ from ._tool_system import ToolCollector
 from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
-from .llm._markdown_prompt_formatter import MarkdownPromptFormatter
+from .llm._markdown_arguments_renderer import MarkdownArgumentsRenderer
 from .pydantic._json_utils import pydantic_json_default
 from .pydantic._model_backend import PydanticModelBackend
 from .tool_collectors import DefaultToolCollector
@@ -49,14 +49,16 @@ class Session:
         self._tool_collector = tool_collector or DefaultToolCollector(
             inspector=model_backend
         )
-        prompt_formatter = MarkdownPromptFormatter(json_default=pydantic_json_default)
+        arguments_renderer = MarkdownArgumentsRenderer(
+            json_default=pydantic_json_default
+        )
 
         # A profile only swaps the client; the rest of the strategy is shared.
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
                 result_format_factory=model_backend,
-                prompt_formatter=prompt_formatter,
+                arguments_renderer=arguments_renderer,
                 json_default=pydantic_json_default,
                 stream=stream,
                 max_repair_attempts=max_repair_attempts,

@@ -80,14 +80,14 @@ def mock_llm_client() -> AsyncMock:
 def _make_strategy(
     llm_client: Any = None, *, stream: bool = False, max_repair_attempts: int = 2
 ) -> LLMInferenceStrategy:
-    """The strategy under test, with a stub prompt formatter."""
-    formatter = Mock()
-    formatter.format_arguments.return_value = "<arguments/>"
+    """The strategy under test, with a stub prompt renderer."""
+    renderer = Mock()
+    renderer.render.return_value = "<arguments/>"
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
         result_format_factory=PydanticModelBackend(),
-        prompt_formatter=formatter,
+        arguments_renderer=renderer,
         json_default=pydantic_json_default,
         stream=stream,
         max_repair_attempts=max_repair_attempts,

@@ -5,7 +5,7 @@ from typing import Any, Callable
 from ..exceptions import InvalidInferenceResponseError
 from ..inference import FunctionInfo, HistoryItem, ToolCallsDecision
 from ._messages import Message
-from ._prompt_formatter import PromptFormatter
+from ._arguments_renderer import ArgumentsRenderer
 
 JsonDefault = Callable[[Any], Any]
 
@@ -14,7 +14,7 @@ def build_messages(
     function_info: FunctionInfo,
     history: Sequence[HistoryItem],
     system_prompt_addition: str,
-    prompt_formatter: PromptFormatter,
+    arguments_renderer: ArgumentsRenderer,
     json_default: JsonDefault | None,
 ) -> list[Message]:
     messages = [
@@ -26,7 +26,7 @@ def build_messages(
 
     prompt_arguments = function_info.prompt_arguments
     user_prompt = (
-        prompt_formatter.format_arguments(prompt_arguments)
+        arguments_renderer.render(prompt_arguments)
         if prompt_arguments
         else (
             "This inference call has no direct function arguments. "

@@ -17,7 +17,7 @@ from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
 from ._message_builder import build_messages, build_repair_messages
 from ._messages import Message
-from ._prompt_formatter import PromptFormatter
+from ._arguments_renderer import ArgumentsRenderer
 from ._step_decision_prompt import build_step_decision_prompt
 from ._tool_call_ids import ToolCallIdRegistry
 from .step_decision import (
@@ -44,7 +44,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         llm_client: LLMClient,
         result_format_factory: ResultFormatFactory,
-        prompt_formatter: PromptFormatter,
+        arguments_renderer: ArgumentsRenderer,
         json_default: JsonDefault | None = None,
         stream: bool = False,
         max_repair_attempts: int = 2,
@@ -53,7 +53,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             raise ValueError("max_repair_attempts must be non-negative")
         self.llm_client = llm_client
         self._result_format_factory = result_format_factory
-        self._prompt_formatter = prompt_formatter
+        self._arguments_renderer = arguments_renderer
         self._json_default = json_default
         self._stream = stream
         self._max_repair_attempts = max_repair_attempts
@@ -185,7 +185,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             function_info,
             history,
             build_step_decision_prompt(spec),
-            self._prompt_formatter,
+            self._arguments_renderer,
             self._json_default,
         )
 

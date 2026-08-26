@@ -12,7 +12,7 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMClient, LLMInferenceStrategy, PromptFormatter
+from sefia.llm import LLMClient, LLMInferenceStrategy, ArgumentsRenderer
 from sefia.llm.step_decision import StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
@@ -64,22 +64,22 @@ def _tool(func: Callable[..., Any]) -> ToolEntry:
 def _make_strategy(
     llm_client: LLMClient | None = None,
     *,
-    prompt_formatter: PromptFormatter | None = None,
+    arguments_renderer: ArgumentsRenderer | None = None,
     stream: bool = False,
     max_repair_attempts: int = 2,
 ) -> LLMInferenceStrategy:
-    """The strategy under test, with a stub prompt formatter."""
-    if prompt_formatter is None:
-        formatter_mock = Mock(spec=PromptFormatter)
-        formatter_mock.format_arguments.return_value = "<arguments/>"
-        formatter: PromptFormatter = formatter_mock
+    """The strategy under test, with a stub prompt renderer."""
+    if arguments_renderer is None:
+        renderer_mock = Mock(spec=ArgumentsRenderer)
+        renderer_mock.render.return_value = "<arguments/>"
+        renderer: ArgumentsRenderer = renderer_mock
     else:
-        formatter = prompt_formatter
+        renderer = arguments_renderer
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
         result_format_factory=PydanticModelBackend(),
-        prompt_formatter=formatter,
+        arguments_renderer=renderer,
         json_default=pydantic_json_default,
         stream=stream,
         max_repair_attempts=max_repair_attempts,
@@ -156,10 +156,10 @@ class TestLLMInferenceStrategy:
             }
         }
 
-    def test_build_messages_does_not_assume_the_formatter_syntax(self):
-        formatter = Mock(spec=PromptFormatter)
-        formatter.format_arguments.return_value = "formatted arguments"
-        strategy = _make_strategy(prompt_formatter=formatter)
+    def test_build_messages_does_not_assume_the_renderer_syntax(self):
+        renderer = Mock(spec=ArgumentsRenderer)
+        renderer.render.return_value = "formatted arguments"
+        strategy = _make_strategy(arguments_renderer=renderer)
 
         messages = strategy._build_messages(
             _function_info(arguments={"arg": "val"}),
@@ -170,4 +170,4 @@ class TestLLMInferenceStrategy:
         )
 
         assert messages[1].content == "formatted arguments"
-        formatter.format_arguments.assert_called_once_with({"arg": "val"})
+        renderer.render.assert_called_once_with({"arg": "val"})

@@ -1,7 +1,7 @@
+from ._arguments_renderer import ArgumentsRenderer
 from ._client import LLMClient
-from ._markdown_prompt_formatter import MarkdownPromptFormatter
+from ._markdown_arguments_renderer import MarkdownArgumentsRenderer
 from ._messages import LLMResponse, Message, ToolCall
-from ._prompt_formatter import PromptFormatter
 from ._strategy import LLMInferenceStrategy
 from .llm_output import LLMOutput, LLMOutputData
 
@@ -13,6 +13,6 @@ __all__ = [
     "LLMInferenceStrategy",
     "LLMOutput",
     "LLMOutputData",
-    "MarkdownPromptFormatter",
-    "PromptFormatter",
+    "ArgumentsRenderer",
+    "MarkdownArgumentsRenderer",
 ]
