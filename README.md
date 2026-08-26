@@ -86,7 +86,7 @@ and selects `SQLitePersistence` explicitly so its sessions survive restarts.
 
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
 `domain` / `concurrent` / `preview` / `policy` / `profile` decorators,
-`Tools`, `AsRawText`, and `Policy` / `Profile` — alongside its own `SessionScope` and
+`Tools` and `Policy` / `Profile` — alongside its own `SessionScope` and
 batteries, so application code needs only `sefios`. Reach into `sefia` directly for the
 extension seams (a custom policy, strategy, client, or tool collector) and tool-call
 context helpers such as `current_tool_call_id_for`.

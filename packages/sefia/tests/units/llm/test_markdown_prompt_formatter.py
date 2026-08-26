@@ -28,16 +28,14 @@ def test_format_arguments_renders_json_in_markdown():
         "nested": {"enabled": True, "values": [1, None]},
     }
 
-    prompt = _formatter().format_arguments(arguments=arguments, type_hints={})
+    prompt = _formatter().format_arguments(arguments=arguments)
 
     assert _json_content(prompt) == arguments
     assert "日本語" in prompt
 
 
 def test_format_arguments_uses_a_fence_longer_than_content():
-    prompt = _formatter().format_arguments(
-        arguments={"source": "before ``` after"}, type_hints={}
-    )
+    prompt = _formatter().format_arguments(arguments={"source": "before ``` after"})
 
     assert prompt.splitlines()[2] == "````json"
     assert _json_content(prompt) == {"source": "before ``` after"}
@@ -45,7 +43,7 @@ def test_format_arguments_uses_a_fence_longer_than_content():
 
 def test_format_arguments_uses_json_default():
     prompt = _formatter().format_arguments(
-        arguments={"value": _CustomValue("serialized")}, type_hints={}
+        arguments={"value": _CustomValue("serialized")}
     )
 
     assert _json_content(prompt) == {"value": {"value": "serialized"}}
@@ -56,7 +54,7 @@ def test_format_arguments_falls_back_to_string_when_json_default_rejects_value()
         raise TypeError
 
     prompt = MarkdownPromptFormatter(json_default=json_default).format_arguments(
-        arguments={"value": _CustomValue("fallback")}, type_hints={}
+        arguments={"value": _CustomValue("fallback")}
     )
 
     assert _json_content(prompt) == {"value": "_CustomValue(value='fallback')"}

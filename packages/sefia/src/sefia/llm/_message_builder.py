@@ -26,7 +26,7 @@ def build_messages(
 
     prompt_arguments = function_info.prompt_arguments
     user_prompt = (
-        prompt_formatter.format_arguments(prompt_arguments, function_info.type_hints)
+        prompt_formatter.format_arguments(prompt_arguments)
         if prompt_arguments
         else (
             "This inference call has no direct function arguments. "
