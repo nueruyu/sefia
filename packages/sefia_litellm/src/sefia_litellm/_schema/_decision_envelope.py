@@ -201,10 +201,7 @@ def _payload_schema(
         )
     if len(branches) == 1:
         return branches[0]
-    return cast(
-        JsonObject,
-        {K.ANY_OF: branches},
-    )
+    return _branch_union(branches)
 
 
 def _tool_calls_schema(
@@ -221,14 +218,7 @@ def _tool_calls_schema(
         if tool_format.description:
             call[K.DESCRIPTION] = tool_format.description
         calls.append(call)
-    items: JsonObject = (
-        calls[0]
-        if len(calls) == 1
-        else cast(
-            JsonObject,
-            {K.ANY_OF: calls},
-        )
-    )
+    items: JsonObject = calls[0] if len(calls) == 1 else _branch_union(calls)
     return _closed_object(
         {
             "decision": _literal("tool_calls"),
@@ -244,6 +234,12 @@ def _closed_object(properties: JsonObject) -> JsonObject:
         K.REQUIRED: list(properties),
         K.ADDITIONAL_PROPERTIES: False,
     }
+
+
+def _branch_union(branches: list[JsonObject]) -> JsonObject:
+    """Build a provider-compatible union of const-disjoint schema branches."""
+    # Anthropic rejects OpenAPI's discriminator in native structured output.
+    return cast(JsonObject, {K.ANY_OF: branches})
 
 
 def _literal(value: str) -> JsonObject:

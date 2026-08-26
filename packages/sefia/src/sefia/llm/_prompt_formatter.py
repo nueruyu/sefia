@@ -3,11 +3,9 @@ from typing import Any
 
 
 class PromptFormatter(ABC):
-    """
-    Abstract interface for formatting inference arguments for LLM prompts.
-    """
+    """Renders inference arguments as the complete task-argument user message."""
 
     @abstractmethod
     def format_arguments(self, arguments: dict[str, Any]) -> str:
-        """Serialize prompt arguments into a string."""
+        """Render a complete user message containing the prompt arguments."""
         ...

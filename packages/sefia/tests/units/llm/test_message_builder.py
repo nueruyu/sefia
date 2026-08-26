@@ -1,7 +1,7 @@
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 from sefia._tool_system import SignatureToolEntry, ToolEntry
@@ -12,7 +12,7 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMClient, LLMInferenceStrategy
+from sefia.llm import LLMClient, LLMInferenceStrategy, PromptFormatter
 from sefia.llm.step_decision import StepDecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
@@ -64,12 +64,17 @@ def _tool(func: Callable[..., Any]) -> ToolEntry:
 def _make_strategy(
     llm_client: LLMClient | None = None,
     *,
+    prompt_formatter: PromptFormatter | None = None,
     stream: bool = False,
     max_repair_attempts: int = 2,
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt formatter."""
-    formatter = Mock()
-    formatter.format_arguments.return_value = "<arguments/>"
+    if prompt_formatter is None:
+        formatter_mock = Mock(spec=PromptFormatter)
+        formatter_mock.format_arguments.return_value = "<arguments/>"
+        formatter: PromptFormatter = formatter_mock
+    else:
+        formatter = prompt_formatter
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
@@ -152,9 +157,9 @@ class TestLLMInferenceStrategy:
         }
 
     def test_build_messages_does_not_assume_the_formatter_syntax(self):
-        strategy = _make_strategy()
-        formatter = cast(Any, strategy._prompt_formatter)
+        formatter = Mock(spec=PromptFormatter)
         formatter.format_arguments.return_value = "formatted arguments"
+        strategy = _make_strategy(prompt_formatter=formatter)
 
         messages = strategy._build_messages(
             _function_info(arguments={"arg": "val"}),
@@ -165,3 +170,4 @@ class TestLLMInferenceStrategy:
         )
 
         assert messages[1].content == "formatted arguments"
+        formatter.format_arguments.assert_called_once_with({"arg": "val"})

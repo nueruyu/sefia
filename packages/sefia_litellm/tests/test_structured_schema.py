@@ -115,7 +115,7 @@ def test_generated_schema_titles_are_removed() -> None:
     assert "description" not in schema
 
 
-def test_generated_schema_discriminators_are_removed() -> None:
+def test_wire_schema_omits_openapi_discriminator_for_provider_compatibility() -> None:
     schema = _prepare(
         _decision_model(
             str,

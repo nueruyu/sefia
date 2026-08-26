@@ -12,6 +12,10 @@ from ._output_stream import OutputEventStreamer
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage
+    from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
+        ChatCompletionMessageCustomToolCall,
+        ChatCompletionMessageToolCall,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +49,16 @@ def handle_response(
     return result
 
 
-def _function_tool_call(call: Any) -> ToolCall:
-    function = getattr(call, "function", None)
-    if function is None:
+def _function_tool_call(
+    call: ChatCompletionMessageToolCall | ChatCompletionMessageCustomToolCall,
+) -> ToolCall:
+    if getattr(call, "type", None) == "custom":
         raise RuntimeError("LLM returned an unsupported custom tool call")
-    return ToolCall(id=call.id, function=function.model_dump())
+    function_call = cast("ChatCompletionMessageToolCall", call)
+    return ToolCall(
+        id=function_call.id,
+        function=function_call.function.model_dump(),
+    )
 
 
 async def handle_stream(

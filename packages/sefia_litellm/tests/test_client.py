@@ -19,6 +19,10 @@ from litellm.exceptions import (
     RateLimitError,
     Timeout,
 )
+from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
+    ChatCompletionCustomToolCallPayload,
+    ChatCompletionMessageCustomToolCall,
+)
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
 from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
@@ -34,7 +38,7 @@ from sefia_litellm.exceptions import (
     InferenceTemporarilyUnavailableError,
     InferenceTimeoutError,
 )
-from sefia_litellm._response import handle_stream
+from sefia_litellm._response import handle_response, handle_stream
 
 
 @pytest.fixture
@@ -193,6 +197,32 @@ class TestLiteLLMClient:
         assert response.usage is not None
         assert response.usage["prompt_tokens"] == 10
         assert len(response.tool_calls) == 1
+
+    def test_handle_response_rejects_custom_tool_calls(self) -> None:
+        response = ModelResponse(
+            model="gpt-4o",
+            choices=[
+                Choices(
+                    finish_reason="tool_calls",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant",
+                        tool_calls=[
+                            ChatCompletionMessageCustomToolCall(
+                                id="call_custom",
+                                type="custom",
+                                custom=ChatCompletionCustomToolCallPayload(
+                                    name="shell", input="pwd"
+                                ),
+                            )
+                        ],
+                    ),
+                )
+            ],
+        )
+
+        with pytest.raises(RuntimeError, match="unsupported custom tool call"):
+            handle_response(response, requested_model="gpt-4o", output=None)
 
     async def test_complete_captures_reasoning_content(
         self, mock_acompletion: AsyncMock

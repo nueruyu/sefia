@@ -1,5 +1,8 @@
 import json
 from dataclasses import dataclass
+from uuid import UUID
+
+import pytest
 
 from sefia.llm import MarkdownPromptFormatter
 from sefia.pydantic._json_utils import pydantic_json_default
@@ -47,6 +50,25 @@ def test_format_arguments_uses_json_default():
     )
 
     assert _json_content(prompt) == {"value": {"value": "serialized"}}
+
+
+def test_format_arguments_normalizes_nested_mapping_keys():
+    identifier = UUID("12345678-1234-5678-1234-567812345678")
+
+    prompt = _formatter().format_arguments(
+        arguments={"values_by_id": {identifier: "serialized"}}
+    )
+
+    assert _json_content(prompt) == {"values_by_id": {str(identifier): "serialized"}}
+
+
+def test_format_arguments_rejects_keys_that_normalize_to_the_same_json_key():
+    identifier = UUID("12345678-1234-5678-1234-567812345678")
+
+    with pytest.raises(ValueError, match="same JSON key"):
+        _formatter().format_arguments(
+            arguments={"values": {identifier: "first", str(identifier): "second"}}
+        )
 
 
 def test_format_arguments_falls_back_to_string_when_json_default_rejects_value():

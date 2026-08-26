@@ -1,8 +1,9 @@
-import glyff
-import sefia
+import json
 from dataclasses import dataclass
 
+import glyff
 import pytest
+import sefia
 
 from sefia import Policy, Tools, policy
 from sefia._authoring.metadata import get_metadata
@@ -149,6 +150,13 @@ async def test_inference_without_tool_calls():
     assert report.topic == "direct"
     assert "direct answer" in report.summary
     assert len(mock_llm.requests) == 1
+    argument_message = mock_llm.requests[0]["messages"][1]["content"]
+    assert isinstance(argument_message, str)
+    lines = argument_message.splitlines()
+    assert lines[0] == "## Task arguments"
+    assert lines[2].endswith("json")
+    assert lines[-1] == lines[2][:-4]
+    assert json.loads("\n".join(lines[3:-1])) == {"topic": "direct"}
 
 
 async def test_inference_with_tool_exception():
