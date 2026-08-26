@@ -30,10 +30,7 @@ def handle_response(
 
     choice: Choices = response.choices[0]
     message = choice.message
-    tool_calls = [
-        ToolCall(id=call.id, function=call.function.model_dump())
-        for call in (message.tool_calls or [])
-    ]
+    tool_calls = [_function_tool_call(call) for call in (message.tool_calls or [])]
     usage = cast("Usage | None", cast(dict[str, Any], response).get("usage"))
     result = LLMResponse(
         model=response.model,
@@ -46,6 +43,13 @@ def handle_response(
     )
     _decode_output(result, output)
     return result
+
+
+def _function_tool_call(call: Any) -> ToolCall:
+    function = getattr(call, "function", None)
+    if function is None:
+        raise RuntimeError("LLM returned an unsupported custom tool call")
+    return ToolCall(id=call.id, function=function.model_dump())
 
 
 async def handle_stream(
