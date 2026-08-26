@@ -43,29 +43,37 @@ def build_messages(
             messages.append(
                 Message(
                     role="assistant",
-                    content=None,
-                    tool_calls=[
+                    content=json.dumps(
                         {
-                            "id": call.id,
-                            "type": "function",
-                            "function": {
-                                "name": call.name,
-                                "arguments": json.dumps(
-                                    call.arguments, ensure_ascii=False
-                                ),
-                            },
-                        }
-                        for call in item.calls
-                    ],
+                            "decision": "tool_calls",
+                            "tool_calls": [
+                                {
+                                    "id": call.id,
+                                    "name": call.name,
+                                    "arguments": call.arguments,
+                                }
+                                for call in item.calls
+                            ],
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
                 )
             )
         else:
             messages.append(
                 Message(
-                    role="tool",
-                    tool_call_id=item.tool_call_id,
+                    role="user",
                     content=json.dumps(
-                        item.result, default=json_default, ensure_ascii=False
+                        {
+                            "tool_call_result": {
+                                "tool_call_id": item.tool_call_id,
+                                "result": item.result,
+                            }
+                        },
+                        default=json_default,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
                     ),
                 )
             )

@@ -80,8 +80,11 @@ async def test_concurrent_calls_in_one_decision_overlap():
     # Both results reach the model in request order: the waiting tool first,
     # even though it finished after the releasing one.
     final_messages = mock_llm.requests[1]["messages"]
-    tool_messages = [m for m in final_messages if m.get("role") == "tool"]
-    assert [json.loads(m["content"]) for m in tool_messages] == ["waited", "released"]
+    result_messages = [
+        json.loads(message["content"])["tool_call_result"]["result"]
+        for message in final_messages[3:]
+    ]
+    assert result_messages == ["waited", "released"]
 
 
 class PausingToolkit:
@@ -154,5 +157,8 @@ async def test_pause_in_concurrent_batch_resumes_without_rerunning_sibling():
     assert toolkit.fetch_runs == 1
     assert len(mock_llm.requests) == 2
     final_messages = mock_llm.requests[1]["messages"]
-    tool_messages = [m for m in final_messages if m.get("role") == "tool"]
-    assert [json.loads(m["content"]) for m in tool_messages] == ["data:alpha", "yes"]
+    result_messages = [
+        json.loads(message["content"])["tool_call_result"]["result"]
+        for message in final_messages[3:]
+    ]
+    assert result_messages == ["data:alpha", "yes"]

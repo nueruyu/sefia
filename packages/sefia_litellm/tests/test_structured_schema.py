@@ -85,6 +85,36 @@ def test_decision_envelope_format_returns_defensive_schema_copies() -> None:
     assert envelope_format.schema.to_dict()
 
 
+def test_tool_description_is_part_of_the_wire_schema() -> None:
+    schema = _prepare(_decision_model(Never, [_tool()])).schema.to_dict()
+
+    assert _tool_call_item(schema)["description"] == (
+        "Ask the user a question and return the answer."
+    )
+
+
+def test_tool_without_description_omits_wire_schema_description() -> None:
+    tool = _raw_tool(
+        {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        }
+    )
+
+    schema = _prepare(_decision_model(Never, [tool])).schema.to_dict()
+
+    assert "description" not in _tool_call_item(schema)
+
+
+def test_generated_schema_titles_are_removed() -> None:
+    schema = _prepare(_decision_model(str, [_tool()])).schema.to_dict()
+
+    assert all("title" not in cursor.node.value for cursor in SchemaNode(schema).walk())
+    assert "description" not in schema
+
+
 async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
     prepared = _prepare(_decision_model(Never, [_tool()]))
     events: list[object] = []
@@ -459,8 +489,9 @@ def test_identical_definitions_are_namespaced_deterministically() -> None:
 
 def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
     raw_schema = {
+        "title": "SearchArguments",
         "type": "object",
-        "properties": {"query": {"type": "string"}},
+        "properties": {"query": {"title": "Query", "type": "string"}},
         "required": ["query"],
         "additionalProperties": False,
     }

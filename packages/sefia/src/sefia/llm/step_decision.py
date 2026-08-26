@@ -74,6 +74,7 @@ ToolArguments = TypedToolArguments | JsonToolArguments
 @dataclass(frozen=True)
 class StepTool:
     name: str
+    description: str
     arguments: ToolArguments
 
 
@@ -108,27 +109,24 @@ class StepDecisionModel:
         spec: StepDecisionSpec,
         result_format_factory: ResultFormatFactory,
     ) -> "StepDecisionModel":
-        tools = {
-            tool.name: _ToolModel(
+        tools: dict[str, _ToolModel] = {}
+        for tool in spec.tools:
+            definition = tool.definition()
+            tools[tool.name] = _ToolModel(
                 StepTool(
                     name=tool.name,
+                    description=definition.description,
                     arguments=(
                         JsonToolArguments(
-                            JsonSchemaDocument.from_mapping(
-                                tool.definition().parameters
-                            )
+                            JsonSchemaDocument.from_mapping(definition.parameters)
                         )
                         if isinstance(tool, JsonSchemaToolEntry)
                         else TypedToolArguments(
-                            JsonSchemaDocument.from_mapping(
-                                tool.definition().parameters
-                            )
+                            JsonSchemaDocument.from_mapping(definition.parameters)
                         )
                     ),
                 )
             )
-            for tool in spec.tools
-        }
         result = (
             None
             if spec.mode is StepDecisionMode.TOOLS_REQUIRED
