@@ -1,7 +1,7 @@
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, Mock
 
 from sefia._tool_system import SignatureToolEntry, ToolEntry
@@ -150,3 +150,17 @@ class TestLLMInferenceStrategy:
                 "result": "見つかりました",
             }
         }
+    def test_build_messages_does_not_assume_the_formatter_syntax(self):
+        strategy = _make_strategy()
+        formatter = cast(Any, strategy._prompt_formatter)
+        formatter.format_arguments.return_value = "formatted arguments"
+
+        messages = strategy._build_messages(
+            _function_info(arguments={"arg": "val"}),
+            [],
+            StepDecisionSpec.for_inference(
+                name="StepDecision", output_type=str, tools=[]
+            ),
+        )
+
+        assert messages[1].content == "formatted arguments"
