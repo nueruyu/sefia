@@ -150,6 +150,7 @@ class TestLLMInferenceStrategy:
                 "result": "見つかりました",
             }
         }
+
     def test_build_messages_does_not_assume_the_formatter_syntax(self):
         strategy = _make_strategy()
         formatter = cast(Any, strategy._prompt_formatter)

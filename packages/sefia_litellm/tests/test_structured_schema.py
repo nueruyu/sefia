@@ -115,6 +115,29 @@ def test_generated_schema_titles_are_removed() -> None:
     assert "description" not in schema
 
 
+def test_generated_schema_discriminators_are_removed() -> None:
+    schema = _prepare(
+        _decision_model(
+            str,
+            [
+                _tool(),
+                _raw_tool(
+                    {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": False,
+                    }
+                ),
+            ],
+        )
+    ).schema.to_dict()
+
+    assert all(
+        "discriminator" not in cursor.node.value for cursor in SchemaNode(schema).walk()
+    )
+
+
 async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
     prepared = _prepare(_decision_model(Never, [_tool()]))
     events: list[object] = []
