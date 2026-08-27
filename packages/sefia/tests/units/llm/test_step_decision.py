@@ -24,7 +24,6 @@ from sefia.llm.step_decision import (
 from sefia.llm.json_schema import JsonValue
 from sefia.llm.llm_output import LLMOutput
 from sefia.pydantic import PydanticModelBackend
-from sefia.pydantic._json_utils import pydantic_json_default
 
 
 class MockEventPublisher(EventPublisher):
@@ -114,13 +113,13 @@ def _make_strategy(
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt renderer."""
     renderer = Mock()
-    renderer.render.return_value = "<arguments/>"
+    renderer.render.return_value = []
+    renderer.render_repair.return_value = []
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
         result_format_factory=PydanticModelBackend(),
-        arguments_renderer=renderer,
-        json_default=pydantic_json_default,
+        prompt_renderer=renderer,
         stream=stream,
         max_repair_attempts=max_repair_attempts,
     )

@@ -1008,11 +1008,12 @@ class TestToolCallValidation:
             ),
         )
         renderer = Mock()
-        renderer.render.return_value = "<arguments/>"
+        renderer.render.return_value = []
+        renderer.render_repair.return_value = []
         return LLMInferenceStrategy(
             llm_client=client,
             result_format_factory=PydanticModelBackend(),
-            arguments_renderer=renderer,
+            prompt_renderer=renderer,
         )
 
     def _registry(self) -> ToolRegistry:

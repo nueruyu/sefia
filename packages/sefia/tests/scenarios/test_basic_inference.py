@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from unittest.mock import Mock
 
 import glyff
 import pytest
@@ -8,7 +9,7 @@ import sefia
 from sefia import Policy, Tools, policy
 from sefia._authoring.metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
-from sefia.llm import LLMResponse
+from sefia.llm import LLMResponse, Message, PromptRenderer
 from sefia.llm.step_decision import StepDecisionMode, StepDecisionModel
 from sefia.testing import (
     MockLLMClient,
@@ -157,6 +158,34 @@ async def test_inference_without_tool_calls():
     assert lines[2].endswith("json")
     assert lines[-1] == lines[2][:-4]
     assert json.loads("\n".join(lines[3:-1])) == {"topic": "direct"}
+
+
+async def test_session_accepts_a_custom_prompt_renderer():
+    mock_llm = MockLLMClient(
+        responses=[
+            result_response(
+                Report(topic="custom", summary="Custom prompt.", sources=[])
+            )
+        ]
+    )
+    prompt_renderer = Mock(spec=PromptRenderer)
+    prompt_renderer.render.return_value = [
+        Message(role="system", content="custom system"),
+        Message(role="user", content="custom user"),
+    ]
+
+    async with memory_session(
+        mock_llm,
+        session_id="custom-prompt-renderer",
+        prompt_renderer=prompt_renderer,
+    ):
+        await SimpleAgent().generate_report(topic="custom")
+
+    assert mock_llm.requests[0]["messages"] == [
+        {"role": "system", "content": "custom system"},
+        {"role": "user", "content": "custom user"},
+    ]
+    prompt_renderer.render.assert_called_once()
 
 
 async def test_inference_with_tool_exception():

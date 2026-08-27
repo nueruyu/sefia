@@ -2,7 +2,7 @@ import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, cast
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -16,7 +16,7 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMInferenceStrategy, LLMResponse
+from sefia.llm import LLMInferenceStrategy, LLMResponse, MarkdownPromptRenderer
 from sefia.llm.events import (
     LLMReasoningTokenReceived,
     LLMResponseRepairAttempt,
@@ -81,14 +81,11 @@ def _make_strategy(
     llm_client: Any = None, *, stream: bool = False, max_repair_attempts: int = 2
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt renderer."""
-    renderer = Mock()
-    renderer.render.return_value = "<arguments/>"
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
         result_format_factory=PydanticModelBackend(),
-        arguments_renderer=renderer,
-        json_default=pydantic_json_default,
+        prompt_renderer=MarkdownPromptRenderer(json_default=pydantic_json_default),
         stream=stream,
         max_repair_attempts=max_repair_attempts,
     )
