@@ -1008,8 +1008,9 @@ class TestToolCallValidation:
             ),
         )
         renderer = Mock()
-        renderer.render.return_value = []
-        renderer.render_repair.return_value = []
+        renderer.render_instructions.return_value = "instructions"
+        renderer.render_invocation.return_value = "invocation"
+        renderer.render_response_feedback.return_value = "feedback"
         return LLMInferenceStrategy(
             llm_client=client,
             result_format_factory=PydanticModelBackend(),

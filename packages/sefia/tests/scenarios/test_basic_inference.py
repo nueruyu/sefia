@@ -9,7 +9,7 @@ import sefia
 from sefia import Policy, Tools, policy
 from sefia._authoring.metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
-from sefia.llm import LLMResponse, Message, PromptRenderer
+from sefia.llm import LLMResponse, PromptRenderer
 from sefia.llm.step_decision import StepDecisionMode, StepDecisionModel
 from sefia.testing import (
     MockLLMClient,
@@ -169,10 +169,8 @@ async def test_session_accepts_a_custom_prompt_renderer():
         ]
     )
     prompt_renderer = Mock(spec=PromptRenderer)
-    prompt_renderer.render.return_value = [
-        Message(role="system", content="custom system"),
-        Message(role="user", content="custom user"),
-    ]
+    prompt_renderer.render_instructions.return_value = "custom system"
+    prompt_renderer.render_invocation.return_value = "custom user"
 
     async with memory_session(
         mock_llm,
@@ -185,7 +183,8 @@ async def test_session_accepts_a_custom_prompt_renderer():
         {"role": "system", "content": "custom system"},
         {"role": "user", "content": "custom user"},
     ]
-    prompt_renderer.render.assert_called_once()
+    prompt_renderer.render_instructions.assert_called_once()
+    prompt_renderer.render_invocation.assert_called_once()
 
 
 async def test_inference_with_tool_exception():

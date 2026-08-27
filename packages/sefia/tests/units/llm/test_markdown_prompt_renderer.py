@@ -6,12 +6,7 @@ from uuid import UUID
 import pytest
 
 from sefia.exceptions import InvalidInferenceResponseError
-from sefia.inference import (
-    FunctionInfo,
-    ToolCallsDecision,
-    ToolCallRequest,
-    ToolCallResult,
-)
+from sefia.inference import FunctionInfo
 from sefia.llm import MarkdownPromptRenderer
 from sefia.llm._markdown_prompt_renderer import _markdown_fence
 from sefia.llm.step_decision import StepDecisionSpec
@@ -48,13 +43,7 @@ def _decision_spec() -> StepDecisionSpec:
 
 
 def _task_content(arguments: dict[str, Any]) -> str:
-    messages = _renderer().render(
-        _function_info(arguments),
-        [],
-        _decision_spec(),
-    )
-    assert messages[1].role == "user"
-    return str(messages[1].content)
+    return _renderer().render_invocation(_function_info(arguments))
 
 
 def _json_content(prompt: str) -> object:
@@ -78,58 +67,17 @@ def test_markdown_fence_is_longer_than_any_run_in_content(content: str, expected
     assert _markdown_fence(content) == expected
 
 
-def test_render_builds_the_complete_prompt():
-    history = [
-        ToolCallsDecision(
-            calls=[
-                ToolCallRequest(
-                    id="1",
-                    name="search",
-                    arguments={"q": "日本語の検索クエリ"},
-                )
-            ]
-        ),
-        ToolCallResult(tool_call_id="1", result="見つかりました"),
-    ]
+def test_render_instructions_combines_function_and_decision_instructions():
+    content = _renderer().render_instructions(_function_info(), _decision_spec())
 
-    messages = _renderer().render(
-        _function_info({"arg": "val"}),
-        history,
-        _decision_spec(),
-    )
-
-    assert [message.role for message in messages] == [
-        "system",
-        "user",
-        "assistant",
-        "user",
-    ]
-    assert str(messages[0].content).startswith("instructions")
-    assert _json_content(str(messages[1].content)) == {"arg": "val"}
-    assert json.loads(str(messages[2].content)) == {
-        "decision": "tool_calls",
-        "tool_calls": [
-            {
-                "id": "1",
-                "name": "search",
-                "arguments": {"q": "日本語の検索クエリ"},
-            }
-        ],
-    }
-    assert "\\u65e5" not in str(messages[2].content)
-    assert json.loads(str(messages[3].content)) == {
-        "tool_call_result": {
-            "tool_call_id": "1",
-            "result": "見つかりました",
-        }
-    }
-    assert "\\u898b" not in str(messages[3].content)
+    assert content.startswith("instructions")
+    assert "Set `decision` to `result`" in content
 
 
-def test_render_explains_when_there_are_no_direct_arguments():
-    messages = _renderer().render(_function_info(), [], _decision_spec())
+def test_render_invocation_explains_when_there_are_no_direct_arguments():
+    content = _renderer().render_invocation(_function_info())
 
-    assert "no direct function arguments" in str(messages[1].content)
+    assert "no direct function arguments" in content
 
 
 def test_render_renders_json_in_markdown():
@@ -177,31 +125,25 @@ def test_render_falls_back_to_string_when_json_default_rejects_value():
         raise TypeError
 
     renderer = MarkdownPromptRenderer(json_default=json_default)
-    prompt = str(
-        renderer.render(
-            _function_info({"value": _CustomValue("fallback")}),
-            [],
-            _decision_spec(),
-        )[1].content
+    prompt = renderer.render_invocation(
+        _function_info({"value": _CustomValue("fallback")})
     )
 
     assert _json_content(prompt) == {"value": "_CustomValue(value='fallback')"}
 
 
-def test_render_repair_echoes_invalid_content_before_feedback():
-    messages = _renderer().render_repair(
+def test_render_response_feedback_describes_the_error():
+    feedback = _renderer().render_response_feedback(
         InvalidInferenceResponseError("invalid schema", raw_content="invalid")
     )
 
-    assert [message.role for message in messages] == ["assistant", "user"]
-    assert messages[0].content == "invalid"
-    assert "Error: invalid schema" in str(messages[1].content)
+    assert "Error: invalid schema" in feedback
+    assert "previous response was empty" not in feedback
 
 
-def test_render_repair_explains_an_empty_response():
-    messages = _renderer().render_repair(
+def test_render_response_feedback_explains_an_empty_response():
+    feedback = _renderer().render_response_feedback(
         InvalidInferenceResponseError("empty response")
     )
 
-    assert [message.role for message in messages] == ["user"]
-    assert "Your previous response was empty." in str(messages[0].content)
+    assert "Your previous response was empty." in feedback

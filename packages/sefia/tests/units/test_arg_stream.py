@@ -310,8 +310,9 @@ async def test_arguments_stream_through_a_real_strategy():
         '"arguments": {"question": "What is your name?"}}]}'
     )
     renderer = Mock()
-    renderer.render.return_value = []
-    renderer.render_repair.return_value = []
+    renderer.render_instructions.return_value = "instructions"
+    renderer.render_invocation.return_value = "invocation"
+    renderer.render_response_feedback.return_value = "feedback"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
         result_format_factory=PydanticModelBackend(),

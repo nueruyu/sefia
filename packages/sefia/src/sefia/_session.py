@@ -61,6 +61,7 @@ class Session:
                 client,
                 result_format_factory=model_backend,
                 prompt_renderer=prompt_renderer,
+                json_default=pydantic_json_default,
                 stream=stream,
                 max_repair_attempts=max_repair_attempts,
             )

@@ -86,6 +86,7 @@ def _make_strategy(
         llm_client=client,
         result_format_factory=PydanticModelBackend(),
         prompt_renderer=MarkdownPromptRenderer(json_default=pydantic_json_default),
+        json_default=pydantic_json_default,
         stream=stream,
         max_repair_attempts=max_repair_attempts,
     )

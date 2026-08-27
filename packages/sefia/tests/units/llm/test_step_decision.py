@@ -113,8 +113,9 @@ def _make_strategy(
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt renderer."""
     renderer = Mock()
-    renderer.render.return_value = []
-    renderer.render_repair.return_value = []
+    renderer.render_instructions.return_value = "instructions"
+    renderer.render_invocation.return_value = "invocation"
+    renderer.render_response_feedback.return_value = "feedback"
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,

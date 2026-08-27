@@ -1,13 +1,12 @@
 import json
 import re
-from collections.abc import Callable, Sequence
-from typing import Any, cast
+from collections.abc import Callable
+from typing import cast
 
 from typing_extensions import final, override
 
 from ..exceptions import InvalidInferenceResponseError
-from ..inference import FunctionInfo, HistoryItem, ToolCallsDecision
-from ._messages import Message
+from ..inference import FunctionInfo
 from ._prompt_renderer import PromptRenderer
 from ._step_decision_prompt import build_step_decision_prompt
 from .json_schema import JsonValue
@@ -32,90 +31,16 @@ class MarkdownPromptRenderer(PromptRenderer):
         self._json_default = json_default
 
     @override
-    def render(
+    def render_instructions(
         self,
         function_info: FunctionInfo,
-        history: Sequence[HistoryItem],
         decision_spec: StepDecisionSpec,
-    ) -> list[Message]:
-        messages = [
-            Message(
-                role="system",
-                content=(
-                    function_info.instructions
-                    + build_step_decision_prompt(decision_spec)
-                ),
-            ),
-            Message(
-                role="user",
-                content=self._render_task(function_info.prompt_arguments),
-            ),
-        ]
-
-        for item in history:
-            if isinstance(item, ToolCallsDecision):
-                messages.append(
-                    Message(
-                        role="assistant",
-                        content=json.dumps(
-                            {
-                                "decision": "tool_calls",
-                                "tool_calls": [
-                                    {
-                                        "id": call.id,
-                                        "name": call.name,
-                                        "arguments": call.arguments,
-                                    }
-                                    for call in item.calls
-                                ],
-                            },
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        ),
-                    )
-                )
-            else:
-                messages.append(
-                    Message(
-                        role="user",
-                        content=json.dumps(
-                            {
-                                "tool_call_result": {
-                                    "tool_call_id": item.tool_call_id,
-                                    "result": item.result,
-                                }
-                            },
-                            default=self._json_default,
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        ),
-                    )
-                )
-
-        return messages
+    ) -> str:
+        return function_info.instructions + build_step_decision_prompt(decision_spec)
 
     @override
-    def render_repair(self, error: InvalidInferenceResponseError) -> list[Message]:
-        messages: list[Message] = []
-        if error.raw_content:
-            messages.append(Message(role="assistant", content=error.raw_content))
-            content_note = ""
-        else:
-            content_note = "Your previous response was empty.\n"
-
-        feedback = (
-            "Your previous response was invalid and could not be used as the "
-            "required decision JSON.\n"
-            f"Error: {error.detail}\n"
-            f"{content_note}"
-            "Respond again with exactly one valid raw JSON object matching the "
-            "step-decision schema in the system instructions. Do not include prose, "
-            "markdown, or code fences."
-        )
-        messages.append(Message(role="user", content=feedback))
-        return messages
-
-    def _render_task(self, arguments: dict[str, Any]) -> str:
+    def render_invocation(self, function_info: FunctionInfo) -> str:
+        arguments = function_info.prompt_arguments
         if not arguments:
             return (
                 "This inference call has no direct function arguments. "
@@ -130,6 +55,21 @@ class MarkdownPromptRenderer(PromptRenderer):
         )
         fence = _markdown_fence(content)
         return f"## Task arguments\n\n{fence}json\n{content}\n{fence}"
+
+    @override
+    def render_response_feedback(self, error: InvalidInferenceResponseError) -> str:
+        content_note = (
+            "" if error.raw_content else "Your previous response was empty.\n"
+        )
+        return (
+            "Your previous response was invalid and could not be used as the "
+            "required decision JSON.\n"
+            f"Error: {error.detail}\n"
+            f"{content_note}"
+            "Respond again with exactly one valid raw JSON object matching the "
+            "step-decision schema in the system instructions. Do not include prose, "
+            "markdown, or code fences."
+        )
 
     def _normalize(self, value: object) -> JsonValue:
         if value is None or isinstance(value, (bool, int, float, str)):

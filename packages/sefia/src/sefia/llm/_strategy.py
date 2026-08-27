@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from typing import Any, Callable
 
 from typing_extensions import final, override
 
@@ -14,6 +15,7 @@ from ..streaming import StreamHandler
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
+from ._message_builder import build_messages, build_response_feedback_messages
 from ._messages import Message
 from ._prompt_renderer import PromptRenderer
 from ._tool_call_ids import ToolCallIdRegistry
@@ -24,6 +26,8 @@ from .step_decision import (
 from .result_format import ResultFormatFactory
 from .llm_output import LLMOutput
 from .streaming import OutputStreamEvent
+
+JsonDefault = Callable[[Any], Any]
 
 
 @final
@@ -40,6 +44,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         llm_client: LLMClient,
         result_format_factory: ResultFormatFactory,
         prompt_renderer: PromptRenderer,
+        json_default: JsonDefault | None = None,
         stream: bool = False,
         max_repair_attempts: int = 2,
     ):
@@ -48,6 +53,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self.llm_client = llm_client
         self._result_format_factory = result_format_factory
         self._prompt_renderer = prompt_renderer
+        self._json_default = json_default
         self._stream = stream
         self._max_repair_attempts = max_repair_attempts
 
@@ -65,7 +71,13 @@ class LLMInferenceStrategy(InferenceStrategy):
             tools=tools.get_all(),
         )
         decision_model = StepDecisionModel.from_spec(spec, self._result_format_factory)
-        messages = self._prompt_renderer.render(function_info, history, spec)
+        messages = build_messages(
+            function_info,
+            history,
+            spec,
+            self._prompt_renderer,
+            self._json_default,
+        )
 
         attempt = 0
         while True:
@@ -83,7 +95,10 @@ class LLMInferenceStrategy(InferenceStrategy):
                 await publisher.publish(
                     events.LLMResponseRepairAttempt(error=error, attempt=attempt)
                 )
-                messages = messages + self._prompt_renderer.render_repair(error)
+                messages = messages + build_response_feedback_messages(
+                    error,
+                    self._prompt_renderer,
+                )
 
     async def _complete_once(
         self,

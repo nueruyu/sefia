@@ -1,26 +1,28 @@
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
 
 from ..exceptions import InvalidInferenceResponseError
-from ..inference import FunctionInfo, HistoryItem
-from ._messages import Message
+from ..inference import FunctionInfo
 from .step_decision import StepDecisionSpec
 
 
 class PromptRenderer(ABC):
-    """Renders the messages used for an inference call."""
+    """Renders the text content used in inference prompts."""
 
     @abstractmethod
-    def render(
+    def render_instructions(
         self,
         function_info: FunctionInfo,
-        history: Sequence[HistoryItem],
         decision_spec: StepDecisionSpec,
-    ) -> list[Message]:
-        """Render the initial messages for an inference call."""
+    ) -> str:
+        """Render the instructions governing an inference call."""
         ...
 
     @abstractmethod
-    def render_repair(self, error: InvalidInferenceResponseError) -> list[Message]:
-        """Render corrective messages for an invalid response."""
+    def render_invocation(self, function_info: FunctionInfo) -> str:
+        """Render the invocation context for an inference call."""
+        ...
+
+    @abstractmethod
+    def render_response_feedback(self, error: InvalidInferenceResponseError) -> str:
+        """Render corrective feedback for an invalid response."""
         ...

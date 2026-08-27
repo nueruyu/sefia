@@ -121,9 +121,9 @@ in `sefia.llm.result_format` and `sefia.llm.llm_output`.
 The core system prompt is `docstring + decision semantics`; tool definitions are
 carried by the decision schema. The client adds output-format instructions when the
 model needs that schema in its prompt.
-`MarkdownPromptRenderer` renders the complete inference prompt: the system message,
-the call arguments as JSON in a Markdown code block, prior steps as JSON in ordinary
-assistant/user messages, and corrective messages for invalid responses. These
+`MarkdownPromptRenderer` renders the textual instructions, invocation context, and
+corrective response feedback. The message builder assigns those strings to message
+roles and replays prior steps as JSON in ordinary assistant/user messages. These
 messages deliberately do not use native tool-call message fields or the `tool` role.
 The client is always
 called with `tools=None` and the logical `decision_model` — provider native
