@@ -1,28 +1,29 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
-from ..exceptions import InvalidInferenceResponseError
-from ..inference import FunctionInfo
-from .step_decision import StepDecisionSpec
+from ..inference import FunctionInfo, HistoryItem
+from .step_decision import DecisionSpec
+
+
+@dataclass(frozen=True)
+class RejectedDecision:
+    content: str | None
+    reason: str
+
+
+@dataclass(frozen=True)
+class DecisionPrompt:
+    function: FunctionInfo
+    decision: DecisionSpec
+    history: tuple[HistoryItem, ...]
+    rejected: RejectedDecision | None = None
 
 
 class PromptRenderer(ABC):
-    """Renders the text content used in inference prompts."""
+    """Renders a complete inference prompt as text."""
 
     @abstractmethod
-    def render_instructions(
-        self,
-        function_info: FunctionInfo,
-        decision_spec: StepDecisionSpec,
-    ) -> str:
-        """Render the instructions governing an inference call."""
-        ...
+    def render(self, prompt: DecisionPrompt) -> str: ...
 
-    @abstractmethod
-    def render_invocation(self, function_info: FunctionInfo) -> str:
-        """Render the invocation context for an inference call."""
-        ...
 
-    @abstractmethod
-    def render_response_feedback(self, error: InvalidInferenceResponseError) -> str:
-        """Render corrective feedback for an invalid response."""
-        ...
+__all__ = ["DecisionPrompt", "PromptRenderer", "RejectedDecision"]

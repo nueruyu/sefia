@@ -7,9 +7,9 @@ from typing_extensions import final
 
 from sefia.llm import Message
 from sefia.llm.json_schema import JsonObject
-from sefia.llm.step_decision import StepDecisionModel
+from sefia.llm.step_decision import DecisionSpec
 
-from ._schema import DecisionEnvelopeFormat
+from ._schema import StructuredDecisionFormat
 
 _SCHEMA_PROMPT = """
 ### Response Format
@@ -36,7 +36,7 @@ class _JsonSchemaResponseFormat(TypedDict):
 class PreparedRequest:
     messages: list[dict[str, Any]]
     kwargs: dict[str, Any]
-    output: DecisionEnvelopeFormat | None
+    output: StructuredDecisionFormat | None
 
 
 def prepare_request(
@@ -44,7 +44,7 @@ def prepare_request(
     model: str,
     messages: list[Message],
     tools: list[dict[str, Any]] | None,
-    decision_model: StepDecisionModel | None,
+    decision_model: DecisionSpec | None,
     client_kwargs: dict[str, Any],
     native_structured_output: bool | None,
     supports_response_schema: Callable[..., bool],
@@ -52,7 +52,7 @@ def prepare_request(
 ) -> PreparedRequest:
     raw_messages = [message.to_dict(exclude_none=True) for message in messages]
     output = (
-        DecisionEnvelopeFormat.from_model(decision_model)
+        StructuredDecisionFormat.from_model(decision_model)
         if decision_model is not None
         else None
     )
@@ -76,7 +76,7 @@ def prepare_request(
     return PreparedRequest(raw_messages, kwargs, output)
 
 
-def _response_format(output: DecisionEnvelopeFormat) -> _JsonSchemaResponseFormat:
+def _response_format(output: StructuredDecisionFormat) -> _JsonSchemaResponseFormat:
     return {
         "type": "json_schema",
         "json_schema": {

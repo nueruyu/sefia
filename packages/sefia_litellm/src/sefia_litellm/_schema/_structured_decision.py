@@ -10,30 +10,13 @@ from sefia.llm.json_schema import (
     JsonValue,
     SchemaKeyword,
     SchemaNode,
-    SchemaPath,
 )
 from sefia.llm.llm_output import LLMOutput
-from sefia.llm.step_decision import (
-    StepDecisionMode,
-    StepDecisionModel,
-)
+from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 
 from ._value_format import StructuredValueFormat
 
 K = SchemaKeyword
-
-
-@final
-@dataclass(frozen=True)
-class DecisionEnvelope:
-    payload: LLMOutput
-
-    @classmethod
-    def from_output(cls, output: LLMOutput) -> "DecisionEnvelope":
-        fields = output.to_object("decision envelope")
-        if set(fields) != {"payload"}:
-            raise ValueError("decision envelope must contain exactly one payload")
-        return cls(fields["payload"])
 
 
 @final
@@ -44,7 +27,7 @@ class _ToolFormat:
 
 
 @final
-class DecisionEnvelopeFormat:
+class StructuredDecisionFormat:
     def __init__(
         self,
         schema: JsonSchemaDocument,
@@ -56,7 +39,7 @@ class DecisionEnvelopeFormat:
         self._tool_formats = tool_formats
 
     @classmethod
-    def from_model(cls, model: StepDecisionModel) -> "DecisionEnvelopeFormat":
+    def from_model(cls, model: DecisionSpec) -> "StructuredDecisionFormat":
         result_format = (
             StructuredValueFormat.from_generated_schema(model.result.schema)
             if model.result is not None
@@ -83,17 +66,6 @@ class DecisionEnvelopeFormat:
         return self._decode(LLMOutput.from_json(data))
 
     def _decode(self, output: LLMOutput) -> LLMOutput:
-        try:
-            envelope = DecisionEnvelope.from_output(output)
-        except ValueError:
-            return output
-        return self._decode_payload(envelope.payload)
-
-    @staticmethod
-    def to_payload_path(path: SchemaPath) -> SchemaPath | None:
-        return path[1:] if path and path[0] == "payload" else path
-
-    def _decode_payload(self, output: LLMOutput) -> LLMOutput:
         try:
             fields = output.to_object()
         except ValueError:
@@ -167,19 +139,20 @@ def _build_schema(
 ) -> JsonObject:
     definitions: JsonObject = {}
     registry = DefinitionRegistry(definitions)
-    payload = _payload_schema(
-        mode,
-        result_format,
-        tool_formats,
-        registry,
+    root = SchemaNode(
+        _decision_schema(
+            mode,
+            result_format,
+            tool_formats,
+            registry,
+        )
     )
-    root = SchemaNode.object_schema({"payload": payload})
     if definitions:
         root.set_definitions(definitions)
     return root.value
 
 
-def _payload_schema(
+def _decision_schema(
     mode: StepDecisionMode,
     result_format: StructuredValueFormat | None,
     tool_formats: dict[str, _ToolFormat],

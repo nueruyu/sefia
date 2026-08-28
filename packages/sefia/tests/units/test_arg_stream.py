@@ -1,28 +1,22 @@
-import logging
 import json
 from collections.abc import Callable, Coroutine
 from typing import Any
 from unittest.mock import Mock
 
-import pytest
-
 from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.inference import FunctionInfo, ToolCallsDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse, Message
-from sefia.llm._arg_stream import (
-    ToolArgStreamer,
-    _ArgStreamChannel,
-    parse_tool_call_path,
-)
+from sefia.llm._arg_stream import ToolArgStreamer, _ArgStreamChannel
 from sefia.llm._client import LLMClient
-from sefia.llm.step_decision import StepDecisionModel
+from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import (
     OutputStreamCallback,
     Scalar as OutputScalar,
     StringDelta as OutputStringDelta,
     StringEnd as OutputStringEnd,
 )
+from sefia.llm.transports import StructuredDecisionTransport
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import (
     ArgStream,
@@ -83,22 +77,20 @@ def _feed_events(streamer: ToolArgStreamer, text: str, chunk_size: int) -> None:
     for index, call in enumerate(payload.get("tool_calls", [])):
         for field, field_value in call.items():
             if field == "name":
-                streamer.on_event(
-                    OutputStringEnd(("tool_calls", index, "name"), field_value)
-                )
+                streamer.identify_tool(index, field_value)
             elif field == "arguments":
                 for name, value in field_value.items():
-                    path = ("tool_calls", index, "arguments", name)
                     if isinstance(value, str):
                         for start in range(0, len(value), chunk_size):
-                            streamer.on_event(
-                                OutputStringDelta(
-                                    path, value[start : start + chunk_size]
-                                )
+                            streamer.on_argument(
+                                index,
+                                StringDelta(
+                                    name=name, text=value[start : start + chunk_size]
+                                ),
                             )
-                        streamer.on_event(OutputStringEnd(path, value))
+                        streamer.on_argument(index, StringEnd(name=name, value=value))
                     else:
-                        streamer.on_event(OutputScalar(path, value))
+                        streamer.on_argument(index, Scalar(name=name, value=value))
 
 
 # --- router unit tests --------------------------------------------------------
@@ -167,38 +159,17 @@ async def test_unregistered_tool_is_ignored():
     assert events == []
 
 
-def test_malformed_tool_call_index_is_ignored():
-    assert parse_tool_call_path(("tool_calls", "0", "name")) is None
-
-
-async def test_logs_token_processing_exception_and_closes_channels(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    channel = _ArgStreamChannel()
-    streamer = ToolArgStreamer({}, _tool_call_id)
-    streamer._channels[0] = channel
-    streamer._dispatch = Mock(side_effect=RuntimeError("boom"))
-
-    with caplog.at_level(logging.ERROR, logger="sefia.llm._arg_stream"):
-        streamer.on_event(OutputScalar(("tool_calls",), None))
-
-    assert streamer._channels == {}
-    assert "Error processing event in ToolArgStreamer" in caplog.text
-    with pytest.raises(StopAsyncIteration):
-        await anext(channel)
-
-
 async def test_duplicate_tool_name_resolution_is_ignored():
     async def handler(tool_call_id: str, stream: ArgStream) -> None:
         async for _ in stream:
             pass
 
     streamer = ToolArgStreamer({"ask_human": handler}, _tool_call_id)
-    streamer._resolve_tool_name(0, "ask_human")
+    streamer.identify_tool(0, "ask_human")
     first_channel = streamer._channels[0]
     first_tasks = list(streamer._tasks)
 
-    streamer._resolve_tool_name(0, "ask_human")
+    streamer.identify_tool(0, "ask_human")
 
     assert streamer._channels[0] is first_channel
     assert streamer._tasks == first_tasks
@@ -267,7 +238,7 @@ class StreamingClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
-        decision_model: StepDecisionModel | None = None,
+        decision_model: DecisionSpec | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
@@ -310,13 +281,12 @@ async def test_arguments_stream_through_a_real_strategy():
         '"arguments": {"question": "What is your name?"}}]}'
     )
     renderer = Mock()
-    renderer.render_instructions.return_value = "instructions"
-    renderer.render_invocation.return_value = "invocation"
-    renderer.render_response_feedback.return_value = "feedback"
+    renderer.render.return_value = "prompt"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
         result_format_factory=PydanticModelBackend(),
         prompt_renderer=renderer,
+        decision_transport=StructuredDecisionTransport(),
         stream=True,
     )
 

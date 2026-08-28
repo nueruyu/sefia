@@ -90,7 +90,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `streaming.py` | The tool-arg streaming side channel (`preview`). | `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: `step_decision.py` owns the provider-neutral step-decision model and validation, prompt renderers own textual prompt formatting, `_message_builder.py` assigns message roles and replays history, `llm_output.py` owns generic output-shape operations, `result_format.py` defines result schema generation/restoration, `json_schema/` contains only JSON Schema concepts, and `_strategy.py` orchestrates calls and repair. | `LLMInferenceStrategy`, `LLMClient`, `PromptRenderer`, `MarkdownPromptRenderer`, `StepDecisionSpec`, `StepDecisionModel`, `LLMOutput`, `LLMOutputData`, `ResultFormat`, `JsonSchemaDocument` |
+| `llm/` | The **default** `InferenceStrategy`: `step_decision.py` owns the provider-neutral decision specification and validation; prompt renderers own complete textual prompt construction; transports own communication and logical progress; `llm_output.py` owns generic output-shape operations; `result_format.py` defines result schema generation/restoration; and `_strategy.py` coordinates render, transport, validation, and repair. | `LLMInferenceStrategy`, `LLMClient`, `PromptRenderer`, `MarkdownPromptRenderer`, `DecisionSpec`, `DecisionTransport`, `StructuredDecisionTransport`, `LLMOutput`, `LLMOutputData`, `ResultFormat`, `JsonSchemaDocument` |
 | `pydantic/` | The default `ModelBackend`: callable inspection plus result JSON Schema generation and restoration. It does not know the logical step-decision shape. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
 
@@ -102,6 +102,8 @@ implementation noted in parentheses.
 | Interface | Swap to… | Default |
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
+| `PromptRenderer` | change the complete prompt's text format and wording | `llm/MarkdownPromptRenderer` |
+| `DecisionTransport` | change how a rendered prompt obtains the same logical decision | `llm.transports/StructuredDecisionTransport` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
 | `ModelBackend` | replace callable inspection and result schema generation/restoration together | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
@@ -137,8 +139,8 @@ implementation noted in parentheses.
 | `_client.py` | `LiteLLMClient` orchestration, runtime logging configuration, and LiteLLM exception mapping. |
 | `_request.py` | Converts core messages and a logical decision model into LiteLLM messages, kwargs, native `response_format`, or prompt fallback instructions. |
 | `_response.py` | Converts completed responses and streams into `LLMResponse`, including callbacks, usage, cost, and final output decoding. |
-| `_output_stream.py` | Parses incremental wire JSON and converts its payload events into core `OutputStreamEvent`s. |
-| `_schema/_decision_envelope.py` | Models the wire decision envelope and builds its schema format, output decoding, and path translation from `StepDecisionModel`. |
+| `_output_stream.py` | Parses incremental decision JSON into core `OutputStreamEvent`s. |
+| `_schema/_structured_decision.py` | Builds the provider-compatible decision schema and restores provider representations to the logical `DecisionSpec` shape. |
 | `_schema/_policy.py` | Declares independent generated/user-defined schema policies, applies permitted corrections, and validates the shared strict-output constraints. |
 | `_schema/_uniform_dictionary.py` | Define uniform-dictionary entry-array encoding and decoding. |
 | `_schema/_value_format.py` | Defines how each result or tool-argument value is represented on the wire and restored at runtime. |
@@ -151,7 +153,7 @@ implementation noted in parentheses.
 | Change the logical step-decision shape or validation | `llm/step_decision.py` |
 | Change Pydantic result schema generation or restoration | `pydantic/_result_format.py` |
 | Change generic `$defs` import or `$ref` rewriting | `llm/json_schema/_composition.py` |
-| Change LiteLLM's decision envelope or structured-output wire format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
+| Change LiteLLM's structured decision format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |

@@ -5,11 +5,15 @@ from uuid import UUID
 
 import pytest
 
-from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import FunctionInfo
-from sefia.llm import MarkdownPromptRenderer
+from sefia.llm import (
+    DecisionPrompt,
+    MarkdownPromptRenderer,
+    RejectedDecision,
+)
 from sefia.llm._markdown_prompt_renderer import _markdown_fence
-from sefia.llm.step_decision import StepDecisionSpec
+from sefia.llm.step_decision import DecisionSpec
+from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
 
@@ -34,24 +38,30 @@ def _function_info(arguments: dict[str, Any] | None = None) -> FunctionInfo:
     )
 
 
-def _decision_spec() -> StepDecisionSpec:
-    return StepDecisionSpec.for_inference(
-        name="StepDecision",
+def _decision_spec() -> DecisionSpec:
+    return DecisionSpec.for_inference(
         output_type=str,
         tools=[],
+        result_format_factory=PydanticModelBackend(),
     )
 
 
 def _task_content(arguments: dict[str, Any]) -> str:
-    return _renderer().render_invocation(_function_info(arguments))
+    return _renderer().render(
+        DecisionPrompt(
+            function=_function_info(arguments),
+            decision=_decision_spec(),
+            history=(),
+        )
+    )
 
 
 def _json_content(prompt: str) -> object:
-    lines = prompt.splitlines()
-    assert lines[0] == "## Task arguments"
-    assert lines[2].endswith("json")
-    assert lines[-1] == lines[2][:-4]
-    return json.loads("\n".join(lines[3:-1]))
+    section = prompt.split("## Task arguments\n\n", 1)[1].split("\n\n##", 1)[0]
+    lines = section.splitlines()
+    assert lines[0].endswith("json")
+    assert lines[-1] == lines[0][:-4]
+    return json.loads("\n".join(lines[1:-1]))
 
 
 @pytest.mark.parametrize(
@@ -68,16 +78,16 @@ def test_markdown_fence_is_longer_than_any_run_in_content(content: str, expected
 
 
 def test_render_instructions_combines_function_and_decision_instructions():
-    content = _renderer().render_instructions(_function_info(), _decision_spec())
+    content = _renderer().render(DecisionPrompt(_function_info(), _decision_spec(), ()))
 
-    assert content.startswith("instructions")
-    assert "Set `decision` to `result`" in content
+    assert content.startswith("# Task\n\ninstructions")
+    assert '"decision":"result"' in content
 
 
 def test_render_invocation_explains_when_there_are_no_direct_arguments():
-    content = _renderer().render_invocation(_function_info())
+    content = _renderer().render(DecisionPrompt(_function_info(), _decision_spec(), ()))
 
-    assert "no direct function arguments" in content
+    assert "## Task arguments\n\nNone." in content
 
 
 def test_render_renders_json_in_markdown():
@@ -95,7 +105,8 @@ def test_render_renders_json_in_markdown():
 def test_render_uses_a_fence_longer_than_content():
     prompt = _task_content({"source": "before ``` after"})
 
-    assert prompt.splitlines()[2] == "````json"
+    arguments = prompt.split("## Task arguments\n\n", 1)[1]
+    assert arguments.splitlines()[0] == "````json"
     assert _json_content(prompt) == {"source": "before ``` after"}
 
 
@@ -125,25 +136,39 @@ def test_render_falls_back_to_string_when_json_default_rejects_value():
         raise TypeError
 
     renderer = MarkdownPromptRenderer(json_default=json_default)
-    prompt = renderer.render_invocation(
-        _function_info({"value": _CustomValue("fallback")})
+    prompt = renderer.render(
+        DecisionPrompt(
+            _function_info({"value": _CustomValue("fallback")}),
+            _decision_spec(),
+            (),
+        )
     )
 
     assert _json_content(prompt) == {"value": "_CustomValue(value='fallback')"}
 
 
-def test_render_response_feedback_describes_the_error():
-    feedback = _renderer().render_response_feedback(
-        InvalidInferenceResponseError("invalid schema", raw_content="invalid")
+def test_render_rejected_decision_describes_the_error():
+    feedback = _renderer().render(
+        DecisionPrompt(
+            _function_info(),
+            _decision_spec(),
+            (),
+            RejectedDecision(content="invalid", reason="invalid schema"),
+        )
     )
 
-    assert "Error: invalid schema" in feedback
+    assert "Reason: invalid schema" in feedback
     assert "previous response was empty" not in feedback
 
 
-def test_render_response_feedback_explains_an_empty_response():
-    feedback = _renderer().render_response_feedback(
-        InvalidInferenceResponseError("empty response")
+def test_render_rejected_decision_explains_an_empty_response():
+    feedback = _renderer().render(
+        DecisionPrompt(
+            _function_info(),
+            _decision_spec(),
+            (),
+            RejectedDecision(content=None, reason="empty response"),
+        )
     )
 
-    assert "Your previous response was empty." in feedback
+    assert "The previous response was empty." in feedback

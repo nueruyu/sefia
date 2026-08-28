@@ -1,28 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from ..event_system import Event
 from ..exceptions import InvalidInferenceResponseError
-from ._messages import LLMResponse, Message
-from .step_decision import StepDecisionModel
+from ._messages import LLMResponse
+from .step_decision import DecisionSpec
 
 
 @dataclass(frozen=True)
 class BeforeLLMCall(Event):
     """Event fired just before a call to the LLM."""
 
-    messages: list[Message]
-    tools: list[dict[str, Any]] | None
-    decision_model: StepDecisionModel | None
+    prompt: str
+    decision: DecisionSpec
 
 
 @dataclass(frozen=True)
 class LLMResponseRepairAttempt(Event):
     """
     Event fired when an invalid LLM response is about to be retried with
-    corrective feedback appended to the conversation.
+    corrective feedback included in a newly rendered prompt.
 
     ``attempt`` is the 1-based number of the repair attempt about to run.
     """

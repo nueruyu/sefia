@@ -20,69 +20,23 @@ class StepDecisionMode(Enum):
     RESULT_ONLY = "result_only"
 
 
-@dataclass(frozen=True)
-class StepDecisionSpec:
-    name: str
-    output_type: Any
-    tools: list[ToolEntry]
-    mode: StepDecisionMode
-
-    def __post_init__(self) -> None:
-        if self.mode in (
-            StepDecisionMode.TOOLS_REQUIRED,
-            StepDecisionMode.TOOLS_OR_RESULT,
-        ):
-            if not self.tools:
-                raise ValueError(
-                    f"{self.mode.value} decisions require at least one tool."
-                )
-        elif self.mode is StepDecisionMode.RESULT_ONLY:
-            if self.tools:
-                raise ValueError("result_only cannot include tools.")
-        else:
-            raise ValueError(f"Unsupported step decision mode: {self.mode!r}")
-
-    @classmethod
-    def for_inference(
-        cls, *, name: str, output_type: Any, tools: list[ToolEntry]
-    ) -> "StepDecisionSpec":
-        if output_type is Never:
-            if not tools:
-                raise ValueError(
-                    "An @infer function returning Never must have tools available, "
-                    "otherwise the inference loop can never make progress."
-                )
-            return cls(name, output_type, tools, StepDecisionMode.TOOLS_REQUIRED)
-        if tools:
-            return cls(name, output_type, tools, StepDecisionMode.TOOLS_OR_RESULT)
-        return cls(name, output_type, [], StepDecisionMode.RESULT_ONLY)
-
-
-@dataclass(frozen=True)
-class TypedToolArguments:
-    json_schema: JsonSchemaDocument
-
-
-@dataclass(frozen=True)
-class JsonToolArguments:
-    json_schema: JsonSchemaDocument
-
-
-ToolArguments = TypedToolArguments | JsonToolArguments
+class ToolSchemaSource(Enum):
+    GENERATED = "generated"
+    USER_DEFINED = "user_defined"
 
 
 @dataclass(frozen=True)
 class StepTool:
     name: str
     description: str
-    arguments: ToolArguments
+    arguments: JsonSchemaDocument
+    schema_source: ToolSchemaSource
 
 
 class _ToolModel:
     def __init__(self, step_tool: StepTool):
         self.schema = step_tool
-        document = step_tool.arguments.json_schema
-        schema = document.to_dict()
+        schema = step_tool.arguments.to_dict()
         validator_cls = jsonschema.validators.validator_for(
             schema, default=jsonschema.Draft202012Validator
         )
@@ -102,51 +56,80 @@ class _ToolModel:
 
 
 @final
-class StepDecisionModel:
+class DecisionSpec:
     @classmethod
-    def from_spec(
+    def for_inference(
         cls,
-        spec: StepDecisionSpec,
+        *,
+        output_type: Any,
+        tools: list[ToolEntry],
         result_format_factory: ResultFormatFactory,
-    ) -> "StepDecisionModel":
-        tools: dict[str, _ToolModel] = {}
-        for tool in spec.tools:
+    ) -> "DecisionSpec":
+        if output_type is Never:
+            if not tools:
+                raise ValueError(
+                    "An @infer function returning Never must have tools available, "
+                    "otherwise the inference loop can never make progress."
+                )
+            mode = StepDecisionMode.TOOLS_REQUIRED
+        elif tools:
+            mode = StepDecisionMode.TOOLS_OR_RESULT
+        else:
+            mode = StepDecisionMode.RESULT_ONLY
+        return cls(
+            output_type=output_type,
+            tools=tools,
+            mode=mode,
+            result_format_factory=result_format_factory,
+        )
+
+    def __init__(
+        self,
+        *,
+        output_type: Any,
+        tools: list[ToolEntry],
+        mode: StepDecisionMode,
+        result_format_factory: ResultFormatFactory,
+    ) -> None:
+        if mode in (
+            StepDecisionMode.TOOLS_REQUIRED,
+            StepDecisionMode.TOOLS_OR_RESULT,
+        ):
+            if not tools:
+                raise ValueError(f"{mode.value} decisions require at least one tool.")
+        elif mode is StepDecisionMode.RESULT_ONLY:
+            if tools:
+                raise ValueError("result_only cannot include tools.")
+        else:
+            raise ValueError(f"Unsupported step decision mode: {mode!r}")
+
+        prepared_tools: dict[str, _ToolModel] = {}
+        for tool in tools:
             definition = tool.definition()
-            tools[tool.name] = _ToolModel(
+            prepared_tools[tool.name] = _ToolModel(
                 StepTool(
                     name=tool.name,
                     description=definition.description,
-                    arguments=(
-                        JsonToolArguments(
-                            JsonSchemaDocument.from_mapping(definition.parameters)
-                        )
+                    arguments=JsonSchemaDocument.from_mapping(definition.parameters),
+                    schema_source=(
+                        ToolSchemaSource.USER_DEFINED
                         if isinstance(tool, JsonSchemaToolEntry)
-                        else TypedToolArguments(
-                            JsonSchemaDocument.from_mapping(definition.parameters)
-                        )
+                        else ToolSchemaSource.GENERATED
                     ),
                 )
             )
         result = (
             None
-            if spec.mode is StepDecisionMode.TOOLS_REQUIRED
-            else result_format_factory.create(spec.output_type)
+            if mode is StepDecisionMode.TOOLS_REQUIRED
+            else result_format_factory.create(output_type)
         )
-        return cls(spec, tools, result)
-
-    def __init__(
-        self,
-        spec: StepDecisionSpec,
-        tools: dict[str, _ToolModel],
-        result: ResultFormat | None,
-    ):
-        self._spec = spec
-        self._tools = tools
+        self._mode = mode
+        self._tools = prepared_tools
         self._result = result
 
     @property
     def mode(self) -> StepDecisionMode:
-        return self._spec.mode
+        return self._mode
 
     @property
     def tools(self) -> tuple[StepTool, ...]:
@@ -166,11 +149,11 @@ class StepDecisionModel:
                 decision.to_string("decision") if decision is not None else None
             )
             if decision_name == "tool_calls":
-                if self._spec.mode is StepDecisionMode.RESULT_ONLY:
+                if self._mode is StepDecisionMode.RESULT_ONLY:
                     raise ValueError("tool_calls is not allowed")
                 return self._validate_tool_calls(data, tool_call_ids)
             if decision_name == "result":
-                if self._spec.mode is StepDecisionMode.TOOLS_REQUIRED:
+                if self._mode is StepDecisionMode.TOOLS_REQUIRED:
                     raise ValueError("result is not allowed")
                 return self._validate_result(data)
             raise ValueError("decision must be 'tool_calls' or 'result'")
@@ -229,10 +212,8 @@ def _require_fields(value: dict[str, LLMOutput], expected: set[str]) -> None:
 
 
 __all__ = [
-    "JsonToolArguments",
+    "DecisionSpec",
     "StepDecisionMode",
-    "StepDecisionModel",
-    "StepDecisionSpec",
     "StepTool",
-    "TypedToolArguments",
+    "ToolSchemaSource",
 ]

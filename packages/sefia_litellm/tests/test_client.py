@@ -25,7 +25,7 @@ from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
 )
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
-from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
+from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
@@ -51,11 +51,12 @@ class _CityResult:
     city: str
 
 
-def _decision_model() -> StepDecisionModel:
-    spec = StepDecisionSpec.for_inference(
-        name="StepDecision", output_type=_CityResult, tools=[]
+def _decision_model() -> DecisionSpec:
+    return DecisionSpec.for_inference(
+        output_type=_CityResult,
+        tools=[],
+        result_format_factory=PydanticModelBackend(),
     )
-    return StepDecisionModel.from_spec(spec, PydanticModelBackend())
 
 
 class TestLiteLLMClient:
@@ -113,9 +114,7 @@ class TestLiteLLMClient:
         assert call_args["tools"] == tools
         assert call_args["response_format"]["type"] == "json_schema"
         wire_schema = call_args["response_format"]["json_schema"]["schema"]
-        city_schema = wire_schema["properties"]["payload"]["properties"]["result"][
-            "properties"
-        ]["city"]
+        city_schema = wire_schema["properties"]["result"]["properties"]["city"]
         assert city_schema["type"] == "string"
         assert call_args["temperature"] == 0.5
 
@@ -131,10 +130,7 @@ class TestLiteLLMClient:
                     index=0,
                     message=LiteLLMMessage(
                         role="assistant",
-                        content=(
-                            '{"payload":{"decision":"result",'
-                            '"result":{"city":"Tokyo"}}}'
-                        ),
+                        content=('{"decision":"result","result":{"city":"Tokyo"}}'),
                     ),
                 )
             ]
@@ -149,7 +145,8 @@ class TestLiteLLMClient:
         assert "response_format" not in call_args
         system_prompt = call_args["messages"][0]["content"]
         assert "Follow the task." in system_prompt
-        assert '"payload"' in system_prompt
+        assert '"decision"' in system_prompt
+        assert '"payload"' not in system_prompt
         assert response.structured_output is not None
         assert response.structured_output.data == {
             "decision": "result",

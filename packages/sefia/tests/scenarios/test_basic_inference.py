@@ -1,4 +1,3 @@
-import json
 from dataclasses import dataclass
 from unittest.mock import Mock
 
@@ -10,7 +9,7 @@ from sefia import Policy, Tools, policy
 from sefia._authoring.metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.llm import LLMResponse, PromptRenderer
-from sefia.llm.step_decision import StepDecisionMode, StepDecisionModel
+from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.testing import (
     MockLLMClient,
     memory_session,
@@ -151,13 +150,12 @@ async def test_inference_without_tool_calls():
     assert report.topic == "direct"
     assert "direct answer" in report.summary
     assert len(mock_llm.requests) == 1
-    argument_message = mock_llm.requests[0]["messages"][1]["content"]
-    assert isinstance(argument_message, str)
-    lines = argument_message.splitlines()
-    assert lines[0] == "## Task arguments"
-    assert lines[2].endswith("json")
-    assert lines[-1] == lines[2][:-4]
-    assert json.loads("\n".join(lines[3:-1])) == {"topic": "direct"}
+    prompt = mock_llm.requests[0]["messages"][0]["content"]
+    assert isinstance(prompt, str)
+    assert "# Task" in prompt
+    assert "## Task arguments" in prompt
+    assert '"topic": "direct"' in prompt
+    assert "## Response" in prompt
 
 
 async def test_session_accepts_a_custom_prompt_renderer():
@@ -169,8 +167,7 @@ async def test_session_accepts_a_custom_prompt_renderer():
         ]
     )
     prompt_renderer = Mock(spec=PromptRenderer)
-    prompt_renderer.render_instructions.return_value = "custom system"
-    prompt_renderer.render_invocation.return_value = "custom user"
+    prompt_renderer.render.return_value = "custom prompt"
 
     async with memory_session(
         mock_llm,
@@ -180,11 +177,9 @@ async def test_session_accepts_a_custom_prompt_renderer():
         await SimpleAgent().generate_report(topic="custom")
 
     assert mock_llm.requests[0]["messages"] == [
-        {"role": "system", "content": "custom system"},
-        {"role": "user", "content": "custom user"},
+        {"role": "user", "content": "custom prompt"},
     ]
-    prompt_renderer.render_instructions.assert_called_once()
-    prompt_renderer.render_invocation.assert_called_once()
+    prompt_renderer.render.assert_called_once()
 
 
 async def test_inference_with_tool_exception():
@@ -284,8 +279,8 @@ async def test_invalid_response_is_repaired_with_feedback():
     assert len(mock_llm.requests) == 2
     feedback = mock_llm.requests[1]["messages"][-1]
     assert feedback["role"] == "user"
-    assert "invalid" in feedback["content"]
-    assert "Your previous response was empty." in feedback["content"]
+    assert "The previous response was empty." in feedback["content"]
+    assert "Reason:" in feedback["content"]
 
 
 async def test_inference_on_standalone_function():
@@ -304,7 +299,7 @@ async def test_inference_on_standalone_function():
     assert summary == "This is a summary."
     assert len(mock_llm.requests) == 1
     decision_model = mock_llm.requests[0].get("decision_model")
-    assert isinstance(decision_model, StepDecisionModel)
+    assert isinstance(decision_model, DecisionSpec)
     assert decision_model.mode is StepDecisionMode.RESULT_ONLY
     assert decision_model.tools == ()
 

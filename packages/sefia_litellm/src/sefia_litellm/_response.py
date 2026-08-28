@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Coroutine, cast
 from sefia.llm import LLMResponse, ToolCall
 from sefia.llm.streaming import OutputStreamCallback
 
-from ._schema import DecisionEnvelopeFormat
+from ._schema import StructuredDecisionFormat
 from ._output_stream import OutputEventStreamer
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ def handle_response(
     response: ModelResponse,
     *,
     requested_model: str,
-    output: DecisionEnvelopeFormat | None,
+    output: StructuredDecisionFormat | None,
 ) -> LLMResponse:
     if not response.choices:
         raise RuntimeError(
@@ -68,7 +68,7 @@ async def handle_stream(
     output_callback: OutputStreamCallback | None,
     reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
     messages: list[dict[str, Any]],
-    output: DecisionEnvelopeFormat | None,
+    output: StructuredDecisionFormat | None,
     requested_model: str,
 ) -> LLMResponse:
     import litellm
@@ -77,7 +77,7 @@ async def handle_stream(
     chunks: list[Any] = []
     reasoning_parts: list[str] = []
     event_streamer = (
-        OutputEventStreamer(output, output_callback)
+        OutputEventStreamer(output_callback)
         if output is not None and output_callback is not None
         else None
     )
@@ -118,7 +118,7 @@ async def handle_stream(
 
 
 def _decode_output(
-    response: LLMResponse, output: DecisionEnvelopeFormat | None
+    response: LLMResponse, output: StructuredDecisionFormat | None
 ) -> None:
     if output is None or response.content is None:
         return

@@ -4,7 +4,7 @@ from typing_extensions import final
 
 from sefia.llm.json_schema import JsonObject, JsonSchemaDocument
 from sefia.llm.llm_output import LLMOutput
-from sefia.llm.step_decision import StepTool, TypedToolArguments
+from sefia.llm.step_decision import StepTool, ToolSchemaSource
 
 from ._uniform_dictionary import UniformDictionaryFormat
 from ._policy import (
@@ -33,9 +33,9 @@ class StructuredValueFormat:
 
     @classmethod
     def from_tool(cls, tool: StepTool) -> "StructuredValueFormat":
-        if isinstance(tool.arguments, TypedToolArguments):
-            return cls.from_generated_schema(tool.arguments.json_schema)
-        return cls.from_user_schema(tool.arguments.json_schema)
+        if tool.schema_source is ToolSchemaSource.GENERATED:
+            return cls.from_generated_schema(tool.arguments)
+        return cls.from_user_schema(tool.arguments)
 
     @classmethod
     def _from_schema(
