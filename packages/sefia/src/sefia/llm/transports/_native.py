@@ -3,7 +3,7 @@ from typing import cast
 from typing_extensions import final, override
 
 from ...inference import HistoryItem, ToolCallsDecision
-from .._client import LLMClient, LLMResponseDecodingError
+from .._client import LLMClient
 from .._messages import Message, ToolCall
 from .._prompt_renderer import PromptRenderer
 from ..json_schema import JsonSchemaDocument
@@ -43,20 +43,17 @@ class NativeDecisionTransport(DecisionTransport):
         )
         await observer.before_request(prompt)
 
-        try:
-            response = await client.complete(
-                messages=[
-                    Message(role="user", content=prompt),
-                    *_native_history(request.history, prompt_renderer),
-                ],
-                tools=tools,
-                decision_model=None,
-                stream_callback=observer.response_text if stream else None,
-                output_callback=observer.output if stream else None,
-                reasoning_callback=observer.reasoning_text if stream else None,
-            )
-        except LLMResponseDecodingError as error:
-            raise DecisionDecodingError(error.response, str(error)) from error
+        response = await client.complete(
+            messages=[
+                Message(role="user", content=prompt),
+                *_native_history(request.history, prompt_renderer),
+            ],
+            tools=tools,
+            decision_model=None,
+            stream_callback=observer.response_text if stream else None,
+            output_callback=observer.output if stream else None,
+            reasoning_callback=observer.reasoning_text if stream else None,
+        )
         try:
             output = _decode_native_decision(response.tool_calls, result_tool)
         except ValueError as error:

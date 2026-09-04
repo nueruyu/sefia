@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from sefia.llm import LLMOutput, LLMResponse, LLMResponseDecodingError, ToolCall
+from sefia.llm import LLMOutput, LLMResponse, ToolCall
+from sefia.llm.exceptions import LLMResponseDecodingError
 
 from ._schema import StructuredDecisionFormat, StructuredValueFormat
 
@@ -25,9 +26,10 @@ def handle_response(
     tool_argument_formats: dict[str, StructuredValueFormat] | None = None,
 ) -> LLMResponse:
     if not response.choices:
-        raise RuntimeError(
+        raise LLMResponseDecodingError(
+            LLMResponse(model=response.model),
             f"LLM returned empty choices (model={requested_model}). "
-            "This may indicate a content filter, provider error, or a LiteLLM bug."
+            "This may indicate a content filter, provider error, or a LiteLLM bug.",
         )
 
     choice: Choices = response.choices[0]

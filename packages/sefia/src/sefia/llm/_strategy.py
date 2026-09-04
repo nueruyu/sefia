@@ -13,6 +13,7 @@ from ..streaming import ArgEvent, Scalar, StreamHandler, StringDelta, StringEnd
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
+from .exceptions import LLMResponseDecodingError
 from ._prompt_renderer import PromptRenderer, RejectedDecision
 from ._tool_call_ids import ToolCallIdRegistry
 from .result_format import ResultFormatFactory
@@ -178,7 +179,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 observer=observer,
                 stream=self._stream,
             )
-        except DecisionDecodingError as error:
+        except (DecisionDecodingError, LLMResponseDecodingError) as error:
             raise InvalidInferenceResponseError(
                 f"LLM output could not be decoded: {error}",
                 raw_content=error.response.content,

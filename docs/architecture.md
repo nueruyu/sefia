@@ -104,7 +104,7 @@ implementation noted in parentheses.
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
 | `PromptRenderer` | change the complete prompt's text format and wording | `llm/MarkdownPromptRenderer` |
 | `DecisionTransport` | change how a decision request is prompted, sent, and decoded | `llm/transports/` |
-| `LLMClient` (in `llm/_client.py`) | add an LLM provider; raise `LLMResponseDecodingError` for received responses that cannot be represented safely | `sefia_litellm.LiteLLMClient` |
+| `LLMClient` (in `llm/_client.py`) | add an LLM provider; raise `sefia.llm.exceptions.LLMResponseDecodingError` for received responses that cannot be represented safely | `sefia_litellm.LiteLLMClient` |
 | `ModelBackend` | replace callable inspection and result schema generation/restoration together | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |

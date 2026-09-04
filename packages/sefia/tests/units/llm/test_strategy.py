@@ -17,6 +17,7 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import LLMInferenceStrategy, LLMResponse, MarkdownPromptRenderer
+from sefia.llm.exceptions import LLMResponseDecodingError
 from sefia.llm.events import (
     LLMReasoningTokenReceived,
     LLMResponseRepairAttempt,
@@ -373,6 +374,25 @@ class TestResponseRepair:
 
         retry_messages = client.complete.await_args_list[1].kwargs["messages"]
         assert "did not return structured output" in str(retry_messages[-1].content)
+
+    async def test_repairs_client_response_decoding_error(self) -> None:
+        partial = LLMResponse(content="malformed provider response")
+        client = AsyncMock()
+        client.complete.side_effect = [
+            LLMResponseDecodingError(partial, "response could not be decoded"),
+            _structured_response(self.VALID_RESULT),
+        ]
+        strategy = _make_strategy(client)
+
+        decision = await strategy.decide_next_step(
+            _function_info(), [], _tool_registry(), MockEventPublisher()
+        )
+
+        assert isinstance(decision, ResultDecision)
+        assert decision.result == "done"
+        retry_prompt = client.complete.await_args_list[1].kwargs["messages"][0]
+        assert "malformed provider response" in str(retry_prompt.content)
+        assert "response could not be decoded" in str(retry_prompt.content)
 
     async def test_repairs_schema_violation_and_echoes_invalid_output(self):
         invalid = '{"decision": "result", "result": {"name": "test"}}'

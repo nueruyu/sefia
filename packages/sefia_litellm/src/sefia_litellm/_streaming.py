@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Coroutine, cast
 
 from sefia.llm import LLMOutput, LLMResponse
+from sefia.llm.exceptions import LLMResponseDecodingError
 from sefia.llm.streaming import (
     JsonOutputStreamDecoder,
     OutputStreamCallback,
@@ -55,7 +56,13 @@ async def handle_stream(
     )
     response = build_stream_response(chunks=chunks, messages=messages)
     if not isinstance(response, ModelResponse):
-        raise RuntimeError("Invalid model response")
+        raise LLMResponseDecodingError(
+            LLMResponse(
+                content=events.content_text or None,
+                reasoning_content=events.reasoning_text or None,
+            ),
+            "LiteLLM could not reconstruct a model response from the stream.",
+        )
 
     result = handle_response(
         response,
@@ -81,6 +88,7 @@ class _StreamEventDispatcher:
         self._content_callback = content_callback
         self._output_callback = output_callback
         self._reasoning_callback = reasoning_callback
+        self._content_parts: list[str] = []
         self._reasoning_parts: list[str] = []
         self._structured_decoder = (
             JsonOutputStreamDecoder()
@@ -97,6 +105,10 @@ class _StreamEventDispatcher:
     def reasoning_text(self) -> str:
         return "".join(self._reasoning_parts)
 
+    @property
+    def content_text(self) -> str:
+        return "".join(self._content_parts)
+
     async def feed(self, delta: object) -> None:
         reasoning = getattr(delta, "reasoning_content", None)
         if isinstance(reasoning, str) and reasoning:
@@ -106,6 +118,7 @@ class _StreamEventDispatcher:
 
         content = getattr(delta, "content", None)
         if isinstance(content, str) and content:
+            self._content_parts.append(content)
             if self._content_callback is not None:
                 await self._content_callback(content)
             if self._structured_decoder is not None:

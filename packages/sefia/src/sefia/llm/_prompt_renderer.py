@@ -26,10 +26,16 @@ class PromptRenderer(ABC):
     @abstractmethod
     def render(self, prompt: DecisionPrompt) -> str: ...
 
-    @abstractmethod
     def render_tool_result(self, result: object) -> str:
-        """Render a tool result as prompt text."""
-        ...
+        """Render a tool result as prompt text for native decision history.
+
+        Renderers used only by structured or prompted transports need not override
+        this method.
+        """
+        raise NotImplementedError(
+            "PromptRenderer.render_tool_result() is required by "
+            "NativeDecisionTransport."
+        )
 
 
 __all__ = [

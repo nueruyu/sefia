@@ -1,4 +1,4 @@
-from ._client import LLMClient, LLMResponseDecodingError
+from ._client import LLMClient
 from ._markdown_prompt_renderer import MarkdownPromptRenderer
 from ._messages import LLMResponse, Message, ToolCall
 from ._prompt_renderer import (
@@ -14,7 +14,6 @@ __all__ = [
     "Message",
     "ToolCall",
     "LLMResponse",
-    "LLMResponseDecodingError",
     "LLMInferenceStrategy",
     "LLMOutput",
     "LLMOutputData",

@@ -17,7 +17,6 @@ from sefia.llm import (
     DecisionPrompt,
     LLMOutput,
     LLMResponse,
-    LLMResponseDecodingError,
     PromptRenderer,
     ToolCall,
 )
@@ -205,26 +204,6 @@ async def test_native_transport_requires_a_tool_call() -> None:
             _RecordingObserver(),
             stream=False,
         )
-
-
-async def test_native_transport_reports_client_response_decoding_errors() -> None:
-    client = AsyncMock()
-    raw = LLMResponse(content=None)
-    client.complete.side_effect = LLMResponseDecodingError(
-        raw,
-        "Native tool call arguments are not JSON.",
-    )
-
-    with pytest.raises(DecisionDecodingError) as exc_info:
-        await NativeDecisionTransport().request_decision(
-            client,
-            _renderer(),
-            _request(_decision(str)),
-            _RecordingObserver(),
-            stream=False,
-        )
-
-    assert exc_info.value.response is raw
 
 
 async def test_native_transport_sends_previous_calls_as_native_history() -> None:
