@@ -3,12 +3,10 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Protocol
 
 from typing_extensions import final, override
 
 from ..inference import FunctionInfo, HistoryItem
-from ..streaming import ArgEvent, Scalar, StringDelta, StringEnd
 from ._client import LLMClient
 from ._messages import LLMResponse, Message
 from ._prompted_response import PromptedJsonStreamExtractor, extract_prompted_json
@@ -22,50 +20,38 @@ from .step_decision import DecisionSpec, StepDecisionMode
 from .streaming import (
     JsonOutputStreamDecoder,
     OutputStreamEvent,
-    StringDelta as OutputStringDelta,
-    StringEnd as OutputStringEnd,
 )
 
 
-@dataclass(frozen=True)
-class ResponseTextDelta:
-    text: str
-
-
-@dataclass(frozen=True)
-class ReasoningTextDelta:
-    text: str
-
-
-@dataclass(frozen=True)
-class ToolCallIdentified:
-    index: int
-    name: str
-
-
-@dataclass(frozen=True)
-class ToolArgumentChanged:
-    index: int
-    event: ArgEvent
-
-
-DecisionProgress = (
-    ResponseTextDelta | ReasoningTextDelta | ToolCallIdentified | ToolArgumentChanged
-)
-
-
-class DecisionObserver(Protocol):
+class DecisionObserver(ABC):
+    @abstractmethod
     async def before_request(self, prompt: str) -> None: ...
 
-    async def progress(self, progress: DecisionProgress) -> None: ...
+    @abstractmethod
+    async def response_text(self, text: str) -> None: ...
+
+    @abstractmethod
+    async def reasoning_text(self, text: str) -> None: ...
+
+    @abstractmethod
+    async def output(self, event: OutputStreamEvent) -> None: ...
 
 
 @dataclass(frozen=True)
 class DecisionRequest:
     function: FunctionInfo
-    decision: DecisionSpec
+    spec: DecisionSpec
     history: tuple[HistoryItem, ...]
     rejected: RejectedDecision | None = None
+
+    def to_prompt(self, response_instructions: str) -> DecisionPrompt:
+        return DecisionPrompt(
+            function=self.function,
+            spec=self.spec,
+            history=self.history,
+            response_instructions=response_instructions,
+            rejected=self.rejected,
+        )
 
 
 @dataclass(frozen=True)
@@ -92,38 +78,6 @@ class DecisionTransport(ABC):
         observer: DecisionObserver,
         stream: bool,
     ) -> DecisionResponse: ...
-
-    def _render_prompt(
-        self,
-        prompt_renderer: PromptRenderer,
-        request: DecisionRequest,
-        response_instructions: str,
-    ) -> str:
-        return prompt_renderer.render(
-            DecisionPrompt(
-                function=request.function,
-                decision=request.decision,
-                history=request.history,
-                response_instructions=response_instructions,
-                rejected=request.rejected,
-            )
-        )
-
-
-class _ProgressReporter:
-    def __init__(self, observer: DecisionObserver) -> None:
-        self._observer = observer
-
-    async def response_text(self, text: str) -> None:
-        await self._observer.progress(ResponseTextDelta(text))
-
-    async def reasoning_text(self, text: str) -> None:
-        await self._observer.progress(ReasoningTextDelta(text))
-
-    async def output(self, event: OutputStreamEvent) -> None:
-        converted = output_progress(event)
-        if converted is not None:
-            await self._observer.progress(converted)
 
 
 def _json_response_instructions(
@@ -171,23 +125,18 @@ class StructuredDecisionTransport(DecisionTransport):
         observer: DecisionObserver,
         stream: bool,
     ) -> DecisionResponse:
-        prompt = self._render_prompt(
-            prompt_renderer,
-            request,
-            _json_response_instructions(request.decision),
+        prompt = prompt_renderer.render(
+            request.to_prompt(_json_response_instructions(request.spec))
         )
         await observer.before_request(prompt)
-        reporter = _ProgressReporter(observer) if stream else None
 
         response = await client.complete(
             messages=[Message(role="user", content=prompt)],
             tools=None,
-            decision_model=request.decision,
-            stream_callback=reporter.response_text if reporter is not None else None,
-            output_callback=reporter.output if reporter is not None else None,
-            reasoning_callback=(
-                reporter.reasoning_text if reporter is not None else None
-            ),
+            decision_model=request.spec,
+            stream_callback=observer.response_text if stream else None,
+            output_callback=observer.output if stream else None,
+            reasoning_callback=observer.reasoning_text if stream else None,
         )
         output = response.structured_output
         if output is None:
@@ -208,34 +157,28 @@ class PromptedDecisionTransport(DecisionTransport):
         observer: DecisionObserver,
         stream: bool,
     ) -> DecisionResponse:
-        prompt = self._render_prompt(
-            prompt_renderer,
-            request,
-            _json_response_instructions(request.decision),
+        prompt = prompt_renderer.render(
+            request.to_prompt(_json_response_instructions(request.spec))
         )
         await observer.before_request(prompt)
-        reporter = _ProgressReporter(observer) if stream else None
-        stream_decoder = JsonOutputStreamDecoder() if reporter is not None else None
-        extractor = PromptedJsonStreamExtractor() if reporter is not None else None
+        stream_decoder = JsonOutputStreamDecoder() if stream else None
+        extractor = PromptedJsonStreamExtractor() if stream else None
 
         async def on_text(text: str) -> None:
-            assert reporter is not None
             assert stream_decoder is not None and extractor is not None
-            await reporter.response_text(text)
+            await observer.response_text(text)
             json_text = extractor.feed(text)
             if json_text:
                 for event in stream_decoder.feed(json_text):
-                    await reporter.output(event)
+                    await observer.output(event)
 
         response = await client.complete(
             messages=[Message(role="user", content=prompt)],
             tools=None,
             decision_model=None,
-            stream_callback=on_text if reporter is not None else None,
+            stream_callback=on_text if stream else None,
             output_callback=None,
-            reasoning_callback=(
-                reporter.reasoning_text if reporter is not None else None
-            ),
+            reasoning_callback=observer.reasoning_text if stream else None,
         )
         if response.content is None:
             raise DecisionDecodingError(
@@ -248,42 +191,12 @@ class PromptedDecisionTransport(DecisionTransport):
         return DecisionResponse(output=output, raw=response)
 
 
-def output_progress(event: OutputStreamEvent) -> DecisionProgress | None:
-    path = event.path
-    if len(path) == 3 and path[0] == "tool_calls" and isinstance(path[1], int):
-        if path[2] == "name" and isinstance(event, OutputStringEnd):
-            return ToolCallIdentified(index=path[1], name=event.value)
-        return None
-    if (
-        len(path) == 4
-        and path[0] == "tool_calls"
-        and isinstance(path[1], int)
-        and path[2] == "arguments"
-        and isinstance(path[3], str)
-    ):
-        name = path[3]
-        if isinstance(event, OutputStringDelta):
-            argument_event: ArgEvent = StringDelta(name=name, text=event.text)
-        elif isinstance(event, OutputStringEnd):
-            argument_event = StringEnd(name=name, value=event.value)
-        else:
-            argument_event = Scalar(name=name, value=event.value)
-        return ToolArgumentChanged(index=path[1], event=argument_event)
-    return None
-
-
 __all__ = [
     "DecisionDecodingError",
     "DecisionObserver",
-    "DecisionProgress",
     "DecisionRequest",
     "DecisionResponse",
     "DecisionTransport",
     "PromptedDecisionTransport",
-    "ReasoningTextDelta",
-    "ResponseTextDelta",
     "StructuredDecisionTransport",
-    "ToolArgumentChanged",
-    "ToolCallIdentified",
-    "output_progress",
 ]

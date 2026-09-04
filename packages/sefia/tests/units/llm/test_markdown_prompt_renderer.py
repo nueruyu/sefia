@@ -52,7 +52,7 @@ def _prompt(
 ) -> DecisionPrompt:
     return DecisionPrompt(
         function=function,
-        decision=_decision_spec(),
+        spec=_decision_spec(),
         history=(),
         response_instructions=(
             'Return one result as {"decision":"result","result":<value>}.'

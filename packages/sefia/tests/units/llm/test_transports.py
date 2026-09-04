@@ -8,17 +8,14 @@ from sefia.inference import FunctionInfo
 from sefia.llm import DecisionPrompt, LLMResponse, PromptRenderer
 from sefia.llm.llm_output import LLMOutput
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.streaming import StringEnd
+from sefia.llm.streaming import OutputStreamEvent, StringEnd
 from sefia.llm.transports import (
     DecisionDecodingError,
-    DecisionProgress,
+    DecisionObserver,
     DecisionRequest,
     DecisionTransport,
     PromptedDecisionTransport,
-    ReasoningTextDelta,
-    ResponseTextDelta,
     StructuredDecisionTransport,
-    ToolCallIdentified,
 )
 from sefia.pydantic import PydanticModelBackend
 
@@ -42,7 +39,7 @@ def _request() -> DecisionRequest:
             args=(),
             kwargs={},
         ),
-        decision=_decision(),
+        spec=_decision(),
         history=(),
     )
 
@@ -56,16 +53,24 @@ def _transport(
     return transport_type(), renderer
 
 
-class _RecordingObserver:
+class _RecordingObserver(DecisionObserver):
     def __init__(self) -> None:
         self.prompt: str | None = None
-        self.events: list[DecisionProgress] = []
+        self.response_texts: list[str] = []
+        self.reasoning_texts: list[str] = []
+        self.output_events: list[OutputStreamEvent] = []
 
     async def before_request(self, prompt: str) -> None:
         self.prompt = prompt
 
-    async def progress(self, progress: DecisionProgress) -> None:
-        self.events.append(progress)
+    async def response_text(self, text: str) -> None:
+        self.response_texts.append(text)
+
+    async def reasoning_text(self, text: str) -> None:
+        self.reasoning_texts.append(text)
+
+    async def output(self, event: OutputStreamEvent) -> None:
+        self.output_events.append(event)
 
 
 async def test_structured_transport_renders_and_delivers_one_complete_prompt() -> None:
@@ -86,7 +91,7 @@ async def test_structured_transport_renders_and_delivers_one_complete_prompt() -
     assert [message.to_dict(exclude_none=True) for message in sent["messages"]] == [
         {"role": "user", "content": "complete prompt"}
     ]
-    assert sent["decision_model"] is request.decision
+    assert sent["decision_model"] is request.spec
     assert observer.prompt == "complete prompt"
     assert response.output.data == {"decision": "result", "result": "done"}
     assert response.raw is raw
@@ -191,7 +196,7 @@ async def test_prompted_transport_streams_fenced_json_after_prose() -> None:
     for character in content:
         await callback(character)
 
-    assert ToolCallIdentified(index=0, name="search") in observer.events
+    assert StringEnd(("tool_calls", 0, "name"), "search") in observer.output_events
 
 
 async def test_prompted_transport_reports_undecodable_response() -> None:
@@ -241,8 +246,8 @@ async def test_transports_report_text_and_reasoning_progress(
     await client.complete.await_args.kwargs["stream_callback"]("text")
     await client.complete.await_args.kwargs["reasoning_callback"]("reasoning")
 
-    assert ResponseTextDelta("text") in observer.events
-    assert ReasoningTextDelta("reasoning") in observer.events
+    assert observer.response_texts == ["text"]
+    assert observer.reasoning_texts == ["reasoning"]
 
 
 async def test_structured_transport_reports_logical_tool_progress() -> None:
@@ -265,4 +270,4 @@ async def test_structured_transport_reports_logical_tool_progress() -> None:
     )
     await callback(StringEnd(("tool_calls", 0, "name"), "search"))
 
-    assert observer.events == [ToolCallIdentified(index=0, name="search")]
+    assert observer.output_events == [StringEnd(("tool_calls", 0, "name"), "search")]

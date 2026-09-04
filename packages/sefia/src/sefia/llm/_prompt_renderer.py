@@ -14,7 +14,7 @@ class RejectedDecision:
 @dataclass(frozen=True)
 class DecisionPrompt:
     function: FunctionInfo
-    decision: DecisionSpec
+    spec: DecisionSpec
     history: tuple[HistoryItem, ...]
     response_instructions: str
     rejected: RejectedDecision | None = None

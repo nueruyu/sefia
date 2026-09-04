@@ -9,7 +9,7 @@ from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from ..inference import FunctionInfo, HistoryItem, StepDecision
-from ..streaming import StreamHandler
+from ..streaming import ArgEvent, Scalar, StreamHandler, StringDelta, StringEnd
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
@@ -17,19 +17,21 @@ from ._prompt_renderer import PromptRenderer, RejectedDecision
 from ._tool_call_ids import ToolCallIdRegistry
 from .result_format import ResultFormatFactory
 from .step_decision import DecisionSpec
+from .streaming import (
+    OutputStreamEvent,
+    StringDelta as OutputStringDelta,
+    StringEnd as OutputStringEnd,
+)
 from .transports import (
     DecisionDecodingError,
-    DecisionProgress,
+    DecisionObserver,
     DecisionRequest,
     DecisionTransport,
-    ReasoningTextDelta,
-    ResponseTextDelta,
-    ToolCallIdentified,
 )
 
 
 @final
-class _StrategyDecisionObserver:
+class _StrategyDecisionObserver(DecisionObserver):
     def __init__(
         self,
         publisher: EventPublisher,
@@ -40,23 +42,55 @@ class _StrategyDecisionObserver:
         self._decision = decision
         self._tool_arg_streamer = tool_arg_streamer
 
+    @override
     async def before_request(self, prompt: str) -> None:
         await self._publisher.publish(
             events.BeforeLLMCall(prompt=prompt, decision=self._decision)
         )
 
-    async def progress(self, progress: DecisionProgress) -> None:
-        if isinstance(progress, ResponseTextDelta):
-            await self._publisher.publish(events.LLMTokenReceived(token=progress.text))
-        elif isinstance(progress, ReasoningTextDelta):
-            await self._publisher.publish(
-                events.LLMReasoningTokenReceived(token=progress.text)
-            )
-        elif self._tool_arg_streamer is not None:
-            if isinstance(progress, ToolCallIdentified):
-                self._tool_arg_streamer.identify_tool(progress.index, progress.name)
-            else:
-                self._tool_arg_streamer.on_argument(progress.index, progress.event)
+    @override
+    async def response_text(self, text: str) -> None:
+        await self._publisher.publish(events.LLMTokenReceived(token=text))
+
+    @override
+    async def reasoning_text(self, text: str) -> None:
+        await self._publisher.publish(events.LLMReasoningTokenReceived(token=text))
+
+    @override
+    async def output(self, event: OutputStreamEvent) -> None:
+        streamer = self._tool_arg_streamer
+        if streamer is None:
+            return
+
+        path = event.path
+        if (
+            len(path) == 3
+            and path[0] == "tool_calls"
+            and isinstance(path[1], int)
+            and path[2] == "name"
+            and isinstance(event, OutputStringEnd)
+        ):
+            streamer.identify_tool(path[1], event.value)
+            return
+
+        if (
+            len(path) != 4
+            or path[0] != "tool_calls"
+            or not isinstance(path[1], int)
+            or path[2] != "arguments"
+            or not isinstance(path[3], str)
+        ):
+            return
+
+        name = path[3]
+        argument_event: ArgEvent
+        if isinstance(event, OutputStringDelta):
+            argument_event = StringDelta(name=name, text=event.text)
+        elif isinstance(event, OutputStringEnd):
+            argument_event = StringEnd(name=name, value=event.value)
+        else:
+            argument_event = Scalar(name=name, value=event.value)
+        streamer.on_argument(path[1], argument_event)
 
 
 @final
@@ -99,7 +133,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         for attempt in range(self._max_repair_attempts + 1):
             request = DecisionRequest(
                 function=function_info,
-                decision=decision,
+                spec=decision,
                 history=tuple(history),
                 rejected=rejected,
             )
@@ -132,7 +166,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         tool_arg_streamer = self._tool_arg_streamer(tools, tool_call_ids)
         observer = _StrategyDecisionObserver(
             publisher,
-            request.decision,
+            request.spec,
             tool_arg_streamer,
         )
 
@@ -155,7 +189,7 @@ class LLMInferenceStrategy(InferenceStrategy):
 
         await publisher.publish(events.AfterLLMCall(response.raw))
         try:
-            return request.decision.validate(response.output, tool_call_ids)
+            return request.spec.validate(response.output, tool_call_ids)
         except UnknownToolDecisionError as error:
             raise InvalidInferenceResponseError(
                 f"LLM output requested an unknown tool: {error.tool_name!r}",

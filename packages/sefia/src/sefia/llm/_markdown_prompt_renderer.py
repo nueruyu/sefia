@@ -32,8 +32,8 @@ class MarkdownPromptRenderer(PromptRenderer):
     def render(self, prompt: DecisionPrompt) -> str:
         sections = [f"# Task\n\n{prompt.function.instructions}"]
         sections.append(self._render_arguments(prompt))
-        if prompt.decision.tools:
-            sections.append(self._render_tools(prompt.decision))
+        if prompt.spec.tools:
+            sections.append(self._render_tools(prompt.spec))
         if prompt.history:
             sections.append(self._render_history(prompt))
         sections.append(f"## Response\n\n{prompt.response_instructions}")
