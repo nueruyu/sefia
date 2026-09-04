@@ -90,6 +90,9 @@ class UniformDictionaryFormat:
     def decode(self, output: LLMOutput) -> LLMOutput:
         return _decode(output, self.schema, self.schema, self.restoration_paths, ())
 
+    def encode(self, output: LLMOutput) -> LLMOutput:
+        return _encode(output, self.schema, self.schema, self.restoration_paths, ())
+
 
 def _find_dictionary_schema(
     schema: JsonObject,
@@ -136,6 +139,36 @@ def _decode(
         return _decode_object(output, node, root, restoration_paths, path)
     if node.type == "array":
         return _decode_array(output, node, root, restoration_paths, path)
+    return output
+
+
+def _encode(
+    output: LLMOutput,
+    schema: JsonObject,
+    root: JsonObject,
+    restoration_paths: frozenset[SchemaPath],
+    path: SchemaPath,
+) -> LLMOutput:
+    schema, path = _resolve(schema, root, path)
+    node = SchemaNode(schema)
+    if path in restoration_paths:
+        return _encode_dictionary(output, node, root, restoration_paths, path)
+
+    for index, alternative in enumerate(node.any_of()):
+        candidate = _encode(
+            output,
+            alternative.value,
+            root,
+            restoration_paths,
+            (*path, K.ANY_OF, index),
+        )
+        if _matches(candidate.data, alternative.value, root):
+            return candidate
+
+    if node.type == "object":
+        return _encode_object(output, node, root, restoration_paths, path)
+    if node.type == "array":
+        return _encode_array(output, node, root, restoration_paths, path)
     return output
 
 
@@ -246,3 +279,88 @@ def _decode_dictionary(
             (*path, K.ITEMS, K.PROPERTIES, "value"),
         )
     return LLMOutput.from_mapping(result)
+
+
+def _encode_dictionary(
+    output: LLMOutput,
+    node: SchemaNode,
+    root: JsonObject,
+    restoration_paths: frozenset[SchemaPath],
+    path: SchemaPath,
+) -> LLMOutput:
+    values = output.data
+    if type(values) is not dict:
+        return output
+    items = node.items()
+    properties = items.properties() if items is not None else {}
+    if set(properties) != {"key", "value"}:
+        raise ValueError("lowered mapping schema is missing key/value entries")
+    return LLMOutput.from_array(
+        LLMOutput.from_object(
+            {
+                "key": _encode(
+                    LLMOutput.from_scalar(key),
+                    properties["key"].value,
+                    root,
+                    restoration_paths,
+                    (*path, K.ITEMS, K.PROPERTIES, "key"),
+                ),
+                "value": _encode(
+                    LLMOutput.from_data(value),
+                    properties["value"].value,
+                    root,
+                    restoration_paths,
+                    (*path, K.ITEMS, K.PROPERTIES, "value"),
+                ),
+            }
+        )
+        for key, value in values.items()
+    )
+
+
+def _encode_object(
+    output: LLMOutput,
+    node: SchemaNode,
+    root: JsonObject,
+    restoration_paths: frozenset[SchemaPath],
+    path: SchemaPath,
+) -> LLMOutput:
+    try:
+        fields = output.to_object()
+    except ValueError:
+        return output
+    properties = node.properties()
+    return LLMOutput.from_object(
+        {
+            name: _encode(
+                value,
+                properties[name].value,
+                root,
+                restoration_paths,
+                (*path, K.PROPERTIES, name),
+            )
+            if name in properties
+            else value
+            for name, value in fields.items()
+        }
+    )
+
+
+def _encode_array(
+    output: LLMOutput,
+    node: SchemaNode,
+    root: JsonObject,
+    restoration_paths: frozenset[SchemaPath],
+    path: SchemaPath,
+) -> LLMOutput:
+    items = node.items()
+    if items is None:
+        return output
+    try:
+        values = output.to_array()
+    except ValueError:
+        return output
+    return LLMOutput.from_array(
+        _encode(value, items.value, root, restoration_paths, (*path, K.ITEMS))
+        for value in values
+    )

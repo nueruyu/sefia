@@ -9,10 +9,10 @@ from typing_extensions import final, override
 
 from sefia.exceptions import InferenceError
 from sefia.llm import LLMClient, LLMResponse, Message
-from sefia.llm.step_decision import DecisionSpec
+from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import OutputStreamCallback
 
-from ._request import prepare_request
+from ._request import build_completion_request
 from ._response import handle_response, handle_stream
 from .exceptions import (
     InferenceConnectionError,
@@ -96,7 +96,7 @@ class LiteLLMClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[StepTool] | None = None,
         decision_model: DecisionSpec | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,
@@ -108,7 +108,7 @@ class LiteLLMClient(LLMClient):
         from litellm import ModelResponse
 
         _configure_litellm_logging(self._suppress_logs)
-        prepared = prepare_request(
+        request = build_completion_request(
             messages=messages,
             tools=tools,
             decision_model=decision_model,
@@ -130,8 +130,8 @@ class LiteLLMClient(LLMClient):
             )
             response = await complete(
                 model=self.model,
-                messages=prepared.messages,
-                **prepared.kwargs,
+                messages=request.messages,
+                **request.kwargs,
             )
             if hasattr(response, "__aiter__") and not isinstance(
                 response, ModelResponse
@@ -141,8 +141,9 @@ class LiteLLMClient(LLMClient):
                     content_callback=stream_callback,
                     output_callback=output_callback,
                     reasoning_callback=reasoning_callback,
-                    messages=prepared.messages,
-                    output=prepared.output,
+                    messages=request.messages,
+                    output=request.decision_format,
+                    tool_argument_formats=request.tool_argument_formats,
                     requested_model=self.model,
                 )
         except Exception as error:
@@ -156,7 +157,8 @@ class LiteLLMClient(LLMClient):
         return handle_response(
             response,
             requested_model=self.model,
-            output=prepared.output,
+            output=request.decision_format,
+            tool_argument_formats=request.tool_argument_formats,
         )
 
 

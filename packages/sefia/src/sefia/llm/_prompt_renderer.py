@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from ..inference import FunctionInfo, HistoryItem
-from .step_decision import DecisionSpec
+from .step_decision import StepTool
 
 
 @dataclass(frozen=True)
@@ -14,7 +14,7 @@ class RejectedDecision:
 @dataclass(frozen=True)
 class DecisionPrompt:
     function: FunctionInfo
-    spec: DecisionSpec
+    tools: tuple[StepTool, ...]
     history: tuple[HistoryItem, ...]
     response_instructions: str
     rejected: RejectedDecision | None = None
@@ -25,6 +25,11 @@ class PromptRenderer(ABC):
 
     @abstractmethod
     def render(self, prompt: DecisionPrompt) -> str: ...
+
+    @abstractmethod
+    def render_tool_result(self, result: object) -> str:
+        """Render a tool result as prompt text."""
+        ...
 
 
 __all__ = [

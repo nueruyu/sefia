@@ -1,12 +1,25 @@
-from dataclasses import asdict, dataclass, field, is_dataclass
+from __future__ import annotations
+
+from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Literal, cast
 
 from .llm_output import LLMOutput
 
 
 def _to_serializable(value: Any, exclude_none: bool) -> Any:
+    if isinstance(value, LLMOutput):
+        return _to_serializable(value.data, exclude_none=exclude_none)
     if is_dataclass(value) and not isinstance(value, type):
-        return _to_serializable(asdict(value), exclude_none=exclude_none)
+        result: dict[str, Any] = {}
+        for item in fields(value):
+            converted = _to_serializable(
+                getattr(value, item.name),
+                exclude_none=exclude_none,
+            )
+            if exclude_none and converted is None:
+                continue
+            result[item.name] = converted
+        return result
     if isinstance(value, dict):
         result: dict[str, Any] = {}
         for key, item in cast(dict[str, Any], value).items():
@@ -30,9 +43,7 @@ class Message:
     role: Literal["system", "user", "assistant", "tool"]
     content: str | list[Any] | None = None
     tool_call_id: str | None = None  # Required for role="tool" messages
-    tool_calls: list[Any] | None = (
-        None  # Present on role="assistant" messages with tool calls
-    )
+    tool_calls: list[ToolCall] | None = None
 
     def to_dict(self, *, exclude_none: bool = False) -> dict[str, Any]:
         return _to_serializable(self, exclude_none=exclude_none)
@@ -43,7 +54,8 @@ class ToolCall:
     """Represents a tool call requested by the LLM."""
 
     id: str
-    function: dict[str, Any]  # {"name": "...", "arguments": "..."}
+    name: str
+    arguments: LLMOutput
 
 
 @dataclass
@@ -58,3 +70,11 @@ class LLMResponse:
     stop_reason: str | None = None
     cost: float | None = None
     structured_output: LLMOutput | None = None
+
+
+class LLMResponseDecodingError(ValueError):
+    """The client received a response it could not represent safely."""
+
+    def __init__(self, response: LLMResponse, reason: str) -> None:
+        super().__init__(reason)
+        self.response = response

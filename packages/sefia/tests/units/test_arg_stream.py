@@ -12,7 +12,7 @@ from sefia.llm import LLMInferenceStrategy, LLMResponse, Message
 from sefia.llm.llm_output import LLMOutput
 from sefia.llm._arg_stream import ToolArgStreamer, _ArgStreamChannel
 from sefia.llm._client import LLMClient
-from sefia.llm.step_decision import DecisionSpec
+from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import (
     OutputStreamCallback,
     Scalar as OutputScalar,
@@ -244,7 +244,7 @@ class StreamingClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[StepTool] | None = None,
         decision_model: DecisionSpec | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,

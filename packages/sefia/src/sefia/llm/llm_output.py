@@ -26,6 +26,11 @@ class LLMOutput:
         return cls._from_json_value(cast(object, json.loads(text)))
 
     @classmethod
+    def from_data(cls, value: LLMOutputData) -> "LLMOutput":
+        """Create output from an already-normalized logical JSON value."""
+        return cls._from_value(value)
+
+    @classmethod
     def _from_json_value(cls, value: object) -> "LLMOutput":
         if isinstance(value, list):
             items = cast(list[object], value)

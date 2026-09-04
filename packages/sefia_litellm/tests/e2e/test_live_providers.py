@@ -19,7 +19,8 @@ from typing import Any, Protocol
 import pytest
 from sefia import Tools
 
-from sefia_litellm import LiteLLMClient, NativeDecisionTransport
+from sefia.llm.transports import NativeDecisionTransport
+from sefia_litellm import LiteLLMClient
 
 
 class Provider(Protocol):

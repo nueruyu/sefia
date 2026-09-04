@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Coroutine
+from typing import Callable, Coroutine
 
 from sefia.llm._messages import LLMResponse, Message
-from sefia.llm.step_decision import DecisionSpec
+from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import OutputStreamCallback
 
 
@@ -15,7 +15,7 @@ class LLMClient(ABC):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[StepTool] | None = None,
         decision_model: DecisionSpec | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,

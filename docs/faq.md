@@ -125,10 +125,10 @@ The unified schema is a design choice, not only a portability workaround. Asking
 model for one result shape (`result | tool_calls`) with strict structured output lets
 sefia treat the **Python return type as the primary output contract** — any
 nested/union/collection type — independently of a provider's tool-call format.
-`sefia_litellm.NativeDecisionTransport` is available when provider-native parallel
-tools or caching are a better fit. It represents the typed final value as a synthetic
-result tool and restores provider responses to the same internal decision shape. Full
-treatment:
+`sefia.llm.transports.NativeDecisionTransport` is available when provider-native
+parallel tools or caching are a better fit. It represents the typed final value as a
+synthetic result tool and restores provider responses to the same internal decision
+shape. Full treatment:
 [tradeoffs.md](./tradeoffs.md).
 
 ### Does it scale?

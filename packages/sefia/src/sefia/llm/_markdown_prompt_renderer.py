@@ -8,7 +8,7 @@ from typing_extensions import final, override
 from ..inference import ToolCallsDecision
 from ._prompt_renderer import DecisionPrompt, PromptRenderer
 from .json_schema import JsonValue
-from .step_decision import DecisionSpec, StepTool
+from .step_decision import StepTool
 
 JsonDefault = Callable[[object], object]
 
@@ -32,8 +32,8 @@ class MarkdownPromptRenderer(PromptRenderer):
     def render(self, prompt: DecisionPrompt) -> str:
         sections = [f"# Task\n\n{prompt.function.instructions}"]
         sections.append(self._render_arguments(prompt))
-        if prompt.spec.tools:
-            sections.append(self._render_tools(prompt.spec))
+        if prompt.tools:
+            sections.append(self._render_tools(prompt.tools))
         if prompt.history:
             sections.append(self._render_history(prompt))
         sections.append(f"## Response\n\n{prompt.response_instructions}")
@@ -41,14 +41,18 @@ class MarkdownPromptRenderer(PromptRenderer):
             sections.append(self._render_rejection(prompt))
         return "\n\n".join(sections)
 
+    @override
+    def render_tool_result(self, result: object) -> str:
+        return self._compact_json(result)
+
     def _render_arguments(self, prompt: DecisionPrompt) -> str:
         arguments = prompt.function.prompt_arguments
         if not arguments:
             return "## Task arguments\n\nNone."
         return "## Task arguments\n\n" + self._json_block(arguments)
 
-    def _render_tools(self, decision: DecisionSpec) -> str:
-        tools = "\n".join(self._render_tool(tool) for tool in decision.tools)
+    def _render_tools(self, definitions: tuple[StepTool, ...]) -> str:
+        tools = "\n".join(self._render_tool(tool) for tool in definitions)
         return f"## Available tools\n\n{tools}"
 
     def _render_tool(self, tool: StepTool) -> str:

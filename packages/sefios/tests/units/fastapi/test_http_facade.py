@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from sefia import Tools
 from sefia.llm import LLMClient, LLMOutput, LLMResponse, Message
-from sefia.llm.step_decision import DecisionSpec
+from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import (
     OutputStreamCallback,
     StringDelta,
@@ -31,7 +31,7 @@ class StreamingClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[StepTool] | None = None,
         decision_model: DecisionSpec | None = None,
         stream_callback: Callable[[str], Coroutine[Any, Any, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,

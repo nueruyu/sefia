@@ -14,6 +14,7 @@ from sefia.llm.json_schema import (
 from sefia.llm.llm_output import LLMOutput
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 
+from ._tool_arguments import tool_arguments_format
 from ._value_format import StructuredValueFormat
 
 K = SchemaKeyword
@@ -47,7 +48,7 @@ class StructuredDecisionFormat:
         )
         tool_formats = {
             tool.name: _ToolFormat(
-                arguments=StructuredValueFormat.from_tool(tool),
+                arguments=tool_arguments_format(tool),
                 description=tool.description,
             )
             for tool in model.tools

@@ -36,7 +36,7 @@ from typing_extensions import final, override
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._session import Session
 from .llm import LLMClient, LLMOutput, LLMResponse, Message
-from .llm.step_decision import DecisionSpec
+from .llm.step_decision import DecisionSpec, StepTool
 from .llm.streaming import OutputStreamCallback
 from .pydantic._json_utils import pydantic_json_default
 
@@ -55,7 +55,7 @@ class MockLLMClient(LLMClient):
     async def complete(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[StepTool] | None = None,
         decision_model: DecisionSpec | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,

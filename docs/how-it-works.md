@@ -120,13 +120,15 @@ result schema interfaces and decoded values live in `sefia.llm.result_format` an
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 `MarkdownPromptRenderer` owns the textual representation of instructions, arguments,
-tool descriptions, prior tool interactions, response forms, and repair feedback. It
-returns text, not protocol messages. A transport owns the response instructions,
-invokes the renderer, sends the resulting prompt, and decodes the reply.
+tool descriptions, prior tool interactions, response forms, and repair feedback when
+those concepts belong in prompt text. It returns text, not protocol messages. A
+transport chooses which concepts are textual, owns the response instructions, invokes
+the renderer, sends protocol messages, and decodes the reply.
 `StructuredDecisionTransport` requests structured output;
 `PromptedDecisionTransport` asks for the same JSON decision in ordinary response
-text; `sefia_litellm.NativeDecisionTransport` exposes application tools and a
-synthetic result tool through the provider's function-call protocol. All return the
+text; `sefia.llm.transports.NativeDecisionTransport` exposes application tools and a
+synthetic result tool through the client's function-call protocol, and represents
+prior calls and results as native messages. All return the
 same `DecisionResponse` and logical progress events, so final results, repair, token
 streams, reasoning streams, and tool-argument previews do not depend on the selected
 transport.

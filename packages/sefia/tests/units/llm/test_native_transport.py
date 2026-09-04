@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from typing import Any, Never, cast
 from unittest.mock import AsyncMock, Mock
@@ -5,8 +6,21 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from sefia._tool_system import ToolRegistry
-from sefia.inference import FunctionInfo, ResultDecision, ToolCallsDecision
-from sefia.llm import DecisionPrompt, LLMResponse, PromptRenderer, ToolCall
+from sefia.inference import (
+    FunctionInfo,
+    ResultDecision,
+    ToolCallRequest,
+    ToolCallResult,
+    ToolCallsDecision,
+)
+from sefia.llm import (
+    DecisionPrompt,
+    LLMOutput,
+    LLMResponse,
+    LLMResponseDecodingError,
+    PromptRenderer,
+    ToolCall,
+)
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import OutputStreamEvent, StringEnd as OutputStringEnd
@@ -14,9 +28,9 @@ from sefia.llm.transports import (
     DecisionDecodingError,
     DecisionObserver,
     DecisionRequest,
+    NativeDecisionTransport,
 )
 from sefia.pydantic import PydanticModelBackend
-from sefia_litellm import NativeDecisionTransport
 
 
 def lookup(key: str) -> str:
@@ -60,6 +74,11 @@ def _request(decision: DecisionSpec) -> DecisionRequest:
 def _renderer() -> Mock:
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "prompt"
+
+    def render_tool_result(value: object) -> str:
+        return json.dumps(value)
+
+    renderer.render_tool_result.side_effect = render_tool_result
     return renderer
 
 
@@ -84,7 +103,11 @@ class _RecordingObserver(DecisionObserver):
 
 
 def _call(name: str, arguments: str = "{}") -> ToolCall:
-    return ToolCall(id="provider-id", function={"name": name, "arguments": arguments})
+    return ToolCall(
+        id="provider-id",
+        name=name,
+        arguments=LLMOutput.parse_json(arguments),
+    )
 
 
 async def test_native_transport_exposes_application_and_result_tools() -> None:
@@ -104,7 +127,7 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
     assert isinstance(validated, ToolCallsDecision)
     assert validated.calls[0].arguments == {"key": "item"}
     sent = client.complete.await_args.kwargs
-    assert [tool["function"]["name"] for tool in sent["tools"]] == [
+    assert [tool.name for tool in sent["tools"]] == [
         "lookup",
         "return_result",
     ]
@@ -112,6 +135,7 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
     assert observer.prompt == "prompt"
     rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
     assert "return_result" in rendered_prompt.response_instructions
+    assert rendered_prompt.tools == ()
 
 
 async def test_native_transport_decodes_typed_result() -> None:
@@ -160,9 +184,10 @@ async def test_native_transport_avoids_result_tool_name_collision() -> None:
         stream=False,
     )
 
-    assert [
-        tool["function"]["name"] for tool in client.complete.await_args.kwargs["tools"]
-    ] == ["return_result", "return_result_2"]
+    assert [tool.name for tool in client.complete.await_args.kwargs["tools"]] == [
+        "return_result",
+        "return_result_2",
+    ]
     rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
     assert "return_result_2" in rendered_prompt.response_instructions
 
@@ -182,10 +207,85 @@ async def test_native_transport_requires_a_tool_call() -> None:
         )
 
 
-@pytest.mark.parametrize("arguments", ["not json", "[]"])
-async def test_native_transport_requires_object_arguments(arguments: str) -> None:
+async def test_native_transport_reports_client_response_decoding_errors() -> None:
     client = AsyncMock()
-    client.complete.return_value = LLMResponse(tool_calls=[_call("lookup", arguments)])
+    raw = LLMResponse(content=None)
+    client.complete.side_effect = LLMResponseDecodingError(
+        raw,
+        "Native tool call arguments are not JSON.",
+    )
+
+    with pytest.raises(DecisionDecodingError) as exc_info:
+        await NativeDecisionTransport().request_decision(
+            client,
+            _renderer(),
+            _request(_decision(str)),
+            _RecordingObserver(),
+            stream=False,
+        )
+
+    assert exc_info.value.response is raw
+
+
+async def test_native_transport_sends_previous_calls_as_native_history() -> None:
+    client = AsyncMock()
+    client.complete.return_value = LLMResponse(
+        tool_calls=[_call("lookup", '{"key":"next"}')]
+    )
+    decision = _decision(Never, lookup)
+    request = _request(decision)
+    request = DecisionRequest(
+        function=request.function,
+        spec=request.spec,
+        history=(
+            ToolCallsDecision(
+                [
+                    ToolCallRequest(
+                        id="call-1",
+                        name="lookup",
+                        arguments={"key": "first"},
+                    )
+                ]
+            ),
+            ToolCallResult(tool_call_id="call-1", result={"value": "found"}),
+        ),
+    )
+    renderer = _renderer()
+
+    await NativeDecisionTransport().request_decision(
+        client,
+        renderer,
+        request,
+        _RecordingObserver(),
+        stream=False,
+    )
+
+    messages = client.complete.await_args.kwargs["messages"]
+    assert [message.role for message in messages] == ["user", "assistant", "tool"]
+    assert messages[1].tool_calls == [
+        ToolCall(
+            id="call-1",
+            name="lookup",
+            arguments=LLMOutput.from_json({"key": "first"}),
+        )
+    ]
+    assert messages[2].tool_call_id == "call-1"
+    assert messages[2].content == '{"value": "found"}'
+    rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
+    assert rendered_prompt.history == ()
+
+
+async def test_native_transport_requires_object_arguments() -> None:
+    client = AsyncMock()
+    client.complete.return_value = LLMResponse(
+        tool_calls=[
+            ToolCall(
+                id="provider-id",
+                name="lookup",
+                arguments=LLMOutput.from_json([]),
+            )
+        ]
+    )
     decision = _decision(Never, lookup)
 
     with pytest.raises(DecisionDecodingError):

@@ -52,7 +52,7 @@ def _prompt(
 ) -> DecisionPrompt:
     return DecisionPrompt(
         function=function,
-        spec=_decision_spec(),
+        tools=_decision_spec().tools,
         history=(),
         response_instructions=(
             'Return one result as {"decision":"result","result":<value>}.'
@@ -123,6 +123,12 @@ def test_render_uses_json_default():
     prompt = _task_content({"value": _CustomValue("serialized")})
 
     assert _json_content(prompt) == {"value": {"value": "serialized"}}
+
+
+def test_render_tool_result_uses_the_same_json_representation() -> None:
+    assert _renderer().render_tool_result(_CustomValue("serialized")) == (
+        '{"value":"serialized"}'
+    )
 
 
 def test_render_normalizes_nested_mapping_keys():

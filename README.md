@@ -156,7 +156,7 @@ and streamed tool-argument previews.
 LiteLLM can instead expose decisions as provider-native function calls:
 
 ```python
-from sefia_litellm import NativeDecisionTransport
+from sefia.llm.transports import NativeDecisionTransport
 
 scope = SessionScope(
     model="gpt-4o",

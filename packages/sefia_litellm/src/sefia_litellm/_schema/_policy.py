@@ -79,14 +79,10 @@ USER_DEFINED_SCHEMA_POLICY = SchemaPolicy(
 )
 
 
-@final
-@dataclass(frozen=True)
-class PreparedSchema:
-    wire_schema: JsonObject
-    dictionary_format: UniformDictionaryFormat | None
-
-
-def prepare_schema(schema: JsonObject, policy: SchemaPolicy) -> PreparedSchema:
+def apply_schema_policy(
+    schema: JsonObject,
+    policy: SchemaPolicy,
+) -> UniformDictionaryFormat | None:
     _apply_corrections(schema, policy)
     dictionary_format = (
         UniformDictionaryFormat.from_schema(schema)
@@ -94,7 +90,7 @@ def prepare_schema(schema: JsonObject, policy: SchemaPolicy) -> PreparedSchema:
         else None
     )
     _validate(schema, policy.constraints)
-    return PreparedSchema(schema, dictionary_format)
+    return dictionary_format
 
 
 def _apply_corrections(schema: JsonObject, policy: SchemaPolicy) -> None:

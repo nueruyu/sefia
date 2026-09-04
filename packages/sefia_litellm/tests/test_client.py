@@ -2,7 +2,7 @@ import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Never, Self
+from typing import Never, Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -24,9 +24,20 @@ from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
     ChatCompletionMessageCustomToolCall,
 )
 from pytest_mock import MockerFixture
-from sefia.llm import LLMResponse, Message
-from sefia.llm.streaming import OutputStreamEvent, StringEnd as OutputStringEnd
-from sefia.llm.step_decision import DecisionSpec
+from sefia.llm import (
+    LLMOutput,
+    LLMResponse,
+    LLMResponseDecodingError,
+    Message,
+    ToolCall,
+)
+from sefia.llm.json_schema import JsonSchemaDocument
+from sefia.llm.streaming import (
+    OutputStreamEvent,
+    Scalar as OutputScalar,
+    StringEnd as OutputStringEnd,
+)
+from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
@@ -44,6 +55,7 @@ from sefia_litellm._response import (
     handle_response,
     handle_stream,
 )
+from sefia_litellm._schema import StructuredValueFormat
 
 
 @pytest.fixture
@@ -110,8 +122,20 @@ class TestLiteLLMClient:
     ):
         client = LiteLLMClient(model="gpt-4o", temperature=0.5)
         messages = [Message(role="user", content="Hello")]
-        tools: list[dict[str, Any]] = [
-            {"type": "function", "function": {"name": "get_weather"}}
+        tools = [
+            StepTool(
+                name="get_weather",
+                description="",
+                arguments=JsonSchemaDocument.from_mapping(
+                    {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": False,
+                    }
+                ),
+                schema_source=ToolSchemaSource.GENERATED,
+            )
         ]
         decision_model = _decision_model()
 
@@ -131,7 +155,15 @@ class TestLiteLLMClient:
         call_args = mock_acompletion.call_args[1]
         assert call_args["model"] == "gpt-4o"
         assert call_args["messages"] == [{"role": "user", "content": "Hello"}]
-        assert call_args["tools"] == tools
+        assert call_args["tools"][0]["function"] == {
+            "name": "get_weather",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            },
+        }
         assert call_args["response_format"]["type"] == "json_schema"
         wire_schema = call_args["response_format"]["json_schema"]["schema"]
         city_schema = wire_schema["properties"]["result"]["properties"]["city"]
@@ -240,7 +272,128 @@ class TestLiteLLMClient:
         assert response.stop_reason == "tool_calls"
         assert response.usage is not None
         assert response.usage["prompt_tokens"] == 10
-        assert len(response.tool_calls) == 1
+        assert response.tool_calls == [
+            ToolCall(
+                id="call_abc",
+                name="get_weather",
+                arguments=LLMOutput.from_json({"city": "Tokyo"}),
+            )
+        ]
+
+    async def test_complete_translates_native_tool_schema_and_arguments(
+        self,
+        mock_acompletion: AsyncMock,
+    ) -> None:
+        tool = StepTool(
+            name="categorize",
+            description="Categorize labels.",
+            arguments=JsonSchemaDocument.from_mapping(
+                {
+                    "type": "object",
+                    "properties": {
+                        "labels": {
+                            "type": "object",
+                            "additionalProperties": {"type": "integer"},
+                        }
+                    },
+                    "required": ["labels"],
+                    "additionalProperties": False,
+                }
+            ),
+            schema_source=ToolSchemaSource.GENERATED,
+        )
+        mock_acompletion.return_value = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="tool_calls",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant",
+                        tool_calls=[
+                            ChatCompletionMessageToolCall(
+                                id="call-1",
+                                function={
+                                    "name": "categorize",
+                                    "arguments": (
+                                        '{"labels":[{"key":"important","value":2}]}'
+                                    ),
+                                },
+                                type="function",
+                            )
+                        ],
+                    ),
+                )
+            ]
+        )
+
+        response = await LiteLLMClient(model="gpt-4o").complete(
+            [Message(role="user", content="Categorize.")],
+            tools=[tool],
+        )
+
+        sent_schema = mock_acompletion.call_args.kwargs["tools"][0]["function"][
+            "parameters"
+        ]
+        assert sent_schema["properties"]["labels"]["type"] == "array"
+        assert response.tool_calls[0].arguments.data == {"labels": {"important": 2}}
+
+    async def test_complete_encodes_native_tool_call_history_for_wire_schema(
+        self,
+        mock_acompletion: AsyncMock,
+    ) -> None:
+        tool = StepTool(
+            name="categorize",
+            description="",
+            arguments=JsonSchemaDocument.from_mapping(
+                {
+                    "type": "object",
+                    "properties": {
+                        "labels": {
+                            "type": "object",
+                            "additionalProperties": {"type": "integer"},
+                        }
+                    },
+                    "required": ["labels"],
+                    "additionalProperties": False,
+                }
+            ),
+            schema_source=ToolSchemaSource.GENERATED,
+        )
+        mock_acompletion.return_value = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(role="assistant", content="done"),
+                )
+            ]
+        )
+        messages = [
+            Message(role="user", content="Categorize."),
+            Message(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id="call-1",
+                        name="categorize",
+                        arguments=LLMOutput.from_json({"labels": {"important": 2}}),
+                    )
+                ],
+            ),
+            Message(role="tool", content="done", tool_call_id="call-1"),
+        ]
+
+        await LiteLLMClient(model="gpt-4o").complete(messages, tools=[tool])
+
+        sent_call = mock_acompletion.call_args.kwargs["messages"][1]["tool_calls"][0]
+        assert sent_call == {
+            "id": "call-1",
+            "type": "function",
+            "function": {
+                "name": "categorize",
+                "arguments": ('{"labels":[{"key":"important","value":2}]}'),
+            },
+        }
 
     def test_handle_response_rejects_custom_tool_calls(self) -> None:
         response = ModelResponse(
@@ -265,7 +418,37 @@ class TestLiteLLMClient:
             ],
         )
 
-        with pytest.raises(RuntimeError, match="unsupported custom tool call"):
+        with pytest.raises(
+            LLMResponseDecodingError,
+            match="unsupported custom tool call",
+        ):
+            handle_response(response, requested_model="gpt-4o", output=None)
+
+    def test_handle_response_rejects_malformed_tool_arguments(self) -> None:
+        response = ModelResponse(
+            model="gpt-4o",
+            choices=[
+                Choices(
+                    finish_reason="tool_calls",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant",
+                        tool_calls=[
+                            ChatCompletionMessageToolCall(
+                                id="call-1",
+                                function={
+                                    "name": "lookup",
+                                    "arguments": "not json",
+                                },
+                                type="function",
+                            )
+                        ],
+                    ),
+                )
+            ],
+        )
+
+        with pytest.raises(LLMResponseDecodingError):
             handle_response(response, requested_model="gpt-4o", output=None)
 
     async def test_complete_captures_reasoning_content(
@@ -455,6 +638,7 @@ class TestLiteLLMClient:
             reasoning_callback=None,
             messages=[{"role": "user", "content": "Hello"}],
             output=None,
+            tool_argument_formats={},
             requested_model="gpt-4o",
         )
 
@@ -490,6 +674,7 @@ class TestLiteLLMClient:
             reasoning_callback=reasoning_callback,
             messages=[{"role": "user", "content": "Hello"}],
             output=None,
+            tool_argument_formats={},
             requested_model="gpt-4o",
         )
 
@@ -622,9 +807,130 @@ class TestLiteLLMClient:
             reasoning_callback=None,
             messages=[],
             output=None,
+            tool_argument_formats={
+                "lookup": StructuredValueFormat.from_generated_schema(
+                    JsonSchemaDocument.from_mapping(
+                        {
+                            "type": "object",
+                            "properties": {"key": {"type": "string"}},
+                            "required": ["key"],
+                            "additionalProperties": False,
+                        }
+                    )
+                )
+            },
             requested_model="gpt-4o",
         )
 
         assert OutputStringEnd(("tool_calls", 0, "name"), "lookup") in events
         assert events.count(OutputStringEnd(("tool_calls", 0, "name"), "lookup")) == 1
         assert OutputStringEnd(("tool_calls", 0, "arguments", "key"), "item") in events
+
+    async def test_handle_stream_restores_translated_native_tool_arguments(
+        self,
+        mocker: MockerFixture,
+    ) -> None:
+        async def stream() -> AsyncIterator[SimpleNamespace]:
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None,
+                            reasoning_content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    function=SimpleNamespace(
+                                        name="categorize",
+                                        arguments=('{"labels":[{"key":"important",'),
+                                    ),
+                                )
+                            ],
+                        )
+                    )
+                ]
+            )
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None,
+                            reasoning_content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    function=SimpleNamespace(
+                                        name=None,
+                                        arguments='"value":2}]}',
+                                    ),
+                                )
+                            ],
+                        )
+                    )
+                ]
+            )
+
+        built = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="tool_calls",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant",
+                        tool_calls=[
+                            ChatCompletionMessageToolCall(
+                                id="call-1",
+                                function={
+                                    "name": "categorize",
+                                    "arguments": (
+                                        '{"labels":[{"key":"important","value":2}]}'
+                                    ),
+                                },
+                                type="function",
+                            )
+                        ],
+                    ),
+                )
+            ]
+        )
+        mocker.patch("litellm.stream_chunk_builder", return_value=built)
+        value_format = StructuredValueFormat.from_generated_schema(
+            JsonSchemaDocument.from_mapping(
+                {
+                    "type": "object",
+                    "properties": {
+                        "labels": {
+                            "type": "object",
+                            "additionalProperties": {"type": "integer"},
+                        }
+                    },
+                    "required": ["labels"],
+                    "additionalProperties": False,
+                }
+            )
+        )
+        events: list[OutputStreamEvent] = []
+
+        async def collect(event: OutputStreamEvent) -> None:
+            events.append(event)
+
+        response = await handle_stream(
+            stream(),
+            content_callback=None,
+            output_callback=collect,
+            reasoning_callback=None,
+            messages=[],
+            output=None,
+            tool_argument_formats={"categorize": value_format},
+            requested_model="gpt-4o",
+        )
+
+        assert OutputStringEnd(("tool_calls", 0, "name"), "categorize") in events
+        assert (
+            OutputScalar(
+                ("tool_calls", 0, "arguments", "labels", "important"),
+                2,
+            )
+            in events
+        )
+        assert response.tool_calls[0].arguments.data == {"labels": {"important": 2}}
