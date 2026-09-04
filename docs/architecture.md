@@ -90,7 +90,7 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `streaming.py` | The tool-arg streaming side channel (`preview`). | `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: `step_decision.py` owns the provider-neutral decision specification and validation; prompt renderers own textual representation; transports own response instructions, communication, decoding, and logical progress; `streaming.py` decodes incremental JSON; and `_strategy.py` coordinates transport, validation, and repair. | `LLMInferenceStrategy`, `LLMClient`, `PromptRenderer`, `MarkdownPromptRenderer`, `DecisionSpec`, `DecisionTransport`, `StructuredDecisionTransport`, `PromptedDecisionTransport`, `NativeDecisionTransport`, `LLMOutput`, `ResultFormat` |
+| `llm/` | The **default** `InferenceStrategy`: `step_decision.py` owns the provider-neutral decision specification and validation; prompt renderers own textual representation; `transports/` separates the shared contract, JSON-decision instructions, and structured, prompted, and native implementations; `streaming.py` decodes incremental JSON; and `_strategy.py` coordinates transport, validation, and repair. | `LLMInferenceStrategy`, `LLMClient`, `PromptRenderer`, `MarkdownPromptRenderer`, `DecisionSpec`, `DecisionTransport`, `StructuredDecisionTransport`, `PromptedDecisionTransport`, `NativeDecisionTransport`, `LLMOutput`, `ResultFormat` |
 | `pydantic/` | The default `ModelBackend`: callable inspection plus result JSON Schema generation and restoration. It does not know the logical step-decision shape. | `PydanticModelBackend` |
 | `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
 
@@ -103,8 +103,8 @@ implementation noted in parentheses.
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
 | `PromptRenderer` | change the complete prompt's text format and wording | `llm/MarkdownPromptRenderer` |
-| `DecisionTransport` | change how a decision request is prompted, sent, and decoded | `llm.transports/StructuredDecisionTransport` |
-| `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
+| `DecisionTransport` | change how a decision request is prompted, sent, and decoded | `llm/transports/` |
+| `LLMClient` (in `llm/_client.py`) | add an LLM provider; raise `LLMResponseDecodingError` for received responses that cannot be represented safely | `sefia_litellm.LiteLLMClient` |
 | `ModelBackend` | replace callable inspection and result schema generation/restoration together | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |

@@ -1,6 +1,6 @@
-from ._client import LLMClient
+from ._client import LLMClient, LLMResponseDecodingError
 from ._markdown_prompt_renderer import MarkdownPromptRenderer
-from ._messages import LLMResponse, LLMResponseDecodingError, Message, ToolCall
+from ._messages import LLMResponse, Message, ToolCall
 from ._prompt_renderer import (
     DecisionPrompt,
     PromptRenderer,

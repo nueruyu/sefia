@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from dataclasses import replace
-from typing import Any, AsyncGenerator, Callable, Coroutine
+from dataclasses import fields, is_dataclass, replace
+from typing import Any, AsyncGenerator, Callable, Coroutine, cast
 
 import glyff
 from glyff.serialization import (
@@ -39,6 +39,28 @@ from .llm import LLMClient, LLMOutput, LLMResponse, Message
 from .llm.step_decision import DecisionSpec, StepTool
 from .llm.streaming import OutputStreamCallback
 from .pydantic._json_utils import pydantic_json_default
+
+
+def _snapshot_value(value: Any) -> Any:
+    if isinstance(value, LLMOutput):
+        return _snapshot_value(value.data)
+    if is_dataclass(value) and not isinstance(value, type):
+        result: dict[str, Any] = {}
+        for item in fields(value):
+            converted = _snapshot_value(getattr(value, item.name))
+            if converted is not None:
+                result[item.name] = converted
+        return result
+    if isinstance(value, dict):
+        result = {}
+        for key, item in cast(dict[str, Any], value).items():
+            converted = _snapshot_value(item)
+            if converted is not None:
+                result[key] = converted
+        return result
+    if isinstance(value, list):
+        return [_snapshot_value(item) for item in cast(list[Any], value)]
+    return value
 
 
 @final
@@ -65,7 +87,7 @@ class MockLLMClient(LLMClient):
     ) -> LLMResponse:
         self.requests.append(
             {
-                "messages": [m.to_dict(exclude_none=True) for m in messages],
+                "messages": [_snapshot_value(message) for message in messages],
                 "tools": tools,
                 "decision_model": decision_model,
                 "stream_callback": stream_callback,

@@ -21,7 +21,7 @@ class DecisionPrompt:
 
 
 class PromptRenderer(ABC):
-    """Renders a complete inference prompt as text."""
+    """Renders text representations that a transport sends to an LLM."""
 
     @abstractmethod
     def render(self, prompt: DecisionPrompt) -> str: ...
