@@ -50,9 +50,9 @@ from sefia_litellm.exceptions import (
     InferenceTemporarilyUnavailableError,
     InferenceTimeoutError,
 )
-from sefia_litellm._response import (
+from sefia_litellm._response import handle_response
+from sefia_litellm._streaming import (
     _extract_native_tool_call_fragments,
-    handle_response,
     handle_stream,
 )
 from sefia_litellm._schema import StructuredValueFormat

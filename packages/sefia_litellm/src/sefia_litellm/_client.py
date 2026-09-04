@@ -13,7 +13,8 @@ from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import OutputStreamCallback
 
 from ._request import build_completion_request
-from ._response import handle_response, handle_stream
+from ._response import handle_response
+from ._streaming import handle_stream
 from .exceptions import (
     InferenceConnectionError,
     InferenceRateLimitError,

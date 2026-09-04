@@ -138,7 +138,8 @@ implementation noted in parentheses.
 | --- | --- |
 | `_client.py` | `LiteLLMClient` orchestration, runtime logging configuration, and LiteLLM exception mapping. |
 | `_request.py` | Converts core messages, tools, and a logical decision model into the unified LiteLLM wire schema, messages, kwargs, and native `response_format`. |
-| `_response.py` | Converts completed responses and streams from the unified LiteLLM wire schema into `LLMResponse`, including tool-argument restoration, callbacks, usage, cost, and final output decoding. |
+| `_response.py` | Converts completed responses from the unified LiteLLM wire schema into `LLMResponse`, including tool-argument restoration, usage, cost, and final output decoding. |
+| `_streaming.py` | Consumes response streams, dispatches text and reasoning callbacks, decodes structured and native tool-argument progress, and delegates the completed response to `_response.py`. |
 | `_schema/_structured_decision.py` | Builds the provider-compatible decision schema and restores provider representations to the logical `DecisionSpec` shape. |
 | `_schema/_policy.py` | Declares independent generated/user-defined schema policies, applies permitted corrections, and validates the shared strict-output constraints. |
 | `_schema/_uniform_dictionary.py` | Define uniform-dictionary entry-array encoding and decoding. |
