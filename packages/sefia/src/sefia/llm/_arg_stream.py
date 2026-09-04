@@ -5,58 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from typing import Literal
-
 from sefia.streaming import ArgStream
-from sefia.llm.streaming import (
-    OutputStreamEvent,
-    StringDelta as OutputStringDelta,
-    StringEnd as OutputStringEnd,
-)
 
-from ..streaming import (
-    ArgEvent,
-    Scalar,
-    StreamHandler,
-    StringDelta,
-    StringEnd,
-)
+from ..streaming import ArgEvent, StreamHandler
 
 logger = logging.getLogger(__name__)
 
 _HANDLER_DRAIN_TIMEOUT = 1.0
-
-
-@dataclass(frozen=True)
-class ToolCallPath:
-    index: int
-    field: Literal["name", "argument"]
-    argument_name: str | None = None
-
-
-def parse_tool_call_path(path: tuple[str | int, ...]) -> ToolCallPath | None:
-    if len(path) < 3 or path[0] != "tool_calls":
-        return None
-
-    index = path[1]
-    if not isinstance(index, int):
-        return None
-
-    field = path[2]
-    if len(path) == 3 and field == "name":
-        return ToolCallPath(index=index, field="name")
-
-    if len(path) == 4 and field == "arguments":
-        argument_name = path[3]
-        if isinstance(argument_name, str):
-            return ToolCallPath(
-                index=index,
-                field="argument",
-                argument_name=argument_name,
-            )
-
-    return None
 
 
 _CLOSED = object()
@@ -121,12 +76,15 @@ class ToolArgStreamer:
         self._channels: dict[int, _ArgStreamChannel] = {}
         self._tasks: list[asyncio.Task[None]] = []
 
-    def on_event(self, event: OutputStreamEvent) -> None:
-        try:
-            self._dispatch(event)
-        except Exception:
-            logger.exception("Error processing event in ToolArgStreamer")
-            self._close_all_channels()
+    def identify_tool(self, index: int, name: str) -> None:
+        self._resolve_tool_name(index, name)
+
+    def on_argument(self, index: int, event: ArgEvent) -> None:
+        channel = self._channels.get(index)
+        if channel is not None:
+            channel.feed(event)
+        elif index not in self._index_to_name:
+            self._buffers.setdefault(index, []).append(event)
 
     async def close(self) -> None:
         self._close_all_channels()
@@ -141,26 +99,6 @@ class ToolArgStreamer:
             task.cancel()
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
-
-    def _dispatch(self, event: OutputStreamEvent) -> None:
-        tool_path = parse_tool_call_path(event.path)
-        if tool_path is None:
-            return
-
-        if tool_path.field == "name":
-            if isinstance(event, OutputStringEnd):
-                self._resolve_tool_name(tool_path.index, event.value)
-            return
-
-        arg_event = _to_arg_event(tool_path, event)
-        if arg_event is None:
-            return
-
-        channel = self._channels.get(tool_path.index)
-        if channel is not None:
-            channel.feed(arg_event)
-        elif tool_path.index not in self._index_to_name:
-            self._buffers.setdefault(tool_path.index, []).append(arg_event)
 
     def _resolve_tool_name(self, index: int, name: str) -> None:
         if index in self._index_to_name:
@@ -197,15 +135,3 @@ class ToolArgStreamer:
                 "Tool argument stream handler raised; ignoring.",
                 exc_info=(type(error), error, error.__traceback__),
             )
-
-
-def _to_arg_event(tool_path: ToolCallPath, event: OutputStreamEvent) -> ArgEvent | None:
-    name = tool_path.argument_name
-    if name is None:
-        return None
-
-    if isinstance(event, OutputStringDelta):
-        return StringDelta(name=name, text=event.text)
-    if isinstance(event, OutputStringEnd):
-        return StringEnd(name=name, value=event.value)
-    return Scalar(name=name, value=event.value)

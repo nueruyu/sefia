@@ -7,11 +7,15 @@ from typing import TYPE_CHECKING, Any, Coroutine, cast
 from sefia.llm import LLMResponse, ToolCall
 from sefia.llm.streaming import OutputStreamCallback
 
-from ._schema import DecisionEnvelopeFormat
+from ._schema import StructuredDecisionFormat
 from ._output_stream import OutputEventStreamer
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage
+    from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
+        ChatCompletionMessageCustomToolCall,
+        ChatCompletionMessageToolCall,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +24,7 @@ def handle_response(
     response: ModelResponse,
     *,
     requested_model: str,
-    output: DecisionEnvelopeFormat | None,
+    output: StructuredDecisionFormat | None,
 ) -> LLMResponse:
     if not response.choices:
         raise RuntimeError(
@@ -30,10 +34,7 @@ def handle_response(
 
     choice: Choices = response.choices[0]
     message = choice.message
-    tool_calls = [
-        ToolCall(id=call.id, function=call.function.model_dump())
-        for call in (message.tool_calls or [])
-    ]
+    tool_calls = [_function_tool_call(call) for call in (message.tool_calls or [])]
     usage = cast("Usage | None", cast(dict[str, Any], response).get("usage"))
     result = LLMResponse(
         model=response.model,
@@ -48,6 +49,18 @@ def handle_response(
     return result
 
 
+def _function_tool_call(
+    call: ChatCompletionMessageToolCall | ChatCompletionMessageCustomToolCall,
+) -> ToolCall:
+    if getattr(call, "type", None) == "custom":
+        raise RuntimeError("LLM returned an unsupported custom tool call")
+    function_call = cast("ChatCompletionMessageToolCall", call)
+    return ToolCall(
+        id=function_call.id,
+        function=function_call.function.model_dump(),
+    )
+
+
 async def handle_stream(
     stream: AsyncIterator[Any],
     *,
@@ -55,7 +68,7 @@ async def handle_stream(
     output_callback: OutputStreamCallback | None,
     reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
     messages: list[dict[str, Any]],
-    output: DecisionEnvelopeFormat | None,
+    output: StructuredDecisionFormat | None,
     requested_model: str,
 ) -> LLMResponse:
     import litellm
@@ -64,7 +77,7 @@ async def handle_stream(
     chunks: list[Any] = []
     reasoning_parts: list[str] = []
     event_streamer = (
-        OutputEventStreamer(output, output_callback)
+        OutputEventStreamer(output_callback)
         if output is not None and output_callback is not None
         else None
     )
@@ -105,7 +118,7 @@ async def handle_stream(
 
 
 def _decode_output(
-    response: LLMResponse, output: DecisionEnvelopeFormat | None
+    response: LLMResponse, output: StructuredDecisionFormat | None
 ) -> None:
     if output is None or response.content is None:
         return

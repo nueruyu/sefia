@@ -1,3 +1,3 @@
-from ._decision_envelope import DecisionEnvelope, DecisionEnvelopeFormat
+from ._structured_decision import StructuredDecisionFormat
 
-__all__ = ["DecisionEnvelope", "DecisionEnvelopeFormat"]
+__all__ = ["StructuredDecisionFormat"]

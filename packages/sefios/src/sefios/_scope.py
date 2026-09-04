@@ -12,7 +12,7 @@ from glyff_pydantic import (
     PydanticSerializer,
 )
 from sefia import HistoryStorage, Policy, Profile, ToolCollector
-from sefia.llm import LLMClient
+from sefia.llm import LLMClient, PromptRenderer
 
 from ._session_state import bind_session_storage
 from .persistence import MemoryPersistence, PersistenceProvider
@@ -51,6 +51,7 @@ class SessionScope:
         persistence: PersistenceProvider | None = None,
         history_storage: HistoryStorage | None = None,
         tool_collector: ToolCollector | None = None,
+        prompt_renderer: PromptRenderer | None = None,
     ):
         self.model = model
         self.llm_client = llm_client
@@ -62,6 +63,7 @@ class SessionScope:
         self.persistence = persistence or MemoryPersistence()
         self.history_storage = history_storage
         self.tool_collector = tool_collector
+        self.prompt_renderer = prompt_renderer
 
     @asynccontextmanager
     async def session(
@@ -126,6 +128,7 @@ class SessionScope:
                     stream=resolved_stream,
                     tool_collector=resolved_tool_collector,
                     history_storage=self.history_storage,
+                    prompt_renderer=self.prompt_renderer,
                     max_repair_attempts=self.max_repair_attempts,
                 ) as session:
                     yield session

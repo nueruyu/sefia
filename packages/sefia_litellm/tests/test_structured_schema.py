@@ -18,34 +18,30 @@ from sefia.inference import FunctionInfo, StepDecision, ToolCallsDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm.json_schema import SchemaNode
-from sefia.llm.streaming import OutputStreamEvent
+from sefia.llm.streaming import OutputStreamEvent, StringEnd as OutputStringEnd
+from sefia.llm.transports import StructuredDecisionTransport
 from sefia.llm.llm_output import LLMOutput
-from sefia.llm.step_decision import (
-    StepDecisionMode,
-    StepDecisionModel,
-    StepDecisionSpec,
-)
+from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.pydantic import PydanticModelBackend
-from sefia.streaming import ArgStream, StringEnd
-from sefia_litellm._schema import DecisionEnvelope, DecisionEnvelopeFormat
+from sefia_litellm._schema import StructuredDecisionFormat
 from sefia_litellm._output_stream import OutputEventStreamer
 
 
-def _decision_model(output_type: Any, tools: list[ToolEntry]) -> StepDecisionModel:
-    spec = StepDecisionSpec.for_inference(
-        name="StepDecision", output_type=output_type, tools=tools
+def _decision_model(output_type: Any, tools: list[ToolEntry]) -> DecisionSpec:
+    return DecisionSpec.for_inference(
+        output_type=output_type,
+        tools=tools,
+        result_format_factory=PydanticModelBackend(),
     )
-    return StepDecisionModel.from_spec(spec, PydanticModelBackend())
 
 
-def _prepare(decision: StepDecisionModel):
-    return DecisionEnvelopeFormat.from_model(decision)
+def _prepare(decision: DecisionSpec):
+    return StructuredDecisionFormat.from_model(decision)
 
 
 def _process(
-    decision: StepDecisionModel,
+    decision: DecisionSpec,
     data: Any,
     tool_call_ids: ToolCallIdRegistry | None = None,
 ) -> StepDecision:
@@ -53,36 +49,13 @@ def _process(
     return decision.validate(prepared.decode(data), tool_call_ids)
 
 
-def test_envelope_format_removes_payload_from_stream_paths() -> None:
-    envelope_format = _prepare(_decision_model(str, []))
+def test_structured_decision_format_returns_defensive_schema_copies() -> None:
+    decision_format = _prepare(_decision_model(str, [_tool()]))
 
-    assert envelope_format.to_payload_path(
-        ("payload", "tool_calls", 0, "arguments", "question")
-    ) == ("tool_calls", 0, "arguments", "question")
-
-
-def test_decision_envelope_models_the_wire_payload() -> None:
-    payload = LLMOutput.from_json({"decision": "result", "result": "done"})
-
-    envelope = DecisionEnvelope.from_output(LLMOutput.from_object({"payload": payload}))
-
-    assert envelope.payload.data == payload.data
-
-
-def test_decision_envelope_rejects_other_fields() -> None:
-    output = LLMOutput.from_json({"payload": {}, "extra": True})
-
-    with pytest.raises(ValueError, match="exactly one payload"):
-        DecisionEnvelope.from_output(output)
-
-
-def test_decision_envelope_format_returns_defensive_schema_copies() -> None:
-    envelope_format = _prepare(_decision_model(str, [_tool()]))
-
-    schema = envelope_format.schema.to_dict()
+    schema = decision_format.schema.to_dict()
     schema.clear()
 
-    assert envelope_format.schema.to_dict()
+    assert decision_format.schema.to_dict()
 
 
 def test_tool_description_is_part_of_the_wire_schema() -> None:
@@ -115,32 +88,44 @@ def test_generated_schema_titles_are_removed() -> None:
     assert "description" not in schema
 
 
-async def test_payload_stream_reaches_preview_as_a_logical_argument() -> None:
-    prepared = _prepare(_decision_model(Never, [_tool()]))
-    events: list[object] = []
+def test_wire_schema_omits_openapi_discriminator_for_provider_compatibility() -> None:
+    schema = _prepare(
+        _decision_model(
+            str,
+            [
+                _tool(),
+                _raw_tool(
+                    {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": False,
+                    }
+                ),
+            ],
+        )
+    ).schema.to_dict()
 
-    async def collect(_tool_call_id: str, stream: ArgStream) -> None:
-        async for event in stream:
-            events.append(event)
+    assert all(
+        "discriminator" not in cursor.node.value for cursor in SchemaNode(schema).walk()
+    )
 
-    streamer = ToolArgStreamer(
-        {"ask_user": collect},
-        lambda index: f"call-{index}",
-    )
-    wire_streamer = OutputEventStreamer(
-        prepared, lambda event: _dispatch_event(streamer, event)
-    )
+
+async def test_decision_stream_preserves_logical_paths() -> None:
+    events: list[OutputStreamEvent] = []
+
+    async def collect(event: OutputStreamEvent) -> None:
+        events.append(event)
+
+    wire_streamer = OutputEventStreamer(collect)
     await wire_streamer.feed(
-        '{"payload":{"decision":"tool_calls","tool_calls":['
-        '{"name":"ask_user","arguments":{"question":"Hello"}}]}}'
+        '{"decision":"tool_calls","tool_calls":['
+        '{"name":"ask_user","arguments":{"question":"Hello"}}]}'
     )
-    await streamer.close()
-
-    assert StringEnd(name="question", value="Hello") in events
-
-
-async def _dispatch_event(streamer: ToolArgStreamer, event: OutputStreamEvent) -> None:
-    streamer.on_event(event)
+    assert (
+        OutputStringEnd(path=("tool_calls", 0, "arguments", "question"), value="Hello")
+        in events
+    )
 
 
 async def ask_user(question: Annotated[str, Field(min_length=1)]) -> str:
@@ -194,8 +179,8 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tool_calls_array(schema: dict[str, Any]) -> dict[str, Any]:
-    payload = _resolve(cast(dict[str, Any], schema["properties"]["payload"]), schema)
-    tool_calls = payload["properties"]["tool_calls"]
+    decision = _resolve(schema, schema)
+    tool_calls = decision["properties"]["tool_calls"]
     if "anyOf" in tool_calls:
         return next(
             candidate
@@ -267,11 +252,9 @@ def test_result_shape_cannot_be_mistaken_for_a_tool_call() -> None:
     definition = _decision_model(Output, [_tool()])
 
     schema = _prepare(definition).schema.to_dict()
-    payload = SchemaNode(schema).properties()["payload"].value
-
     result_branch = next(
         branch
-        for branch in SchemaNode(payload).any_of()
+        for branch in SchemaNode(schema).any_of()
         if branch.properties()["decision"].value["const"] == "result"
     )
     output = result_branch.properties()["result"]
@@ -335,7 +318,7 @@ def test_raw_definition_is_not_normalized_with_typed_decision_model() -> None:
     )
 
     with pytest.raises(ValueError, match=r"missing \['name'\]"):
-        DecisionEnvelopeFormat.from_model(definition)
+        StructuredDecisionFormat.from_model(definition)
 
 
 def test_conflicting_tool_definition_names_are_renamed() -> None:
@@ -438,20 +421,16 @@ def test_transitive_definition_collisions_remain_fragment_local() -> None:
     first = _process(
         definition,
         {
-            "payload": {
-                "decision": "tool_calls",
-                "tool_calls": [{"name": "first", "arguments": {"value": "one"}}],
-            }
+            "decision": "tool_calls",
+            "tool_calls": [{"name": "first", "arguments": {"value": "one"}}],
         },
         ToolCallIdRegistry(),
     )
     second = _process(
         definition,
         {
-            "payload": {
-                "decision": "tool_calls",
-                "tool_calls": [{"name": "second", "arguments": {"value": 2}}],
-            }
+            "decision": "tool_calls",
+            "tool_calls": [{"name": "second", "arguments": {"value": 2}}],
         },
         ToolCallIdRegistry(),
     )
@@ -616,8 +595,8 @@ def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
 
 
 def _result_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    payload = _resolve(schema["properties"]["payload"], schema)
-    return _resolve(payload["properties"]["result"], schema)
+    decision = _resolve(schema, schema)
+    return _resolve(decision["properties"]["result"], schema)
 
 
 def test_mapping_result_is_lowered_and_decoded() -> None:
@@ -633,13 +612,11 @@ def test_mapping_result_is_lowered_and_decoded() -> None:
     decision = _process(
         definition,
         {
-            "payload": {
-                "decision": "result",
-                "result": [
-                    {"key": "Maintainability", "value": "good"},
-                    {"key": "Dependencies", "value": "current"},
-                ],
-            }
+            "decision": "result",
+            "result": [
+                {"key": "Maintainability", "value": "good"},
+                {"key": "Dependencies", "value": "current"},
+            ],
         },
     )
 
@@ -660,15 +637,13 @@ def test_mapping_values_can_be_mappings() -> None:
     decision = _process(
         definition,
         {
-            "payload": {
-                "decision": "result",
-                "result": [
-                    {
-                        "key": "outer",
-                        "value": [{"key": "inner", "value": 1}],
-                    }
-                ],
-            }
+            "decision": "result",
+            "result": [
+                {
+                    "key": "outer",
+                    "value": [{"key": "inner", "value": 1}],
+                }
+            ],
         },
     )
 
@@ -682,20 +657,18 @@ def test_mapping_values_can_be_nested_to_arbitrary_depth() -> None:
     decision = _process(
         definition,
         {
-            "payload": {
-                "decision": "result",
-                "result": [
-                    {
-                        "key": "outer",
-                        "value": [
-                            {
-                                "key": "middle",
-                                "value": [{"key": "inner", "value": 1}],
-                            }
-                        ],
-                    }
-                ],
-            }
+            "decision": "result",
+            "result": [
+                {
+                    "key": "outer",
+                    "value": [
+                        {
+                            "key": "middle",
+                            "value": [{"key": "inner", "value": 1}],
+                        }
+                    ],
+                }
+            ],
         },
     )
 
@@ -752,17 +725,15 @@ def test_nested_mapping_result_is_lowered_and_decoded() -> None:
     decision = _process(
         definition,
         {
-            "payload": {
-                "decision": "result",
-                "result": {
-                    "issues_by_perspective": [
-                        {
-                            "key": "Maintainability",
-                            "value": [{"description": "Use clearer names."}],
-                        }
-                    ]
-                },
-            }
+            "decision": "result",
+            "result": {
+                "issues_by_perspective": [
+                    {
+                        "key": "Maintainability",
+                        "value": [{"description": "Use clearer names."}],
+                    }
+                ]
+            },
         },
     )
 
@@ -781,13 +752,11 @@ def test_mapping_restoration_rejects_duplicate_keys() -> None:
         _process(
             definition,
             {
-                "payload": {
-                    "decision": "result",
-                    "result": [
-                        {"key": "same", "value": "first"},
-                        {"key": "same", "value": "second"},
-                    ],
-                }
+                "decision": "result",
+                "result": [
+                    {"key": "same", "value": "first"},
+                    {"key": "same", "value": "second"},
+                ],
             },
         )
 
@@ -799,10 +768,8 @@ def test_mapping_restoration_rejects_malformed_entries() -> None:
         _process(
             definition,
             {
-                "payload": {
-                    "decision": "result",
-                    "result": [{"key": "missing-value"}],
-                }
+                "decision": "result",
+                "result": [{"key": "missing-value"}],
             },
         )
 
@@ -813,10 +780,8 @@ def test_mapping_nested_in_list_is_lowered_and_decoded() -> None:
     decision = _process(
         definition,
         {
-            "payload": {
-                "decision": "result",
-                "result": [[{"key": "count", "value": 3}]],
-            }
+            "decision": "result",
+            "result": [[{"key": "count", "value": 3}]],
         },
     )
 
@@ -840,12 +805,10 @@ def test_mapping_nested_in_union_is_lowered_and_decoded() -> None:
     decision = _process(
         definition,
         {
-            "payload": {
-                "decision": "result",
-                "result": {
-                    "labels": [{"key": "important", "value": 2}],
-                },
-            }
+            "decision": "result",
+            "result": {
+                "labels": [{"key": "important", "value": 2}],
+            },
         },
     )
 
@@ -870,13 +833,11 @@ def test_mapping_union_selects_the_fully_valid_wire_branch() -> None:
     decision = _process(
         definition,
         {
-            "payload": {
-                "decision": "result",
-                "result": {
-                    "x": [1],
-                    "y": [{"key": "n", "value": 2}],
-                },
-            }
+            "decision": "result",
+            "result": {
+                "x": [1],
+                "y": [{"key": "n", "value": 2}],
+            },
         },
     )
 
@@ -905,15 +866,13 @@ def test_mapping_tool_argument_is_lowered_and_decoded() -> None:
     decision = _process(
         definition,
         {
-            "payload": {
-                "decision": "tool_calls",
-                "tool_calls": [
-                    {
-                        "name": "categorize",
-                        "arguments": {"labels": [{"key": "important", "value": 2}]},
-                    }
-                ],
-            }
+            "decision": "tool_calls",
+            "tool_calls": [
+                {
+                    "name": "categorize",
+                    "arguments": {"labels": [{"key": "important", "value": 2}]},
+                }
+            ],
         },
         ToolCallIdRegistry(),
     )
@@ -931,22 +890,20 @@ def test_nested_mapping_tool_argument_is_lowered_and_decoded() -> None:
     decision = _process(
         definition,
         {
-            "payload": {
-                "decision": "tool_calls",
-                "tool_calls": [
-                    {
-                        "name": "categorize_nested",
-                        "arguments": {
-                            "values": [
-                                {
-                                    "key": "outer",
-                                    "value": [{"key": "inner", "value": 1}],
-                                }
-                            ]
-                        },
-                    }
-                ],
-            }
+            "decision": "tool_calls",
+            "tool_calls": [
+                {
+                    "name": "categorize_nested",
+                    "arguments": {
+                        "values": [
+                            {
+                                "key": "outer",
+                                "value": [{"key": "inner", "value": 1}],
+                            }
+                        ]
+                    },
+                }
+            ],
         },
         ToolCallIdRegistry(),
     )
@@ -955,21 +912,21 @@ def test_nested_mapping_tool_argument_is_lowered_and_decoded() -> None:
     assert decision.calls[0].arguments == {"values": {"outer": {"inner": 1}}}
 
 
-def test_step_decision_spec_rejects_tool_modes_without_tools() -> None:
+def test_decision_spec_rejects_tool_modes_without_tools() -> None:
     with pytest.raises(ValueError, match="require at least one tool"):
-        StepDecisionSpec(
-            "StepDecision",
-            Never,
-            [],
-            StepDecisionMode.TOOLS_REQUIRED,
+        DecisionSpec(
+            output_type=Never,
+            tools=[],
+            mode=StepDecisionMode.TOOLS_REQUIRED,
+            result_format_factory=PydanticModelBackend(),
         )
 
     with pytest.raises(ValueError, match="require at least one tool"):
-        StepDecisionSpec(
-            "StepDecision",
-            str,
-            [],
-            StepDecisionMode.TOOLS_OR_RESULT,
+        DecisionSpec(
+            output_type=str,
+            tools=[],
+            mode=StepDecisionMode.TOOLS_OR_RESULT,
+            result_format_factory=PydanticModelBackend(),
         )
 
 
@@ -981,15 +938,16 @@ class TestToolCallValidation:
         client.complete.return_value = LLMResponse(
             content=content,
             structured_output=LLMOutput.from_json(
-                cast(dict[str, Any], json.loads(content))["payload"]
+                cast(dict[str, Any], json.loads(content))
             ),
         )
-        formatter = Mock()
-        formatter.format_arguments.return_value = "<arguments/>"
+        renderer = Mock()
+        renderer.render.return_value = "prompt"
         return LLMInferenceStrategy(
             llm_client=client,
             result_format_factory=PydanticModelBackend(),
-            prompt_formatter=formatter,
+            prompt_renderer=renderer,
+            decision_transport=StructuredDecisionTransport(),
         )
 
     def _registry(self) -> ToolRegistry:
@@ -997,8 +955,8 @@ class TestToolCallValidation:
         registry.add(ask_user, name="ask_user")
         return registry
 
-    async def _decide(self, payload: dict[str, Any]) -> StepDecision:
-        strategy = self._strategy(json.dumps({"payload": payload}))
+    async def _decide(self, decision: dict[str, Any]) -> StepDecision:
+        strategy = self._strategy(json.dumps(decision))
         return await strategy.decide_next_step(
             FunctionInfo(
                 qualname="test",

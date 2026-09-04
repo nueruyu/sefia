@@ -9,7 +9,6 @@ from ._interfaces import (
     StepContext,
     StepMiddleware,
 )
-from ._markers import AsRawText
 from ._profiles import Profile
 from ._session import Session
 from ._tool_context import current_tool_call_id, current_tool_call_id_for
@@ -30,7 +29,6 @@ __all__ = [
     "policy",
     "profile",
     "Profile",
-    "AsRawText",
     "Session",
     "current_tool_call_id",
     "current_tool_call_id_for",

@@ -123,7 +123,9 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
                     await _Agent(Notes(), Input(get_input=get_input)).chat()
 
     assert len(mock_llm.requests) == 4
-    assert len(mock_llm.requests[3]["messages"]) < len(mock_llm.requests[2]["messages"])
+    compacted_prompt = mock_llm.requests[3]["messages"][0]["content"]
+    previous_prompt = mock_llm.requests[2]["messages"][0]["content"]
+    assert len(compacted_prompt) < len(previous_prompt)
 
     answers[seen[0].interaction_id] = "No, that's all."
 

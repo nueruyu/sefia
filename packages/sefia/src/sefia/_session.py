@@ -13,7 +13,9 @@ from ._tool_system import ToolCollector
 from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
 from .llm._strategy import LLMInferenceStrategy
-from .llm._xml_prompt_formatter import XmlPromptFormatter
+from .llm._markdown_prompt_renderer import MarkdownPromptRenderer
+from .llm._prompt_renderer import PromptRenderer
+from .llm.transports import DecisionTransport, StructuredDecisionTransport
 from .pydantic._json_utils import pydantic_json_default
 from .pydantic._model_backend import PydanticModelBackend
 from .tool_collectors import DefaultToolCollector
@@ -37,6 +39,8 @@ class Session:
         stream: bool = False,
         history_storage: HistoryStorage | None = None,
         max_repair_attempts: int = 2,
+        prompt_renderer: PromptRenderer | None = None,
+        decision_transport: DecisionTransport | None = None,
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
@@ -49,15 +53,18 @@ class Session:
         self._tool_collector = tool_collector or DefaultToolCollector(
             inspector=model_backend
         )
-        prompt_formatter = XmlPromptFormatter(json_default=pydantic_json_default)
+        prompt_renderer = prompt_renderer or MarkdownPromptRenderer(
+            json_default=pydantic_json_default
+        )
+        decision_transport = decision_transport or StructuredDecisionTransport()
 
         # A profile only swaps the client; the rest of the strategy is shared.
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
                 result_format_factory=model_backend,
-                prompt_formatter=prompt_formatter,
-                json_default=pydantic_json_default,
+                prompt_renderer=prompt_renderer,
+                decision_transport=decision_transport,
                 stream=stream,
                 max_repair_attempts=max_repair_attempts,
             )

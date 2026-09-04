@@ -1,7 +1,6 @@
 """Opinionated stack for building applications with the Sefia framework."""
 
 from sefia import (
-    AsRawText,
     Policy,
     Profile,
     Tools,
@@ -44,7 +43,6 @@ __all__ = [
     "Policy",
     "Profile",
     "Tools",
-    "AsRawText",
     "domain",
     # sefios' own front door and batteries.
     "SessionScope",

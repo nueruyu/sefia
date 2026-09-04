@@ -2,9 +2,9 @@ from importlib import import_module
 
 from sefia._tool_system import SignatureToolEntry, ToolEntry
 from sefia.llm.json_schema import SchemaNode
-from sefia.llm.step_decision import StepDecisionModel, StepDecisionSpec
+from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import PydanticModelBackend
-from sefia_litellm._schema import DecisionEnvelopeFormat
+from sefia_litellm._schema import StructuredDecisionFormat
 from sefios.tools import WebSearch
 
 news_agents = import_module("examples.01_news_article.agents")
@@ -13,10 +13,11 @@ quality_models = import_module("examples.02_code_quality.models")
 
 
 def _decision_schema(output_type: object, tools: list[ToolEntry]):
-    spec = StepDecisionSpec.for_inference(
-        name="StepDecision", output_type=output_type, tools=tools
+    return DecisionSpec.for_inference(
+        output_type=output_type,
+        tools=tools,
+        result_format_factory=PydanticModelBackend(),
     )
-    return StepDecisionModel.from_spec(spec, PydanticModelBackend())
 
 
 def test_news_writer_schema_composes_nested_research_tool_types() -> None:
@@ -31,19 +32,21 @@ def test_news_writer_schema_composes_nested_research_tool_types() -> None:
     )
 
     model = _decision_schema(news_models.NewsArticle, [tool])
-    schema = DecisionEnvelopeFormat.from_model(model).schema.to_dict()
+    schema = StructuredDecisionFormat.from_model(model).schema.to_dict()
 
-    assert schema["additionalProperties"] is False
+    assert all(
+        branch.additional_properties() is False
+        for branch in SchemaNode(schema).any_of()
+    )
 
 
 def test_code_quality_report_schema_lowers_perspective_mapping() -> None:
     model = _decision_schema(quality_models.QualityReport, [])
-    schema = DecisionEnvelopeFormat.from_model(model).schema.to_dict()
+    schema = StructuredDecisionFormat.from_model(model).schema.to_dict()
 
-    payload = SchemaNode(schema).properties()["payload"]
-    perspective_issues = payload.properties()["result"].properties()[
-        "issues_by_perspective"
-    ]
+    perspective_issues = (
+        SchemaNode(schema).properties()["result"].properties()["issues_by_perspective"]
+    )
     assert perspective_issues.type == "array"
     items = perspective_issues.child("items")
     assert items is not None

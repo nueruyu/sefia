@@ -76,11 +76,17 @@ loop:
 
 ## Turning a function into a prompt
 
-`LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) does the core
-translation. Instead of provider-native tool-calling, it asks the model for one
-unified structured-output schema.
+`LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) coordinates five
+domain concepts:
 
-A `StepDecisionSpec` selects one of three shapes:
+1. `DecisionSpec` describes which next decisions are valid.
+2. `DecisionPrompt` gathers the task, available tools, prior interactions, and any
+   rejected response.
+3. `PromptRenderer` turns that prompt into one complete text string.
+4. `DecisionTransport` delivers the text and returns a logical decision response.
+5. `DecisionSpec` validates that response as a `StepDecision`.
+
+`DecisionSpec` selects one of three shapes:
 
 | Return type | Mode | Step-decision shape |
 | --- | --- | --- |
@@ -93,14 +99,10 @@ A `StepDecisionSpec` selects one of three shapes:
 `StepDecision`s. `llm/json_schema` imports `$defs`, resolves name collisions, and
 rewrites local references without knowing about tools or Pydantic. Recursive JSON
 value types and `SchemaNode` accessors keep schema traversal out of `dict[str, Any]`.
-The logical `StepDecisionModel` crosses the `LLMClient` boundary without first being
-flattened into one JSON Schema document. In `sefia_litellm`, the request adapter
-prepares the result and each tool-argument schema separately, while the schema
-adapter composes the decision and `payload` envelopes. The request uses that wire
-schema as native structured output or a prompt instruction. Typed mappings are
-reversibly encoded as arrays of `{key, value}` entries; the output codec restores
-them while removing the provider envelope. Raw JSON Schema tool arguments are
-validated without semantic rewriting.
+The same decision object is visible to the model regardless of transport:
+`{"decision":"tool_calls",...}` or `{"decision":"result",...}`. A provider adapter
+may change how values are represented to satisfy a structured-output API, but it
+restores the same logical decision before returning it.
 
 The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
 reflects callable parameters, while `_result_format.py` produces a JSON Schema and
@@ -109,33 +111,26 @@ operations live on `LLMOutput`; the backend does not know the step-decision
 shape. Provider-side response decoding and stream-path normalization stay inside the
 client implementation.
 
-`StepDecisionModel.from_spec()` composes these leaves into a model. It exposes the
-decision mode, result model, and tools, and validates the returned value as the
-corresponding `StepDecision`. An `LLMClient`
-owns decision-envelope composition, schema encoding, prompt fallback, response
-decoding, and structured-stream decoding needed by its model. Step-decision models
-live in `sefia.llm.step_decision`; result schema interfaces and decoded values live
-in `sefia.llm.result_format` and `sefia.llm.llm_output`.
+`DecisionSpec.for_inference()` composes these leaves. It exposes the decision mode,
+result format, and tools, and validates a returned value as the corresponding
+`StepDecision`. Step-decision specifications live in `sefia.llm.step_decision`;
+result schema interfaces and decoded values live in `sefia.llm.result_format` and
+`sefia.llm.llm_output`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
-The core system prompt is `docstring + decision semantics`; tool definitions are
-carried by the decision schema. The client adds output-format instructions when the
-model needs that schema in its prompt.
-The user message is the call's arguments rendered as XML (`_build_messages`); prior
-steps are replayed as JSON in ordinary assistant/user messages. They deliberately do
-not use native tool-call message fields or the `tool` role. The client is always
-called with `tools=None` and the logical `decision_model` — provider native
-tool-calling is never used. The client returns logical structured data when it adapts
-the wire format; the strategy falls back to parsing plain client responses before the
-step-decision validator validates the value (`InvalidInferenceResponseError` if it
-doesn't conform).
+`MarkdownPromptRenderer` owns all textual prompt construction: instructions,
+arguments, tool descriptions, prior tool interactions, response forms, and repair
+feedback. It returns text, not protocol messages. A transport alone decides how that
+text is communicated. `StructuredDecisionTransport` requests structured output;
+other transports can request the same decision through a different communication
+method without changing the renderer or strategy.
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
-first **repaired in place**: the strategy appends the invalid output and the
-validation error to the conversation as corrective feedback and asks again, up to
+first **repaired in place**: the strategy renders a new complete prompt containing
+the invalid output and validation error, and asks again, up to
 `max_repair_attempts` times (default 2; configurable on
 `LLMInferenceStrategy` / `Session` / `SessionScope`). The repair exchange lives only
-inside that one (engraved) step's messages — it never enters the step history, so an
+inside that one (engraved) step's prompt — it never enters the step history, so an
 invalid decision is never persisted. Only when the budget is spent does the
 `InvalidInferenceResponseError` propagate as described below.
 

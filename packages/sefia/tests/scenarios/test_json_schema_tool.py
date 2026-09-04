@@ -88,7 +88,7 @@ async def test_json_schema_tool_reaches_the_llm_and_is_dispatched():
     tool = decision_model.tools[0]
     assert tool.name == "search"
     assert tool.description == "Search the corpus for a query."
-    assert tool.arguments.json_schema.to_dict() == _SEARCH_SCHEMA
+    assert tool.arguments.to_dict() == _SEARCH_SCHEMA
 
     history = "\n".join(
         str(message["content"]) for message in mock_llm.requests[1]["messages"]

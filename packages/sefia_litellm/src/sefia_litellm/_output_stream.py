@@ -9,16 +9,12 @@ from sefia.llm.streaming import (
     StringEnd,
 )
 
-from ._schema import DecisionEnvelopeFormat
-
 
 class OutputEventStreamer:
     def __init__(
         self,
-        schema: DecisionEnvelopeFormat,
         callback: OutputStreamCallback,
     ) -> None:
-        self._schema = schema
         self._callback = callback
         self._parser = IncrementalJsonParser()
 
@@ -32,15 +28,12 @@ class OutputEventStreamer:
         path = getattr(event, "path", None)
         if path is None:
             return None
-        payload_path = self._schema.to_payload_path(path)
-        if payload_path is None:
-            return None
         if isinstance(event, js.StringDelta):
-            return StringDelta(payload_path, event.text)
+            return StringDelta(path, event.text)
         if isinstance(event, js.EndString):
-            return StringEnd(payload_path, event.value)
+            return StringEnd(path, event.value)
         if isinstance(event, js.Scalar):
             if isinstance(event.value, str):
                 return None
-            return Scalar(payload_path, event.value)
+            return Scalar(path, event.value)
         return None

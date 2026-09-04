@@ -2,7 +2,7 @@ import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, cast
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -16,13 +16,14 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMInferenceStrategy, LLMResponse
+from sefia.llm import LLMInferenceStrategy, LLMResponse, MarkdownPromptRenderer
 from sefia.llm.events import (
     LLMReasoningTokenReceived,
     LLMResponseRepairAttempt,
     LLMTokenReceived,
 )
 from sefia.llm.llm_output import LLMOutput
+from sefia.llm.transports import StructuredDecisionTransport
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -80,15 +81,13 @@ def mock_llm_client() -> AsyncMock:
 def _make_strategy(
     llm_client: Any = None, *, stream: bool = False, max_repair_attempts: int = 2
 ) -> LLMInferenceStrategy:
-    """The strategy under test, with a stub prompt formatter."""
-    formatter = Mock()
-    formatter.format_arguments.return_value = "<arguments/>"
+    """The strategy under test, with a stub prompt renderer."""
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
         result_format_factory=PydanticModelBackend(),
-        prompt_formatter=formatter,
-        json_default=pydantic_json_default,
+        prompt_renderer=MarkdownPromptRenderer(json_default=pydantic_json_default),
+        decision_transport=StructuredDecisionTransport(),
         stream=stream,
         max_repair_attempts=max_repair_attempts,
     )
@@ -342,9 +341,8 @@ class TestResponseRepair:
         retry_messages = client.complete.await_args_list[1].kwargs["messages"]
         feedback = retry_messages[-1]
         assert feedback.role == "user"
-        assert "invalid" in str(feedback.content)
-        assert "Your previous response was empty." in str(feedback.content)
-        assert "Error:" in str(feedback.content)
+        assert "The previous response was empty." in str(feedback.content)
+        assert "Reason:" in str(feedback.content)
 
         assert any(
             isinstance(event, LLMResponseRepairAttempt) and event.attempt == 1
@@ -367,7 +365,7 @@ class TestResponseRepair:
         assert decision.result == "done"
 
         retry_messages = client.complete.await_args_list[1].kwargs["messages"]
-        assert "did not provide a response content" in str(retry_messages[-1].content)
+        assert "did not provide response content" in str(retry_messages[-1].content)
 
     async def test_repairs_schema_violation_and_echoes_invalid_output(self):
         invalid = '{"decision": "result", "result": {"name": "test"}}'
@@ -389,13 +387,10 @@ class TestResponseRepair:
         assert isinstance(decision, ResultDecision)
         assert decision.result == MyOutput(name="test", value=42)
 
-        retry_messages = client.complete.await_args_list[1].kwargs["messages"]
-        # The invalid output is echoed back as the assistant turn, followed by
-        # the corrective user message.
-        assert retry_messages[-2].role == "assistant"
-        assert retry_messages[-2].content == invalid
-        assert retry_messages[-1].role == "user"
-        assert "Error:" in str(retry_messages[-1].content)
+        retry_prompt = client.complete.await_args_list[1].kwargs["messages"][0]
+        assert retry_prompt.role == "user"
+        assert invalid in str(retry_prompt.content)
+        assert "Reason:" in str(retry_prompt.content)
 
     async def test_repairs_unknown_tool_call(self):
         invalid = json.dumps(
@@ -444,12 +439,13 @@ class TestResponseRepair:
             _function_info(), history, _tool_registry(), MockEventPublisher()
         )
 
-        # The repair exchange lives only in the per-attempt messages; the step
-        # history the executor owns is untouched.
+        # Repair context is rendered into a new prompt without changing the
+        # executor-owned decision history.
         assert history == snapshot
         first_messages = client.complete.await_args_list[0].kwargs["messages"]
         retry_messages = client.complete.await_args_list[1].kwargs["messages"]
-        assert len(retry_messages) == len(first_messages) + 2
+        assert len(first_messages) == len(retry_messages) == 1
+        assert first_messages[0].content != retry_messages[0].content
 
     async def test_raises_original_error_after_budget_exhausted(self):
         invalid = "not json"
@@ -458,7 +454,7 @@ class TestResponseRepair:
         strategy = _make_strategy(client, max_repair_attempts=2)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output failed validation"
+            InvalidInferenceResponseError, match="LLM output could not be decoded"
         ) as exc_info:
             await strategy.decide_next_step(
                 _function_info(), [], _tool_registry(), MockEventPublisher()
@@ -466,7 +462,7 @@ class TestResponseRepair:
 
         assert client.complete.await_count == 3
         assert exc_info.value.raw_content == invalid
-        assert exc_info.value.detail.startswith("LLM output failed validation")
+        assert exc_info.value.detail.startswith("LLM output could not be decoded")
 
     async def test_zero_budget_disables_repair(self):
         client = AsyncMock()
