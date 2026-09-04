@@ -80,10 +80,11 @@ loop:
 domain concepts:
 
 1. `DecisionSpec` describes which next decisions are valid.
-2. `DecisionPrompt` gathers the task, available tools, prior interactions, and any
+2. `DecisionRequest` gathers the task, available tools, prior interactions, and any
    rejected response.
-3. `PromptRenderer` turns that prompt into one complete text string.
-4. `DecisionTransport` delivers the text and returns a logical decision response.
+3. `DecisionTransport` supplies the response instructions for its protocol and asks
+   `PromptRenderer` to produce one complete text string.
+4. The transport sends that text and decodes the reply as a logical decision response.
 5. `DecisionSpec` validates that response as a `StepDecision`.
 
 `DecisionSpec` selects one of three shapes:
@@ -118,20 +119,21 @@ result schema interfaces and decoded values live in `sefia.llm.result_format` an
 `sefia.llm.llm_output`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
-`MarkdownPromptRenderer` owns all textual prompt construction: instructions,
-arguments, tool descriptions, prior tool interactions, response forms, and repair
-feedback. It returns text, not protocol messages. A transport alone decides how that
-text is communicated. `StructuredDecisionTransport` requests structured output;
+`MarkdownPromptRenderer` owns the textual representation of instructions, arguments,
+tool descriptions, prior tool interactions, response forms, and repair feedback. It
+returns text, not protocol messages. A transport owns the response instructions,
+invokes the renderer, sends the resulting prompt, and decodes the reply.
+`StructuredDecisionTransport` requests structured output;
 `PromptedDecisionTransport` asks for the same JSON decision in ordinary response
 text. Both return the same `DecisionResponse` and logical progress events, so final
 results, repair, token streams, reasoning streams, and tool-argument previews do not
 depend on the selected transport.
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
-first **repaired in place**: the strategy renders a new complete prompt containing
-the invalid output and validation error, and asks again, up to
+first **repaired in place**: the strategy creates a new request containing the
+invalid output and validation error, and asks again, up to
 `max_repair_attempts` times (default 2; configurable on
-`LLMInferenceStrategy` / `Session` / `SessionScope`). The repair exchange lives only
+`LLMInferenceStrategy` / `Session` / `SessionScope`). The rejected response lives only
 inside that one (engraved) step's prompt — it never enters the step history, so an
 invalid decision is never persisted. Only when the budget is spent does the
 `InvalidInferenceResponseError` propagate as described below.
