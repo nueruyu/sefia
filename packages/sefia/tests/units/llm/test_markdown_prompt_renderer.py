@@ -8,8 +8,6 @@ import pytest
 from sefia.inference import FunctionInfo
 from sefia.llm import (
     DecisionPrompt,
-    DecisionResponseForm,
-    DecisionResponseInstructions,
     MarkdownPromptRenderer,
     RejectedDecision,
 )
@@ -56,14 +54,8 @@ def _prompt(
         function=function,
         decision=_decision_spec(),
         history=(),
-        response=DecisionResponseInstructions(
-            forms=(
-                DecisionResponseForm(
-                    label="Final result",
-                    example='{"decision":"result","result":<value>}',
-                ),
-            ),
-            rules=("Return one result.",),
+        response_instructions=(
+            'Return one result as {"decision":"result","result":<value>}.'
         ),
         rejected=rejected,
     )

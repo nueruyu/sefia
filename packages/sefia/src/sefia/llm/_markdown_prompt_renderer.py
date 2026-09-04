@@ -6,11 +6,7 @@ from typing import cast
 from typing_extensions import final, override
 
 from ..inference import ToolCallsDecision
-from ._prompt_renderer import (
-    DecisionPrompt,
-    DecisionResponseInstructions,
-    PromptRenderer,
-)
+from ._prompt_renderer import DecisionPrompt, PromptRenderer
 from .json_schema import JsonValue
 from .step_decision import DecisionSpec, StepTool
 
@@ -40,7 +36,7 @@ class MarkdownPromptRenderer(PromptRenderer):
             sections.append(self._render_tools(prompt.decision))
         if prompt.history:
             sections.append(self._render_history(prompt))
-        sections.append(self._render_response(prompt.response))
+        sections.append(f"## Response\n\n{prompt.response_instructions}")
         if prompt.rejected is not None:
             sections.append(self._render_rejection(prompt))
         return "\n\n".join(sections)
@@ -86,16 +82,6 @@ class MarkdownPromptRenderer(PromptRenderer):
                     }
                 )
         return "## Previous tool interactions\n\n" + self._json_block(records)
-
-    def _render_response(self, response: DecisionResponseInstructions) -> str:
-        forms: list[str] = []
-        for form in response.forms:
-            rendered = f"{form.label}:\n{self._code_block(form.example, 'json')}"
-            if form.schema is not None:
-                rendered += f"\nResult JSON Schema: {self._compact_json(form.schema)}"
-            forms.append(rendered)
-        content = [*forms, "\n".join(f"- {rule}" for rule in response.rules)]
-        return "## Response\n\n" + "\n\n".join(part for part in content if part)
 
     def _render_rejection(self, prompt: DecisionPrompt) -> str:
         assert prompt.rejected is not None

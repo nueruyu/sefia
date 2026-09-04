@@ -92,8 +92,8 @@ async def test_structured_transport_renders_and_delivers_one_complete_prompt() -
     assert response.raw is raw
     renderer.render.assert_called_once()
     rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
-    assert [form.label for form in rendered_prompt.response.forms] == ["Final result"]
-    assert "Return exactly one JSON object" in rendered_prompt.response.rules[0]
+    assert "Return exactly one JSON object" in rendered_prompt.response_instructions
+    assert "JSON Schema" in rendered_prompt.response_instructions
 
 
 async def test_prompted_transport_uses_the_rendered_prompt_without_a_model() -> None:

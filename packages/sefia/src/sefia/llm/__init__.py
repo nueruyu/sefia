@@ -3,8 +3,6 @@ from ._markdown_prompt_renderer import MarkdownPromptRenderer
 from ._messages import LLMResponse, Message, ToolCall
 from ._prompt_renderer import (
     DecisionPrompt,
-    DecisionResponseForm,
-    DecisionResponseInstructions,
     PromptRenderer,
     RejectedDecision,
 )
@@ -20,8 +18,6 @@ __all__ = [
     "LLMOutput",
     "LLMOutputData",
     "DecisionPrompt",
-    "DecisionResponseForm",
-    "DecisionResponseInstructions",
     "PromptRenderer",
     "RejectedDecision",
     "MarkdownPromptRenderer",
