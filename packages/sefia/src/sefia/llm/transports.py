@@ -369,7 +369,9 @@ def _decode_native_decision(
                 LLMOutput.from_object(
                     {
                         "name": LLMOutput.from_json(call.name),
-                        "arguments": call.arguments,
+                        "arguments": LLMOutput.from_object(
+                            call.arguments.to_object("tool arguments")
+                        ),
                     }
                 )
                 for call in calls
