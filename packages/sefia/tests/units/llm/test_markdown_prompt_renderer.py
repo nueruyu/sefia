@@ -46,14 +46,23 @@ def _decision_spec() -> DecisionSpec:
     )
 
 
-def _task_content(arguments: dict[str, Any]) -> str:
-    return _renderer().render(
-        DecisionPrompt(
-            function=_function_info(arguments),
-            decision=_decision_spec(),
-            history=(),
-        )
+def _prompt(
+    function: FunctionInfo,
+    rejected: RejectedDecision | None = None,
+) -> DecisionPrompt:
+    return DecisionPrompt(
+        function=function,
+        spec=_decision_spec(),
+        history=(),
+        response_instructions=(
+            'Return one result as {"decision":"result","result":<value>}.'
+        ),
+        rejected=rejected,
     )
+
+
+def _task_content(arguments: dict[str, Any]) -> str:
+    return _renderer().render(_prompt(_function_info(arguments)))
 
 
 def _json_content(prompt: str) -> object:
@@ -78,14 +87,14 @@ def test_markdown_fence_is_longer_than_any_run_in_content(content: str, expected
 
 
 def test_render_instructions_combines_function_and_decision_instructions():
-    content = _renderer().render(DecisionPrompt(_function_info(), _decision_spec(), ()))
+    content = _renderer().render(_prompt(_function_info()))
 
     assert content.startswith("# Task\n\ninstructions")
     assert '"decision":"result"' in content
 
 
 def test_render_invocation_explains_when_there_are_no_direct_arguments():
-    content = _renderer().render(DecisionPrompt(_function_info(), _decision_spec(), ()))
+    content = _renderer().render(_prompt(_function_info()))
 
     assert "## Task arguments\n\nNone." in content
 
@@ -137,11 +146,7 @@ def test_render_falls_back_to_string_when_json_default_rejects_value():
 
     renderer = MarkdownPromptRenderer(json_default=json_default)
     prompt = renderer.render(
-        DecisionPrompt(
-            _function_info({"value": _CustomValue("fallback")}),
-            _decision_spec(),
-            (),
-        )
+        _prompt(_function_info({"value": _CustomValue("fallback")}))
     )
 
     assert _json_content(prompt) == {"value": "_CustomValue(value='fallback')"}
@@ -149,10 +154,8 @@ def test_render_falls_back_to_string_when_json_default_rejects_value():
 
 def test_render_rejected_decision_describes_the_error():
     feedback = _renderer().render(
-        DecisionPrompt(
+        _prompt(
             _function_info(),
-            _decision_spec(),
-            (),
             RejectedDecision(content="invalid", reason="invalid schema"),
         )
     )
@@ -163,10 +166,8 @@ def test_render_rejected_decision_describes_the_error():
 
 def test_render_rejected_decision_explains_an_empty_response():
     feedback = _renderer().render(
-        DecisionPrompt(
+        _prompt(
             _function_info(),
-            _decision_spec(),
-            (),
             RejectedDecision(content=None, reason="empty response"),
         )
     )

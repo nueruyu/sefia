@@ -18,14 +18,16 @@ from sefia.inference import FunctionInfo, StepDecision, ToolCallsDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
 from sefia.llm.json_schema import SchemaNode
-from sefia.llm.streaming import OutputStreamEvent, StringEnd as OutputStringEnd
+from sefia.llm.streaming import (
+    JsonOutputStreamDecoder,
+    StringEnd as OutputStringEnd,
+)
 from sefia.llm.transports import StructuredDecisionTransport
 from sefia.llm.llm_output import LLMOutput
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._schema import StructuredDecisionFormat
-from sefia_litellm._output_stream import OutputEventStreamer
 
 
 def _decision_model(output_type: Any, tools: list[ToolEntry]) -> DecisionSpec:
@@ -111,14 +113,9 @@ def test_wire_schema_omits_openapi_discriminator_for_provider_compatibility() ->
     )
 
 
-async def test_decision_stream_preserves_logical_paths() -> None:
-    events: list[OutputStreamEvent] = []
-
-    async def collect(event: OutputStreamEvent) -> None:
-        events.append(event)
-
-    wire_streamer = OutputEventStreamer(collect)
-    await wire_streamer.feed(
+def test_decision_stream_preserves_logical_paths() -> None:
+    decoder = JsonOutputStreamDecoder()
+    events = decoder.feed(
         '{"decision":"tool_calls","tool_calls":['
         '{"name":"ask_user","arguments":{"question":"Hello"}}]}'
     )

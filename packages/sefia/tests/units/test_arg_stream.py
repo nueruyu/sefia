@@ -3,10 +3,13 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 from unittest.mock import Mock
 
+import pytest
+
 from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.inference import FunctionInfo, ToolCallsDecision
 from sefia.llm import LLMInferenceStrategy, LLMResponse, Message
+from sefia.llm.llm_output import LLMOutput
 from sefia.llm._arg_stream import ToolArgStreamer, _ArgStreamChannel
 from sefia.llm._client import LLMClient
 from sefia.llm.step_decision import DecisionSpec
@@ -16,7 +19,11 @@ from sefia.llm.streaming import (
     StringDelta as OutputStringDelta,
     StringEnd as OutputStringEnd,
 )
-from sefia.llm.transports import StructuredDecisionTransport
+from sefia.llm.transports import (
+    DecisionTransport,
+    PromptedDecisionTransport,
+    StructuredDecisionTransport,
+)
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import (
     ArgStream,
@@ -260,7 +267,14 @@ class StreamingClient(LLMClient):
                         await output_callback(OutputStringEnd(path, value))
                     else:
                         await output_callback(OutputScalar(path, value))
-        return LLMResponse(content=self.content)
+        return LLMResponse(
+            content=self.content,
+            structured_output=(
+                LLMOutput.parse_json(self.content)
+                if decision_model is not None
+                else None
+            ),
+        )
 
 
 def _function_info() -> FunctionInfo:
@@ -275,18 +289,33 @@ def _function_info() -> FunctionInfo:
     )
 
 
-async def test_arguments_stream_through_a_real_strategy():
-    content = (
-        '{"decision": "tool_calls", "tool_calls": [{"name": "ask_human", '
-        '"arguments": {"question": "What is your name?"}}]}'
-    )
+_TOOL_CALL_CONTENT = (
+    '{"decision": "tool_calls", "tool_calls": [{"name": "ask_human", '
+    '"arguments": {"question": "What is your name?"}}]}'
+)
+
+
+@pytest.mark.parametrize(
+    ("transport", "content"),
+    [
+        (StructuredDecisionTransport(), _TOOL_CALL_CONTENT),
+        (
+            PromptedDecisionTransport(),
+            f"Decision with {{irrelevant}} braces:\n```json\n{_TOOL_CALL_CONTENT}\n```",
+        ),
+    ],
+)
+async def test_arguments_stream_through_a_real_strategy(
+    transport: DecisionTransport,
+    content: str,
+) -> None:
     renderer = Mock()
     renderer.render.return_value = "prompt"
     strategy = LLMInferenceStrategy(
         llm_client=StreamingClient(content),
         result_format_factory=PydanticModelBackend(),
         prompt_renderer=renderer,
-        decision_transport=StructuredDecisionTransport(),
+        decision_transport=transport,
         stream=True,
     )
 

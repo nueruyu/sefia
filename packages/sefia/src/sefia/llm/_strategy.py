@@ -9,22 +9,88 @@ from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from ..inference import FunctionInfo, HistoryItem, StepDecision
-from ..streaming import StreamHandler
+from ..streaming import ArgEvent, Scalar, StreamHandler, StringDelta, StringEnd
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
-from ._prompt_renderer import DecisionPrompt, PromptRenderer, RejectedDecision
+from ._prompt_renderer import PromptRenderer, RejectedDecision
 from ._tool_call_ids import ToolCallIdRegistry
 from .result_format import ResultFormatFactory
 from .step_decision import DecisionSpec
-from .transports import (
-    DecisionProgress,
-    DecisionDecodingError,
-    DecisionTransport,
-    ReasoningTextDelta,
-    ResponseTextDelta,
-    ToolCallIdentified,
+from .streaming import (
+    OutputStreamEvent,
+    StringDelta as OutputStringDelta,
+    StringEnd as OutputStringEnd,
 )
+from .transports import (
+    DecisionDecodingError,
+    DecisionObserver,
+    DecisionRequest,
+    DecisionTransport,
+)
+
+
+@final
+class _StrategyDecisionObserver(DecisionObserver):
+    def __init__(
+        self,
+        publisher: EventPublisher,
+        decision: DecisionSpec,
+        tool_arg_streamer: ToolArgStreamer | None,
+    ) -> None:
+        self._publisher = publisher
+        self._decision = decision
+        self._tool_arg_streamer = tool_arg_streamer
+
+    @override
+    async def before_request(self, prompt: str) -> None:
+        await self._publisher.publish(
+            events.BeforeLLMCall(prompt=prompt, decision=self._decision)
+        )
+
+    @override
+    async def response_text(self, text: str) -> None:
+        await self._publisher.publish(events.LLMTokenReceived(token=text))
+
+    @override
+    async def reasoning_text(self, text: str) -> None:
+        await self._publisher.publish(events.LLMReasoningTokenReceived(token=text))
+
+    @override
+    async def output(self, event: OutputStreamEvent) -> None:
+        streamer = self._tool_arg_streamer
+        if streamer is None:
+            return
+
+        path = event.path
+        if (
+            len(path) == 3
+            and path[0] == "tool_calls"
+            and isinstance(path[1], int)
+            and path[2] == "name"
+            and isinstance(event, OutputStringEnd)
+        ):
+            streamer.identify_tool(path[1], event.value)
+            return
+
+        if (
+            len(path) != 4
+            or path[0] != "tool_calls"
+            or not isinstance(path[1], int)
+            or path[2] != "arguments"
+            or not isinstance(path[3], str)
+        ):
+            return
+
+        name = path[3]
+        argument_event: ArgEvent
+        if isinstance(event, OutputStringDelta):
+            argument_event = StringDelta(name=name, text=event.text)
+        elif isinstance(event, OutputStringEnd):
+            argument_event = StringEnd(name=name, value=event.value)
+        else:
+            argument_event = Scalar(name=name, value=event.value)
+        streamer.on_argument(path[1], argument_event)
 
 
 @final
@@ -65,18 +131,15 @@ class LLMInferenceStrategy(InferenceStrategy):
         rejected: RejectedDecision | None = None
 
         for attempt in range(self._max_repair_attempts + 1):
-            prompt = self._prompt_renderer.render(
-                DecisionPrompt(
-                    function=function_info,
-                    decision=decision,
-                    history=tuple(history),
-                    rejected=rejected,
-                )
+            request = DecisionRequest(
+                function=function_info,
+                spec=decision,
+                history=tuple(history),
+                rejected=rejected,
             )
             try:
                 return await self._complete_once(
-                    prompt,
-                    decision,
+                    request,
                     tools,
                     publisher,
                 )
@@ -95,35 +158,25 @@ class LLMInferenceStrategy(InferenceStrategy):
 
     async def _complete_once(
         self,
-        prompt: str,
-        decision: DecisionSpec,
+        request: DecisionRequest,
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> StepDecision:
-        await publisher.publish(events.BeforeLLMCall(prompt=prompt, decision=decision))
-
         tool_call_ids = ToolCallIdRegistry()
         tool_arg_streamer = self._tool_arg_streamer(tools, tool_call_ids)
-
-        async def on_progress(progress: DecisionProgress) -> None:
-            if isinstance(progress, ResponseTextDelta):
-                await publisher.publish(events.LLMTokenReceived(token=progress.text))
-            elif isinstance(progress, ReasoningTextDelta):
-                await publisher.publish(
-                    events.LLMReasoningTokenReceived(token=progress.text)
-                )
-            elif tool_arg_streamer is not None:
-                if isinstance(progress, ToolCallIdentified):
-                    tool_arg_streamer.identify_tool(progress.index, progress.name)
-                else:
-                    tool_arg_streamer.on_argument(progress.index, progress.event)
+        observer = _StrategyDecisionObserver(
+            publisher,
+            request.spec,
+            tool_arg_streamer,
+        )
 
         try:
-            response = await self._decision_transport.complete(
+            response = await self._decision_transport.request_decision(
                 client=self.llm_client,
-                prompt=prompt,
-                decision=decision,
-                progress=on_progress if self._stream else None,
+                prompt_renderer=self._prompt_renderer,
+                request=request,
+                observer=observer,
+                stream=self._stream,
             )
         except DecisionDecodingError as error:
             raise InvalidInferenceResponseError(
@@ -136,7 +189,7 @@ class LLMInferenceStrategy(InferenceStrategy):
 
         await publisher.publish(events.AfterLLMCall(response.raw))
         try:
-            return decision.validate(response.output, tool_call_ids)
+            return request.spec.validate(response.output, tool_call_ids)
         except UnknownToolDecisionError as error:
             raise InvalidInferenceResponseError(
                 f"LLM output requested an unknown tool: {error.tool_name!r}",

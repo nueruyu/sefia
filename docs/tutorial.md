@@ -80,6 +80,11 @@ records, Sefia session state, and the session registry survive restarts in one d
 JSON files remain available for debugging with `FilePersistence` from the
 `sefios[file-store]` extra.
 
+By default, the provider constrains decisions with native structured output.
+Providers without that capability can use `PromptedDecisionTransport`, which asks
+for the same decision format in the prompt and validates it locally. Both transports
+provide the same final results, repair behavior, and streaming features.
+
 ## 2. Give it a tool
 
 Tools are the **public methods of fields granted with the `Tools[...]` annotation**

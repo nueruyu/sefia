@@ -79,15 +79,18 @@ class LiteLLMClient(LLMClient):
         model: str,
         *,
         suppress_logs: bool | None = None,
-        native_structured_output: bool | None = None,
         **kwargs: Any,
     ):
+        if "native_structured_output" in kwargs:
+            raise TypeError(
+                "native_structured_output is no longer supported; select "
+                "PromptedDecisionTransport for models without structured output."
+            )
         self.model = model
         self._kwargs = kwargs
         self._suppress_logs = (
             _env_suppress_logs_default() if suppress_logs is None else suppress_logs
         )
-        self._native_structured_output = native_structured_output
 
     @override
     async def complete(
@@ -106,13 +109,10 @@ class LiteLLMClient(LLMClient):
 
         _configure_litellm_logging(self._suppress_logs)
         prepared = prepare_request(
-            model=self.model,
             messages=messages,
             tools=tools,
             decision_model=decision_model,
             client_kwargs=self._kwargs,
-            native_structured_output=self._native_structured_output,
-            supports_response_schema=litellm.supports_response_schema,
             stream=any(
                 callback is not None
                 for callback in (

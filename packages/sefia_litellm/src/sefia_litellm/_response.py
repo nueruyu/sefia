@@ -5,10 +5,9 @@ from collections.abc import AsyncIterator, Callable
 from typing import TYPE_CHECKING, Any, Coroutine, cast
 
 from sefia.llm import LLMResponse, ToolCall
-from sefia.llm.streaming import OutputStreamCallback
+from sefia.llm.streaming import JsonOutputStreamDecoder, OutputStreamCallback
 
 from ._schema import StructuredDecisionFormat
-from ._output_stream import OutputEventStreamer
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage
@@ -76,8 +75,8 @@ async def handle_stream(
 
     chunks: list[Any] = []
     reasoning_parts: list[str] = []
-    event_streamer = (
-        OutputEventStreamer(output_callback)
+    event_decoder = (
+        JsonOutputStreamDecoder()
         if output is not None and output_callback is not None
         else None
     )
@@ -96,8 +95,10 @@ async def handle_stream(
         if content:
             if content_callback is not None:
                 await content_callback(content)
-            if event_streamer is not None:
-                await event_streamer.feed(content)
+            if event_decoder is not None:
+                assert output_callback is not None
+                for event in event_decoder.feed(content):
+                    await output_callback(event)
 
     build_stream_response = cast(
         Callable[..., ModelResponse | None],
@@ -122,12 +123,8 @@ def _decode_output(
 ) -> None:
     if output is None or response.content is None:
         return
-    raw = response.content.strip()
-    if raw.startswith("```"):
-        lines = raw.splitlines()
-        raw = "\n".join(lines[1:-1]).strip()
     try:
-        response.structured_output = output.decode_json(raw)
+        response.structured_output = output.decode_json(response.content)
     except ValueError:
         return
 

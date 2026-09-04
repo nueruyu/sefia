@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from unittest.mock import Mock
 
@@ -10,6 +11,7 @@ from sefia._authoring.metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.llm import LLMResponse, PromptRenderer
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
+from sefia.llm.transports import PromptedDecisionTransport
 from sefia.testing import (
     MockLLMClient,
     memory_session,
@@ -180,6 +182,36 @@ async def test_session_accepts_a_custom_prompt_renderer():
         {"role": "user", "content": "custom prompt"},
     ]
     prompt_renderer.render.assert_called_once()
+
+
+async def test_session_accepts_a_prompted_decision_transport() -> None:
+    mock_llm = MockLLMClient(
+        responses=[
+            LLMResponse(
+                content=json.dumps(
+                    {
+                        "decision": "result",
+                        "result": {
+                            "topic": "prompted",
+                            "summary": "Prompt JSON.",
+                            "sources": [],
+                        },
+                    }
+                )
+            )
+        ]
+    )
+
+    async with memory_session(
+        mock_llm,
+        session_id="prompted-decision-transport",
+        decision_transport=PromptedDecisionTransport(),
+    ):
+        report = await SimpleAgent().generate_report(topic="prompted")
+
+    assert report.topic == "prompted"
+    assert mock_llm.requests[0]["decision_model"] is None
+    assert '"decision":"result"' in mock_llm.requests[0]["messages"][0]["content"]
 
 
 async def test_inference_with_tool_exception():

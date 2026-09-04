@@ -14,8 +14,9 @@ class RejectedDecision:
 @dataclass(frozen=True)
 class DecisionPrompt:
     function: FunctionInfo
-    decision: DecisionSpec
+    spec: DecisionSpec
     history: tuple[HistoryItem, ...]
+    response_instructions: str
     rejected: RejectedDecision | None = None
 
 
@@ -26,4 +27,8 @@ class PromptRenderer(ABC):
     def render(self, prompt: DecisionPrompt) -> str: ...
 
 
-__all__ = ["DecisionPrompt", "PromptRenderer", "RejectedDecision"]
+__all__ = [
+    "DecisionPrompt",
+    "PromptRenderer",
+    "RejectedDecision",
+]
