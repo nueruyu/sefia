@@ -170,11 +170,13 @@ class TestToolsRequiredDecision:
 
     async def test_decide_next_step_returns_tool_call_decision_for_never(self):
         mock_client = AsyncMock()
+        content = (
+            '{"decision": "tool_calls", '
+            '"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
+        )
         mock_client.complete.return_value = LLMResponse(
-            content=(
-                '{"decision": "tool_calls", '
-                '"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
-            )
+            content=content,
+            structured_output=LLMOutput.parse_json(content),
         )
         strategy = _make_strategy(mock_client)
 
@@ -191,8 +193,10 @@ class TestToolsRequiredDecision:
         self,
     ):
         mock_client = AsyncMock()
+        content = '{"decision": "result", "result": "bye"}'
         mock_client.complete.return_value = LLMResponse(
-            content='{"decision": "result", "result": "bye"}'
+            content=content,
+            structured_output=LLMOutput.parse_json(content),
         )
         strategy = _make_strategy(mock_client)
 

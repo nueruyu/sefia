@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from typing import Any, AsyncGenerator, Callable, Coroutine
 
 import glyff
@@ -34,7 +35,7 @@ from typing_extensions import final, override
 
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._session import Session
-from .llm import LLMClient, LLMResponse, Message
+from .llm import LLMClient, LLMOutput, LLMResponse, Message
 from .llm.step_decision import DecisionSpec
 from .llm.streaming import OutputStreamCallback
 from .pydantic._json_utils import pydantic_json_default
@@ -74,7 +75,20 @@ class MockLLMClient(LLMClient):
         )
         if not self.responses:
             raise AssertionError("MockLLMClient has no more responses.")
-        return self.responses.pop(0)
+        response = self.responses.pop(0)
+        if (
+            decision_model is not None
+            and response.structured_output is None
+            and response.content is not None
+        ):
+            try:
+                response = replace(
+                    response,
+                    structured_output=LLMOutput.parse_json(response.content),
+                )
+            except json.JSONDecodeError:
+                pass
+        return response
 
 
 @final

@@ -93,6 +93,13 @@ def _make_strategy(
     )
 
 
+def _structured_response(content: str) -> LLMResponse:
+    return LLMResponse(
+        content=content,
+        structured_output=LLMOutput.parse_json(content),
+    )
+
+
 def _function_info(
     return_type: Any = str,
     arguments: dict[str, Any] | None = None,
@@ -120,7 +127,7 @@ class TestLLMInferenceStrategy:
                 "tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}],
             }
         )
-        mock_llm_client.complete.return_value = LLMResponse(content=tool_calls_payload)
+        mock_llm_client.complete.return_value = _structured_response(tool_calls_payload)
         strategy = _make_strategy(mock_llm_client, stream=True)
 
         decision = await strategy.decide_next_step(
@@ -145,7 +152,7 @@ class TestLLMInferenceStrategy:
                 "result": {"name": "test", "value": 42},
             }
         )
-        mock_llm_client.complete.return_value = LLMResponse(content=result_payload)
+        mock_llm_client.complete.return_value = _structured_response(result_payload)
         strategy = _make_strategy(mock_llm_client, stream=True)
         publisher = MockEventPublisher()
 
@@ -195,8 +202,8 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_publishes_reasoning_tokens(
         self, mock_llm_client: AsyncMock
     ):
-        mock_llm_client.complete.return_value = LLMResponse(
-            content='{"decision": "result", "result": "done"}'
+        mock_llm_client.complete.return_value = _structured_response(
+            '{"decision": "result", "result": "done"}'
         )
         strategy = _make_strategy(mock_llm_client, stream=True)
         publisher = MockEventPublisher()
@@ -224,8 +231,8 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_does_not_set_reasoning_callback_by_default(
         self, mock_llm_client: AsyncMock
     ):
-        mock_llm_client.complete.return_value = LLMResponse(
-            content='{"decision": "result", "result": "done"}'
+        mock_llm_client.complete.return_value = _structured_response(
+            '{"decision": "result", "result": "done"}'
         )
         strategy = _make_strategy(mock_llm_client)
 
@@ -241,8 +248,8 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_does_not_set_stream_callback_by_default(
         self, mock_llm_client: AsyncMock
     ):
-        mock_llm_client.complete.return_value = LLMResponse(
-            content='{"decision": "result", "result": "done"}'
+        mock_llm_client.complete.return_value = _structured_response(
+            '{"decision": "result", "result": "done"}'
         )
         strategy = _make_strategy(mock_llm_client)
 
@@ -260,8 +267,8 @@ class TestLLMInferenceStrategy:
         self, mock_llm_client: AsyncMock
     ):
         # result is missing required 'value' field — Pydantic should reject it
-        mock_llm_client.complete.return_value = LLMResponse(
-            content='{"decision": "result", "result": {"name": "test"}}'
+        mock_llm_client.complete.return_value = _structured_response(
+            '{"decision": "result", "result": {"name": "test"}}'
         )
         strategy = _make_strategy(mock_llm_client)
 
@@ -278,8 +285,8 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_handles_plain_string_output(
         self, mock_llm_client: AsyncMock
     ):
-        mock_llm_client.complete.return_value = LLMResponse(
-            content='{"decision": "result", "result": "Hello, world!"}'
+        mock_llm_client.complete.return_value = _structured_response(
+            '{"decision": "result", "result": "Hello, world!"}'
         )
         strategy = _make_strategy(mock_llm_client)
 
@@ -296,8 +303,8 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_raises_when_result_null(
         self, mock_llm_client: AsyncMock
     ):
-        mock_llm_client.complete.return_value = LLMResponse(
-            content='{"decision": "result", "result": null}'
+        mock_llm_client.complete.return_value = _structured_response(
+            '{"decision": "result", "result": null}'
         )
         strategy = _make_strategy(mock_llm_client)
 
@@ -325,7 +332,7 @@ class TestResponseRepair:
         client = AsyncMock()
         client.complete.side_effect = [
             LLMResponse(content=""),
-            LLMResponse(content=self.VALID_RESULT),
+            _structured_response(self.VALID_RESULT),
         ]
         strategy = _make_strategy(client)
         publisher = MockEventPublisher()
@@ -353,7 +360,7 @@ class TestResponseRepair:
         client = AsyncMock()
         client.complete.side_effect = [
             LLMResponse(content=None),
-            LLMResponse(content=self.VALID_RESULT),
+            _structured_response(self.VALID_RESULT),
         ]
         strategy = _make_strategy(client)
 
@@ -365,15 +372,15 @@ class TestResponseRepair:
         assert decision.result == "done"
 
         retry_messages = client.complete.await_args_list[1].kwargs["messages"]
-        assert "did not provide response content" in str(retry_messages[-1].content)
+        assert "did not return structured output" in str(retry_messages[-1].content)
 
     async def test_repairs_schema_violation_and_echoes_invalid_output(self):
         invalid = '{"decision": "result", "result": {"name": "test"}}'
         valid = '{"decision": "result", "result": {"name": "test", "value": 42}}'
         client = AsyncMock()
         client.complete.side_effect = [
-            LLMResponse(content=invalid),
-            LLMResponse(content=valid),
+            _structured_response(invalid),
+            _structured_response(valid),
         ]
         strategy = _make_strategy(client)
 
@@ -407,8 +414,8 @@ class TestResponseRepair:
         )
         client = AsyncMock()
         client.complete.side_effect = [
-            LLMResponse(content=invalid),
-            LLMResponse(content=valid),
+            _structured_response(invalid),
+            _structured_response(valid),
         ]
         strategy = _make_strategy(client)
 
@@ -424,7 +431,7 @@ class TestResponseRepair:
         client = AsyncMock()
         client.complete.side_effect = [
             LLMResponse(content="not json"),
-            LLMResponse(content=self.VALID_RESULT),
+            _structured_response(self.VALID_RESULT),
         ]
         strategy = _make_strategy(client)
         history = [

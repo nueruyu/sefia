@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 from sefia import Tools
-from sefia.llm import LLMClient, LLMResponse, Message
+from sefia.llm import LLMClient, LLMOutput, LLMResponse, Message
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import (
     OutputStreamCallback,
@@ -62,7 +62,12 @@ class StreamingClient(LLMClient):
                                 value,
                             )
                         )
-        return LLMResponse(content=content)
+        return LLMResponse(
+            content=content,
+            structured_output=(
+                LLMOutput.parse_json(content) if decision_model is not None else None
+            ),
+        )
 
 
 class OutputAgent:

@@ -12,6 +12,7 @@ dependencies = [
     "glyff-file-store>=0.16.0",
     "glyff-pydantic>=0.16.0",
     "jsonschema>=4.18",
+    "jsonweir>=0.1.0",
 ]
 dynamic = ["version"]
 keywords = [

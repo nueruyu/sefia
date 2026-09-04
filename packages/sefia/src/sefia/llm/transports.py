@@ -7,9 +7,11 @@ from typing_extensions import final, override
 from ..streaming import ArgEvent, Scalar, StringDelta, StringEnd
 from ._client import LLMClient
 from ._messages import LLMResponse, Message
+from ._prompted_response import PromptedJsonStreamExtractor, extract_prompted_json
 from .llm_output import LLMOutput
 from .step_decision import DecisionSpec
 from .streaming import (
+    JsonOutputStreamDecoder,
     OutputStreamEvent,
     StringDelta as OutputStringDelta,
     StringEnd as OutputStringEnd,
@@ -69,6 +71,22 @@ class DecisionTransport(ABC):
     ) -> DecisionResponse: ...
 
 
+class _ProgressReporter:
+    def __init__(self, callback: DecisionProgressCallback) -> None:
+        self._callback = callback
+
+    async def response_text(self, text: str) -> None:
+        await self._callback(ResponseTextDelta(text))
+
+    async def reasoning_text(self, text: str) -> None:
+        await self._callback(ReasoningTextDelta(text))
+
+    async def output(self, event: OutputStreamEvent) -> None:
+        converted = _convert_output_event(event)
+        if converted is not None:
+            await self._callback(converted)
+
+
 @final
 class StructuredDecisionTransport(DecisionTransport):
     @override
@@ -79,39 +97,67 @@ class StructuredDecisionTransport(DecisionTransport):
         decision: DecisionSpec,
         progress: DecisionProgressCallback | None,
     ) -> DecisionResponse:
-        async def on_text(text: str) -> None:
-            if progress is not None:
-                await progress(ResponseTextDelta(text))
-
-        async def on_reasoning(text: str) -> None:
-            if progress is not None:
-                await progress(ReasoningTextDelta(text))
-
-        async def on_output(event: OutputStreamEvent) -> None:
-            if progress is None:
-                return
-            converted = _convert_output_event(event)
-            if converted is not None:
-                await progress(converted)
+        reporter = _ProgressReporter(progress) if progress is not None else None
 
         response = await client.complete(
             messages=[Message(role="user", content=prompt)],
             tools=None,
             decision_model=decision,
-            stream_callback=on_text if progress is not None else None,
-            output_callback=on_output if progress is not None else None,
-            reasoning_callback=on_reasoning if progress is not None else None,
+            stream_callback=reporter.response_text if reporter is not None else None,
+            output_callback=reporter.output if reporter is not None else None,
+            reasoning_callback=reporter.reasoning_text
+            if reporter is not None
+            else None,
         )
         output = response.structured_output
         if output is None:
-            if response.content is None:
-                raise DecisionDecodingError(
-                    response, "LLM did not provide response content."
-                )
-            try:
-                output = LLMOutput.parse_json(response.content.strip())
-            except ValueError as error:
-                raise DecisionDecodingError(response, str(error)) from error
+            raise DecisionDecodingError(
+                response, "LLM client did not return structured output."
+            )
+        return DecisionResponse(output=output, raw=response)
+
+
+@final
+class PromptedDecisionTransport(DecisionTransport):
+    @override
+    async def complete(
+        self,
+        client: LLMClient,
+        prompt: str,
+        decision: DecisionSpec,
+        progress: DecisionProgressCallback | None,
+    ) -> DecisionResponse:
+        reporter = _ProgressReporter(progress) if progress is not None else None
+        stream_decoder = JsonOutputStreamDecoder() if reporter is not None else None
+        extractor = PromptedJsonStreamExtractor() if reporter is not None else None
+
+        async def on_text(text: str) -> None:
+            assert reporter is not None
+            assert stream_decoder is not None and extractor is not None
+            await reporter.response_text(text)
+            json_text = extractor.feed(text)
+            if json_text:
+                for event in stream_decoder.feed(json_text):
+                    await reporter.output(event)
+
+        response = await client.complete(
+            messages=[Message(role="user", content=prompt)],
+            tools=None,
+            decision_model=None,
+            stream_callback=on_text if reporter is not None else None,
+            output_callback=None,
+            reasoning_callback=reporter.reasoning_text
+            if reporter is not None
+            else None,
+        )
+        if response.content is None:
+            raise DecisionDecodingError(
+                response, "LLM did not provide response content."
+            )
+        try:
+            output = LLMOutput.parse_json(extract_prompted_json(response.content))
+        except ValueError as error:
+            raise DecisionDecodingError(response, str(error)) from error
         return DecisionResponse(output=output, raw=response)
 
 
@@ -145,6 +191,7 @@ __all__ = [
     "DecisionDecodingError",
     "DecisionResponse",
     "DecisionTransport",
+    "PromptedDecisionTransport",
     "ReasoningTextDelta",
     "ResponseTextDelta",
     "StructuredDecisionTransport",

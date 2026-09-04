@@ -122,8 +122,10 @@ result schema interfaces and decoded values live in `sefia.llm.result_format` an
 arguments, tool descriptions, prior tool interactions, response forms, and repair
 feedback. It returns text, not protocol messages. A transport alone decides how that
 text is communicated. `StructuredDecisionTransport` requests structured output;
-other transports can request the same decision through a different communication
-method without changing the renderer or strategy.
+`PromptedDecisionTransport` asks for the same JSON decision in ordinary response
+text. Both return the same `DecisionResponse` and logical progress events, so final
+results, repair, token streams, reasoning streams, and tool-argument previews do not
+depend on the selected transport.
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
 first **repaired in place**: the strategy renders a new complete prompt containing

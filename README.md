@@ -138,6 +138,21 @@ for durable execution and session state; drop to
 `sefia.Session` directly when you want full control. The **[tutorial](./docs/tutorial.md)**
 builds this into a human-in-the-loop service that resumes over HTTP.
 
+Native structured output is the default. For a provider without that capability,
+select the prompted transport:
+
+```python
+from sefia.llm.transports import PromptedDecisionTransport
+
+scope = SessionScope(
+    model="gpt-4o",
+    decision_transport=PromptedDecisionTransport(),
+)
+```
+
+Both transports use the same decision format and support token, reasoning-token,
+and streamed tool-argument previews.
+
 ## Pause for a human, resume after a restart
 
 A turn that pauses for a human and resumes after a restart, served on an ordinary

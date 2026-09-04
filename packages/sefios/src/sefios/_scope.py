@@ -13,6 +13,7 @@ from glyff_pydantic import (
 )
 from sefia import HistoryStorage, Policy, Profile, ToolCollector
 from sefia.llm import LLMClient, PromptRenderer
+from sefia.llm.transports import DecisionTransport
 
 from ._session_state import bind_session_storage
 from .persistence import MemoryPersistence, PersistenceProvider
@@ -52,6 +53,7 @@ class SessionScope:
         history_storage: HistoryStorage | None = None,
         tool_collector: ToolCollector | None = None,
         prompt_renderer: PromptRenderer | None = None,
+        decision_transport: DecisionTransport | None = None,
     ):
         self.model = model
         self.llm_client = llm_client
@@ -64,6 +66,7 @@ class SessionScope:
         self.history_storage = history_storage
         self.tool_collector = tool_collector
         self.prompt_renderer = prompt_renderer
+        self.decision_transport = decision_transport
 
     @asynccontextmanager
     async def session(
@@ -75,6 +78,8 @@ class SessionScope:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
+        prompt_renderer: PromptRenderer | None = None,
+        decision_transport: DecisionTransport | None = None,
     ) -> AsyncGenerator[sefia.Session]:
         """Run code within a configured Sefia session context."""
         llm_client = self.llm_client
@@ -82,6 +87,14 @@ class SessionScope:
         resolved_stream = self.stream if stream is None else stream
         resolved_tool_collector = (
             self.tool_collector if tool_collector is None else tool_collector
+        )
+        resolved_prompt_renderer = (
+            self.prompt_renderer if prompt_renderer is None else prompt_renderer
+        )
+        resolved_decision_transport = (
+            self.decision_transport
+            if decision_transport is None
+            else decision_transport
         )
 
         if llm_client is None:
@@ -128,7 +141,8 @@ class SessionScope:
                     stream=resolved_stream,
                     tool_collector=resolved_tool_collector,
                     history_storage=self.history_storage,
-                    prompt_renderer=self.prompt_renderer,
+                    prompt_renderer=resolved_prompt_renderer,
+                    decision_transport=resolved_decision_transport,
                     max_repair_attempts=self.max_repair_attempts,
                 ) as session:
                     yield session

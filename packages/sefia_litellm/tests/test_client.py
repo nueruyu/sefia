@@ -60,10 +60,13 @@ def _decision_model() -> DecisionSpec:
 
 
 class TestLiteLLMClient:
+    def test_rejects_removed_structured_output_fallback_option(self) -> None:
+        with pytest.raises(TypeError, match="PromptedDecisionTransport"):
+            LiteLLMClient(model="legacy-model", native_structured_output=False)
+
     async def test_complete_skips_structured_output_without_decision_model(
-        self, mock_acompletion: AsyncMock, mocker: MockerFixture
+        self, mock_acompletion: AsyncMock
     ) -> None:
-        supports_response_schema = mocker.patch("litellm.supports_response_schema")
         mock_acompletion.return_value = ModelResponse(
             choices=[
                 Choices(
@@ -81,14 +84,11 @@ class TestLiteLLMClient:
         call_args = mock_acompletion.call_args.kwargs
         assert "response_format" not in call_args
         assert call_args["messages"] == [{"role": "user", "content": "Hello"}]
-        supports_response_schema.assert_not_called()
 
     async def test_complete_sends_correct_request_to_litellm(
         self, mock_acompletion: AsyncMock
     ):
-        client = LiteLLMClient(
-            model="gpt-4o", native_structured_output=True, temperature=0.5
-        )
+        client = LiteLLMClient(model="gpt-4o", temperature=0.5)
         messages = [Message(role="user", content="Hello")]
         tools: list[dict[str, Any]] = [
             {"type": "function", "function": {"name": "get_weather"}}
@@ -118,10 +118,43 @@ class TestLiteLLMClient:
         assert city_schema["type"] == "string"
         assert call_args["temperature"] == 0.5
 
-    async def test_complete_uses_prompt_fallback_and_decodes_response(
+    async def test_complete_does_not_accept_fenced_structured_output(
         self, mock_acompletion: AsyncMock
     ) -> None:
-        client = LiteLLMClient(model="legacy-model", native_structured_output=False)
+        client = LiteLLMClient(model="gpt-4o")
+        model = _decision_model()
+        mock_acompletion.return_value = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant",
+                        content=(
+                            '```json\n{"decision":"result",'
+                            '"result":{"city":"Tokyo"}}\n```'
+                        ),
+                    ),
+                )
+            ]
+        )
+
+        response = await client.complete(
+            [Message(role="user", content="Follow the task.")],
+            decision_model=model,
+        )
+
+        call_args = mock_acompletion.call_args.kwargs
+        assert call_args["response_format"]["type"] == "json_schema"
+        assert call_args["messages"] == [
+            {"role": "user", "content": "Follow the task."}
+        ]
+        assert response.structured_output is None
+
+    async def test_complete_decodes_native_structured_output(
+        self, mock_acompletion: AsyncMock
+    ) -> None:
+        client = LiteLLMClient(model="gpt-4o")
         model = _decision_model()
         mock_acompletion.return_value = ModelResponse(
             choices=[
@@ -137,16 +170,10 @@ class TestLiteLLMClient:
         )
 
         response = await client.complete(
-            [Message(role="system", content="Follow the task.")],
+            [Message(role="user", content="Follow the task.")],
             decision_model=model,
         )
 
-        call_args = mock_acompletion.call_args.kwargs
-        assert "response_format" not in call_args
-        system_prompt = call_args["messages"][0]["content"]
-        assert "Follow the task." in system_prompt
-        assert '"decision"' in system_prompt
-        assert '"payload"' not in system_prompt
         assert response.structured_output is not None
         assert response.structured_output.data == {
             "decision": "result",
