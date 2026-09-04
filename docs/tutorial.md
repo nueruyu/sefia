@@ -83,7 +83,9 @@ JSON files remain available for debugging with `FilePersistence` from the
 By default, the provider constrains decisions with native structured output.
 Providers without that capability can use `PromptedDecisionTransport`, which asks
 for the same decision format in the prompt and validates it locally. Both transports
-provide the same final results, repair behavior, and streaming features.
+provide the same final results, repair behavior, and streaming features. LiteLLM also
+provides `NativeDecisionTransport` for provider-native function calls, with the same
+observable behavior.
 
 ## 2. Give it a tool
 

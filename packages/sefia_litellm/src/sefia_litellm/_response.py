@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Coroutine, cast
 
 from sefia.llm import LLMResponse, ToolCall
-from sefia.llm.streaming import JsonOutputStreamDecoder, OutputStreamCallback
+from sefia.llm.streaming import (
+    JsonOutputStreamDecoder,
+    OutputStreamCallback,
+    OutputStreamEvent,
+    Scalar,
+    StringDelta,
+    StringEnd,
+)
 
 from ._schema import StructuredDecisionFormat
 
@@ -75,6 +83,8 @@ async def handle_stream(
 
     chunks: list[Any] = []
     reasoning_parts: list[str] = []
+    native_argument_decoders: dict[int, JsonOutputStreamDecoder] = {}
+    identified_native_tools: set[int] = set()
     event_decoder = (
         JsonOutputStreamDecoder()
         if output is not None and output_callback is not None
@@ -99,6 +109,27 @@ async def handle_stream(
                 assert output_callback is not None
                 for event in event_decoder.feed(content):
                     await output_callback(event)
+        if output is None and output_callback is not None:
+            for fragment in _extract_native_tool_call_fragments(
+                getattr(delta, "tool_calls", None)
+            ):
+                if (
+                    fragment.name is not None
+                    and fragment.index not in identified_native_tools
+                ):
+                    identified_native_tools.add(fragment.index)
+                    await output_callback(
+                        StringEnd(("tool_calls", fragment.index, "name"), fragment.name)
+                    )
+                if fragment.arguments_json:
+                    decoder = native_argument_decoders.get(fragment.index)
+                    if decoder is None:
+                        decoder = JsonOutputStreamDecoder()
+                        native_argument_decoders[fragment.index] = decoder
+                    for event in decoder.feed(fragment.arguments_json):
+                        await output_callback(
+                            _tool_argument_event(fragment.index, event)
+                        )
 
     build_stream_response = cast(
         Callable[..., ModelResponse | None],
@@ -116,6 +147,49 @@ async def handle_stream(
     if reasoning_parts and result.reasoning_content is None:
         result.reasoning_content = "".join(reasoning_parts)
     return result
+
+
+@dataclass(frozen=True)
+class _NativeToolCallFragment:
+    index: int
+    name: str | None
+    arguments_json: str | None
+
+
+def _extract_native_tool_call_fragments(
+    calls: object,
+) -> list[_NativeToolCallFragment]:
+    if not isinstance(calls, list):
+        return []
+
+    fragments: list[_NativeToolCallFragment] = []
+    for call in cast(list[object], calls):
+        index = getattr(call, "index", None)
+        function = getattr(call, "function", None)
+        if not isinstance(index, int) or function is None:
+            continue
+        name = getattr(function, "name", None)
+        arguments = getattr(function, "arguments", None)
+        fragments.append(
+            _NativeToolCallFragment(
+                index=index,
+                name=name if isinstance(name, str) and name else None,
+                arguments_json=(
+                    arguments if isinstance(arguments, str) and arguments else None
+                ),
+            )
+        )
+    return fragments
+
+
+def _tool_argument_event(index: int, event: OutputStreamEvent) -> OutputStreamEvent:
+    path = ("tool_calls", index, "arguments", *event.path)
+    if isinstance(event, StringDelta):
+        return StringDelta(path, event.text)
+    if isinstance(event, StringEnd):
+        return StringEnd(path, event.value)
+    assert isinstance(event, Scalar)
+    return Scalar(path, event.value)
 
 
 def _decode_output(

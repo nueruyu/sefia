@@ -119,18 +119,16 @@ workload, that's the boundary where an engine is the right call.
 
 ## Constraints & production
 
-### Why not native tool-calling? Don't I lose parallel tools and caching?
+### Why isn't native tool-calling the default?
 
-You do lose those, but the unified schema is a design choice, not only a portability
-workaround. Asking the model for one result shape (`final_answer | tool_calls`) with
-strict structured output is what lets sefia treat the **Python return type as the
-primary output contract** — any nested/union/collection type — independent of a
-provider's native tool-call format, and handle final answers and tool calls in one
-step-decision shape. The portability (no per-provider semantics leaking into your code)
-comes with it. The cost is real: no native parallel tool calls, some frontier-model
-tuning on long agent loops, and prompt caching to design for rather than get free
-(tracked, not guaranteed). If you target one provider and lean on native parallel
-tools, that calculus can flip. Full treatment:
+The unified schema is a design choice, not only a portability workaround. Asking the
+model for one result shape (`result | tool_calls`) with strict structured output lets
+sefia treat the **Python return type as the primary output contract** — any
+nested/union/collection type — independently of a provider's tool-call format.
+`sefia_litellm.NativeDecisionTransport` is available when provider-native parallel
+tools or caching are a better fit. It represents the typed final value as a synthetic
+result tool and restores provider responses to the same internal decision shape. Full
+treatment:
 [tradeoffs.md](./tradeoffs.md).
 
 ### Does it scale?

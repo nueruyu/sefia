@@ -25,6 +25,7 @@ from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
 )
 from pytest_mock import MockerFixture
 from sefia.llm import LLMResponse, Message
+from sefia.llm.streaming import OutputStreamEvent, StringEnd as OutputStringEnd
 from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._client import (
@@ -38,7 +39,11 @@ from sefia_litellm.exceptions import (
     InferenceTemporarilyUnavailableError,
     InferenceTimeoutError,
 )
-from sefia_litellm._response import handle_response, handle_stream
+from sefia_litellm._response import (
+    _extract_native_tool_call_fragments,
+    handle_response,
+    handle_stream,
+)
 
 
 @pytest.fixture
@@ -60,6 +65,21 @@ def _decision_model() -> DecisionSpec:
 
 
 class TestLiteLLMClient:
+    def test_extracts_native_tool_call_fragments_without_decoding_json(self) -> None:
+        fragments = _extract_native_tool_call_fragments(
+            [
+                SimpleNamespace(
+                    index=2,
+                    function=SimpleNamespace(name="lookup", arguments='{"key":"'),
+                )
+            ]
+        )
+
+        assert len(fragments) == 1
+        assert fragments[0].index == 2
+        assert fragments[0].name == "lookup"
+        assert fragments[0].arguments_json == '{"key":"'
+
     def test_rejects_removed_structured_output_fallback_option(self) -> None:
         with pytest.raises(TypeError, match="PromptedDecisionTransport"):
             LiteLLMClient(model="legacy-model", native_structured_output=False)
@@ -526,3 +546,85 @@ class TestLiteLLMClient:
         assert reasoning_tokens == ["Let me ", "think."]
         assert content_tokens == ['{"decision"', ":...}"]
         assert response.reasoning_content == "Let me think."
+
+    async def test_handle_stream_decodes_native_tool_arguments(
+        self, mocker: MockerFixture
+    ) -> None:
+        async def stream() -> AsyncIterator[SimpleNamespace]:
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None,
+                            reasoning_content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    function=SimpleNamespace(
+                                        name="lookup", arguments='{"key":"'
+                                    ),
+                                )
+                            ],
+                        )
+                    )
+                ]
+            )
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None,
+                            reasoning_content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    function=SimpleNamespace(
+                                        name="lookup", arguments='item"}'
+                                    ),
+                                )
+                            ],
+                        )
+                    )
+                ]
+            )
+
+        built = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="tool_calls",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant",
+                        tool_calls=[
+                            ChatCompletionMessageToolCall(
+                                id="call-1",
+                                function={
+                                    "name": "lookup",
+                                    "arguments": '{"key":"item"}',
+                                },
+                                type="function",
+                            )
+                        ],
+                    ),
+                )
+            ]
+        )
+        mocker.patch("litellm.stream_chunk_builder", return_value=built)
+        events: list[OutputStreamEvent] = []
+
+        async def collect(event: OutputStreamEvent) -> None:
+            events.append(event)
+
+        await handle_stream(
+            stream(),
+            content_callback=None,
+            output_callback=collect,
+            reasoning_callback=None,
+            messages=[],
+            output=None,
+            requested_model="gpt-4o",
+        )
+
+        assert OutputStringEnd(("tool_calls", 0, "name"), "lookup") in events
+        assert events.count(OutputStringEnd(("tool_calls", 0, "name"), "lookup")) == 1
+        assert OutputStringEnd(("tool_calls", 0, "arguments", "key"), "item") in events

@@ -137,6 +137,7 @@ implementation noted in parentheses.
 | Path | Responsibility |
 | --- | --- |
 | `_client.py` | `LiteLLMClient` orchestration, runtime logging configuration, and LiteLLM exception mapping. |
+| `_native_transport.py` | Maps provider-native function calls, including the synthetic result tool, to logical decisions and progress events. |
 | `_request.py` | Converts core messages and a logical decision model into LiteLLM messages, kwargs, and native `response_format`. |
 | `_response.py` | Converts completed responses and streams into `LLMResponse`, including callbacks, usage, cost, final output decoding, and shared core JSON stream decoding. |
 | `_schema/_structured_decision.py` | Builds the provider-compatible decision schema and restores provider representations to the logical `DecisionSpec` shape. |

@@ -125,9 +125,11 @@ returns text, not protocol messages. A transport owns the response instructions,
 invokes the renderer, sends the resulting prompt, and decodes the reply.
 `StructuredDecisionTransport` requests structured output;
 `PromptedDecisionTransport` asks for the same JSON decision in ordinary response
-text. Both return the same `DecisionResponse` and logical progress events, so final
-results, repair, token streams, reasoning streams, and tool-argument previews do not
-depend on the selected transport.
+text; `sefia_litellm.NativeDecisionTransport` exposes application tools and a
+synthetic result tool through the provider's function-call protocol. All return the
+same `DecisionResponse` and logical progress events, so final results, repair, token
+streams, reasoning streams, and tool-argument previews do not depend on the selected
+transport.
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
 first **repaired in place**: the strategy creates a new request containing the
