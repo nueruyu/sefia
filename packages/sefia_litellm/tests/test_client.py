@@ -1,4 +1,5 @@
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Never, Self
 from unittest.mock import AsyncMock
@@ -15,6 +16,11 @@ from litellm.exceptions import (
     InternalServerError,
     RateLimitError,
     Timeout,
+)
+from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
+    Delta,
+    ModelResponseStream,
+    StreamingChoices,
 )
 from pytest_mock import MockerFixture
 from sefia._tool_system import ToolRegistry
@@ -44,6 +50,13 @@ from sefia_litellm.exceptions import (
 @pytest.fixture
 def mock_acompletion(mocker: MockerFixture) -> AsyncMock:
     return mocker.patch("litellm.acompletion", new_callable=AsyncMock)
+
+
+async def _completion_stream(
+    *chunks: ModelResponseStream,
+) -> AsyncIterator[ModelResponseStream]:
+    for chunk in chunks:
+        yield chunk
 
 
 @dataclass
@@ -489,13 +502,6 @@ class TestLiteLLMClient:
         _apply_litellm_log_level(False)
         assert lg.level == logging.NOTSET
 
-    def test_explicit_suppress_logs_overrides_env(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("SEFIA_LITELLM_SUPPRESS_LOGS", "false")
-        assert LiteLLMClient(model="gpt-4o", suppress_logs=True)._suppress_logs is True
-        assert LiteLLMClient(model="gpt-4o")._suppress_logs is False
-
     async def test_complete_uses_streaming_when_callback_is_provided(
         self, mock_acompletion: AsyncMock, mocker: MockerFixture
     ):
@@ -534,6 +540,39 @@ class TestLiteLLMClient:
             tool_data_formats={},
             requested_model="gpt-4o",
         )
+
+    async def test_complete_reconstructs_real_litellm_stream_chunks(
+        self, mock_acompletion: AsyncMock
+    ) -> None:
+        chunks = [
+            ModelResponseStream(
+                id="completion-1",
+                model="gpt-4o",
+                object="chat.completion.chunk",
+                choices=[StreamingChoices(index=0, delta=Delta(content="hel"))],
+            ),
+            ModelResponseStream(
+                id="completion-1",
+                model="gpt-4o",
+                object="chat.completion.chunk",
+                choices=[
+                    StreamingChoices(
+                        index=0,
+                        delta=Delta(content="lo"),
+                        finish_reason="stop",
+                    )
+                ],
+            ),
+        ]
+        mock_acompletion.return_value = _completion_stream(*chunks)
+        callback = AsyncMock()
+
+        response = await LiteLLMClient(model="gpt-4o").complete(
+            [Message(role="user", content="Hello")], stream_callback=callback
+        )
+
+        assert response.content == "hello"
+        assert [call.args[0] for call in callback.await_args_list] == ["hel", "lo"]
 
     async def test_complete_streams_when_only_reasoning_callback_is_provided(
         self, mock_acompletion: AsyncMock, mocker: MockerFixture

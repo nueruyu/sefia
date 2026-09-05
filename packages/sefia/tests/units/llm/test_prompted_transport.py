@@ -7,13 +7,10 @@ from sefia.inference import FunctionInfo
 from sefia.llm import DecisionPrompt, LLMCompletion, Message, PromptRenderer
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.streaming import OutputStreamEvent, StringEnd
-from sefia.llm.transports import (
-    DecisionObserver,
-    DecisionRequest,
-    PromptedDecisionTransport,
-)
+from sefia.llm.streaming import StringEnd
+from sefia.llm.transports import DecisionRequest, PromptedDecisionTransport
 from sefia.pydantic import PydanticModelBackend
+from sefia.testing import RecordingDecisionObserver
 
 
 def _request() -> DecisionRequest:
@@ -43,31 +40,11 @@ def _renderer(prompt: str = "complete prompt") -> Mock:
     return renderer
 
 
-class _RecordingObserver(DecisionObserver):
-    def __init__(self) -> None:
-        self.prompt: str | None = None
-        self.response_texts: list[str] = []
-        self.reasoning_texts: list[str] = []
-        self.output_events: list[OutputStreamEvent] = []
-
-    async def before_request(self, prompt: str) -> None:
-        self.prompt = prompt
-
-    async def response_text(self, text: str) -> None:
-        self.response_texts.append(text)
-
-    async def reasoning_text(self, text: str) -> None:
-        self.reasoning_texts.append(text)
-
-    async def output(self, event: OutputStreamEvent) -> None:
-        self.output_events.append(event)
-
-
 async def test_uses_the_rendered_prompt_without_a_model() -> None:
     client = AsyncMock()
     completion = LLMCompletion(content='{"decision":"result","result":"done"}')
     client.complete.return_value = completion
-    observer = _RecordingObserver()
+    observer = RecordingDecisionObserver()
     renderer = _renderer()
 
     decoded = await PromptedDecisionTransport().request_decision(
@@ -97,7 +74,7 @@ async def test_streams_fenced_json_after_prose() -> None:
     )
     client = AsyncMock()
     client.complete.return_value = LLMCompletion(content=content)
-    observer = _RecordingObserver()
+    observer = RecordingDecisionObserver()
 
     await PromptedDecisionTransport().request_decision(
         client, _renderer(), _request(), observer, stream=True
@@ -116,7 +93,11 @@ async def test_reports_undecodable_response() -> None:
 
     with pytest.raises(DecisionDecodingError) as exc_info:
         await PromptedDecisionTransport().request_decision(
-            client, _renderer(), _request(), _RecordingObserver(), stream=False
+            client,
+            _renderer(),
+            _request(),
+            RecordingDecisionObserver(),
+            stream=False,
         )
 
     assert exc_info.value.completion is completion
@@ -127,7 +108,7 @@ async def test_reports_text_and_reasoning_progress() -> None:
     client.complete.return_value = LLMCompletion(
         content='{"decision":"result","result":"done"}'
     )
-    observer = _RecordingObserver()
+    observer = RecordingDecisionObserver()
 
     await PromptedDecisionTransport().request_decision(
         client, _renderer(), _request(), observer, stream=True

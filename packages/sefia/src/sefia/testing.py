@@ -39,6 +39,8 @@ from .llm import LLMClient, LLMCompletion, Message
 from .llm.step_decision import DecisionSpec, StepTool
 from .llm.structured_data import StructuredData
 from .llm.streaming import OutputStreamCallback
+from .llm.streaming import OutputStreamEvent
+from .llm.transports import DecisionObserver
 from .pydantic._json_utils import pydantic_json_default
 
 
@@ -136,6 +138,34 @@ class MemoryHistoryStorage(HistoryStorage):
         )
         self.snapshot = record
         self.saves.append(record)
+
+
+class RecordingDecisionObserver(DecisionObserver):
+    """Records decision transport callbacks for assertions in tests."""
+
+    def __init__(self) -> None:
+        self.prompt: str | None = None
+        self.prompts: list[str] = []
+        self.response_texts: list[str] = []
+        self.reasoning_texts: list[str] = []
+        self.output_events: list[OutputStreamEvent] = []
+
+    @override
+    async def before_request(self, prompt: str) -> None:
+        self.prompt = prompt
+        self.prompts.append(prompt)
+
+    @override
+    async def response_text(self, text: str) -> None:
+        self.response_texts.append(text)
+
+    @override
+    async def reasoning_text(self, text: str) -> None:
+        self.reasoning_texts.append(text)
+
+    @override
+    async def output(self, event: OutputStreamEvent) -> None:
+        self.output_events.append(event)
 
 
 def result_completion(result: Any) -> LLMCompletion:

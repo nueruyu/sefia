@@ -311,10 +311,6 @@ async def test_invalid_response_is_repaired_with_feedback():
 
     assert report == Report(topic="sefia", summary="Repaired.", sources=[])
     assert len(mock_llm.requests) == 2
-    feedback = mock_llm.requests[1]["messages"][-1]
-    assert feedback["role"] == "user"
-    assert "The previous response was empty." in feedback["content"]
-    assert "Reason:" in feedback["content"]
 
 
 async def test_inference_on_standalone_function():

@@ -10,7 +10,7 @@ from sefia.event_system import EventPublisher
 from sefia.inference import FunctionInfo, ToolCallsDecision
 from sefia.llm import LLMInferenceStrategy, LLMCompletion, Message
 from sefia.llm.structured_data import StructuredData
-from sefia.llm._arg_stream import ToolArgStreamer, _ArgStreamChannel
+from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.llm._client import LLMClient
 from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import (
@@ -51,23 +51,33 @@ def _tool_call_id(index: int) -> str:
 
 
 async def run_router(
-    json_text: str, *, chunk_size: int = 10_000, tool: str = "ask_human"
-) -> list[Any]:
+    events: list[tuple[int, str | Scalar | StringDelta | StringEnd]],
+    *,
+    tool: str = "ask_human",
+) -> Collector:
     collector = Collector()
     streamer = ToolArgStreamer({tool: collector}, _tool_call_id)
 
-    _feed_events(streamer, json_text, chunk_size)
+    for index, event in events:
+        if isinstance(event, str):
+            streamer.identify_tool(index, event)
+        else:
+            streamer.on_argument(index, event)
     await streamer.close()
-    return collector.events
+    return collector
 
 
 async def run_router_handlers(
-    json_text: str, tools: list[str], *, chunk_size: int = 10_000
+    events: list[tuple[int, str | Scalar | StringDelta | StringEnd]], tools: list[str]
 ) -> dict[str, list[Any]]:
     collectors = {name: Collector() for name in tools}
     streamer = ToolArgStreamer(dict(collectors), _tool_call_id)
 
-    _feed_events(streamer, json_text, chunk_size)
+    for index, event in events:
+        if isinstance(event, str):
+            streamer.identify_tool(index, event)
+        else:
+            streamer.on_argument(index, event)
     await streamer.close()
     return {name: collector.events for name, collector in collectors.items()}
 
@@ -76,39 +86,19 @@ def _delta_text(events: list[Any]) -> str:
     return "".join(e.text for e in events if isinstance(e, StringDelta))
 
 
-def _feed_events(streamer: ToolArgStreamer, text: str, chunk_size: int) -> None:
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        return
-    for index, call in enumerate(payload.get("tool_calls", [])):
-        for field, field_value in call.items():
-            if field == "name":
-                streamer.identify_tool(index, field_value)
-            elif field == "arguments":
-                for name, value in field_value.items():
-                    if isinstance(value, str):
-                        for start in range(0, len(value), chunk_size):
-                            streamer.on_argument(
-                                index,
-                                StringDelta(
-                                    name=name, text=value[start : start + chunk_size]
-                                ),
-                            )
-                        streamer.on_argument(index, StringEnd(name=name, value=value))
-                    else:
-                        streamer.on_argument(index, Scalar(name=name, value=value))
-
-
 # --- router unit tests --------------------------------------------------------
 
 
 async def test_streams_string_argument():
-    text = (
-        '{"decision":"tool_calls","tool_calls":[{"name":"ask_human",'
-        '"arguments":{"question":"Hello world"}}]}'
+    collector = await run_router(
+        [
+            (0, "ask_human"),
+            (0, StringDelta(name="question", text="Hello ")),
+            (0, StringDelta(name="question", text="world")),
+            (0, StringEnd(name="question", value="Hello world")),
+        ]
     )
-    events = await run_router(text)
+    events = collector.events
 
     assert _delta_text(events) == "Hello world"
     assert all(
@@ -119,23 +109,16 @@ async def test_streams_string_argument():
     assert events[-1] == StringEnd(name="question", value="Hello world")
 
 
-async def test_streams_string_argument_character_by_character():
-    text = (
-        '{"decision":"tool_calls","tool_calls":[{"name":"ask_human",'
-        '"arguments":{"question":"Hello world"}}]}'
-    )
-    events = await run_router(text, chunk_size=1)
-
-    assert _delta_text(events) == "Hello world"
-    assert events[-1] == StringEnd(name="question", value="Hello world")
-
-
 async def test_streams_scalar_arguments_whole():
-    text = (
-        '{"decision":"tool_calls","tool_calls":[{"name":"ask_human",'
-        '"arguments":{"count":42,"ok":true,"note":null}}]}'
+    collector = await run_router(
+        [
+            (0, "ask_human"),
+            (0, Scalar(name="count", value=42)),
+            (0, Scalar(name="ok", value=True)),
+            (0, Scalar(name="note", value=None)),
+        ]
     )
-    events = await run_router(text)
+    events = collector.events
 
     assert Scalar(name="count", value=42) in events
     assert Scalar(name="ok", value=True) in events
@@ -144,73 +127,55 @@ async def test_streams_scalar_arguments_whole():
 
 
 async def test_resolves_when_arguments_precede_name():
-    # JSON member order is the model's choice; routing must not depend on the
-    # name arriving before the arguments.
-    text = (
-        '{"decision":"tool_calls","tool_calls":[{"arguments":{"question":"Hi there"},'
-        '"name":"ask_human"}]}'
+    collector = await run_router(
+        [
+            (0, StringDelta(name="question", text="Hi there")),
+            (0, StringEnd(name="question", value="Hi there")),
+            (0, "ask_human"),
+        ]
     )
-    events = await run_router(text)
+    events = collector.events
 
     assert _delta_text(events) == "Hi there"
     assert StringEnd(name="question", value="Hi there") in events
 
 
 async def test_unregistered_tool_is_ignored():
-    text = (
-        '{"decision":"tool_calls","tool_calls":[{"name":"other",'
-        '"arguments":{"question":"Hi"}}]}'
+    collector = await run_router(
+        [
+            (0, "other"),
+            (0, StringEnd(name="question", value="Hi")),
+        ]
     )
-    events = await run_router(text)  # router only knows ask_human
 
-    assert events == []
+    assert collector.events == []
 
 
 async def test_duplicate_tool_name_resolution_is_ignored():
-    async def handler(tool_call_id: str, stream: ArgStream) -> None:
-        async for _ in stream:
-            pass
-
-    streamer = ToolArgStreamer({"ask_human": handler}, _tool_call_id)
-    streamer.identify_tool(0, "ask_human")
-    first_channel = streamer._channels[0]
-    first_tasks = list(streamer._tasks)
-
-    streamer.identify_tool(0, "ask_human")
-
-    assert streamer._channels[0] is first_channel
-    assert streamer._tasks == first_tasks
-    await streamer.close()
-
-
-async def test_result_is_not_streamed():
-    text = '{"decision":"result","result":"the answer"}'
-    events = await run_router(text)
-
-    assert events == []
-
-
-async def test_fenced_response_is_ignored_gracefully():
-    # A markdown-fenced response is not the bare JSON the side channel parses;
-    # it must stop quietly rather than raise.
-    text = (
-        "```json\n"
-        '{"decision":"tool_calls","tool_calls":[{"name":"ask_human","arguments":{"question":"Hi"}}]}\n'
-        "```"
+    collector = await run_router(
+        [
+            (0, "ask_human"),
+            (0, "ask_human"),
+            (0, StringEnd(name="question", value="Hi")),
+        ]
     )
-    events = await run_router(text)
 
-    assert events == []
+    assert collector.tool_call_ids == ["call-0"]
+    assert collector.events == [StringEnd(name="question", value="Hi")]
 
 
 async def test_routes_multiple_tool_calls_independently():
-    text = (
-        '{"decision":"tool_calls","tool_calls":['
-        '{"name":"ask_a","arguments":{"question":"A?"}},'
-        '{"name":"ask_b","arguments":{"question":"B?"}}'
-        "]}"
+    events = await run_router_handlers(
+        [
+            (0, "ask_a"),
+            (1, "ask_b"),
+            (0, StringDelta(name="question", text="A?")),
+            (0, StringEnd(name="question", value="A?")),
+            (1, StringDelta(name="question", text="B?")),
+            (1, StringEnd(name="question", value="B?")),
+        ],
+        ["ask_a", "ask_b"],
     )
-    events = await run_router_handlers(text, ["ask_a", "ask_b"], chunk_size=3)
 
     assert StringEnd(name="question", value="A?") in events["ask_a"]
     assert StringEnd(name="question", value="B?") in events["ask_b"]
@@ -220,11 +185,17 @@ async def test_routes_multiple_tool_calls_independently():
 
 
 async def test_routes_multiple_arguments_of_one_call():
-    text = (
-        '{"decision":"tool_calls","tool_calls":[{"name":"ask",'
-        '"arguments":{"question":"Hi","count":3}}]}'
-    )
-    events = (await run_router_handlers(text, ["ask"], chunk_size=4))["ask"]
+    events = (
+        await run_router_handlers(
+            [
+                (0, "ask"),
+                (0, StringDelta(name="question", text="Hi")),
+                (0, StringEnd(name="question", value="Hi")),
+                (0, Scalar(name="count", value=3)),
+            ],
+            ["ask"],
+        )
+    )["ask"]
 
     # A single multiplexed stream carries both arguments, distinguished by name.
     assert _delta_text(events) == "Hi"
@@ -341,17 +312,3 @@ async def test_arguments_stream_through_a_real_strategy(
         == "What is your name?"
     )
     assert StringEnd(name="question", value="What is your name?") in collector.events
-
-
-async def test_channel_delivers_in_order_then_stops():
-    channel = _ArgStreamChannel()
-    channel.feed(StringDelta(name="q", text="a"))
-    channel.feed(StringDelta(name="q", text="b"))
-    channel.close()
-
-    seen = [event async for event in channel]
-
-    assert seen == [
-        StringDelta(name="q", text="a"),
-        StringDelta(name="q", text="b"),
-    ]

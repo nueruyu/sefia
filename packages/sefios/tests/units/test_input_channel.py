@@ -1,30 +1,11 @@
 from collections.abc import Iterator
-from typing import Any
 
 import pytest
 
 from sefios._input_channel import InputChannel, _to_input_text
 from sefios.exceptions import AmbiguousInputError, UnknownInputError
+from sefios.storage import MemorySessionStorage
 from sefios.tools import InputRequest
-
-
-class InMemoryKeyValueStore:
-    def __init__(self):
-        self._data: dict[str, Any] = {}
-
-    async def get(self, key: str, type_hint: type[Any]) -> Any | None:
-        return self._data.get(key)
-
-    async def set(self, key: str, value: Any, type_hint: type[Any]) -> None:
-        self._data[key] = value
-
-    async def delete(self, key: str) -> None:
-        self._data.pop(key, None)
-
-
-@pytest.fixture
-def kv_store() -> InMemoryKeyValueStore:
-    return InMemoryKeyValueStore()
 
 
 class TestToInputText:
@@ -42,9 +23,9 @@ class TestToInputText:
 
 
 @pytest.fixture
-def channel(kv_store: InMemoryKeyValueStore) -> Iterator[InputChannel]:
+def channel(memory_session_storage: MemorySessionStorage) -> Iterator[InputChannel]:
     channel = InputChannel()
-    with channel.use_store(kv_store):
+    with channel.use_store(memory_session_storage):
         yield channel
 
 
@@ -60,17 +41,22 @@ class TestBinding:
             InputChannel(namespace="/")
 
     async def test_namespace_scopes_persisted_keys(
-        self, kv_store: InMemoryKeyValueStore
-    ):
-        channel = InputChannel(namespace="custom/input")
+        self, memory_session_storage: MemorySessionStorage
+    ) -> None:
+        first = InputChannel(namespace="first")
+        second = InputChannel(namespace="second")
 
-        with channel.use_store(kv_store):
-            await channel.record_request("x", "why?")
-            await channel.receive_input("answer", reply_to="x")
+        with first.use_store(memory_session_storage):
+            await first.record_request("x", "first?")
+            await first.receive_input("first answer", reply_to="x")
+        with second.use_store(memory_session_storage):
+            await second.record_request("x", "second?")
+            await second.receive_input("second answer", reply_to="x")
 
-        assert "custom/input/pending" in kv_store._data
-        assert kv_store._data["custom/input/input/x"] == "answer"
-        assert "input_channel/pending" not in kv_store._data
+        with first.use_store(memory_session_storage):
+            assert await first.provide_input("x") == "first answer"
+        with second.use_store(memory_session_storage):
+            assert await second.provide_input("x") == "second answer"
 
 
 class TestPending:
@@ -110,22 +96,26 @@ class TestPending:
 
         assert await channel.pending() == []
 
-    async def test_record_request_notifies(self, kv_store: InMemoryKeyValueStore):
+    async def test_record_request_notifies(
+        self, memory_session_storage: MemorySessionStorage
+    ) -> None:
         seen: list[InputRequest] = []
         channel = InputChannel(on_request=seen.append)
 
-        with channel.use_store(kv_store):
+        with channel.use_store(memory_session_storage):
             await channel.record_request("x", "why?")
 
         assert seen == [InputRequest(interaction_id="x", prompt="why?")]
 
-    async def test_prompt_delta_notifies(self, kv_store: InMemoryKeyValueStore):
+    async def test_prompt_delta_notifies(
+        self, memory_session_storage: MemorySessionStorage
+    ) -> None:
         seen: list[tuple[str, str]] = []
         channel = InputChannel(
             on_prompt_delta=lambda call_id, text: seen.append((call_id, text))
         )
 
-        with channel.use_store(kv_store):
+        with channel.use_store(memory_session_storage):
             await channel.notify_prompt_delta("call-1", "What ")
             await channel.notify_prompt_delta("call-1", "topic?")
 

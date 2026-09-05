@@ -1,8 +1,8 @@
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, cast
-from unittest.mock import AsyncMock
+from typing import Any, Never, cast
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -17,9 +17,11 @@ from sefia.inference import (
     ToolCallResult,
 )
 from sefia.llm import (
+    DecisionPrompt,
     LLMCompletion,
     LLMInferenceStrategy,
     MarkdownPromptRenderer,
+    PromptRenderer,
     ToolCall,
 )
 from sefia.llm.exceptions import LLMCompletionDecodingError
@@ -85,18 +87,37 @@ def mock_llm_client() -> AsyncMock:
 
 
 def _make_strategy(
-    llm_client: Any = None, *, stream: bool = False, max_repair_attempts: int = 2
+    llm_client: Any = None,
+    *,
+    stream: bool = False,
+    max_repair_attempts: int = 2,
+    prompt_renderer: PromptRenderer | None = None,
 ) -> LLMInferenceStrategy:
     """The strategy under test, with a stub prompt renderer."""
     client = llm_client if llm_client is not None else AsyncMock()
     return LLMInferenceStrategy(
         llm_client=client,
         result_format_factory=PydanticModelBackend(),
-        prompt_renderer=MarkdownPromptRenderer(json_default=pydantic_json_default),
+        prompt_renderer=(
+            prompt_renderer
+            if prompt_renderer is not None
+            else MarkdownPromptRenderer(json_default=pydantic_json_default)
+        ),
         decision_transport=StructuredDecisionTransport(),
         stream=stream,
         max_repair_attempts=max_repair_attempts,
     )
+
+
+def _recording_renderer() -> Mock:
+    renderer = Mock(spec=PromptRenderer)
+    renderer.render.return_value = "prompt"
+    renderer.render_tool_result.return_value = "tool result"
+    return renderer
+
+
+def _retry_prompt(renderer: Mock) -> DecisionPrompt:
+    return cast(DecisionPrompt, renderer.render.call_args_list[1].args[0])
 
 
 def _structured_completion(content: str) -> LLMCompletion:
@@ -150,6 +171,40 @@ class TestLLMInferenceStrategy:
         assert decision.calls[0].name == "my_tool"
         assert decision.calls[0].arguments == {"param": 1}
         assert decision.calls[0].id.startswith("call_")
+
+    async def test_never_return_type_accepts_tool_call_decision(self) -> None:
+        client = AsyncMock()
+        content = (
+            '{"decision": "tool_calls", '
+            '"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
+        )
+        client.complete.return_value = _structured_completion(content)
+
+        decision = await _make_strategy(client).decide_next_step(
+            _function_info(return_type=Never, instructions="chat"),
+            [],
+            _tool_registry(chat_tool),
+            MockEventPublisher(),
+        )
+
+        assert isinstance(decision, ToolCallsDecision)
+        assert decision.calls[0].name == "chat_tool"
+
+    async def test_never_return_type_rejects_result_decision(self) -> None:
+        client = AsyncMock()
+        client.complete.return_value = _structured_completion(
+            '{"decision": "result", "result": "bye"}'
+        )
+
+        with pytest.raises(
+            InvalidInferenceResponseError, match="LLM decision failed validation"
+        ):
+            await _make_strategy(client, max_repair_attempts=0).decide_next_step(
+                _function_info(return_type=Never, instructions="chat"),
+                [],
+                _tool_registry(chat_tool),
+                MockEventPublisher(),
+            )
 
     async def test_decide_next_step_handles_result_with_validation(
         self, mock_llm_client: AsyncMock
@@ -342,7 +397,10 @@ class TestResponseRepair:
             LLMCompletion(content=""),
             _structured_completion(self.VALID_RESULT),
         ]
-        strategy = _make_strategy(client)
+        renderer = _recording_renderer()
+        strategy = _make_strategy(
+            client, prompt_renderer=cast(PromptRenderer, renderer)
+        )
         publisher = MockEventPublisher()
 
         decision = await strategy.decide_next_step(
@@ -353,11 +411,10 @@ class TestResponseRepair:
         assert decision.result == "done"
         assert client.complete.await_count == 2
 
-        retry_messages = client.complete.await_args_list[1].kwargs["messages"]
-        feedback = retry_messages[-1]
-        assert feedback.role == "user"
-        assert "The previous response was empty." in str(feedback.content)
-        assert "Reason:" in str(feedback.content)
+        rejected = _retry_prompt(renderer).rejected
+        assert rejected is not None
+        assert rejected.content == ""
+        assert rejected.reason
 
         assert any(
             isinstance(event, DecisionRepairAttempt) and event.attempt == 1
@@ -370,7 +427,10 @@ class TestResponseRepair:
             LLMCompletion(content=None),
             _structured_completion(self.VALID_RESULT),
         ]
-        strategy = _make_strategy(client)
+        renderer = _recording_renderer()
+        strategy = _make_strategy(
+            client, prompt_renderer=cast(PromptRenderer, renderer)
+        )
 
         decision = await strategy.decide_next_step(
             _function_info(), [], _tool_registry(), MockEventPublisher()
@@ -379,8 +439,10 @@ class TestResponseRepair:
         assert isinstance(decision, ResultDecision)
         assert decision.result == "done"
 
-        retry_messages = client.complete.await_args_list[1].kwargs["messages"]
-        assert "did not return structured output" in str(retry_messages[-1].content)
+        rejected = _retry_prompt(renderer).rejected
+        assert rejected is not None
+        assert rejected.content is None
+        assert "did not return structured output" in rejected.reason
 
     async def test_repairs_client_completion_decoding_error(self) -> None:
         partial = LLMCompletion(content="malformed provider response")
@@ -389,7 +451,10 @@ class TestResponseRepair:
             LLMCompletionDecodingError(partial, "response could not be decoded"),
             _structured_completion(self.VALID_RESULT),
         ]
-        strategy = _make_strategy(client)
+        renderer = _recording_renderer()
+        strategy = _make_strategy(
+            client, prompt_renderer=cast(PromptRenderer, renderer)
+        )
 
         decision = await strategy.decide_next_step(
             _function_info(), [], _tool_registry(), MockEventPublisher()
@@ -397,9 +462,10 @@ class TestResponseRepair:
 
         assert isinstance(decision, ResultDecision)
         assert decision.result == "done"
-        retry_prompt = client.complete.await_args_list[1].kwargs["messages"][0]
-        assert "malformed provider response" in str(retry_prompt.content)
-        assert "response could not be decoded" in str(retry_prompt.content)
+        rejected = _retry_prompt(renderer).rejected
+        assert rejected is not None
+        assert rejected.content == "malformed provider response"
+        assert rejected.reason.endswith("response could not be decoded")
 
     async def test_repairs_schema_violation_and_echoes_invalid_output(self):
         invalid = '{"decision": "result", "result": {"name": "test"}}'
@@ -409,7 +475,10 @@ class TestResponseRepair:
             _structured_completion(invalid),
             _structured_completion(valid),
         ]
-        strategy = _make_strategy(client)
+        renderer = _recording_renderer()
+        strategy = _make_strategy(
+            client, prompt_renderer=cast(PromptRenderer, renderer)
+        )
 
         decision = await strategy.decide_next_step(
             _function_info(return_type=MyOutput),
@@ -421,10 +490,10 @@ class TestResponseRepair:
         assert isinstance(decision, ResultDecision)
         assert decision.result == MyOutput(name="test", value=42)
 
-        retry_prompt = client.complete.await_args_list[1].kwargs["messages"][0]
-        assert retry_prompt.role == "user"
-        assert invalid in str(retry_prompt.content)
-        assert "Reason:" in str(retry_prompt.content)
+        rejected = _retry_prompt(renderer).rejected
+        assert rejected is not None
+        assert json.loads(rejected.content or "") == json.loads(invalid)
+        assert rejected.reason
 
     async def test_repairs_unknown_tool_call(self):
         invalid = json.dumps(
@@ -476,10 +545,11 @@ class TestResponseRepair:
                 ]
             ),
         ]
+        renderer = _recording_renderer()
         strategy = LLMInferenceStrategy(
             llm_client=client,
             result_format_factory=PydanticModelBackend(),
-            prompt_renderer=MarkdownPromptRenderer(json_default=pydantic_json_default),
+            prompt_renderer=cast(PromptRenderer, renderer),
             decision_transport=NativeDecisionTransport(),
         )
 
@@ -488,9 +558,17 @@ class TestResponseRepair:
         )
 
         assert isinstance(decision, ResultDecision)
-        retry_prompt = client.complete.await_args_list[1].kwargs["messages"][0]
-        assert '"name":"no_such_tool"' in str(retry_prompt.content)
-        assert '"arguments":{"query":"lost"}' in str(retry_prompt.content)
+        rejected = _retry_prompt(renderer).rejected
+        assert rejected is not None
+        assert json.loads(rejected.content or "") == {
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "name": "no_such_tool",
+                    "arguments": {"query": "lost"},
+                }
+            ]
+        }
 
     async def test_repair_does_not_mutate_history(self):
         client = AsyncMock()

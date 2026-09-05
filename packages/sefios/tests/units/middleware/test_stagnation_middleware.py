@@ -94,18 +94,22 @@ class TestStagnationDetector:
         with pytest.raises(StagnationError):
             await middleware.wrap(StepContext(step=0, history=_empty_history()), nxt)
 
-    def test_hashes_nested_dictionaries_consistently(self):
-        middleware = StagnationDetector()
+    async def test_treats_reordered_nested_dictionaries_as_the_same_call(self):
+        middleware = StagnationDetector(max_repeats=2)
         args1 = {"a": 1, "nested": {"c": 3, "b": 2}}
         args2 = {"nested": {"b": 2, "c": 3}, "a": 1}
 
-        assert middleware._hash_tool_call(
-            "test_tool", args1
-        ) == middleware._hash_tool_call("test_tool", args2)
+        await _step(middleware, "test_tool", args1)
 
-    def test_handles_non_serializable_types_with_fallback(self):
-        middleware = StagnationDetector()
+        with pytest.raises(StagnationError):
+            await _step(middleware, "test_tool", args2)
+
+    async def test_detects_repeated_calls_with_non_serializable_arguments(self):
+        middleware = StagnationDetector(max_repeats=2)
         now = datetime.now()
+        arguments = {"dt": now, "num": 1}
 
-        h = middleware._hash_tool_call("test_tool", {"dt": now, "num": 1})
-        assert str(now) in h
+        await _step(middleware, "test_tool", arguments)
+
+        with pytest.raises(StagnationError):
+            await _step(middleware, "test_tool", arguments)

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import cast
+from typing import TypeAlias, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import sefios.storage as storage_module
 from glyff import Serializer
 from glyff_pydantic import PydanticSerializer
 from pytest_mock import MockerFixture
@@ -18,8 +19,13 @@ from sefios.storage import (
 )
 
 
-StoreType = (
+StoreType: TypeAlias = (
     type[FileSessionStorage] | type[MemorySessionStorage] | type[SQLiteSessionStorage]
+)
+STORE_TYPES: tuple[StoreType, ...] = (
+    FileSessionStorage,
+    MemorySessionStorage,
+    SQLiteSessionStorage,
 )
 
 
@@ -33,9 +39,7 @@ def _make_store(
     return store_type(serializer=serializer)
 
 
-@pytest.mark.parametrize(
-    "store_type", [FileSessionStorage, MemorySessionStorage, SQLiteSessionStorage]
-)
+@pytest.mark.parametrize("store_type", STORE_TYPES)
 async def test_get_awaits_deserialize(store_type: StoreType, tmp_path: Path) -> None:
     serializer = AsyncMock()
     serializer.serialize.return_value = b'{"value": "loaded"}'
@@ -52,9 +56,7 @@ async def test_get_awaits_deserialize(store_type: StoreType, tmp_path: Path) -> 
     serializer.deserialize.assert_awaited_once_with(b'{"value": "loaded"}', dict)
 
 
-@pytest.mark.parametrize(
-    "store_type", [FileSessionStorage, MemorySessionStorage, SQLiteSessionStorage]
-)
+@pytest.mark.parametrize("store_type", STORE_TYPES)
 async def test_get_returns_none_when_data_is_missing(
     store_type: StoreType, tmp_path: Path
 ) -> None:
@@ -67,9 +69,7 @@ async def test_get_returns_none_when_data_is_missing(
     serializer.deserialize.assert_not_awaited()
 
 
-@pytest.mark.parametrize(
-    "store_type", [FileSessionStorage, MemorySessionStorage, SQLiteSessionStorage]
-)
+@pytest.mark.parametrize("store_type", STORE_TYPES)
 async def test_set_then_delete_round_trip(
     store_type: StoreType, tmp_path: Path
 ) -> None:
@@ -81,6 +81,30 @@ async def test_set_then_delete_round_trip(
 
     await store.delete("session/state")
     assert await store.get("session/state", dict) is None
+
+
+def test_contract_covers_all_exported_implementations() -> None:
+    exported = {
+        value
+        for name in storage_module.__all__
+        if isinstance(value := getattr(storage_module, name), type)
+        and value is not SessionStorage
+        and issubclass(value, SessionStorage)
+    }
+
+    assert set(STORE_TYPES) == exported
+
+
+@pytest.mark.parametrize("store_type", STORE_TYPES)
+async def test_overwrite_replaces_the_stored_value(
+    store_type: StoreType, tmp_path: Path, serializer: Serializer
+) -> None:
+    store = _make_store(store_type, tmp_path, serializer)
+    await store.set("session/state", {"value": "first"}, dict)
+
+    await store.set("session/state", {"value": "second"}, dict)
+
+    assert await store.get("session/state", dict) == {"value": "second"}
 
 
 async def test_file_store_commits_immediately(tmp_path: Path) -> None:
