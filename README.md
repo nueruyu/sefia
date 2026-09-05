@@ -61,9 +61,16 @@ and **[the positioning argument](./docs/tradeoffs.md)**. For a
 
 ## Install
 
+Requires Python 3.11+. In your application project, install with
+[uv](https://docs.astral.sh/uv/guides/projects/) (run `uv init` first if you
+have not created a project yet):
+
 ```bash
-pip install 'sefios[litellm,web,sqlite]'
+uv add 'sefios[litellm,web,sqlite]'
 ```
+
+Or, with pip in an activated virtual environment:
+`pip install 'sefios[litellm,web,sqlite]'`.
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
 - **`sefios`** — the opinionated batteries: the `SessionScope` front door, ready-made
@@ -95,7 +102,8 @@ context helpers such as `current_tool_call_id_for`.
 
 ## Quickstart
 
-Save this as `research.py`, set `OPENAI_API_KEY`, and run `python research.py`.
+Save this as `research.py`, set `OPENAI_API_KEY`, and run `uv run python research.py`
+(or `python research.py` in the virtual environment used for pip).
 The class holds a web dependency, runs an inferred step, and persists its run.
 
 <!-- example: readme-quickstart -->
@@ -183,8 +191,15 @@ A turn that pauses for a human and resumes after a restart, served on an ordinar
 request/response handler: the pause is a tool that **raises**, and resume is calling
 the endpoint again.
 
-This example uses the FastAPI integration with SQLite persistence, so install the required
-extras — `pip install 'sefios[litellm,web,fastapi,sqlite]'`.
+This example also needs the FastAPI extra and an HTTP server:
+
+```bash
+uv add 'sefios[litellm,web,fastapi,sqlite]' uvicorn
+```
+
+With pip: `pip install 'sefios[litellm,web,fastapi,sqlite]' uvicorn`.
+Save the code as `server.py` and run `uv run uvicorn server:app`
+(or `uvicorn server:app` in the virtual environment used for pip).
 
 <!-- example: readme-http -->
 ```python
