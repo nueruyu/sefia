@@ -81,11 +81,10 @@ Or, with pip in an activated virtual environment:
   `sefios.fastapi` integrations — Typer and FastAPI apps with persisted sessions
   and human-in-the-loop pause/resume.
 
-The opt-in live compatibility suite covers OpenAI, Anthropic, Gemini, xAI,
-Mistral, Groq, DeepSeek, and local Ollama. Each provider is skipped unless its
-enabling environment variable is set; suite coverage does not imply that every
-provider was exercised in a given test run. See the provider table in
-[CONTRIBUTING.md](./CONTRIBUTING.md#end-to-end-tests-against-real-providers).
+Sefia connects to [LiteLLM-supported LLM providers](https://docs.litellm.ai/docs/providers)
+through the LiteLLM adapter. End-to-end operation has currently been verified
+with **OpenAI, Anthropic, and Gemini** only. Available features depend on the
+selected model and decision transport.
 
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
@@ -102,7 +101,12 @@ context helpers such as `current_tool_call_id_for`.
 
 ## Quickstart
 
-Save this as `research.py`, set `OPENAI_API_KEY`, and run `uv run python research.py`
+Choose a model from [LiteLLM's provider guide](https://docs.litellm.ai/docs/providers),
+set `model=` to its LiteLLM model name, and configure the credentials required by
+that provider. The code below uses `gpt-4o` with `OPENAI_API_KEY` as an example;
+you can use another provider by changing the model and its credentials.
+
+Save this as `research.py` and run `uv run python research.py`
 (or `python research.py` in the virtual environment used for pip).
 The class holds a web dependency, runs an inferred step, and persists its run.
 
