@@ -18,12 +18,13 @@ from litellm.exceptions import (
 )
 from pytest_mock import MockerFixture
 from sefia.llm import (
-    LLMOutput,
-    LLMResponse,
+    LLMCompletion,
     Message,
     ToolCall,
 )
+from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.json_schema import JsonSchemaDocument
+from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._client import (
@@ -49,7 +50,7 @@ class _CityResult:
     city: str
 
 
-def _decision_model() -> DecisionSpec:
+def _decision_spec() -> DecisionSpec:
     return DecisionSpec.for_inference(
         output_type=_CityResult,
         tools=[],
@@ -83,6 +84,20 @@ class TestLiteLLMClient:
         assert "response_format" not in call_args
         assert call_args["messages"] == [{"role": "user", "content": "Hello"}]
 
+    async def test_complete_rejects_non_litellm_completion(
+        self, mock_acompletion: AsyncMock
+    ) -> None:
+        mock_acompletion.return_value = object()
+
+        with pytest.raises(
+            LLMCompletionDecodingError, match="unsupported completion response"
+        ) as exc_info:
+            await LiteLLMClient(model="gpt-4o").complete(
+                [Message(role="user", content="Hello")]
+            )
+
+        assert exc_info.value.completion.model == "gpt-4o"
+
     async def test_complete_sends_correct_request_to_litellm(
         self, mock_acompletion: AsyncMock
     ):
@@ -103,7 +118,7 @@ class TestLiteLLMClient:
                 schema_source=ToolSchemaSource.GENERATED,
             )
         ]
-        decision_model = _decision_model()
+        decision_spec = _decision_spec()
 
         mock_acompletion.return_value = ModelResponse(
             choices=[
@@ -115,7 +130,7 @@ class TestLiteLLMClient:
             ]
         )
 
-        await client.complete(messages, tools=tools, decision_model=decision_model)
+        await client.complete(messages, tools=tools, decision_spec=decision_spec)
 
         mock_acompletion.assert_called_once()
         call_args = mock_acompletion.call_args[1]
@@ -140,7 +155,7 @@ class TestLiteLLMClient:
         self, mock_acompletion: AsyncMock
     ) -> None:
         client = LiteLLMClient(model="gpt-4o")
-        model = _decision_model()
+        decision_spec = _decision_spec()
         mock_acompletion.return_value = ModelResponse(
             choices=[
                 Choices(
@@ -159,7 +174,7 @@ class TestLiteLLMClient:
 
         response = await client.complete(
             [Message(role="user", content="Follow the task.")],
-            decision_model=model,
+            decision_spec=decision_spec,
         )
 
         call_args = mock_acompletion.call_args.kwargs
@@ -173,7 +188,7 @@ class TestLiteLLMClient:
         self, mock_acompletion: AsyncMock
     ) -> None:
         client = LiteLLMClient(model="gpt-4o")
-        model = _decision_model()
+        decision_spec = _decision_spec()
         mock_acompletion.return_value = ModelResponse(
             choices=[
                 Choices(
@@ -189,11 +204,11 @@ class TestLiteLLMClient:
 
         response = await client.complete(
             [Message(role="user", content="Follow the task.")],
-            decision_model=model,
+            decision_spec=decision_spec,
         )
 
         assert response.structured_output is not None
-        assert response.structured_output.data == {
+        assert response.structured_output.tree == {
             "decision": "result",
             "result": {"city": "Tokyo"},
         }
@@ -253,7 +268,7 @@ class TestLiteLLMClient:
             "parameters"
         ]
         assert sent_schema["properties"]["labels"]["type"] == "array"
-        assert response.tool_calls[0].arguments.data == {"labels": {"important": 2}}
+        assert response.tool_calls[0].arguments.tree == {"labels": {"important": 2}}
 
     async def test_complete_encodes_native_tool_call_history_for_wire_schema(
         self,
@@ -294,7 +309,9 @@ class TestLiteLLMClient:
                     ToolCall(
                         id="call-1",
                         name="categorize",
-                        arguments=LLMOutput.from_json({"labels": {"important": 2}}),
+                        arguments=StructuredData.from_json(
+                            {"labels": {"important": 2}}
+                        ),
                     )
                 ],
             ),
@@ -439,9 +456,9 @@ class TestLiteLLMClient:
 
         stream = FakeStream()
         client = LiteLLMClient(model="gpt-4o")
-        stream_response = LLMResponse(content="streamed")
+        stream_response = LLMCompletion(content="streamed")
         stream_handler = mocker.patch(
-            "sefia_litellm._client.handle_stream",
+            "sefia_litellm._client.consume_completion_stream",
             new_callable=AsyncMock,
             return_value=stream_response,
         )
@@ -461,8 +478,8 @@ class TestLiteLLMClient:
             output_callback=None,
             reasoning_callback=None,
             messages=[{"role": "user", "content": "Hello"}],
-            output=None,
-            tool_argument_formats={},
+            decision_format=None,
+            tool_data_formats={},
             requested_model="gpt-4o",
         )
 
@@ -478,9 +495,9 @@ class TestLiteLLMClient:
 
         stream = FakeStream()
         client = LiteLLMClient(model="gpt-4o")
-        stream_response = LLMResponse(content="streamed")
+        stream_response = LLMCompletion(content="streamed")
         stream_handler = mocker.patch(
-            "sefia_litellm._client.handle_stream",
+            "sefia_litellm._client.consume_completion_stream",
             new_callable=AsyncMock,
             return_value=stream_response,
         )
@@ -497,7 +514,7 @@ class TestLiteLLMClient:
             output_callback=None,
             reasoning_callback=reasoning_callback,
             messages=[{"role": "user", "content": "Hello"}],
-            output=None,
-            tool_argument_formats={},
+            decision_format=None,
+            tool_data_formats={},
             requested_model="gpt-4o",
         )

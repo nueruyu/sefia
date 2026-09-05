@@ -8,11 +8,8 @@ from sefia.llm import Message, ToolCall
 from sefia.llm.json_schema import JsonObject
 from sefia.llm.step_decision import DecisionSpec, StepTool
 
-from ._schema import (
-    StructuredDecisionFormat,
-    StructuredValueFormat,
-    tool_arguments_format,
-)
+from ._schema import StructuredDecisionFormat
+from ._schema._data_format import StructuredDataFormat
 
 
 class _JsonSchemaResponseDefinition(TypedDict):
@@ -30,82 +27,85 @@ class _JsonSchemaResponseFormat(TypedDict):
 @dataclass(frozen=True)
 class CompletionRequest:
     messages: list[dict[str, Any]]
-    kwargs: dict[str, Any]
+    api_kwargs: dict[str, Any]
     decision_format: StructuredDecisionFormat | None
-    tool_argument_formats: dict[str, StructuredValueFormat]
+    tool_data_formats: dict[str, StructuredDataFormat]
 
 
 def build_completion_request(
     *,
     messages: list[Message],
     tools: list[StepTool] | None,
-    decision_model: DecisionSpec | None,
+    decision_spec: DecisionSpec | None,
     client_kwargs: dict[str, Any],
     stream: bool,
 ) -> CompletionRequest:
-    tool_argument_formats = {
-        tool.name: tool_arguments_format(tool) for tool in tools or []
+    tool_data_formats = {
+        tool.name: StructuredDataFormat.from_tool(tool) for tool in tools or []
     }
-    raw_messages = [_message(message, tool_argument_formats) for message in messages]
+    wire_messages = [
+        _encode_message(message, tool_data_formats) for message in messages
+    ]
     decision_format = (
-        StructuredDecisionFormat.from_model(decision_model)
-        if decision_model is not None
+        StructuredDecisionFormat.from_spec(decision_spec)
+        if decision_spec is not None
         else None
     )
-    kwargs = client_kwargs.copy()
+    api_kwargs = client_kwargs.copy()
     if tools:
-        kwargs["tools"] = [
-            _tool_definition(tool, tool_argument_formats[tool.name]) for tool in tools
+        api_kwargs["tools"] = [
+            _encode_tool_definition(tool, tool_data_formats[tool.name])
+            for tool in tools
         ]
     if decision_format is not None:
-        kwargs["response_format"] = _response_format(decision_format)
+        api_kwargs["response_format"] = _response_format(decision_format)
     if stream:
-        kwargs["stream"] = True
+        api_kwargs["stream"] = True
     return CompletionRequest(
-        raw_messages,
-        kwargs,
+        wire_messages,
+        api_kwargs,
         decision_format,
-        tool_argument_formats,
+        tool_data_formats,
     )
 
 
-def _tool_definition(
+def _encode_tool_definition(
     tool: StepTool,
-    value_format: StructuredValueFormat,
+    data_format: StructuredDataFormat,
 ) -> dict[str, Any]:
     function: dict[str, Any] = {
         "name": tool.name,
-        "parameters": value_format.schema,
+        "parameters": data_format.schema,
     }
     if tool.description:
         function["description"] = tool.description
     return {"type": "function", "function": function}
 
 
-def _message(
+def _encode_message(
     message: Message,
-    tool_argument_formats: dict[str, StructuredValueFormat],
+    tool_data_formats: dict[str, StructuredDataFormat],
 ) -> dict[str, Any]:
-    result: dict[str, Any] = {"role": message.role}
+    wire_message: dict[str, Any] = {"role": message.role}
     if message.content is not None:
-        result["content"] = message.content
+        wire_message["content"] = message.content
     if message.tool_call_id is not None:
-        result["tool_call_id"] = message.tool_call_id
+        wire_message["tool_call_id"] = message.tool_call_id
     if message.tool_calls is not None:
-        result["tool_calls"] = [
-            _tool_call(call, tool_argument_formats.get(call.name))
+        wire_message["tool_calls"] = [
+            _encode_tool_call(call, tool_data_formats.get(call.name))
             for call in message.tool_calls
         ]
-    return result
+    return wire_message
 
 
-def _tool_call(
+def _encode_tool_call(
     call: ToolCall,
-    value_format: StructuredValueFormat | None,
+    data_format: StructuredDataFormat | None,
 ) -> dict[str, Any]:
     arguments = (
-        value_format.encode(call.arguments)
-        if value_format is not None
+        data_format.encode(call.arguments)
+        if data_format is not None
         else call.arguments
     )
     return {
@@ -114,7 +114,7 @@ def _tool_call(
         "function": {
             "name": call.name,
             "arguments": json.dumps(
-                arguments.data,
+                arguments.tree,
                 ensure_ascii=False,
                 separators=(",", ":"),
             ),
@@ -122,12 +122,14 @@ def _tool_call(
     }
 
 
-def _response_format(output: StructuredDecisionFormat) -> _JsonSchemaResponseFormat:
+def _response_format(
+    decision_format: StructuredDecisionFormat,
+) -> _JsonSchemaResponseFormat:
     return {
         "type": "json_schema",
         "json_schema": {
             "name": "structured_output",
-            "schema": output.schema.to_dict(),
+            "schema": decision_format.schema.to_dict(),
             "strict": True,
         },
     }

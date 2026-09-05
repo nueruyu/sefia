@@ -4,13 +4,13 @@ from .._client import LLMClient
 from .._messages import Message
 from .._prompted_response import PromptedJsonStreamExtractor, extract_prompted_json
 from .._prompt_renderer import PromptRenderer
-from ..llm_output import LLMOutput
+from ..exceptions import DecisionDecodingError
+from ..structured_data import StructuredData
 from ..streaming import JsonOutputStreamDecoder
 from ._base import (
-    DecisionDecodingError,
     DecisionObserver,
     DecisionRequest,
-    DecisionResponse,
+    DecodedDecision,
     DecisionTransport,
 )
 from ._json_decision import json_response_instructions
@@ -26,7 +26,7 @@ class PromptedDecisionTransport(DecisionTransport):
         request: DecisionRequest,
         observer: DecisionObserver,
         stream: bool,
-    ) -> DecisionResponse:
+    ) -> DecodedDecision:
         prompt = prompt_renderer.render(
             request.to_prompt(
                 json_response_instructions(request.spec),
@@ -46,20 +46,22 @@ class PromptedDecisionTransport(DecisionTransport):
                 for event in stream_decoder.feed(json_text):
                     await observer.output(event)
 
-        response = await client.complete(
+        completion = await client.complete(
             messages=[Message(role="user", content=prompt)],
             tools=None,
-            decision_model=None,
+            decision_spec=None,
             stream_callback=on_text if stream else None,
             output_callback=None,
             reasoning_callback=observer.reasoning_text if stream else None,
         )
-        if response.content is None:
+        if completion.content is None:
             raise DecisionDecodingError(
-                response, "LLM did not provide response content."
+                completion, "LLM did not provide response content."
             )
         try:
-            output = LLMOutput.parse_json(extract_prompted_json(response.content))
+            data = StructuredData.parse_json(
+                extract_prompted_json(completion.content)
+            )
         except ValueError as error:
-            raise DecisionDecodingError(response, str(error)) from error
-        return DecisionResponse(output=output, raw=response)
+            raise DecisionDecodingError(completion, str(error)) from error
+        return DecodedDecision(decision_data=data, completion=completion)

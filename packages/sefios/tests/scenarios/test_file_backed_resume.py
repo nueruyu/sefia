@@ -17,8 +17,8 @@ import pytest
 from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
 from glyff_sqlite import SQLiteBackend
 from sefia import Session, Tools
-from sefia.llm import LLMResponse
-from sefia.testing import MockLLMClient, result_response, tool_calls_response
+from sefia.llm import LLMCompletion
+from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 
 from sefios import SQLiteSessionStorage, domain
 from sefios.exceptions import InputRequired
@@ -31,10 +31,10 @@ infer = domain(
 
 _SESSION_ID = "file-backed-resume-test"
 
-_TOOL_CALL_RESPONSE = tool_calls_response(
+_TOOL_CALL_RESPONSE = tool_calls_completion(
     ("Input_get_input", {"prompt": "What is your name?"})
 )
-_RESULT_RESPONSE = result_response("The user's name is Alice.")
+_RESULT_RESPONSE = result_completion("The user's name is Alice.")
 
 
 class _Agent:
@@ -51,7 +51,7 @@ class _Agent:
 
 async def test_pause_resume_survives_process_restart(
     tmp_path: Path,
-    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
 ) -> None:
     seen: list[InputRequest] = []
     answers: dict[str, str] = {}

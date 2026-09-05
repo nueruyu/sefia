@@ -27,6 +27,6 @@ class CostCalculator(EventHandler[AfterLLMCall]):
     async def handle(self, event: AfterLLMCall):
         state_store = get_state().get(CostState)
         current = await state_store.ensure()
-        if event.response.cost is not None and event.response.cost > 0.0:
-            new_state = CostState(cost=current.cost + event.response.cost)
+        if event.completion.cost is not None and event.completion.cost > 0.0:
+            new_state = CostState(cost=current.cost + event.completion.cost)
             await state_store.save(new_state)

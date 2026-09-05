@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from sefia.inference import FunctionInfo
-from sefia.llm import DecisionPrompt, LLMResponse, Message, PromptRenderer
-from sefia.llm.llm_output import LLMOutput
+from sefia.llm import DecisionPrompt, LLMCompletion, Message, PromptRenderer
+from sefia.llm.exceptions import DecisionDecodingError
+from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import OutputStreamEvent, StringEnd
 from sefia.llm.transports import (
-    DecisionDecodingError,
     DecisionObserver,
     DecisionRequest,
     StructuredDecisionTransport,
@@ -67,24 +67,26 @@ class _RecordingObserver(DecisionObserver):
 
 async def test_renders_and_delivers_one_complete_prompt() -> None:
     client = AsyncMock()
-    raw = LLMResponse(
-        structured_output=LLMOutput.from_json({"decision": "result", "result": "done"})
+    completion = LLMCompletion(
+        structured_output=StructuredData.from_json(
+            {"decision": "result", "result": "done"}
+        )
     )
-    client.complete.return_value = raw
+    client.complete.return_value = completion
     renderer = _renderer()
     request = _request()
     observer = _RecordingObserver()
 
-    response = await StructuredDecisionTransport().request_decision(
+    decoded = await StructuredDecisionTransport().request_decision(
         client, renderer, request, observer, stream=False
     )
 
     sent = client.complete.await_args.kwargs
     assert sent["messages"] == [Message(role="user", content="complete prompt")]
-    assert sent["decision_model"] is request.spec
+    assert sent["decision_spec"] is request.spec
     assert observer.prompt == "complete prompt"
-    assert response.output.data == {"decision": "result", "result": "done"}
-    assert response.raw is raw
+    assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
+    assert decoded.completion is completion
     renderer.render.assert_called_once()
     rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
     assert "Return exactly one JSON object" in rendered_prompt.response_instructions
@@ -95,10 +97,10 @@ async def test_observer_finishes_before_the_client_request() -> None:
     order: list[str] = []
     client = AsyncMock()
 
-    async def complete(**_kwargs: object) -> LLMResponse:
+    async def complete(**_kwargs: object) -> LLMCompletion:
         order.append("request")
-        return LLMResponse(
-            structured_output=LLMOutput.from_json(
+        return LLMCompletion(
+            structured_output=StructuredData.from_json(
                 {"decision": "result", "result": "done"}
             )
         )
@@ -119,20 +121,20 @@ async def test_observer_finishes_before_the_client_request() -> None:
 
 async def test_reports_undecodable_response() -> None:
     client = AsyncMock()
-    raw = LLMResponse(content="not json")
-    client.complete.return_value = raw
+    completion = LLMCompletion(content="not json")
+    client.complete.return_value = completion
 
     with pytest.raises(DecisionDecodingError) as exc_info:
         await StructuredDecisionTransport().request_decision(
             client, _renderer(), _request(), _RecordingObserver(), stream=False
         )
 
-    assert exc_info.value.response is raw
+    assert exc_info.value.completion is completion
 
 
 async def test_rejects_raw_json_content() -> None:
     client = AsyncMock()
-    client.complete.return_value = LLMResponse(
+    client.complete.return_value = LLMCompletion(
         content='{"decision":"result","result":"done"}'
     )
 
@@ -144,8 +146,10 @@ async def test_rejects_raw_json_content() -> None:
 
 async def test_reports_text_and_reasoning_progress() -> None:
     client = AsyncMock()
-    client.complete.return_value = LLMResponse(
-        structured_output=LLMOutput.from_json({"decision": "result", "result": "done"})
+    client.complete.return_value = LLMCompletion(
+        structured_output=StructuredData.from_json(
+            {"decision": "result", "result": "done"}
+        )
     )
     observer = _RecordingObserver()
 
@@ -161,8 +165,8 @@ async def test_reports_text_and_reasoning_progress() -> None:
 
 async def test_reports_logical_tool_progress() -> None:
     client = AsyncMock()
-    client.complete.return_value = LLMResponse(
-        structured_output=LLMOutput.from_json(
+    client.complete.return_value = LLMCompletion(
+        structured_output=StructuredData.from_json(
             {"decision": "tool_calls", "tool_calls": []}
         )
     )

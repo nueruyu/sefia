@@ -8,8 +8,8 @@ import pytest
 from sefia._tool_system import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.inference import FunctionInfo, ToolCallsDecision
-from sefia.llm import LLMInferenceStrategy, LLMResponse, Message
-from sefia.llm.llm_output import LLMOutput
+from sefia.llm import LLMInferenceStrategy, LLMCompletion, Message
+from sefia.llm.structured_data import StructuredData
 from sefia.llm._arg_stream import ToolArgStreamer, _ArgStreamChannel
 from sefia.llm._client import LLMClient
 from sefia.llm.step_decision import DecisionSpec, StepTool
@@ -245,11 +245,11 @@ class StreamingClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[StepTool] | None = None,
-        decision_model: DecisionSpec | None = None,
+        decision_spec: DecisionSpec | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
-    ) -> LLMResponse:
+    ) -> LLMCompletion:
         if stream_callback is not None:
             for char in self.content:
                 await stream_callback(char)
@@ -267,11 +267,11 @@ class StreamingClient(LLMClient):
                         await output_callback(OutputStringEnd(path, value))
                     else:
                         await output_callback(OutputScalar(path, value))
-        return LLMResponse(
+        return LLMCompletion(
             content=self.content,
             structured_output=(
-                LLMOutput.parse_json(self.content)
-                if decision_model is not None
+                StructuredData.parse_json(self.content)
+                if decision_spec is not None
                 else None
             ),
         )

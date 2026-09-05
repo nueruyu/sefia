@@ -5,8 +5,9 @@ from typing import Any
 
 import pytest
 from sefia import Tools
-from sefia.llm import LLMClient, LLMOutput, LLMResponse, Message
+from sefia.llm import LLMClient, LLMCompletion, Message
 from sefia.llm.step_decision import DecisionSpec, StepTool
+from sefia.llm.structured_data import StructuredData
 from sefia.llm.streaming import (
     OutputStreamCallback,
     StringDelta,
@@ -32,11 +33,11 @@ class StreamingClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[StepTool] | None = None,
-        decision_model: DecisionSpec | None = None,
+        decision_spec: DecisionSpec | None = None,
         stream_callback: Callable[[str], Coroutine[Any, Any, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,
         reasoning_callback: (Callable[[str], Coroutine[Any, Any, None]] | None) = None,
-    ) -> LLMResponse:
+    ) -> LLMCompletion:
         content = self.responses.pop(0)
         if stream_callback is not None:
             for character in content:
@@ -62,10 +63,12 @@ class StreamingClient(LLMClient):
                                 value,
                             )
                         )
-        return LLMResponse(
+        return LLMCompletion(
             content=content,
             structured_output=(
-                LLMOutput.parse_json(content) if decision_model is not None else None
+                StructuredData.parse_json(content)
+                if decision_spec is not None
+                else None
             ),
         )
 

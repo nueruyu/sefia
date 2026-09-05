@@ -3,11 +3,11 @@ from typing_extensions import final, override
 from .._client import LLMClient
 from .._messages import Message
 from .._prompt_renderer import PromptRenderer
+from ..exceptions import DecisionDecodingError
 from ._base import (
-    DecisionDecodingError,
     DecisionObserver,
     DecisionRequest,
-    DecisionResponse,
+    DecodedDecision,
     DecisionTransport,
 )
 from ._json_decision import json_response_instructions
@@ -23,7 +23,7 @@ class StructuredDecisionTransport(DecisionTransport):
         request: DecisionRequest,
         observer: DecisionObserver,
         stream: bool,
-    ) -> DecisionResponse:
+    ) -> DecodedDecision:
         prompt = prompt_renderer.render(
             request.to_prompt(
                 json_response_instructions(request.spec),
@@ -33,17 +33,17 @@ class StructuredDecisionTransport(DecisionTransport):
         )
         await observer.before_request(prompt)
 
-        response = await client.complete(
+        completion = await client.complete(
             messages=[Message(role="user", content=prompt)],
             tools=None,
-            decision_model=request.spec,
+            decision_spec=request.spec,
             stream_callback=observer.response_text if stream else None,
             output_callback=observer.output if stream else None,
             reasoning_callback=observer.reasoning_text if stream else None,
         )
-        output = response.structured_output
-        if output is None:
+        data = completion.structured_output
+        if data is None:
             raise DecisionDecodingError(
-                response, "LLM client did not return structured output."
+                completion, "LLM client did not return structured output."
             )
-        return DecisionResponse(output=output, raw=response)
+        return DecodedDecision(decision_data=data, completion=completion)

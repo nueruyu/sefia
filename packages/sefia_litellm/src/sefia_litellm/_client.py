@@ -8,13 +8,14 @@ from typing import Any, Coroutine, cast
 from typing_extensions import final, override
 
 from sefia.exceptions import InferenceError
-from sefia.llm import LLMClient, LLMResponse, Message
+from sefia.llm import LLMClient, LLMCompletion, Message
+from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import OutputStreamCallback
 
 from ._request import build_completion_request
-from ._response import handle_response
-from ._streaming import handle_stream
+from ._response import decode_completion
+from ._streaming import consume_completion_stream
 from .exceptions import (
     InferenceConnectionError,
     InferenceRateLimitError,
@@ -98,13 +99,13 @@ class LiteLLMClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[StepTool] | None = None,
-        decision_model: DecisionSpec | None = None,
+        decision_spec: DecisionSpec | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,
         reasoning_callback: (
             Callable[[str], Coroutine[None, None, None]] | None
         ) = None,
-    ) -> LLMResponse:
+    ) -> LLMCompletion:
         import litellm
         from litellm import ModelResponse
 
@@ -112,7 +113,7 @@ class LiteLLMClient(LLMClient):
         request = build_completion_request(
             messages=messages,
             tools=tools,
-            decision_model=decision_model,
+            decision_spec=decision_spec,
             client_kwargs=self._kwargs,
             stream=any(
                 callback is not None
@@ -132,19 +133,19 @@ class LiteLLMClient(LLMClient):
             response = await complete(
                 model=self.model,
                 messages=request.messages,
-                **request.kwargs,
+                **request.api_kwargs,
             )
             if hasattr(response, "__aiter__") and not isinstance(
                 response, ModelResponse
             ):
-                return await handle_stream(
+                return await consume_completion_stream(
                     cast(AsyncIterator[Any], response),
                     content_callback=stream_callback,
                     output_callback=output_callback,
                     reasoning_callback=reasoning_callback,
                     messages=request.messages,
-                    output=request.decision_format,
-                    tool_argument_formats=request.tool_argument_formats,
+                    decision_format=request.decision_format,
+                    tool_data_formats=request.tool_data_formats,
                     requested_model=self.model,
                 )
         except Exception as error:
@@ -154,12 +155,15 @@ class LiteLLMClient(LLMClient):
             raise
 
         if not isinstance(response, ModelResponse):
-            raise RuntimeError("Invalid model response")
-        return handle_response(
+            raise LLMCompletionDecodingError(
+                LLMCompletion(model=self.model),
+                "LiteLLM returned an unsupported completion response.",
+            )
+        return decode_completion(
             response,
             requested_model=self.model,
-            output=request.decision_format,
-            tool_argument_formats=request.tool_argument_formats,
+            decision_format=request.decision_format,
+            tool_data_formats=request.tool_data_formats,
         )
 
 

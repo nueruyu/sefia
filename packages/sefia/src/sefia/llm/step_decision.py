@@ -8,10 +8,10 @@ from typing_extensions import final
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCallsDecision
-from .json_schema import JsonSchemaDocument
 from ._tool_call_ids import ToolCallIdRegistry
+from .json_schema import JsonSchemaDocument
 from .result_format import ResultFormat, ResultFormatFactory
-from .llm_output import LLMOutput
+from .structured_data import StructuredData
 
 
 class StepDecisionMode(Enum):
@@ -33,9 +33,9 @@ class StepTool:
     schema_source: ToolSchemaSource
 
 
-class _ToolModel:
+class _ToolValidator:
     def __init__(self, step_tool: StepTool):
-        self.schema = step_tool
+        self.definition = step_tool
         schema = step_tool.arguments.to_dict()
         validator_cls = jsonschema.validators.validator_for(
             schema, default=jsonschema.Draft202012Validator
@@ -43,16 +43,16 @@ class _ToolModel:
         validator_cls.check_schema(schema)
         self._validator = validator_cls(schema)
 
-    def validate(self, value: LLMOutput) -> dict[str, Any]:
-        value.to_object("arguments")
-        value_dict = cast(dict[str, Any], value.data)
+    def validate(self, arguments: StructuredData) -> dict[str, Any]:
+        arguments.to_object("arguments")
+        argument_data = cast(dict[str, Any], arguments.tree)
         errors = sorted(
-            self._validator.iter_errors(value_dict),
+            self._validator.iter_errors(argument_data),
             key=lambda error: list(error.path),
         )
         if errors:
             raise ValueError("; ".join(error.message for error in errors))
-        return value_dict
+        return argument_data
 
 
 @final
@@ -103,10 +103,10 @@ class DecisionSpec:
         else:
             raise ValueError(f"Unsupported step decision mode: {mode!r}")
 
-        prepared_tools: dict[str, _ToolModel] = {}
+        tool_validators: dict[str, _ToolValidator] = {}
         for tool in tools:
             definition = tool.definition()
-            prepared_tools[tool.name] = _ToolModel(
+            tool_validators[tool.name] = _ToolValidator(
                 StepTool(
                     name=tool.name,
                     description=definition.description,
@@ -124,7 +124,7 @@ class DecisionSpec:
             else result_format_factory.create(output_type)
         )
         self._mode = mode
-        self._tools = prepared_tools
+        self._tools = tool_validators
         self._result = result
 
     @property
@@ -133,29 +133,29 @@ class DecisionSpec:
 
     @property
     def tools(self) -> tuple[StepTool, ...]:
-        return tuple(tool.schema for tool in self._tools.values())
+        return tuple(tool.definition for tool in self._tools.values())
 
     @property
     def result(self) -> ResultFormat | None:
         return self._result
 
     def validate(
-        self, value: LLMOutput, tool_call_ids: ToolCallIdRegistry | None
+        self, data: StructuredData, tool_call_ids: ToolCallIdRegistry | None
     ) -> StepDecision:
         try:
-            data = value.to_object("step decision")
-            decision = data.get("decision")
+            fields = data.to_object("step decision")
+            decision = fields.get("decision")
             decision_name = (
                 decision.to_string("decision") if decision is not None else None
             )
             if decision_name == "tool_calls":
                 if self._mode is StepDecisionMode.RESULT_ONLY:
                     raise ValueError("tool_calls is not allowed")
-                return self._validate_tool_calls(data, tool_call_ids)
+                return self._validate_tool_calls(fields, tool_call_ids)
             if decision_name == "result":
                 if self._mode is StepDecisionMode.TOOLS_REQUIRED:
                     raise ValueError("result is not allowed")
-                return self._validate_result(data)
+                return self._validate_result(fields)
             raise ValueError("decision must be 'tool_calls' or 'result'")
         except UnknownToolDecisionError:
             raise
@@ -164,20 +164,20 @@ class DecisionSpec:
 
     def _validate_tool_calls(
         self,
-        data: dict[str, LLMOutput],
+        fields: dict[str, StructuredData],
         tool_call_ids: ToolCallIdRegistry | None,
     ) -> ToolCallsDecision:
-        _require_fields(data, {"decision", "tool_calls"})
-        calls = data["tool_calls"].to_array("tool_calls")
+        _require_exact_fields(fields, {"decision", "tool_calls"})
+        calls = fields["tool_calls"].to_array("tool_calls")
         if not calls:
             raise ValueError("tool_calls must be a non-empty array")
         if tool_call_ids is None:
             raise RuntimeError("Tool call ids are required for tool calls.")
 
         requests: list[ToolCallRequest] = []
-        for index, value in enumerate(calls):
-            call = value.to_object("tool call")
-            _require_fields(call, {"name", "arguments"})
+        for index, call_data in enumerate(calls):
+            call = call_data.to_object("tool call")
+            _require_exact_fields(call, {"name", "arguments"})
             name = call["name"].to_string("tool name")
             tool = self._tools.get(name)
             if tool is None:
@@ -191,15 +191,17 @@ class DecisionSpec:
             )
         return ToolCallsDecision(requests)
 
-    def _validate_result(self, data: dict[str, LLMOutput]) -> ResultDecision:
-        _require_fields(data, {"decision", "result"})
+    def _validate_result(self, fields: dict[str, StructuredData]) -> ResultDecision:
+        _require_exact_fields(fields, {"decision", "result"})
         if self._result is None:
             raise ValueError("result is not allowed")
-        return ResultDecision(self._result.validate(data["result"]))
+        return ResultDecision(self._result.validate(fields["result"]))
 
 
-def _require_fields(value: dict[str, LLMOutput], expected: set[str]) -> None:
-    actual = set(value)
+def _require_exact_fields(
+    fields: dict[str, StructuredData], expected: set[str]
+) -> None:
+    actual = set(fields)
     if actual != expected:
         missing = expected - actual
         extra = actual - expected

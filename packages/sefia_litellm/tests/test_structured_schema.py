@@ -16,14 +16,14 @@ from sefia.event_system import Event, EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.inference import FunctionInfo, StepDecision, ToolCallsDecision
 from sefia.inference import ResultDecision
-from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
+from sefia.llm import LLMClient, LLMInferenceStrategy, LLMCompletion
 from sefia.llm.json_schema import SchemaNode
 from sefia.llm.streaming import (
     JsonOutputStreamDecoder,
     StringEnd as OutputStringEnd,
 )
 from sefia.llm.transports import StructuredDecisionTransport
-from sefia.llm.llm_output import LLMOutput
+from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.pydantic import PydanticModelBackend
@@ -39,7 +39,7 @@ def _decision_model(output_type: Any, tools: list[ToolEntry]) -> DecisionSpec:
 
 
 def _prepare(decision: DecisionSpec):
-    return StructuredDecisionFormat.from_model(decision)
+    return StructuredDecisionFormat.from_spec(decision)
 
 
 def _process(
@@ -315,7 +315,7 @@ def test_raw_definition_is_not_normalized_with_typed_decision_model() -> None:
     )
 
     with pytest.raises(ValueError, match=r"missing \['name'\]"):
-        StructuredDecisionFormat.from_model(definition)
+        StructuredDecisionFormat.from_spec(definition)
 
 
 def test_conflicting_tool_definition_names_are_renamed() -> None:
@@ -932,9 +932,9 @@ class TestToolCallValidation:
 
     def _strategy(self, content: str) -> LLMInferenceStrategy:
         client = Mock(spec=LLMClient)
-        client.complete.return_value = LLMResponse(
+        client.complete.return_value = LLMCompletion(
             content=content,
-            structured_output=LLMOutput.from_json(
+            structured_output=StructuredData.from_json(
                 cast(dict[str, Any], json.loads(content))
             ),
         )

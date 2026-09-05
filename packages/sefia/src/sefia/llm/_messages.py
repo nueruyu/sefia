@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .llm_output import LLMOutput
+from .structured_data import StructuredData
 
 
 @dataclass
@@ -22,12 +22,12 @@ class ToolCall:
 
     id: str
     name: str
-    arguments: LLMOutput
+    arguments: StructuredData
 
 
 @dataclass
-class LLMResponse:
-    """Represents a response from an LLM."""
+class LLMCompletion:
+    """A provider-neutral completion returned by an ``LLMClient``."""
 
     model: str | None = None
     content: str | None = None
@@ -36,4 +36,4 @@ class LLMResponse:
     usage: dict[str, Any] | None = None
     stop_reason: str | None = None
     cost: float | None = None
-    structured_output: LLMOutput | None = None
+    structured_output: StructuredData | None = None

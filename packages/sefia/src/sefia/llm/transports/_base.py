@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 from ...inference import FunctionInfo, HistoryItem
 from .._client import LLMClient
-from .._messages import LLMResponse
+from .._messages import LLMCompletion
 from .._prompt_renderer import DecisionPrompt, PromptRenderer, RejectedDecision
-from ..llm_output import LLMOutput
+from ..structured_data import StructuredData
 from ..step_decision import DecisionSpec, StepTool
 from ..streaming import OutputStreamEvent
 
@@ -50,19 +50,15 @@ class DecisionRequest:
 
 
 @dataclass(frozen=True)
-class DecisionResponse:
-    output: LLMOutput
-    raw: LLMResponse
+class DecodedDecision:
+    """Decision data decoded by a transport, before semantic validation."""
 
-
-class DecisionDecodingError(ValueError):
-    def __init__(self, response: LLMResponse, reason: str) -> None:
-        super().__init__(reason)
-        self.response = response
+    decision_data: StructuredData
+    completion: LLMCompletion
 
 
 class DecisionTransport(ABC):
-    """Requests one decision and decodes the response."""
+    """Requests one completion and decodes its decision protocol."""
 
     @abstractmethod
     async def request_decision(
@@ -72,4 +68,4 @@ class DecisionTransport(ABC):
         request: DecisionRequest,
         observer: DecisionObserver,
         stream: bool,
-    ) -> DecisionResponse: ...
+    ) -> DecodedDecision: ...

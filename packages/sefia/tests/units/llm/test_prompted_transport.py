@@ -3,11 +3,11 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from sefia.inference import FunctionInfo
-from sefia.llm import LLMResponse, Message, PromptRenderer
+from sefia.llm import LLMCompletion, Message, PromptRenderer
+from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import OutputStreamEvent, StringEnd
 from sefia.llm.transports import (
-    DecisionDecodingError,
     DecisionObserver,
     DecisionRequest,
     PromptedDecisionTransport,
@@ -64,20 +64,20 @@ class _RecordingObserver(DecisionObserver):
 
 async def test_uses_the_rendered_prompt_without_a_model() -> None:
     client = AsyncMock()
-    raw = LLMResponse(content='{"decision":"result","result":"done"}')
-    client.complete.return_value = raw
+    completion = LLMCompletion(content='{"decision":"result","result":"done"}')
+    client.complete.return_value = completion
     observer = _RecordingObserver()
 
-    response = await PromptedDecisionTransport().request_decision(
+    decoded = await PromptedDecisionTransport().request_decision(
         client, _renderer(), _request(), observer, stream=False
     )
 
     sent = client.complete.await_args.kwargs
     assert sent["messages"] == [Message(role="user", content="complete prompt")]
-    assert sent["decision_model"] is None
+    assert sent["decision_spec"] is None
     assert observer.prompt == "complete prompt"
-    assert response.output.data == {"decision": "result", "result": "done"}
-    assert response.raw is raw
+    assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
+    assert decoded.completion is completion
 
 
 async def test_streams_fenced_json_after_prose() -> None:
@@ -89,7 +89,7 @@ async def test_streams_fenced_json_after_prose() -> None:
         "```"
     )
     client = AsyncMock()
-    client.complete.return_value = LLMResponse(content=content)
+    client.complete.return_value = LLMCompletion(content=content)
     observer = _RecordingObserver()
 
     await PromptedDecisionTransport().request_decision(
@@ -104,20 +104,20 @@ async def test_streams_fenced_json_after_prose() -> None:
 
 async def test_reports_undecodable_response() -> None:
     client = AsyncMock()
-    raw = LLMResponse(content="not json")
-    client.complete.return_value = raw
+    completion = LLMCompletion(content="not json")
+    client.complete.return_value = completion
 
     with pytest.raises(DecisionDecodingError) as exc_info:
         await PromptedDecisionTransport().request_decision(
             client, _renderer(), _request(), _RecordingObserver(), stream=False
         )
 
-    assert exc_info.value.response is raw
+    assert exc_info.value.completion is completion
 
 
 async def test_reports_text_and_reasoning_progress() -> None:
     client = AsyncMock()
-    client.complete.return_value = LLMResponse(
+    client.complete.return_value = LLMCompletion(
         content='{"decision":"result","result":"done"}'
     )
     observer = _RecordingObserver()

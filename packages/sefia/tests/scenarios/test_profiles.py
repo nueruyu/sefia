@@ -10,8 +10,8 @@ from glyff.store import MemoryBackend
 from sefia import Domain, Policy, Profile, Session, policy, profile
 from sefia._authoring.metadata import KEY_PROFILE_KEY, get_metadata
 from sefia.event_system import Event, EventHandler
-from sefia.llm import LLMResponse
-from sefia.testing import MockLLMClient, memory_session, result_response
+from sefia.llm import LLMCompletion
+from sefia.testing import MockLLMClient, memory_session, result_completion
 
 infer = sefia.Domain(
     glyff.Domain("packages.sefia.tests.scenarios.test_profiles", version="1")
@@ -25,8 +25,8 @@ class Report:
     sources: list[str]
 
 
-def _result(summary: str) -> LLMResponse:
-    return result_response(Report(topic="t", summary=summary, sources=[]))
+def _result(summary: str) -> LLMCompletion:
+    return result_completion(Report(topic="t", summary=summary, sources=[]))
 
 
 @dataclass
@@ -93,13 +93,13 @@ def test_profile_rejects_unhashable_and_none_keys():
 def test_profile_rejects_profile_instance_as_key():
     """@profile rejects a Profile instance passed where its key is expected."""
     with pytest.raises(TypeError, match="not the Profile instance itself"):
-        profile(Profile(key="fast", client=MockLLMClient(responses=[])))
+        profile(Profile(key="fast", client=MockLLMClient(completions=[])))
 
 
 def test_profile_accepts_policy_sequence():
     """Profile accepts a list (or any sequence) of policies at the call site."""
     p = _LabelPolicy(label="x", log=[])
-    prof = Profile(key="p", client=MockLLMClient(responses=[]), policies=[p])
+    prof = Profile(key="p", client=MockLLMClient(completions=[]), policies=[p])
     assert list(prof.policies) == [p]
 
 
@@ -107,8 +107,8 @@ async def test_infer_uses_selected_profile_client():
     """An @infer decorated with @profile runs on the profile's client, while an
     undecorated @infer on the same agent uses the session default."""
 
-    default_llm = MockLLMClient(responses=[_result("from default")])
-    fast_llm = MockLLMClient(responses=[_result("from fast")])
+    default_llm = MockLLMClient(completions=[_result("from default")])
+    fast_llm = MockLLMClient(completions=[_result("from fast")])
 
     async with memory_session(
         default_llm,
@@ -140,7 +140,7 @@ async def test_policy_layering_session_profile_function():
             """Selects a profile and adds its own policy."""
             ...
 
-    fast_llm = MockLLMClient(responses=[_result("ok")])
+    fast_llm = MockLLMClient(completions=[_result("ok")])
     async with memory_session(
         fast_llm,
         session_id="layering",
@@ -159,8 +159,8 @@ async def test_policy_layering_session_profile_function():
 
 
 async def test_domain_default_profile_and_function_override():
-    fast_llm = MockLLMClient(responses=[_result("from domain")])
-    smart_llm = MockLLMClient(responses=[_result("from function")])
+    fast_llm = MockLLMClient(completions=[_result("from domain")])
+    smart_llm = MockLLMClient(completions=[_result("from function")])
     reports = Domain(glyff.Domain("tests.reports", version="1"), default_profile="fast")
 
     @reports.infer(
@@ -175,7 +175,7 @@ async def test_domain_default_profile_and_function_override():
     async def with_function_override(topic: str) -> Report: ...
 
     async with memory_session(
-        MockLLMClient(responses=[]),
+        MockLLMClient(completions=[]),
         session_id="domain-profiles",
         profiles=[
             Profile(key="fast", client=fast_llm),
@@ -201,7 +201,7 @@ async def test_policy_layering_includes_domain_defaults():
     @policy(_LabelPolicy(label="function", log=log))
     async def step(topic: str) -> Report: ...
 
-    llm = MockLLMClient(responses=[_result("ok")])
+    llm = MockLLMClient(completions=[_result("ok")])
     async with memory_session(
         llm,
         session_id="domain-policy-layering",
@@ -223,7 +223,7 @@ async def test_unknown_profile_raises():
     """Referencing a profile the session does not register fails fast at call
     time with the list of registered profiles."""
 
-    default_llm = MockLLMClient(responses=[_result("unused")])
+    default_llm = MockLLMClient(completions=[_result("unused")])
     async with memory_session(
         default_llm,
         session_id="unknown",
@@ -237,8 +237,8 @@ def test_duplicate_profile_keys_rejected(
     serializer: Serializer, hasher: ArgumentCanonicalizer
 ):
     """The Session rejects two profiles sharing a key up front."""
-    a = MockLLMClient(responses=[])
-    b = MockLLMClient(responses=[])
+    a = MockLLMClient(completions=[])
+    b = MockLLMClient(completions=[])
     with pytest.raises(ValueError, match="Duplicate profile key: 'dup'"):
         Session(
             llm_client=a,
@@ -270,8 +270,8 @@ async def test_enum_key_selects_profile():
             """Runs on the profile keyed by an enum member."""
             ...
 
-    default_llm = MockLLMClient(responses=[_result("default")])
-    smart_llm = MockLLMClient(responses=[_result("from smart")])
+    default_llm = MockLLMClient(completions=[_result("default")])
+    smart_llm = MockLLMClient(completions=[_result("from smart")])
 
     async with memory_session(
         default_llm,
@@ -296,7 +296,7 @@ async def test_unknown_enum_key_lists_registered():
             """Selects a profile keyed by an enum member that is not registered."""
             ...
 
-    default_llm = MockLLMClient(responses=[_result("unused")])
+    default_llm = MockLLMClient(completions=[_result("unused")])
     async with memory_session(
         default_llm,
         session_id="enum-miss",

@@ -9,17 +9,16 @@ from litellm import (
     ModelResponse,
 )
 from pytest_mock import MockerFixture
-from sefia.llm.exceptions import LLMResponseDecodingError
+from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.json_schema import JsonSchemaDocument
 from sefia.llm.streaming import (
     OutputStreamEvent,
     Scalar as OutputScalar,
     StringEnd as OutputStringEnd,
 )
-from sefia_litellm._schema import StructuredValueFormat
+from sefia_litellm._schema._data_format import StructuredDataFormat
 from sefia_litellm._streaming import (
-    _extract_native_tool_call_fragments,
-    handle_stream,
+    consume_completion_stream,
 )
 
 
@@ -75,22 +74,6 @@ def _tool_response(name: str, arguments: str) -> ModelResponse:
     )
 
 
-def test_extracts_native_tool_call_fragments_without_decoding_json() -> None:
-    fragments = _extract_native_tool_call_fragments(
-        [
-            SimpleNamespace(
-                index=2,
-                function=SimpleNamespace(name="lookup", arguments='{"key":"'),
-            )
-        ]
-    )
-
-    assert len(fragments) == 1
-    assert fragments[0].index == 2
-    assert fragments[0].name == "lookup"
-    assert fragments[0].arguments_json == '{"key":"'
-
-
 async def test_routes_reasoning_and_content_separately(
     mocker: MockerFixture,
 ) -> None:
@@ -115,7 +98,7 @@ async def test_routes_reasoning_and_content_separately(
     async def on_reasoning(token: str) -> None:
         reasoning_tokens.append(token)
 
-    response = await handle_stream(
+    response = await consume_completion_stream(
         _stream(
             _chunk(reasoning="Let me "),
             _chunk(reasoning="think."),
@@ -125,7 +108,7 @@ async def test_routes_reasoning_and_content_separately(
         output_callback=None,
         reasoning_callback=on_reasoning,
         messages=[],
-        output=None,
+        decision_format=None,
         requested_model="gpt-4o",
     )
 
@@ -140,9 +123,9 @@ async def test_invalid_built_response_is_a_decoding_error(
     mocker.patch("litellm.stream_chunk_builder", return_value=None)
 
     with pytest.raises(
-        LLMResponseDecodingError, match="could not reconstruct"
+        LLMCompletionDecodingError, match="could not reconstruct"
     ) as exc_info:
-        await handle_stream(
+        await consume_completion_stream(
             _stream(
                 _chunk(reasoning="partial thought"),
                 _chunk(content="partial answer"),
@@ -151,12 +134,12 @@ async def test_invalid_built_response_is_a_decoding_error(
             output_callback=None,
             reasoning_callback=None,
             messages=[],
-            output=None,
+            decision_format=None,
             requested_model="gpt-4o",
         )
 
-    assert exc_info.value.response.reasoning_content == "partial thought"
-    assert exc_info.value.response.content == "partial answer"
+    assert exc_info.value.completion.reasoning_content == "partial thought"
+    assert exc_info.value.completion.content == "partial answer"
 
 
 async def test_decodes_native_tool_arguments(mocker: MockerFixture) -> None:
@@ -169,7 +152,7 @@ async def test_decodes_native_tool_arguments(mocker: MockerFixture) -> None:
     async def collect(event: OutputStreamEvent) -> None:
         events.append(event)
 
-    await handle_stream(
+    await consume_completion_stream(
         _stream(
             _chunk(tool_name="lookup", tool_arguments='{"key":"'),
             _chunk(tool_arguments='item"}'),
@@ -178,9 +161,9 @@ async def test_decodes_native_tool_arguments(mocker: MockerFixture) -> None:
         output_callback=collect,
         reasoning_callback=None,
         messages=[],
-        output=None,
-        tool_argument_formats={
-            "lookup": StructuredValueFormat.from_generated_schema(
+        decision_format=None,
+        tool_data_formats={
+            "lookup": StructuredDataFormat.from_generated_schema(
                 JsonSchemaDocument.from_mapping(
                     {
                         "type": "object",
@@ -206,7 +189,7 @@ async def test_restores_translated_native_tool_arguments(
         "litellm.stream_chunk_builder",
         return_value=_tool_response("categorize", wire_arguments),
     )
-    value_format = StructuredValueFormat.from_generated_schema(
+    data_format = StructuredDataFormat.from_generated_schema(
         JsonSchemaDocument.from_mapping(
             {
                 "type": "object",
@@ -226,7 +209,7 @@ async def test_restores_translated_native_tool_arguments(
     async def collect(event: OutputStreamEvent) -> None:
         events.append(event)
 
-    response = await handle_stream(
+    response = await consume_completion_stream(
         _stream(
             _chunk(
                 tool_name="categorize",
@@ -238,8 +221,8 @@ async def test_restores_translated_native_tool_arguments(
         output_callback=collect,
         reasoning_callback=None,
         messages=[],
-        output=None,
-        tool_argument_formats={"categorize": value_format},
+        decision_format=None,
+        tool_data_formats={"categorize": data_format},
         requested_model="gpt-4o",
     )
 
@@ -247,4 +230,4 @@ async def test_restores_translated_native_tool_arguments(
     assert (
         OutputScalar(("tool_calls", 0, "arguments", "labels", "important"), 2) in events
     )
-    assert response.tool_calls[0].arguments.data == {"labels": {"important": 2}}
+    assert response.tool_calls[0].arguments.tree == {"labels": {"important": 2}}

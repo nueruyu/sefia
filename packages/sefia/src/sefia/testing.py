@@ -7,10 +7,10 @@ trees themselves can stay plain, non-importable directories.
 
 Typical shape of a test::
 
-    from sefia.testing import MockLLMClient, memory_session, result_response
+    from sefia.testing import MockLLMClient, memory_session, result_completion
 
     async def test_answer():
-        llm = MockLLMClient(responses=[result_response("hi")])
+        llm = MockLLMClient(completions=[result_completion("hi")])
         async with memory_session(llm):
             assert await my_agent.answer(question="greet") == "hi"
 """
@@ -35,15 +35,16 @@ from typing_extensions import final, override
 
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._session import Session
-from .llm import LLMClient, LLMOutput, LLMResponse, Message
+from .llm import LLMClient, LLMCompletion, Message
 from .llm.step_decision import DecisionSpec, StepTool
+from .llm.structured_data import StructuredData
 from .llm.streaming import OutputStreamCallback
 from .pydantic._json_utils import pydantic_json_default
 
 
 def _snapshot_value(value: Any) -> Any:
-    if isinstance(value, LLMOutput):
-        return _snapshot_value(value.data)
+    if isinstance(value, StructuredData):
+        return _snapshot_value(value.tree)
     if is_dataclass(value) and not isinstance(value, type):
         result: dict[str, Any] = {}
         for item in fields(value):
@@ -65,12 +66,12 @@ def _snapshot_value(value: Any) -> Any:
 
 @final
 class MockLLMClient(LLMClient):
-    """An ``LLMClient`` that replays scripted ``responses`` and records every
+    """An ``LLMClient`` that replays scripted ``completions`` and records every
     request it receives in ``requests`` (messages as plain dicts, plus the
     tools, output schema, and callbacks)."""
 
-    def __init__(self, responses: list[LLMResponse]):
-        self.responses = list(responses)
+    def __init__(self, completions: list[LLMCompletion]):
+        self.completions = list(completions)
         self.requests: list[dict[str, Any]] = []
 
     @override
@@ -78,39 +79,39 @@ class MockLLMClient(LLMClient):
         self,
         messages: list[Message],
         tools: list[StepTool] | None = None,
-        decision_model: DecisionSpec | None = None,
+        decision_spec: DecisionSpec | None = None,
         stream_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
         output_callback: OutputStreamCallback | None = None,
         reasoning_callback: (
             Callable[[str], Coroutine[None, None, None]] | None
         ) = None,
-    ) -> LLMResponse:
+    ) -> LLMCompletion:
         self.requests.append(
             {
                 "messages": [_snapshot_value(message) for message in messages],
                 "tools": tools,
-                "decision_model": decision_model,
+                "decision_spec": decision_spec,
                 "stream_callback": stream_callback,
                 "output_callback": output_callback,
                 "reasoning_callback": reasoning_callback,
             }
         )
-        if not self.responses:
-            raise AssertionError("MockLLMClient has no more responses.")
-        response = self.responses.pop(0)
+        if not self.completions:
+            raise AssertionError("MockLLMClient has no more completions.")
+        completion = self.completions.pop(0)
         if (
-            decision_model is not None
-            and response.structured_output is None
-            and response.content is not None
+            decision_spec is not None
+            and completion.structured_output is None
+            and completion.content is not None
         ):
             try:
-                response = replace(
-                    response,
-                    structured_output=LLMOutput.parse_json(response.content),
+                completion = replace(
+                    completion,
+                    structured_output=StructuredData.parse_json(completion.content),
                 )
             except json.JSONDecodeError:
                 pass
-        return response
+        return completion
 
 
 @final
@@ -139,14 +140,14 @@ class MemoryHistoryStorage(HistoryStorage):
         self.saves.append(record)
 
 
-def result_response(result: Any) -> LLMResponse:
+def result_completion(result: Any) -> LLMCompletion:
     """A scripted "result" decision carrying ``result`` as the final answer.
 
     ``result`` may be anything the framework's JSON encoding handles —
     including dataclasses and Pydantic models, which serialize to the object
     shape the step-decision schema validates.
     """
-    return LLMResponse(
+    return LLMCompletion(
         content=json.dumps(
             {"decision": "result", "result": result},
             default=pydantic_json_default,
@@ -154,9 +155,9 @@ def result_response(result: Any) -> LLMResponse:
     )
 
 
-def tool_calls_response(*calls: tuple[str, dict[str, Any]]) -> LLMResponse:
+def tool_calls_completion(*calls: tuple[str, dict[str, Any]]) -> LLMCompletion:
     """A scripted "tool_calls" decision from ``(tool_name, arguments)`` pairs."""
-    return LLMResponse(
+    return LLMCompletion(
         content=json.dumps(
             {
                 "decision": "tool_calls",

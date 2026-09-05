@@ -11,9 +11,10 @@ from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
     ChatCompletionMessageCustomToolCall,
 )
 from pytest_mock import MockerFixture
-from sefia.llm import LLMOutput, ToolCall
-from sefia.llm.exceptions import LLMResponseDecodingError
-from sefia_litellm._response import handle_response
+from sefia.llm import ToolCall
+from sefia.llm.exceptions import LLMCompletionDecodingError
+from sefia.llm.structured_data import StructuredData
+from sefia_litellm._response import decode_completion
 
 
 def test_converts_response_and_calculates_cost(mocker: MockerFixture) -> None:
@@ -42,24 +43,26 @@ def test_converts_response_and_calculates_cost(mocker: MockerFixture) -> None:
         ],
     )
 
-    result = handle_response(response, requested_model="gpt-4o", output=None)
+    completion = decode_completion(
+        response, requested_model="gpt-4o", decision_format=None
+    )
 
-    assert result.model == "gpt-4o"
-    assert result.cost == 0.003
-    assert result.content is None
-    assert result.stop_reason == "tool_calls"
-    assert result.usage is not None
-    assert result.usage["prompt_tokens"] == 10
-    assert result.tool_calls == [
+    assert completion.model == "gpt-4o"
+    assert completion.cost == 0.003
+    assert completion.content is None
+    assert completion.stop_reason == "tool_calls"
+    assert completion.usage is not None
+    assert completion.usage["prompt_tokens"] == 10
+    assert completion.tool_calls == [
         ToolCall(
             id="call_abc",
             name="get_weather",
-            arguments=LLMOutput.from_json({"city": "Tokyo"}),
+            arguments=StructuredData.from_json({"city": "Tokyo"}),
         )
     ]
 
 
-def test_rejects_custom_tool_calls_with_partial_response() -> None:
+def test_rejects_custom_tool_calls_with_partial_completion() -> None:
     response = ModelResponse(
         model="gpt-4o",
         choices=[
@@ -83,12 +86,12 @@ def test_rejects_custom_tool_calls_with_partial_response() -> None:
     )
 
     with pytest.raises(
-        LLMResponseDecodingError,
+        LLMCompletionDecodingError,
         match="unsupported custom tool call",
     ) as exc_info:
-        handle_response(response, requested_model="gpt-4o", output=None)
+        decode_completion(response, requested_model="gpt-4o", decision_format=None)
 
-    assert exc_info.value.response.model == "gpt-4o"
+    assert exc_info.value.completion.model == "gpt-4o"
 
 
 def test_rejects_malformed_tool_arguments() -> None:
@@ -112,8 +115,8 @@ def test_rejects_malformed_tool_arguments() -> None:
         ],
     )
 
-    with pytest.raises(LLMResponseDecodingError):
-        handle_response(response, requested_model="gpt-4o", output=None)
+    with pytest.raises(LLMCompletionDecodingError):
+        decode_completion(response, requested_model="gpt-4o", decision_format=None)
 
 
 def test_preserves_reasoning_content() -> None:
@@ -124,9 +127,11 @@ def test_preserves_reasoning_content() -> None:
         choices=[Choices(finish_reason="stop", index=0, message=message)],
     )
 
-    result = handle_response(response, requested_model="gpt-4o", output=None)
+    completion = decode_completion(
+        response, requested_model="gpt-4o", decision_format=None
+    )
 
-    assert result.reasoning_content == "The user wants the weather."
+    assert completion.reasoning_content == "The user wants the weather."
 
 
 def test_cost_is_none_if_calculation_fails(mocker: MockerFixture) -> None:
@@ -137,17 +142,21 @@ def test_cost_is_none_if_calculation_fails(mocker: MockerFixture) -> None:
         choices=[Choices(index=0, message=LiteLLMMessage(role="assistant"))],
     )
 
-    result = handle_response(response, requested_model="gpt-4o", output=None)
+    completion = decode_completion(
+        response, requested_model="gpt-4o", decision_format=None
+    )
 
-    assert result.cost is None
+    assert completion.cost is None
 
 
-def test_empty_choices_are_a_response_decoding_error() -> None:
+def test_empty_choices_are_a_completion_decoding_error() -> None:
     response = ModelResponse(model="provider-model", choices=[])
 
     with pytest.raises(
-        LLMResponseDecodingError, match="LLM returned empty choices"
+        LLMCompletionDecodingError, match="LLM returned empty choices"
     ) as exc_info:
-        handle_response(response, requested_model="requested-model", output=None)
+        decode_completion(
+            response, requested_model="requested-model", decision_format=None
+        )
 
-    assert exc_info.value.response.model == "provider-model"
+    assert exc_info.value.completion.model == "provider-model"

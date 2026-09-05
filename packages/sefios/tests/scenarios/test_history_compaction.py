@@ -16,8 +16,8 @@ import pytest
 from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
 from glyff_sqlite import SQLiteBackend
 from sefia import HistoryStorage, Policy, Session, Tools
-from sefia.llm import LLMResponse
-from sefia.testing import MockLLMClient, result_response, tool_calls_response
+from sefia.llm import LLMCompletion
+from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 
 from sefios import SQLiteSessionStorage, domain
 from sefios.exceptions import InputRequired
@@ -33,12 +33,12 @@ infer = domain(
 _SESSION_ID = "history-compaction-test"
 
 
-def _note_response(text: str) -> LLMResponse:
-    return tool_calls_response(("Notes_add_note", {"text": text}))
+def _note_response(text: str) -> LLMCompletion:
+    return tool_calls_completion(("Notes_add_note", {"text": text}))
 
 
-_ASK_RESPONSE = tool_calls_response(("Input_get_input", {"prompt": "Anything else?"}))
-_RESULT_RESPONSE = result_response("All done.")
+_ASK_RESPONSE = tool_calls_completion(("Input_get_input", {"prompt": "Anything else?"}))
+_RESULT_RESPONSE = result_completion("All done.")
 
 
 def _session_history_storage() -> HistoryStorage:
@@ -73,7 +73,7 @@ class _Agent:
 )
 async def test_compacted_history_survives_restart_without_replaying_old_steps(
     tmp_path: Path,
-    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
     make_history_storage: Callable[[], HistoryStorage] | None,
 ) -> None:
     seen: list[InputRequest] = []

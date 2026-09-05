@@ -2,8 +2,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from sefia import JsonSchemaToolEntry
-from sefia.llm import LLMResponse
-from sefia.testing import MockLLMClient, result_response, tool_calls_response
+from sefia.llm import LLMCompletion
+from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefia.tool_collectors import StaticToolCollector
 from sefios import (
     FilePersistence,
@@ -61,10 +61,12 @@ def _static_collector(name: str, calls: list[str]) -> StaticToolCollector:
 
 
 async def test_tool_collector_default_is_used(
-    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
 ) -> None:
     calls: list[str] = []
-    llm = make_mock_llm([tool_calls_response(("init_tool", {})), result_response("ok")])
+    llm = make_mock_llm(
+        [tool_calls_completion(("init_tool", {})), result_completion("ok")]
+    )
     scope = SessionScope(
         llm_client=llm,
         tool_collector=_static_collector("init_tool", calls),
@@ -78,10 +80,12 @@ async def test_tool_collector_default_is_used(
 
 
 async def test_session_tool_collector_overrides_init_default(
-    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
 ) -> None:
     calls: list[str] = []
-    llm = make_mock_llm([tool_calls_response(("call_tool", {})), result_response("ok")])
+    llm = make_mock_llm(
+        [tool_calls_completion(("call_tool", {})), result_completion("ok")]
+    )
     scope = SessionScope(
         llm_client=llm,
         tool_collector=_static_collector("init_tool", calls),
@@ -97,7 +101,7 @@ async def test_session_tool_collector_overrides_init_default(
 
 
 async def test_memory_persistence_is_default(
-    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
 ) -> None:
     scope = SessionScope(llm_client=make_mock_llm([]))
 
@@ -107,7 +111,7 @@ async def test_memory_persistence_is_default(
 
 async def test_sqlite_persistence_can_be_selected(
     tmp_path: Path,
-    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
 ) -> None:
     database = tmp_path / "sessions.sqlite3"
     scope = SessionScope(

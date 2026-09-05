@@ -1,9 +1,10 @@
-from sefia.llm import LLMOutput, LLMResponse, Message, ToolCall
+from sefia.llm import LLMCompletion, Message, ToolCall
+from sefia.llm.structured_data import StructuredData
 from sefia.testing import MockLLMClient
 
 
 async def test_mock_llm_client_snapshots_core_messages() -> None:
-    client = MockLLMClient([LLMResponse(content="done")])
+    client = MockLLMClient([LLMCompletion(content="done")])
 
     await client.complete(
         [
@@ -13,7 +14,7 @@ async def test_mock_llm_client_snapshots_core_messages() -> None:
                     ToolCall(
                         id="call-1",
                         name="lookup",
-                        arguments=LLMOutput.from_json({"key": "item"}),
+                        arguments=StructuredData.from_json({"key": "item"}),
                     )
                 ],
             )

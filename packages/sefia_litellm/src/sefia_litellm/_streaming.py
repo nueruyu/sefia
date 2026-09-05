@@ -1,54 +1,57 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
 from typing import Any, Coroutine, cast
 
-from sefia.llm import LLMOutput, LLMResponse
-from sefia.llm.exceptions import LLMResponseDecodingError
+from typing_extensions import final
+
+from sefia.llm import LLMCompletion
+from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.streaming import (
     JsonOutputStreamDecoder,
     OutputStreamCallback,
     OutputStreamEvent,
-    Scalar,
-    StringDelta,
-    StringEnd,
 )
 
-from ._response import handle_response
-from ._schema import StructuredDecisionFormat, StructuredValueFormat
+from ._native_tool_stream import (
+    NativeToolStreamDecoder,
+    extract_native_tool_call_fragments,
+)
+from ._response import decode_completion
+from ._schema import StructuredDecisionFormat
+from ._schema._data_format import StructuredDataFormat
 
 
-async def handle_stream(
+async def consume_completion_stream(
     stream: AsyncIterator[Any],
     *,
     content_callback: Callable[[str], Coroutine[None, None, None]] | None,
     output_callback: OutputStreamCallback | None,
     reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
     messages: list[dict[str, Any]],
-    output: StructuredDecisionFormat | None,
-    tool_argument_formats: dict[str, StructuredValueFormat] | None = None,
+    decision_format: StructuredDecisionFormat | None,
+    tool_data_formats: dict[str, StructuredDataFormat] | None = None,
     requested_model: str,
-) -> LLMResponse:
+) -> LLMCompletion:
     import litellm
     from litellm import ModelResponse
 
     chunks: list[Any] = []
-    events = _StreamEventDispatcher(
+    state = _CompletionStreamState(
         content_callback=content_callback,
         output_callback=output_callback,
         reasoning_callback=reasoning_callback,
-        structured=output is not None,
-        tool_argument_formats=tool_argument_formats or {},
+        structured=decision_format is not None,
+        tool_data_formats=tool_data_formats or {},
     )
     async for chunk in stream:
         chunks.append(chunk)
         choices = getattr(chunk, "choices", None)
         if not choices:
             continue
-        await events.feed(getattr(choices[0], "delta", None))
+        await state.feed(getattr(choices[0], "delta", None))
 
-    await events.finish()
+    await state.finish()
 
     build_stream_response = cast(
         Callable[..., ModelResponse | None],
@@ -56,26 +59,27 @@ async def handle_stream(
     )
     response = build_stream_response(chunks=chunks, messages=messages)
     if not isinstance(response, ModelResponse):
-        raise LLMResponseDecodingError(
-            LLMResponse(
-                content=events.content_text or None,
-                reasoning_content=events.reasoning_text or None,
+        raise LLMCompletionDecodingError(
+            LLMCompletion(
+                content=state.content_text or None,
+                reasoning_content=state.reasoning_text or None,
             ),
             "LiteLLM could not reconstruct a model response from the stream.",
         )
 
-    result = handle_response(
+    completion = decode_completion(
         response,
         requested_model=requested_model,
-        output=output,
-        tool_argument_formats=tool_argument_formats,
+        decision_format=decision_format,
+        tool_data_formats=tool_data_formats,
     )
-    if events.reasoning_text and result.reasoning_content is None:
-        result.reasoning_content = events.reasoning_text
-    return result
+    if state.reasoning_text and completion.reasoning_content is None:
+        completion.reasoning_content = state.reasoning_text
+    return completion
 
 
-class _StreamEventDispatcher:
+@final
+class _CompletionStreamState:
     def __init__(
         self,
         *,
@@ -83,7 +87,7 @@ class _StreamEventDispatcher:
         output_callback: OutputStreamCallback | None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
         structured: bool,
-        tool_argument_formats: dict[str, StructuredValueFormat],
+        tool_data_formats: dict[str, StructuredDataFormat],
     ) -> None:
         self._content_callback = content_callback
         self._output_callback = output_callback
@@ -96,8 +100,8 @@ class _StreamEventDispatcher:
             else None
         )
         self._native_decoder = (
-            _NativeToolStreamDecoder(tool_argument_formats)
-            if tool_argument_formats and output_callback is not None
+            NativeToolStreamDecoder(tool_data_formats)
+            if tool_data_formats and output_callback is not None
             else None
         )
 
@@ -125,7 +129,7 @@ class _StreamEventDispatcher:
                 await self._emit(self._structured_decoder.feed(content))
 
         if self._native_decoder is not None:
-            fragments = _extract_native_tool_call_fragments(
+            fragments = extract_native_tool_call_fragments(
                 getattr(delta, "tool_calls", None)
             )
             await self._emit(self._native_decoder.feed(fragments))
@@ -140,150 +144,4 @@ class _StreamEventDispatcher:
             await self._output_callback(event)
 
 
-@dataclass(frozen=True)
-class _NativeToolCallFragment:
-    index: int
-    name: str | None
-    arguments_json: str | None
-
-
-def _extract_native_tool_call_fragments(
-    calls: object,
-) -> list[_NativeToolCallFragment]:
-    if not isinstance(calls, list):
-        return []
-
-    fragments: list[_NativeToolCallFragment] = []
-    for call in cast(list[object], calls):
-        index = getattr(call, "index", None)
-        function = getattr(call, "function", None)
-        if not isinstance(index, int) or function is None:
-            continue
-        name = getattr(function, "name", None)
-        arguments = getattr(function, "arguments", None)
-        fragments.append(
-            _NativeToolCallFragment(
-                index=index,
-                name=name if isinstance(name, str) and name else None,
-                arguments_json=(
-                    arguments if isinstance(arguments, str) and arguments else None
-                ),
-            )
-        )
-    return fragments
-
-
-class _NativeToolStreamDecoder:
-    def __init__(
-        self,
-        tool_argument_formats: dict[str, StructuredValueFormat],
-    ) -> None:
-        self._tool_argument_formats = tool_argument_formats
-        self._names: dict[int, str] = {}
-        self._announced: set[int] = set()
-        self._arguments: dict[int, str] = {}
-        self._consumed: dict[int, int] = {}
-        self._decoders: dict[int, JsonOutputStreamDecoder] = {}
-
-    def feed(
-        self,
-        fragments: list[_NativeToolCallFragment],
-    ) -> list[OutputStreamEvent]:
-        events: list[OutputStreamEvent] = []
-        for fragment in fragments:
-            if fragment.name is not None:
-                self._names[fragment.index] = fragment.name
-                if fragment.index not in self._announced:
-                    self._announced.add(fragment.index)
-                    events.append(
-                        StringEnd(
-                            ("tool_calls", fragment.index, "name"),
-                            fragment.name,
-                        )
-                    )
-            if fragment.arguments_json:
-                self._arguments[fragment.index] = (
-                    self._arguments.get(fragment.index, "") + fragment.arguments_json
-                )
-            events.extend(self._decode_available(fragment.index))
-        return events
-
-    def finish(self) -> list[OutputStreamEvent]:
-        events: list[OutputStreamEvent] = []
-        for index, arguments in self._arguments.items():
-            name = self._names.get(index)
-            value_format = (
-                self._tool_argument_formats.get(name) if name is not None else None
-            )
-            if value_format is None or not value_format.translates_values:
-                events.extend(self._decode_available(index))
-                continue
-            try:
-                output = value_format.decode(LLMOutput.parse_json(arguments))
-            except ValueError:
-                continue
-            events.extend(
-                _logical_output_events(
-                    output,
-                    ("tool_calls", index, "arguments"),
-                )
-            )
-        return events
-
-    def _decode_available(self, index: int) -> list[OutputStreamEvent]:
-        name = self._names.get(index)
-        if name is None:
-            return []
-        value_format = self._tool_argument_formats.get(name)
-        if value_format is not None and value_format.translates_values:
-            return []
-
-        arguments = self._arguments.get(index, "")
-        consumed = self._consumed.get(index, 0)
-        token = arguments[consumed:]
-        if not token:
-            return []
-        self._consumed[index] = len(arguments)
-        decoder = self._decoders.setdefault(index, JsonOutputStreamDecoder())
-        return [_tool_argument_event(index, event) for event in decoder.feed(token)]
-
-
-def _logical_output_events(
-    output: LLMOutput,
-    path: tuple[str | int, ...],
-) -> list[OutputStreamEvent]:
-    value = output.data
-    if isinstance(value, str):
-        return [StringEnd(path, value)]
-    if value is None or isinstance(value, int | float | bool):
-        return [Scalar(path, value)]
-    if isinstance(value, list):
-        return [
-            event
-            for index, item in enumerate(value)
-            for event in _logical_output_events(
-                LLMOutput.from_data(item),
-                (*path, index),
-            )
-        ]
-    return [
-        event
-        for name, item in value.items()
-        for event in _logical_output_events(
-            LLMOutput.from_data(item),
-            (*path, name if isinstance(name, str | int) else str(name)),
-        )
-    ]
-
-
-def _tool_argument_event(index: int, event: OutputStreamEvent) -> OutputStreamEvent:
-    path = ("tool_calls", index, "arguments", *event.path)
-    if isinstance(event, StringDelta):
-        return StringDelta(path, event.text)
-    if isinstance(event, StringEnd):
-        return StringEnd(path, event.value)
-    assert isinstance(event, Scalar)
-    return Scalar(path, event.value)
-
-
-__all__ = ["handle_stream"]
+__all__ = ["consume_completion_stream"]

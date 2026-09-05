@@ -1,18 +1,26 @@
-from ._messages import LLMResponse
+from ._messages import LLMCompletion
 
 
-class LLMResponseDecodingError(ValueError):
-    """The provider returned a response the client could not represent safely.
+class LLMCompletionDecodingError(ValueError):
+    """The provider returned data the client could not represent safely.
 
     ``LLMClient`` implementations must raise this exception, rather than a generic
-    decoding exception, when a received response is malformed or cannot be mapped to
-    ``LLMResponse``. The partial response lets the inference strategy route the
+    decoding exception, when received data is malformed or cannot be mapped to an
+    ``LLMCompletion``. The partial completion lets the inference strategy route the
     failure through its repair flow.
     """
 
-    def __init__(self, response: LLMResponse, reason: str) -> None:
+    def __init__(self, completion: LLMCompletion, reason: str) -> None:
         super().__init__(reason)
-        self.response = response
+        self.completion = completion
 
 
-__all__ = ["LLMResponseDecodingError"]
+class DecisionDecodingError(ValueError):
+    """A transport received a completion that did not encode a decision."""
+
+    def __init__(self, completion: LLMCompletion, reason: str) -> None:
+        super().__init__(reason)
+        self.completion = completion
+
+
+__all__ = ["DecisionDecodingError", "LLMCompletionDecodingError"]

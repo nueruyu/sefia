@@ -21,21 +21,15 @@ class DecisionPrompt:
 
 
 class PromptRenderer(ABC):
-    """Renders text representations that a transport sends to an LLM."""
+    """Renders decision prompts and tool-result message content as text."""
 
     @abstractmethod
     def render(self, prompt: DecisionPrompt) -> str: ...
 
+    @abstractmethod
     def render_tool_result(self, result: object) -> str:
-        """Render a tool result as prompt text for native decision history.
-
-        Renderers used only by structured or prompted transports need not override
-        this method.
-        """
-        raise NotImplementedError(
-            "PromptRenderer.render_tool_result() is required by "
-            "NativeDecisionTransport."
-        )
+        """Render a tool result for a native tool-result message."""
+        ...
 
 
 __all__ = [
