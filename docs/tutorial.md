@@ -28,6 +28,7 @@ An `@infer` function is an abstract method whose implementer is an LLM: the
 signature is the input/output contract, the docstring is the instruction, the body
 is `...`. You run it inside a **session**, which gives it durability and a store.
 
+<!-- example: tutorial-quickstart -->
 ```python
 # quickstart.py
 import asyncio
@@ -97,6 +98,7 @@ Replace the `main` function in `quickstart.py` with the code below, keeping the
 imports, models, `infer`, and `scope` above it. Keep the `if __name__` block last
 so it calls the new `main`.
 
+<!-- example: tutorial-tools -->
 ```python
 from sefios import Tools
 from sefios.tools import WebSearch
@@ -162,6 +164,7 @@ facade. When it has no input it records the prompt and **raises**; `SefiaCLI`
 renders the prompt and exits cleanly. Because the session is engraved, you can resume
 in a **completely new process** and the completed steps replay instead of re-running.
 
+<!-- example: tutorial-cli -->
 ```python
 # hitl_cli.py
 import asyncio
@@ -253,6 +256,7 @@ The same service behind a stateless request/response handler. A pause returns
 "needs input"; the input arrives in a later request to the same session id, and the
 run resumes. Nothing runs in the background between the two requests.
 
+<!-- example: tutorial-http -->
 ```python
 # server.py
 from fastapi import FastAPI

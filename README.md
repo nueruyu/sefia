@@ -98,6 +98,7 @@ context helpers such as `current_tool_call_id_for`.
 Save this as `research.py`, set `OPENAI_API_KEY`, and run `python research.py`.
 The class holds a web dependency, runs an inferred step, and persists its run.
 
+<!-- example: readme-quickstart -->
 ```python
 import asyncio
 
@@ -185,6 +186,7 @@ the endpoint again.
 This example uses the FastAPI integration with SQLite persistence, so install the required
 extras — `pip install 'sefios[litellm,web,fastapi,sqlite]'`.
 
+<!-- example: readme-http -->
 ```python
 from fastapi import FastAPI
 from pydantic import BaseModel

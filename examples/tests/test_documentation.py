@@ -17,7 +17,6 @@ from typer.testing import CliRunner
 
 ROOT = Path(__file__).resolve().parents[2]
 TUTORIAL = "docs/tutorial.md"
-CLI_SECTION = "3. Make it pause for a human - and survive a restart"
 REPORT: dict[str, str | list[str]] = {
     "topic": "durable execution",
     "summary": "Approved report",
@@ -33,11 +32,19 @@ def python_blocks(markdown: str) -> list[str]:
     return re.findall(r"^```python\n(.*?)^```", markdown, re.M | re.S)
 
 
-def example(path: str, section: str) -> str:
+def example(path: str, example_id: str) -> str:
     markdown = (ROOT / path).read_text(encoding="utf-8")
-    _, heading, body = markdown.partition(f"## {section}\n")
-    assert heading, f"Missing section {section!r} in {path}"
-    return python_blocks(body.split("\n## ", 1)[0])[0]
+    marker = rf"^<!-- example: {re.escape(example_id)} -->[ \t]*$"
+    markers = list(re.finditer(marker, markdown, re.M))
+    location = f"{path}: example {example_id!r}"
+    assert len(markers) == 1, f"{location}: expected one marker, found {len(markers)}"
+    block = re.match(
+        r"\s*```python[ \t]*\n(.*?)^```[ \t]*(?:\n|$)",
+        markdown[markers[0].end() :],
+        re.M | re.S,
+    )
+    assert block is not None, f"{location}: expected Python block immediately after ID"
+    return block[1]
 
 
 def load_code(code: str, name: str, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
@@ -60,6 +67,37 @@ def llm(monkeypatch: pytest.MonkeyPatch) -> MockLLMClient:
     return client
 
 
+@pytest.mark.parametrize("target_first", [True, False])
+def test_example_selection_ignores_layout(tmp_path: Path, target_first: bool) -> None:
+    target = "<!-- example: chosen -->\n```python\nanswer = 42\n```\n"
+    other = "## Another heading\n```python\nanswer = 0\n```\n"
+    parts = [target, other] if target_first else [other, target]
+    path = tmp_path / "examples.md"
+    path.write_text("## Renamed heading\n" + "\n".join(parts), encoding="utf-8")
+    assert example(str(path), "chosen") == "answer = 42\n"
+
+
+@pytest.mark.parametrize(
+    ("markdown", "error"),
+    [
+        ("<!-- example: other -->\n```python\npass\n```", "found 0"),
+        ("<!-- example: chosen -->\n" * 2, "found 2"),
+        ("<!-- example: chosen -->\n```bash\necho hi\n```", "Python block"),
+        ("<!-- example: chosen -->\nprose\n```python\npass\n```", "Python block"),
+        ("<!-- example: chosen -->\n```python\npass", "Python block"),
+    ],
+)
+def test_example_rejects_invalid_marker(
+    tmp_path: Path, markdown: str, error: str
+) -> None:
+    path = tmp_path / "examples.md"
+    path.write_text(markdown, encoding="utf-8")
+    with pytest.raises(AssertionError, match=error) as caught:
+        example(str(path), "chosen")
+    assert str(path) in str(caught.value)
+    assert "chosen" in str(caught.value)
+
+
 def test_python_blocks_compile() -> None:
     for path in ROOT.rglob("*.md"):
         if any(part.startswith(".") for part in path.relative_to(ROOT).parts):
@@ -78,7 +116,7 @@ def test_tutorial_quickstart(
     llm.completions.append(
         result_completion({"key_points": ["Durable calls"], "uncertainty": "None"})
     )
-    code = example(TUTORIAL, "1. Your first inferred function")
+    code = example(TUTORIAL, "tutorial-quickstart")
     load_code(code, "__main__", monkeypatch)
     assert "Durable calls" in capsys.readouterr().out
     assert len(llm.requests) == 1
@@ -93,7 +131,7 @@ def test_tutorial_cli_pause_resume(
             result_completion(REPORT),
         ]
     )
-    code = example(TUTORIAL, CLI_SECTION)
+    code = example(TUTORIAL, "tutorial-cli")
     first = load_code(code, "hitl_cli", monkeypatch)
     paused = CliRunner().invoke(first.app, [])
     assert paused.exit_code == 0, paused.output
@@ -112,14 +150,14 @@ def test_tutorial_cli_pause_resume(
 
 
 @pytest.mark.parametrize(
-    ("path", "section"),
+    ("path", "example_id"),
     [
-        ("README.md", "Pause for a human, resume after a restart"),
-        (TUTORIAL, "4. Serve it over HTTP"),
+        ("README.md", "readme-http"),
+        (TUTORIAL, "tutorial-http"),
     ],
 )
 def test_http_pause_resume(
-    path: str, section: str, llm: MockLLMClient, monkeypatch: pytest.MonkeyPatch
+    path: str, example_id: str, llm: MockLLMClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     llm.completions.extend(
         [
@@ -128,8 +166,8 @@ def test_http_pause_resume(
         ]
     )
     if path == TUTORIAL:
-        load_code(example(TUTORIAL, CLI_SECTION), "hitl_cli", monkeypatch)
-    code = example(path, section)
+        load_code(example(TUTORIAL, "tutorial-cli"), "hitl_cli", monkeypatch)
+    code = example(path, example_id)
     first = load_code(code, "doc_server", monkeypatch)
     with TestClient(first.app) as raw_client:
         client = cast(HTTPClient, raw_client)
@@ -161,10 +199,10 @@ async def test_research_tool(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     if path == "README.md":
-        code = example(path, "Quickstart")
+        code = example(path, "readme-quickstart")
     else:
-        code = example(path, "1. Your first inferred function")
-        code += "\n" + example(path, "2. Give it a tool")
+        code = example(path, "tutorial-quickstart")
+        code += "\n" + example(path, "tutorial-tools")
     module = load_code(code, "doc_research", monkeypatch)
     llm.completions.extend(
         [
