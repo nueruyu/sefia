@@ -21,12 +21,17 @@ uv run ruff format --check .  # formatting (CI enforces this; drop --check to fi
 uv run pyright                # type-check packages and tests
 ```
 
-Tests mirror the source under each package's `tests/units/` (per-module) and
-`tests/scenarios/` (behavioral) — plain directories, not importable packages
-(no `__init__.py`). Add tests next to the layer you change.
+Tests are grouped by responsibility under each package: `tests/units/` covers
+one source module, `tests/contracts/` applies one shared behavior suite to every
+implementation of an interface, `tests/integrations/` covers component seams,
+and `tests/scenarios/` covers behavior through public application APIs. These
+are plain directories, not importable packages (no `__init__.py`). Add tests at
+the narrowest layer that owns the behavior.
 Shared test doubles and helpers live in the public `sefia.testing` module
 (`MockLLMClient`, `memory_session`, scripted-response builders) rather than
-in conftest imports.
+in conftest imports. Extension interfaces with shared observable behavior expose
+reusable conformance classes from `sefia.testing` or `sefios.testing`; built-in
+implementations apply those same public contracts in `tests/contracts/`.
 
 ### End-to-end tests against real providers
 

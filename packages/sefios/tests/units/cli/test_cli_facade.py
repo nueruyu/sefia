@@ -1,19 +1,12 @@
 from collections.abc import Iterator
 
 import pytest
-from glyff_pydantic import PydanticSerializer
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 from sefios import MemoryPersistence
 from sefios._input_channel import InputChannel
-from sefios.cli import CostReportingCLIReporter, SefiaCLI, SefiaCLISession
-from sefios.cli._app import _USE_DEFAULT_REPORTER
+from sefios.cli import SefiaCLI, SefiaCLISession
 from sefios.storage import MemorySessionStorage
 from sefios.tools import Input, Output
-
-
-@pytest.fixture
-def session_storage() -> MemorySessionStorage:
-    return MemorySessionStorage(serializer=PydanticSerializer())
 
 
 class TestSefiaCLISession:
@@ -25,32 +18,11 @@ class TestSefiaCLISession:
     def session(
         self,
         channel: InputChannel,
-        session_storage: MemorySessionStorage,
+        memory_session_storage: MemorySessionStorage,
     ) -> Iterator[SefiaCLISession]:
         # A bound SessionStorage satisfies the input channel's store protocol.
-        with channel.use_store(session_storage):
+        with channel.use_store(memory_session_storage):
             yield SefiaCLISession(channel=channel)
-
-    async def test_none_input_is_ignored(
-        self, session: SefiaCLISession, channel: InputChannel
-    ) -> None:
-        await session.accept_input(None)
-
-        assert await channel.provide_input("any") is None
-
-    async def test_string_input_is_stored(
-        self, session: SefiaCLISession, channel: InputChannel
-    ) -> None:
-        await session.accept_input("hello")
-
-        assert await channel.provide_input("any") == "hello"
-
-    async def test_list_input_is_joined_and_stored(
-        self, session: SefiaCLISession, channel: InputChannel
-    ) -> None:
-        await session.accept_input(["hello", "world"])
-
-        assert await channel.provide_input("any") == "hello world"
 
     async def test_reply_to_resolves_pending_request(
         self, session: SefiaCLISession, channel: InputChannel
@@ -128,21 +100,3 @@ class TestSefiaCLISessionManagement:
 
         assert second.get_active_session() is None
         assert second.switch_session(session_id) == session_id
-
-
-class TestReporterResolution:
-    def test_default_sentinel_resolves_to_cost_reporting_reporter(self) -> None:
-        cli = SefiaCLI(
-            model="gpt-4o",
-            reporter=_USE_DEFAULT_REPORTER,
-        )
-
-        assert isinstance(cli._reporter, CostReportingCLIReporter)
-
-    def test_explicit_none_disables_reporting(self) -> None:
-        cli = SefiaCLI(
-            model="gpt-4o",
-            reporter=None,
-        )
-
-        assert cli._reporter is None

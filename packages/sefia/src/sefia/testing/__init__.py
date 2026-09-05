@@ -1,11 +1,11 @@
-"""Test doubles and helpers for writing tests against sefia.
+"""Test helpers and conformance contracts for building against sefia.
 
 This is a public, supported surface: applications embedding sefia can use it
 in their own test suites, and the workspace packages' tests use it too. It
 gives shared helpers a collision-free import path (``sefia.testing``) so test
 trees themselves can stay plain, non-importable directories.
 
-Typical shape of a test::
+Application tests can use the scripted client and in-memory session::
 
     from sefia.testing import MockLLMClient, memory_session, result_completion
 
@@ -13,6 +13,9 @@ Typical shape of a test::
         llm = MockLLMClient(completions=[result_completion("hi")])
         async with memory_session(llm):
             assert await my_agent.answer(question="greet") == "hi"
+
+Extension authors can install ``sefia[testing]`` and subclass the exported
+conformance contracts in their own pytest suites.
 """
 
 from __future__ import annotations
@@ -33,13 +36,32 @@ from glyff_pydantic import (
 )
 from typing_extensions import final, override
 
-from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
-from ._session import Session
-from .llm import LLMClient, LLMCompletion, Message
-from .llm.step_decision import DecisionSpec, StepTool
-from .llm.structured_data import StructuredData
-from .llm.streaming import OutputStreamCallback
-from .pydantic._json_utils import pydantic_json_default
+from .._interfaces.history_storage import HistorySnapshot, HistoryStorage
+from .._session import Session
+from ..llm import LLMClient, LLMCompletion, Message
+from ..llm.step_decision import DecisionSpec, StepTool
+from ..llm.structured_data import StructuredData
+from ..llm.streaming import OutputStreamCallback, OutputStreamEvent
+from ..llm.transports import DecisionObserver
+from ..pydantic._json_utils import pydantic_json_default
+from ._decision_transport_contract import (
+    DecisionTransportCase,
+    DecisionTransportContract,
+)
+from ._factories import (
+    make_decision_request,
+    make_function_info,
+    make_step_context,
+    make_tool_call_request,
+)
+from ._history_storage_contract import HistoryStorageContract
+from ._llm_client_contract import (
+    LLMClientCase,
+    LLMClientContract,
+    StreamingLLMClientCase,
+    StreamingLLMClientContract,
+)
+from ._tool_collector_contract import ToolCollectorCase, ToolCollectorContract
 
 
 def _snapshot_value(value: Any) -> Any:
@@ -138,6 +160,34 @@ class MemoryHistoryStorage(HistoryStorage):
         self.saves.append(record)
 
 
+class RecordingDecisionObserver(DecisionObserver):
+    """Records decision transport callbacks for assertions in tests."""
+
+    def __init__(self) -> None:
+        self.prompt: str | None = None
+        self.prompts: list[str] = []
+        self.response_texts: list[str] = []
+        self.reasoning_texts: list[str] = []
+        self.output_events: list[OutputStreamEvent] = []
+
+    @override
+    async def before_request(self, prompt: str) -> None:
+        self.prompt = prompt
+        self.prompts.append(prompt)
+
+    @override
+    async def response_text(self, text: str) -> None:
+        self.response_texts.append(text)
+
+    @override
+    async def reasoning_text(self, text: str) -> None:
+        self.reasoning_texts.append(text)
+
+    @override
+    async def output(self, event: OutputStreamEvent) -> None:
+        self.output_events.append(event)
+
+
 def result_completion(result: Any) -> LLMCompletion:
     """A scripted "result" decision carrying ``result`` as the final answer.
 
@@ -191,3 +241,26 @@ async def memory_session(
             llm_client=llm_client, glyff_session=glyff_session, **session_kwargs
         ) as session:
             yield session
+
+
+__all__ = [
+    "DecisionTransportCase",
+    "DecisionTransportContract",
+    "HistoryStorageContract",
+    "LLMClientCase",
+    "LLMClientContract",
+    "MemoryHistoryStorage",
+    "MockLLMClient",
+    "RecordingDecisionObserver",
+    "StreamingLLMClientCase",
+    "StreamingLLMClientContract",
+    "ToolCollectorCase",
+    "ToolCollectorContract",
+    "make_decision_request",
+    "make_function_info",
+    "make_step_context",
+    "make_tool_call_request",
+    "memory_session",
+    "result_completion",
+    "tool_calls_completion",
+]

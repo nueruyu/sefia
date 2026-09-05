@@ -4,18 +4,14 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from sefia.inference import FunctionInfo
 from sefia.llm import DecisionPrompt, LLMCompletion, Message, PromptRenderer
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.streaming import OutputStreamEvent, StringEnd
-from sefia.llm.transports import (
-    DecisionObserver,
-    DecisionRequest,
-    StructuredDecisionTransport,
-)
+from sefia.llm.streaming import StringEnd
+from sefia.llm.transports import DecisionRequest, StructuredDecisionTransport
 from sefia.pydantic import PydanticModelBackend
+from sefia.testing import RecordingDecisionObserver, make_decision_request
 
 
 def _request() -> DecisionRequest:
@@ -24,45 +20,13 @@ def _request() -> DecisionRequest:
         tools=[],
         result_format_factory=PydanticModelBackend(),
     )
-    return DecisionRequest(
-        function=FunctionInfo(
-            qualname="test",
-            instructions="instructions",
-            bound_arguments={},
-            type_hints={},
-            return_type=str,
-            args=(),
-            kwargs={},
-        ),
-        decision_spec=decision,
-        history=(),
-    )
+    return make_decision_request(decision)
 
 
 def _renderer(prompt: str = "complete prompt") -> Mock:
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = prompt
     return renderer
-
-
-class _RecordingObserver(DecisionObserver):
-    def __init__(self) -> None:
-        self.prompt: str | None = None
-        self.response_texts: list[str] = []
-        self.reasoning_texts: list[str] = []
-        self.output_events: list[OutputStreamEvent] = []
-
-    async def before_request(self, prompt: str) -> None:
-        self.prompt = prompt
-
-    async def response_text(self, text: str) -> None:
-        self.response_texts.append(text)
-
-    async def reasoning_text(self, text: str) -> None:
-        self.reasoning_texts.append(text)
-
-    async def output(self, event: OutputStreamEvent) -> None:
-        self.output_events.append(event)
 
 
 async def test_renders_and_delivers_one_complete_prompt() -> None:
@@ -75,7 +39,7 @@ async def test_renders_and_delivers_one_complete_prompt() -> None:
     client.complete.return_value = completion
     renderer = _renderer()
     request = _request()
-    observer = _RecordingObserver()
+    observer = RecordingDecisionObserver()
 
     decoded = await StructuredDecisionTransport().request_decision(
         client, renderer, request, observer, stream=False
@@ -109,7 +73,7 @@ async def test_observer_finishes_before_the_client_request() -> None:
 
     client.complete.side_effect = complete
 
-    class Observer(_RecordingObserver):
+    class Observer(RecordingDecisionObserver):
         async def before_request(self, prompt: str) -> None:
             await super().before_request(prompt)
             order.append("observed")
@@ -128,7 +92,11 @@ async def test_reports_undecodable_response() -> None:
 
     with pytest.raises(DecisionDecodingError) as exc_info:
         await StructuredDecisionTransport().request_decision(
-            client, _renderer(), _request(), _RecordingObserver(), stream=False
+            client,
+            _renderer(),
+            _request(),
+            RecordingDecisionObserver(),
+            stream=False,
         )
 
     assert exc_info.value.completion is completion
@@ -142,7 +110,11 @@ async def test_rejects_raw_json_content() -> None:
 
     with pytest.raises(DecisionDecodingError, match="structured output"):
         await StructuredDecisionTransport().request_decision(
-            client, _renderer(), _request(), _RecordingObserver(), stream=False
+            client,
+            _renderer(),
+            _request(),
+            RecordingDecisionObserver(),
+            stream=False,
         )
 
 
@@ -153,7 +125,7 @@ async def test_reports_text_and_reasoning_progress() -> None:
             {"decision": "result", "result": "done"}
         )
     )
-    observer = _RecordingObserver()
+    observer = RecordingDecisionObserver()
 
     await StructuredDecisionTransport().request_decision(
         client, _renderer(), _request(), observer, stream=True
@@ -172,7 +144,7 @@ async def test_reports_logical_tool_progress() -> None:
             {"decision": "tool_calls", "tool_calls": []}
         )
     )
-    observer = _RecordingObserver()
+    observer = RecordingDecisionObserver()
 
     await StructuredDecisionTransport().request_decision(
         client, _renderer(), _request(), observer, stream=True

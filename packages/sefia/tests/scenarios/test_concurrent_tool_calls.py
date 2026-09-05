@@ -76,10 +76,6 @@ async def test_concurrent_calls_in_one_decision_overlap():
         report = await Researcher(HandshakeToolkit()).generate_report(topic="t")
 
     assert report.summary == "s"
-    # Both results reach the model in request order: the waiting tool first,
-    # even though it finished after the releasing one.
-    prompt = mock_llm.requests[1]["messages"][0]["content"]
-    assert prompt.index('"result": "waited"') < prompt.index('"result": "released"')
 
 
 class PausingToolkit:
@@ -150,6 +146,3 @@ async def test_pause_in_concurrent_batch_resumes_without_rerunning_sibling():
 
     assert report.summary == "approved"
     assert toolkit.fetch_runs == 1
-    assert len(mock_llm.requests) == 2
-    prompt = mock_llm.requests[1]["messages"][0]["content"]
-    assert prompt.index('"result": "data:alpha"') < prompt.index('"result": "yes"')

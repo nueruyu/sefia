@@ -6,23 +6,18 @@ session storage). Every object is rebuilt for the second run, so the only bridge
 between runs is what was committed to disk before the pause.
 """
 
-import json
 from collections.abc import Callable
 from pathlib import Path
 
-import glyff
-from glyff.serialization import FallbackByTypeQualname
 import pytest
-from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
-from glyff_sqlite import SQLiteBackend
-from sefia import HistoryStorage, Policy, Session, Tools
-from sefia.llm import LLMCompletion
+from sefia import HistoryStorage, Policy, Tools
+from sefia.inference import ToolCallResult
+from sefia.llm import DecisionPrompt, LLMCompletion, PromptRenderer
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 
-from sefios import SQLiteSessionStorage, domain
+from sefios import SessionScope, SQLitePersistence, domain
 from sefios.exceptions import InputRequired
 from sefios.history_storages import SessionHistoryStorage
-from sefios._session_state import bind_session_storage
 from sefios.middleware import HistoryCompactor
 from sefios.tools import Input, InputRequest
 
@@ -48,6 +43,18 @@ def _session_history_storage() -> HistoryStorage:
 class Notes:
     async def add_note(self, text: str) -> str:
         return f"noted: {text}"
+
+
+class _RecordingRenderer(PromptRenderer):
+    def __init__(self) -> None:
+        self.prompts: list[DecisionPrompt] = []
+
+    def render(self, prompt: DecisionPrompt) -> str:
+        self.prompts.append(prompt)
+        return "prompt"
+
+    def render_tool_result(self, result: ToolCallResult) -> str:
+        return str(result.result)
 
 
 class _Agent:
@@ -83,25 +90,21 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
         seen.append(request)
         return answers.get(request.interaction_id)
 
-    def make_glyff_session() -> glyff.Session:
-        return glyff.Session(
-            id=glyff.SessionId(_SESSION_ID),
-            backend=SQLiteBackend(tmp_path / "sessions.sqlite3"),
-            serializer=PydanticSerializer(),
-            argument_canonicalizer=PydanticArgumentCanonicalizer(
-                FallbackByTypeQualname()
+    def make_scope(client: MockLLMClient) -> SessionScope:
+        return SessionScope(
+            llm_client=client,
+            persistence=SQLitePersistence(tmp_path / "sessions.sqlite3"),
+            policies=[compaction_policy],
+            history_storage=(
+                make_history_storage() if make_history_storage is not None else None
             ),
+            prompt_renderer=renderer,
         )
 
-    def make_state_storage() -> SQLiteSessionStorage:
-        return SQLiteSessionStorage(
-            tmp_path / "sessions.sqlite3", _SESSION_ID, PydanticSerializer()
-        )
-
-    history_storage = make_history_storage() if make_history_storage else None
     compaction_policy = Policy(
         middleware=lambda: [HistoryCompactor(max_items=5, keep_items=2)]
     )
+    renderer = _RecordingRenderer()
 
     mock_llm = make_mock_llm(
         [
@@ -112,36 +115,23 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
         ]
     )
     with pytest.raises(InputRequired):
-        async with make_glyff_session() as gs:
-            with bind_session_storage(make_state_storage()):
-                async with Session(
-                    llm_client=mock_llm,
-                    glyff_session=gs,
-                    policies=[compaction_policy],
-                    history_storage=history_storage,
-                ):
-                    await _Agent(Notes(), Input(get_input=get_input)).chat()
+        async with make_scope(mock_llm).session(session_id=_SESSION_ID):
+            await _Agent(Notes(), Input(get_input=get_input)).chat()
 
-    assert len(mock_llm.requests) == 4
-    compacted_prompt = mock_llm.requests[3]["messages"][0]["content"]
-    previous_prompt = mock_llm.requests[2]["messages"][0]["content"]
-    assert len(compacted_prompt) < len(previous_prompt)
+    assert [len(prompt.history) for prompt in renderer.prompts] == [0, 2, 4, 2]
 
     answers[seen[0].interaction_id] = "No, that's all."
 
     resumed_llm = make_mock_llm([_RESULT_RESPONSE])
-    async with make_glyff_session() as gs:
-        with bind_session_storage(make_state_storage()):
-            async with Session(
-                llm_client=resumed_llm,
-                glyff_session=gs,
-                policies=[compaction_policy],
-                history_storage=history_storage,
-            ):
-                result = await _Agent(Notes(), Input(get_input=get_input)).chat()
+    async with make_scope(resumed_llm).session(session_id=_SESSION_ID):
+        result = await _Agent(Notes(), Input(get_input=get_input)).chat()
 
     assert result == "All done."
     assert len(resumed_llm.requests) == 1
-    resumed_messages = json.dumps(resumed_llm.requests[0]["messages"])
-    assert "noted: two" in resumed_messages
-    assert "noted: zero" not in resumed_messages
+    resumed_results = [
+        item.result
+        for item in renderer.prompts[-1].history
+        if isinstance(item, ToolCallResult)
+    ]
+    assert "noted: two" in resumed_results
+    assert "noted: zero" not in resumed_results

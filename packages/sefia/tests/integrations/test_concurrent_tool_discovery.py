@@ -1,4 +1,4 @@
-from typing import Any, Protocol
+from typing import Protocol
 
 from sefia import ToolEntry, ToolRegistry, Tools, concurrent
 from sefia.inference import Capability
@@ -87,22 +87,3 @@ def test_concurrent_marker_is_read_from_the_implementation_under_protocol_narrow
     registry = _collect_self(Agent(BroadWebClient()))
 
     assert _tool_named(registry, "_search").concurrent is True
-
-
-def test_registry_tools_default_to_serial():
-    async def handler(**kwargs: Any) -> str:
-        return "ok"
-
-    registry = ToolRegistry()
-    registry.add(handler, name="plain")
-    registry.add_json_tool(
-        handler, name="json_plain", description="", parameters={"type": "object"}
-    )
-    registry.add(handler, name="marked", concurrent=True)
-
-    plain = registry.get("plain")
-    json_plain = registry.get("json_plain")
-    marked = registry.get("marked")
-    assert plain is not None and plain.concurrent is False
-    assert json_plain is not None and json_plain.concurrent is False
-    assert marked is not None and marked.concurrent is True

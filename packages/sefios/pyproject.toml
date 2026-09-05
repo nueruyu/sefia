@@ -35,6 +35,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+testing = ["pytest>=8.0", "pytest-asyncio>=0.23"]
 file-store = ["glyff-file-store>=0.16.0"]
 sqlite = ["glyff-sqlite>=0.16.0"]
 litellm = ["sefia-litellm>=0.1.0"]

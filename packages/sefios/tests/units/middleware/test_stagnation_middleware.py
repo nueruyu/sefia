@@ -2,19 +2,13 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-from sefia import StepContext
-from sefia._history import StepHistory
 from sefia.inference import (
     StepDecision,
     ResultDecision,
     ToolCallsDecision,
-    ToolCallRequest,
 )
+from sefia.testing import make_step_context, make_tool_call_request
 from sefios.middleware import StagnationDetector, StagnationError
-
-
-def _empty_history() -> StepHistory:
-    return StepHistory()
 
 
 async def _step(
@@ -25,13 +19,13 @@ async def _step(
 ) -> StepDecision:
     """Drives one step whose decision calls a single tool."""
     decision = ToolCallsDecision(
-        calls=[ToolCallRequest(id="1", name=name, arguments=args)]
+        calls=[make_tool_call_request(id="1", name=name, arguments=args)]
     )
 
     async def nxt() -> ToolCallsDecision:
         return decision
 
-    return await middleware.wrap(StepContext(step=step, history=_empty_history()), nxt)
+    return await middleware.wrap(make_step_context(step=step), nxt)
 
 
 class TestStagnationDetector:
@@ -74,16 +68,14 @@ class TestStagnationDetector:
         async def nxt():
             return ResultDecision(result="done")
 
-        decision = await middleware.wrap(
-            StepContext(step=0, history=_empty_history()), nxt
-        )
+        decision = await middleware.wrap(make_step_context(), nxt)
         assert isinstance(decision, ResultDecision)
 
     async def test_records_each_call_in_a_multi_call_decision(self):
         middleware = StagnationDetector(max_repeats=3)
         decision = ToolCallsDecision(
             calls=[
-                ToolCallRequest(id=str(i), name="t", arguments={"a": 1})
+                make_tool_call_request(id=str(i), name="t", arguments={"a": 1})
                 for i in range(3)
             ]
         )
@@ -92,20 +84,24 @@ class TestStagnationDetector:
             return decision
 
         with pytest.raises(StagnationError):
-            await middleware.wrap(StepContext(step=0, history=_empty_history()), nxt)
+            await middleware.wrap(make_step_context(), nxt)
 
-    def test_hashes_nested_dictionaries_consistently(self):
-        middleware = StagnationDetector()
+    async def test_treats_reordered_nested_dictionaries_as_the_same_call(self):
+        middleware = StagnationDetector(max_repeats=2)
         args1 = {"a": 1, "nested": {"c": 3, "b": 2}}
         args2 = {"nested": {"b": 2, "c": 3}, "a": 1}
 
-        assert middleware._hash_tool_call(
-            "test_tool", args1
-        ) == middleware._hash_tool_call("test_tool", args2)
+        await _step(middleware, "test_tool", args1)
 
-    def test_handles_non_serializable_types_with_fallback(self):
-        middleware = StagnationDetector()
+        with pytest.raises(StagnationError):
+            await _step(middleware, "test_tool", args2)
+
+    async def test_detects_repeated_calls_with_non_serializable_arguments(self):
+        middleware = StagnationDetector(max_repeats=2)
         now = datetime.now()
+        arguments = {"dt": now, "num": 1}
 
-        h = middleware._hash_tool_call("test_tool", {"dt": now, "num": 1})
-        assert str(now) in h
+        await _step(middleware, "test_tool", arguments)
+
+        with pytest.raises(StagnationError):
+            await _step(middleware, "test_tool", arguments)
