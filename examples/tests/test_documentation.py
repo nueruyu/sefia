@@ -49,7 +49,9 @@ def test_python_blocks_compile() -> None:
         if any(part.startswith(".") for part in path.relative_to(ROOT).parts):
             continue
         for index, code in enumerate(blocks(str(path.relative_to(ROOT)))):
-            compile(code, f"{path}:{index}", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+            compile(
+                code, f"{path}:{index}", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
+            )
 
 
 @pytest.mark.usefixtures("isolated_workdir")
@@ -136,7 +138,9 @@ async def test_readme_research_tool(monkeypatch: pytest.MonkeyPatch) -> None:
 
         def text(self, query: str, *, max_results: int) -> list[dict[str, str]]:
             calls.append(query)
-            return [{"title": "Example", "href": "https://example.com", "body": "Source"}]
+            return [
+                {"title": "Example", "href": "https://example.com", "body": "Source"}
+            ]
 
     import ddgs
 

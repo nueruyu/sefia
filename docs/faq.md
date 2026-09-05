@@ -19,8 +19,8 @@ functions and classes.
 The closest neighbor on typed ergonomics, and a good library. Two differences: **how
 you get durability** (Pydantic AI via native deferred tools or an adopted
 `TemporalAgent`/`DBOSAgent` engine; sefia native to `@infer`, no engine) and **provider
-coupling** (Pydantic AI binds to per-provider native tool-calling; sefia uses one
-unified schema, at the cost below). The full comparison is in
+coupling** (sefia defaults to a unified structured decision schema and also offers
+`NativeDecisionTransport` for provider-native function calls). The full comparison is in
 [tradeoffs.md](./tradeoffs.md) and [choosing.md](./choosing.md).
 
 ### How is it different from LangGraph?
