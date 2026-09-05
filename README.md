@@ -207,17 +207,47 @@ An input tool pauses the run by raising `InputRequired`. A later HTTP request
 supplies the reply and re-invokes the same call; with durable persistence,
 completed steps replay even after a server restart.
 
-Endpoint excerpt from the [HTTP tutorial](./docs/tutorial.md#4-serve-it-over-http).
-The tutorial defines `app`, `api` (with SQLite persistence), `TurnBody`, and
-`research_service`, and includes the imports, setup, and curl commands.
+The service receives `api.input_tool` as its human-input tool. The endpoints
+create a session, run the research, and accept a reply when it pauses.
+
+This excerpt omits imports and the definitions of `infer`, `Report`, `app`, and
+`TurnBody`; see the [HTTP tutorial](./docs/tutorial.md#4-serve-it-over-http)
+for the complete setup and curl commands.
 
 <!-- example: readme-http -->
 ```python
+class ResearchService:
+    _web: Tools[WebSearch]
+    _input: Tools[Input]
+
+    def __init__(self, web: WebSearch, input_tool: Input):
+        self._web = web
+        self._input = input_tool
+
+    @infer
+    async def run(self, task: str) -> Report:
+        """Research the task, draft a report, ask the human to approve it, then finalize."""
+        ...
+
+
+api = SefiaHTTP(
+    model="gpt-4o",
+    persistence=SQLitePersistence(),
+)
+research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
+
+
+@app.post("/sessions")
+def create_session():
+    return {"session_id": api.create_session()}
+
+
 @app.post("/sessions/{session_id}/turn")
 async def turn(session_id: str, body: TurnBody):
     try:
         async with api.session(session_id=session_id) as session:
-            await session.accept_input(body.input)
+            if body.input is not None:
+                await session.accept_input(body.input)
             report = await research_service.run(body.task)
             return {"status": "done", "report": report}
     except InputRequired as e:

@@ -290,7 +290,8 @@ def create_session():
 async def turn(session_id: str, body: TurnBody):
     try:
         async with api.session(session_id=session_id) as session:
-            await session.accept_input(body.input)
+            if body.input is not None:
+                await session.accept_input(body.input)
             report = await research_service.run(body.task)
             return {"status": "done", "report": report}
     except InputRequired as e:

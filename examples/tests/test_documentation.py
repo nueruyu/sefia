@@ -151,14 +151,15 @@ def test_tutorial_cli_pause_resume(
 
 def test_readme_http_excerpt_matches_tutorial() -> None:
     excerpt = ast.parse(example("README.md", "readme-http"))
-    tutorial = ast.parse(example(TUTORIAL, "tutorial-http"))
-    endpoint = next(
-        node
-        for node in tutorial.body
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "turn"
-    )
-    expected = ast.Module(body=[endpoint], type_ignores=[])
-    assert ast.dump(excerpt) == ast.dump(expected)
+    tutorial_nodes = {
+        ast.dump(node)
+        for example_id in ("tutorial-cli", "tutorial-http")
+        for node in ast.parse(example(TUTORIAL, example_id)).body
+    }
+    assert excerpt.body
+    for node in excerpt.body:
+        assert ast.dump(node) in tutorial_nodes
+
 
 
 def test_http_pause_resume(llm: MockLLMClient, monkeypatch: pytest.MonkeyPatch) -> None:
