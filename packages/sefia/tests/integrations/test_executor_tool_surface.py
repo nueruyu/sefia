@@ -4,6 +4,8 @@ import inspect
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, Protocol
 
+from typing_extensions import override
+
 from sefia._executor import InferenceExecutor
 from sefia._interfaces import InferenceStrategy
 from sefia.event_system import EventPublisher
@@ -23,6 +25,7 @@ class _StubStrategy(InferenceStrategy):
     def __init__(self) -> None:
         self.tool_names: list[str] | None = None
 
+    @override
     async def decide_next_step(
         self,
         function_info: FunctionInfo,

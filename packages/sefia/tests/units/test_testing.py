@@ -4,12 +4,22 @@ from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticModelBackend
 from sefia.testing import (
+    LLMClientCase,
     MockLLMClient,
     make_decision_request,
     make_function_info,
     make_step_context,
     make_tool_call_request,
 )
+
+
+def test_llm_client_cases_have_independent_default_messages() -> None:
+    first = LLMClientCase(MockLLMClient([]), LLMCompletion())
+    second = LLMClientCase(MockLLMClient([]), LLMCompletion())
+
+    first.messages[0].content = "changed"
+
+    assert second.messages[0].content == "Hello"
 
 
 def test_test_data_factories_supply_independent_defaults() -> None:

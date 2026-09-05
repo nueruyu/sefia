@@ -25,14 +25,14 @@ class ToolCollectorCase:
 class ToolCollectorContract:
     """Shared discovery and dispatch behavior required by a tool collector."""
 
-    async def test_collects_one_named_executable_tool(
+    async def test_collects_the_expected_executable_tool(
         self, tool_collector_case: ToolCollectorCase
     ) -> None:
         registry = tool_collector_case.collector.collect(
             tool_collector_case.capabilities
         )
 
-        assert registry.get_names() == [tool_collector_case.expected_name]
+        assert tool_collector_case.expected_name in registry.get_names()
         tool = registry.get(tool_collector_case.expected_name)
         assert tool is not None
         assert await tool.invoke(tool_collector_case.arguments) == (

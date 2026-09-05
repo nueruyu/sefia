@@ -1,7 +1,7 @@
 """Reusable pytest contracts for ``LLMClient`` implementations."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..llm import LLMClient, LLMCompletion, Message
 from ..llm.step_decision import DecisionSpec, StepTool
@@ -14,7 +14,9 @@ class LLMClientCase:
 
     client: LLMClient
     expected_completion: LLMCompletion
-    messages: Sequence[Message] = (Message(role="user", content="Hello"),)
+    messages: Sequence[Message] = field(
+        default_factory=lambda: (Message(role="user", content="Hello"),)
+    )
     tools: Sequence[StepTool] | None = None
     decision_spec: DecisionSpec | None = None
 

@@ -3,6 +3,8 @@
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 
+from typing_extensions import override
+
 from ..inference import ToolCallResult
 from ..llm._client import LLMClient
 from ..llm._messages import LLMCompletion, Message
@@ -25,9 +27,11 @@ class DecisionTransportCase:
 
 
 class _Renderer(PromptRenderer):
+    @override
     def render(self, prompt: DecisionPrompt) -> str:
         return "contract prompt"
 
+    @override
     def render_tool_result(self, result: ToolCallResult) -> str:
         return "contract tool result"
 
@@ -38,15 +42,19 @@ class _Observer(DecisionObserver):
         self.response_texts: list[str] = []
         self.reasoning_texts: list[str] = []
 
+    @override
     async def before_request(self, prompt: str) -> None:
         self.prompts.append(prompt)
 
+    @override
     async def response_text(self, text: str) -> None:
         self.response_texts.append(text)
 
+    @override
     async def reasoning_text(self, text: str) -> None:
         self.reasoning_texts.append(text)
 
+    @override
     async def output(self, event: OutputStreamEvent) -> None:
         pass
 
@@ -56,6 +64,7 @@ class _CompletionClient(LLMClient):
         self.completion = completion
         self.calls = 0
 
+    @override
     async def complete(
         self,
         messages: list[Message],

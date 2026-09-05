@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 from fastapi.responses import StreamingResponse
+from typing_extensions import override
 
 from sefia import Tools
 from sefia.llm import LLMClient, LLMCompletion, Message
@@ -27,6 +28,7 @@ class _StreamingClient(LLMClient):
     def __init__(self, responses: list[str]) -> None:
         self.responses = responses
 
+    @override
     async def complete(
         self,
         messages: list[Message],

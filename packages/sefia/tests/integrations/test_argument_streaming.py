@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
+from typing_extensions import override
 
 from sefia import ToolRegistry
 from sefia.event_system import EventPublisher
@@ -43,6 +44,7 @@ class _StreamingClient(LLMClient):
     def __init__(self, content: str) -> None:
         self.content = content
 
+    @override
     async def complete(
         self,
         messages: list[Message],
