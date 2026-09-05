@@ -12,7 +12,12 @@ from sefia.llm.json_schema import (
     SchemaNode,
 )
 from sefia.llm.structured_data import StructuredData
-from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
+from sefia.llm.step_decision import (
+    DecisionSpec,
+    StepDecisionMode,
+    StepTool,
+    ToolSchemaSource,
+)
 
 from ._data_format import StructuredDataFormat
 
@@ -47,7 +52,7 @@ class StructuredDecisionFormat:
         )
         tool_formats = {
             tool.name: _ToolFormat(
-                arguments=StructuredDataFormat.from_tool(tool),
+                arguments=_tool_data_format(tool),
                 description=tool.description,
             )
             for tool in spec.tools
@@ -130,6 +135,12 @@ class StructuredDecisionFormat:
                 "arguments": tool_format.arguments.decode(fields["arguments"]),
             }
         )
+
+
+def _tool_data_format(tool: StepTool) -> StructuredDataFormat:
+    if tool.schema_source is ToolSchemaSource.GENERATED:
+        return StructuredDataFormat.from_generated_schema(tool.arguments)
+    return StructuredDataFormat.from_user_schema(tool.arguments)
 
 
 def _build_schema(

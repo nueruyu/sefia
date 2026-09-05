@@ -65,7 +65,7 @@ def _request(decision: DecisionSpec) -> DecisionRequest:
             args=(),
             kwargs={},
         ),
-        spec=decision,
+        decision_spec=decision,
         history=(),
     )
 
@@ -215,7 +215,7 @@ async def test_native_transport_sends_previous_calls_as_native_history() -> None
     request = _request(decision)
     request = DecisionRequest(
         function=request.function,
-        spec=request.spec,
+        decision_spec=request.decision_spec,
         history=(
             ToolCallsDecision(
                 [

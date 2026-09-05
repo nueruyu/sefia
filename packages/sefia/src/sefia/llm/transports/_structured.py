@@ -26,8 +26,8 @@ class StructuredDecisionTransport(DecisionTransport):
     ) -> DecodedDecision:
         prompt = prompt_renderer.render(
             request.to_prompt(
-                json_response_instructions(request.spec),
-                tools=request.spec.tools,
+                json_response_instructions(request.decision_spec),
+                tools=request.decision_spec.tools,
                 history=request.history,
             )
         )
@@ -36,7 +36,7 @@ class StructuredDecisionTransport(DecisionTransport):
         completion = await client.complete(
             messages=[Message(role="user", content=prompt)],
             tools=None,
-            decision_spec=request.spec,
+            decision_spec=request.decision_spec,
             stream_callback=observer.response_text if stream else None,
             output_callback=observer.output if stream else None,
             reasoning_callback=observer.reasoning_text if stream else None,

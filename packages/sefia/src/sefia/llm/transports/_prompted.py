@@ -29,8 +29,8 @@ class PromptedDecisionTransport(DecisionTransport):
     ) -> DecodedDecision:
         prompt = prompt_renderer.render(
             request.to_prompt(
-                json_response_instructions(request.spec),
-                tools=request.spec.tools,
+                json_response_instructions(request.decision_spec),
+                tools=request.decision_spec.tools,
                 history=request.history,
             )
         )

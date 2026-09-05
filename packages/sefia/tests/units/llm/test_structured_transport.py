@@ -34,7 +34,7 @@ def _request() -> DecisionRequest:
             args=(),
             kwargs={},
         ),
-        spec=decision,
+        decision_spec=decision,
         history=(),
     )
 
@@ -83,7 +83,7 @@ async def test_renders_and_delivers_one_complete_prompt() -> None:
 
     sent = client.complete.await_args.kwargs
     assert sent["messages"] == [Message(role="user", content="complete prompt")]
-    assert sent["decision_spec"] is request.spec
+    assert sent["decision_spec"] is request.decision_spec
     assert observer.prompt == "complete prompt"
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
     assert decoded.completion is completion

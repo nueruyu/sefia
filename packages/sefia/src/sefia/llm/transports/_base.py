@@ -29,7 +29,7 @@ class DecisionObserver(ABC):
 @dataclass(frozen=True)
 class DecisionRequest:
     function: FunctionInfo
-    spec: DecisionSpec
+    decision_spec: DecisionSpec
     history: tuple[HistoryItem, ...]
     rejected: RejectedDecision | None = None
 

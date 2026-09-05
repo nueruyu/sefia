@@ -70,8 +70,9 @@ Rules that keep the layering clean — worth preserving in any change:
 
 ## Inside `sefia` (the core)
 
-Modules with a leading underscore are internal; the public surface is whatever
-`packages/sefia/src/sefia/__init__.py` re-exports.
+Modules with a leading underscore are internal. The package root is the primary
+authoring surface; categorized extension APIs may also live in named public
+submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 
 | Module | Responsibility | Key symbols |
 | --- | --- | --- |
@@ -138,14 +139,14 @@ implementation noted in parentheses.
 | Path | Responsibility |
 | --- | --- |
 | `_client.py` | `LiteLLMClient` orchestration, runtime logging configuration, and LiteLLM exception mapping. |
-| `_request.py` | Converts core messages, tools, and a logical decision model into the unified LiteLLM wire schema, messages, kwargs, and native `response_format`. |
+| `_request.py` | Converts core messages, tools, and a logical decision spec into LiteLLM wire messages and kwargs; selects the adapter schema policy for each tool. |
 | `_response.py` | Decodes one completed LiteLLM response into `LLMCompletion`, including tool-argument restoration, usage, cost, and structured decision data. |
 | `_streaming.py` | Consumes LiteLLM streams, accumulates completion text, and dispatches text, reasoning, and structured-data callbacks before delegating the completed response to `_response.py`. |
 | `_native_tool_stream.py` | Decodes LiteLLM native tool-call fragments into provider-neutral argument progress events. |
 | `_schema/_structured_decision.py` | Builds the provider-compatible decision schema and restores provider representations to the logical `DecisionSpec` shape. |
 | `_schema/_policy.py` | Declares independent generated/user-defined schema policies, applies permitted corrections, and validates the shared strict-output constraints. |
 | `_schema/_uniform_dictionary.py` | Defines uniform-dictionary entry-array encoding and decoding. |
-| `_schema/_data_format.py` | Defines how structured decision data is represented on the wire and restored at runtime. |
+| `_schema/_data_format.py` | Translates provider-neutral structured data to and from one prepared wire schema; it has no tool knowledge. |
 
 ## Where to change what
 

@@ -6,7 +6,7 @@ from typing_extensions import final
 
 from sefia.llm import Message, ToolCall
 from sefia.llm.json_schema import JsonObject
-from sefia.llm.step_decision import DecisionSpec, StepTool
+from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 
 from ._schema import StructuredDecisionFormat
 from ._schema._data_format import StructuredDataFormat
@@ -40,9 +40,7 @@ def build_completion_request(
     client_kwargs: dict[str, Any],
     stream: bool,
 ) -> CompletionRequest:
-    tool_data_formats = {
-        tool.name: StructuredDataFormat.from_tool(tool) for tool in tools or []
-    }
+    tool_data_formats = {tool.name: _tool_data_format(tool) for tool in tools or []}
     wire_messages = [
         _encode_message(message, tool_data_formats) for message in messages
     ]
@@ -67,6 +65,12 @@ def build_completion_request(
         decision_format,
         tool_data_formats,
     )
+
+
+def _tool_data_format(tool: StepTool) -> StructuredDataFormat:
+    if tool.schema_source is ToolSchemaSource.GENERATED:
+        return StructuredDataFormat.from_generated_schema(tool.arguments)
+    return StructuredDataFormat.from_user_schema(tool.arguments)
 
 
 def _encode_tool_definition(

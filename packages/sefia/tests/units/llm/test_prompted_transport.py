@@ -31,7 +31,7 @@ def _request() -> DecisionRequest:
             args=(),
             kwargs={},
         ),
-        spec=decision,
+        decision_spec=decision,
         history=(),
     )
 

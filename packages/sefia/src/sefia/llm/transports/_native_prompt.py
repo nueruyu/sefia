@@ -15,7 +15,7 @@ def render_native_prompt(
 ) -> str:
     return renderer.render(
         request.to_prompt(
-            _response_instructions(request.spec, result_tool),
+            _response_instructions(request.decision_spec, result_tool),
             tools=(),
             history=(),
         )

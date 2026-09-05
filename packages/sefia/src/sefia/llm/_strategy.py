@@ -133,7 +133,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         for attempt in range(self._max_repair_attempts + 1):
             request = DecisionRequest(
                 function=function_info,
-                spec=decision_spec,
+                decision_spec=decision_spec,
                 history=tuple(history),
                 rejected=rejected,
             )
@@ -166,7 +166,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         tool_arg_streamer = self._tool_arg_streamer(tools, tool_call_ids)
         observer = _StrategyDecisionObserver(
             publisher,
-            request.spec,
+            request.decision_spec,
             tool_arg_streamer,
         )
 
@@ -189,7 +189,7 @@ class LLMInferenceStrategy(InferenceStrategy):
 
         await publisher.publish(events.AfterLLMCall(decoded.completion))
         try:
-            return request.spec.validate(decoded.decision_data, tool_call_ids)
+            return request.decision_spec.validate(decoded.decision_data, tool_call_ids)
         except UnknownToolDecisionError as error:
             raise InvalidInferenceResponseError(
                 f"LLM decision requested an unknown tool: {error.tool_name!r}",

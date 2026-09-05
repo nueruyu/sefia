@@ -28,8 +28,8 @@ class NativeDecisionTransport(DecisionTransport):
         observer: DecisionObserver,
         stream: bool,
     ) -> DecodedDecision:
-        result_tool = create_result_tool(request.spec)
-        tools = [*request.spec.tools]
+        result_tool = create_result_tool(request.decision_spec)
+        tools = [*request.decision_spec.tools]
         if result_tool is not None:
             tools.append(result_tool)
 
