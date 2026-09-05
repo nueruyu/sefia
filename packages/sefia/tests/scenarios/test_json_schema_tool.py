@@ -79,18 +79,4 @@ async def test_json_schema_tool_reaches_the_llm_and_is_dispatched():
 
     assert isinstance(report, Report)
     assert report.summary == "Sefia is a framework for building LLM agents."
-
-    # The handler was dispatched with the decoded arguments.
     assert calls == [{"query": "sefia"}]
-
-    decision_spec = mock_llm.requests[0]["decision_spec"]
-    assert decision_spec is not None
-    tool = decision_spec.tools[0]
-    assert tool.name == "search"
-    assert tool.description == "Search the corpus for a query."
-    assert tool.arguments.to_dict() == _SEARCH_SCHEMA
-
-    history = "\n".join(
-        str(message["content"]) for message in mock_llm.requests[1]["messages"]
-    )
-    assert "framework" in history

@@ -1,3 +1,5 @@
+"""Shared behavior required of every session registry."""
+
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypeAlias

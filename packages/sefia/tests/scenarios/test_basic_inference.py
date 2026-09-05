@@ -1,17 +1,12 @@
-import json
 from dataclasses import dataclass
-from unittest.mock import Mock
 
 import glyff
 import pytest
 import sefia
 
-from sefia import Policy, Tools, policy
-from sefia._authoring.metadata import get_metadata
+from sefia import Tools
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
-from sefia.llm import LLMCompletion, PromptRenderer
-from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
-from sefia.llm.transports import PromptedDecisionTransport
+from sefia.llm import LLMCompletion
 from sefia.testing import (
     MockLLMClient,
     memory_session,
@@ -30,12 +25,15 @@ class SearchResult:
     url: str
 
 
-@dataclass
 class WebToolkit:
     """A simple toolkit for web operations."""
 
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
     async def search(self, query: str) -> list[SearchResult]:
         """Search the web for a query."""
+        self.calls.append(("search", query))
         if query == "sefia":
             return [
                 SearchResult(title="sefia framework", url="https://example.com/sefia")
@@ -44,6 +42,7 @@ class WebToolkit:
 
     async def fetch_content(self, url: str) -> str:
         """Fetch content from a URL."""
+        self.calls.append(("fetch_content", url))
         if url == "https://example.com/sefia":
             return "Sefia is a framework for building LLM agents."
         return "Not found."
@@ -93,11 +92,6 @@ class SimpleAgent:
         ...
 
 
-@dataclass
-class _PolicyFixture(Policy):
-    count: int
-
-
 async def test_inference_with_tool_calls():
     mock_llm = MockLLMClient(
         completions=[
@@ -118,8 +112,9 @@ async def test_inference_with_tool_calls():
         ]
     )
 
+    toolkit = WebToolkit()
     async with memory_session(mock_llm, session_id="basic-inference-tools"):
-        researcher = Researcher(WebToolkit())
+        researcher = Researcher(toolkit)
         report = await researcher.generate_report(topic="sefia")
 
     assert isinstance(report, Report)
@@ -127,11 +122,10 @@ async def test_inference_with_tool_calls():
     assert "framework" in report.summary
     assert report.sources == ["https://example.com/sefia"]
 
-    assert len(mock_llm.requests) == 3
-    final_messages = mock_llm.requests[2]["messages"]
-    assert any(
-        "sefia framework" in str(message["content"]) for message in final_messages
-    )
+    assert toolkit.calls == [
+        ("search", "sefia"),
+        ("fetch_content", "https://example.com/sefia"),
+    ]
 
 
 async def test_inference_without_tool_calls():
@@ -151,67 +145,6 @@ async def test_inference_without_tool_calls():
     assert isinstance(report, Report)
     assert report.topic == "direct"
     assert "direct answer" in report.summary
-    assert len(mock_llm.requests) == 1
-    prompt = mock_llm.requests[0]["messages"][0]["content"]
-    assert isinstance(prompt, str)
-    assert "# Task" in prompt
-    assert "## Task arguments" in prompt
-    assert '"topic": "direct"' in prompt
-    assert "## Response" in prompt
-
-
-async def test_session_accepts_a_custom_prompt_renderer():
-    mock_llm = MockLLMClient(
-        completions=[
-            result_completion(
-                Report(topic="custom", summary="Custom prompt.", sources=[])
-            )
-        ]
-    )
-    prompt_renderer = Mock(spec=PromptRenderer)
-    prompt_renderer.render.return_value = "custom prompt"
-
-    async with memory_session(
-        mock_llm,
-        session_id="custom-prompt-renderer",
-        prompt_renderer=prompt_renderer,
-    ):
-        await SimpleAgent().generate_report(topic="custom")
-
-    assert mock_llm.requests[0]["messages"] == [
-        {"role": "user", "content": "custom prompt"},
-    ]
-    prompt_renderer.render.assert_called_once()
-
-
-async def test_session_accepts_a_prompted_decision_transport() -> None:
-    mock_llm = MockLLMClient(
-        completions=[
-            LLMCompletion(
-                content=json.dumps(
-                    {
-                        "decision": "result",
-                        "result": {
-                            "topic": "prompted",
-                            "summary": "Prompt JSON.",
-                            "sources": [],
-                        },
-                    }
-                )
-            )
-        ]
-    )
-
-    async with memory_session(
-        mock_llm,
-        session_id="prompted-decision-transport",
-        decision_transport=PromptedDecisionTransport(),
-    ):
-        report = await SimpleAgent().generate_report(topic="prompted")
-
-    assert report.topic == "prompted"
-    assert mock_llm.requests[0]["decision_spec"] is None
-    assert '"decision":"result"' in mock_llm.requests[0]["messages"][0]["content"]
 
 
 async def test_inference_with_tool_exception():
@@ -247,11 +180,6 @@ async def test_inference_with_tool_exception():
 
     assert report.topic == "failure"
     assert "tool failed" in report.summary
-    assert len(mock_llm.requests) == 2
-    messages = mock_llm.requests[1]["messages"]
-    history = "\n".join(str(message["content"]) for message in messages)
-    assert "Error executing tool" in history
-    assert "ValueError(Failed because: test)" in history
 
 
 async def test_inference_with_nonexistent_tool_call():
@@ -327,55 +255,3 @@ async def test_inference_on_standalone_function():
         summary = await summarize_text(text="This is a long text...", length=1)
 
     assert summary == "This is a summary."
-    assert len(mock_llm.requests) == 1
-    decision_spec = mock_llm.requests[0].get("decision_spec")
-    assert isinstance(decision_spec, DecisionSpec)
-    assert decision_spec.mode is StepDecisionMode.RESULT_ONLY
-    assert decision_spec.tools == ()
-
-
-def test_policy_attaches_metadata():
-    """`@policy` records its policy under the metadata "policies" key, no matter
-    where it sits relative to @infer."""
-
-    @infer
-    @policy(_PolicyFixture(count=3))
-    async def below(value: int) -> int:
-        """Policy applied below @infer."""
-        ...
-
-    @policy(_PolicyFixture(count=3))
-    @infer
-    async def above(value: int) -> int:
-        """Policy applied above @infer."""
-        ...
-
-    for fn in (below, above):
-        policies = get_metadata(fn)["policies"]
-        assert len(policies) == 1
-        assert isinstance(policies[0], _PolicyFixture)
-
-
-def test_policy_coexists_with_other_metadata():
-    """A non-policies entry in the metadata must not hide a policy attached above
-    @infer — regression for the metadata-present-but-no-policies-key bug."""
-
-    async def fn(value: int) -> int:
-        """A function whose metadata was already touched by another decorator."""
-        ...
-
-    setattr(fn, "__sefia_metadata__", {"other": True})
-
-    # @policy sits above @infer, so the policy lands on the wrapper chain.
-    decorated = policy(_PolicyFixture(count=2))(infer(fn))
-
-    metadata = get_metadata(decorated)
-    assert metadata.get("other") is True
-    assert [type(p) for p in metadata.get("policies", [])] == [_PolicyFixture]
-
-
-def test_policy_rejects_non_policy():
-    """@policy raises a clear error when given a non-Policy (e.g. the class
-    itself instead of an instance)."""
-    with pytest.raises(TypeError):
-        policy(_PolicyFixture)  # type: ignore

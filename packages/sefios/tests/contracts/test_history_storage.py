@@ -1,3 +1,5 @@
+"""Shared behavior required of every history storage."""
+
 from collections.abc import AsyncGenerator, Iterator
 from contextlib import asynccontextmanager
 from typing import Any

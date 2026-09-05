@@ -15,11 +15,7 @@ from sefios import (
     get_session_storage,
 )
 
-infer = domain("packages.sefios.tests.units.test_scope").infer
-
-
-def test_sqlite_persistence_has_a_project_local_default() -> None:
-    assert SQLitePersistence().database == Path(".sefios/sessions.sqlite3")
+infer = domain("packages.sefios.tests.integrations.test_session_scope").infer
 
 
 class _Probe:

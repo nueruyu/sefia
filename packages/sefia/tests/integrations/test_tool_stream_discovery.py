@@ -1,9 +1,9 @@
+from collections.abc import AsyncIterator
 from typing import Protocol
 
 from sefia import Tools, preview
 from sefia._tool_system import ToolRegistry
 from sefia.inference import Capability
-from sefia.llm._arg_stream import _ArgStreamChannel
 from sefia.streaming import ArgEvent, ArgStream, StringDelta
 from sefia.tool_collectors import DefaultToolCollector
 
@@ -11,6 +11,11 @@ from sefia.tool_collectors import DefaultToolCollector
 def _collect(instance: object) -> ToolRegistry:
     """Collect tools for ``instance`` as its @infer method's ``self`` capability."""
     return DefaultToolCollector().collect([Capability(value=instance, declared=None)])
+
+
+async def _events(*events: ArgEvent) -> AsyncIterator[ArgEvent]:
+    for event in events:
+        yield event
 
 
 async def test_stream_handler_is_collected_and_bound_to_instance() -> None:
@@ -38,9 +43,7 @@ async def test_stream_handler_is_collected_and_bound_to_instance() -> None:
     (registered,) = registry.get_all()
     assert registered.stream_handler is not None
 
-    channel = _ArgStreamChannel()
-    channel.close()
-    await registered.stream_handler("call-1", channel)
+    await registered.stream_handler("call-1", _events())
     assert seen_self == [agent._toolkit]  # bound to the toolkit instance
 
 
@@ -66,10 +69,9 @@ async def test_bound_stream_handler_consumes_events() -> None:
     (registered,) = registry.get_all()
     assert registered.stream_handler is not None
 
-    channel = _ArgStreamChannel()
-    channel.feed(StringDelta(name="question", text="hi"))
-    channel.close()
-    await registered.stream_handler("call-1", channel)
+    await registered.stream_handler(
+        "call-1", _events(StringDelta(name="question", text="hi"))
+    )
 
     assert received == [StringDelta(name="question", text="hi")]
 
@@ -115,10 +117,9 @@ async def test_static_tool_stream_handler_is_collected() -> None:
     registered = next(tool for tool in registry.get_all() if "ask_human" in tool.name)
     assert registered.stream_handler is not None
 
-    channel = _ArgStreamChannel()
-    channel.feed(StringDelta(name="question", text="hi"))
-    channel.close()
-    await registered.stream_handler("call-1", channel)
+    await registered.stream_handler(
+        "call-1", _events(StringDelta(name="question", text="hi"))
+    )
 
     assert received == [StringDelta(name="question", text="hi")]
 
@@ -147,9 +148,7 @@ async def test_class_tool_stream_handler_is_bound_to_class() -> None:
     registered = next(tool for tool in registry.get_all() if "ask_human" in tool.name)
     assert registered.stream_handler is not None
 
-    channel = _ArgStreamChannel()
-    channel.close()
-    await registered.stream_handler("call-1", channel)
+    await registered.stream_handler("call-1", _events())
 
     assert seen_cls == [Toolkit]
 
@@ -182,9 +181,8 @@ async def test_stream_handler_is_found_when_the_field_is_protocol_narrowed() -> 
     (registered,) = registry.get_all()
     assert registered.stream_handler is not None
 
-    channel = _ArgStreamChannel()
-    channel.feed(StringDelta(name="question", text="hi"))
-    channel.close()
-    await registered.stream_handler("call-1", channel)
+    await registered.stream_handler(
+        "call-1", _events(StringDelta(name="question", text="hi"))
+    )
 
     assert received == [StringDelta(name="question", text="hi")]

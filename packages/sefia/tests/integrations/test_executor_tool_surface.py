@@ -13,7 +13,9 @@ from sefia.tool_collectors import DefaultToolCollector
 from sefia.testing import MemoryHistoryStorage
 
 infer = sefia.Domain(
-    glyff.Domain("packages.sefia.tests.units.test_executor_tool_surface", version="1")
+    glyff.Domain(
+        "packages.sefia.tests.integrations.test_executor_tool_surface", version="1"
+    )
 ).infer
 
 

@@ -1,3 +1,5 @@
+"""Shared behavior required of every tool collector."""
+
 import inspect
 from dataclasses import dataclass
 from typing import TypeAlias

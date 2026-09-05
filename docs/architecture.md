@@ -194,8 +194,11 @@ implementation noted in parentheses.
   folders (`llm/`, `pydantic/`, `tool_collectors/`). Interfaces that belong to the
   ordinary authoring surface may be selected into the root facade; low-level contracts
   for extension-library authors should have a dedicated public submodule instead.
-- **Tests mirror source** under each package's `tests/units/` (per-module) and
-  `tests/scenarios/` (behavioral). Add tests next to the layer you change.
+- **Tests are separated by responsibility:** `tests/units/` covers one source
+  module, `tests/contracts/` applies shared behavior to interface
+  implementations, `tests/integrations/` covers component seams, and
+  `tests/scenarios/` exercises behavior through public application APIs. Add a
+  test at the narrowest layer that owns the behavior.
 - **The two seams are deliberately separate:** *middleware* controls (can retry /
   short-circuit), *handlers* only observe (their exceptions are isolated). Don't route
   control through a handler.

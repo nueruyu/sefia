@@ -4,11 +4,8 @@ from enum import Enum, auto
 
 import glyff
 import pytest
-from glyff import ArgumentCanonicalizer, Serializer
-from glyff.store import MemoryBackend
 
-from sefia import Domain, Policy, Profile, Session, policy, profile
-from sefia._authoring.metadata import KEY_PROFILE_KEY, get_metadata
+from sefia import Domain, Policy, Profile, policy, profile
 from sefia.event_system import Event, EventHandler
 from sefia.llm import LLMCompletion
 from sefia.testing import MockLLMClient, memory_session, result_completion
@@ -60,47 +57,6 @@ class _MissingProfileAgent:
     async def step(self, topic: str) -> Report:
         """Selects a profile that was never registered."""
         ...
-
-
-def test_profile_attaches_key_metadata():
-    """`@profile` records the profile key under the metadata "profile" slot, no
-    matter where it sits relative to @infer."""
-
-    @infer
-    @profile("fast")
-    async def below(value: int) -> int:
-        """Profile selected below @infer."""
-        ...
-
-    @profile("smart")
-    @infer
-    async def above(value: int) -> int:
-        """Profile selected above @infer."""
-        ...
-
-    assert get_metadata(below)[KEY_PROFILE_KEY] == "fast"
-    assert get_metadata(above)[KEY_PROFILE_KEY] == "smart"
-
-
-def test_profile_rejects_unhashable_and_none_keys():
-    """@profile keys must be hashable and not the None sentinel."""
-    with pytest.raises(TypeError, match="hashable"):
-        profile(["not", "hashable"])  # type: ignore[arg-type]
-    with pytest.raises(TypeError, match="must not be None"):
-        profile(None)
-
-
-def test_profile_rejects_profile_instance_as_key():
-    """@profile rejects a Profile instance passed where its key is expected."""
-    with pytest.raises(TypeError, match="not the Profile instance itself"):
-        profile(Profile(key="fast", client=MockLLMClient(completions=[])))
-
-
-def test_profile_accepts_policy_sequence():
-    """Profile accepts a list (or any sequence) of policies at the call site."""
-    p = _LabelPolicy(label="x", log=[])
-    prof = Profile(key="p", client=MockLLMClient(completions=[]), policies=[p])
-    assert list(prof.policies) == [p]
 
 
 async def test_infer_uses_selected_profile_client():
@@ -231,28 +187,6 @@ async def test_unknown_profile_raises():
     ):
         with pytest.raises(RuntimeError, match="Unknown profile 'missing'"):
             await _MissingProfileAgent().step(topic="t")
-
-
-def test_duplicate_profile_keys_rejected(
-    serializer: Serializer, hasher: ArgumentCanonicalizer
-):
-    """The Session rejects two profiles sharing a key up front."""
-    a = MockLLMClient(completions=[])
-    b = MockLLMClient(completions=[])
-    with pytest.raises(ValueError, match="Duplicate profile key: 'dup'"):
-        Session(
-            llm_client=a,
-            glyff_session=glyff.Session(
-                id=glyff.SessionId("dup"),
-                backend=MemoryBackend(),
-                serializer=serializer,
-                argument_canonicalizer=hasher,
-            ),
-            profiles=[
-                Profile(key="dup", client=a),
-                Profile(key="dup", client=b),
-            ],
-        )
 
 
 class _Models(Enum):

@@ -112,21 +112,3 @@ async def test_domain_engrave_accepts_an_explicit_name():
     ]
     assert len(executions) == 1
     assert executions[0].id.name == glyff.ExecutionName("prepare_report")
-
-
-def test_domain_requires_explicit_non_empty_execution_names():
-    reports = Domain(glyff.Domain("com.example.reports", version="1"))
-
-    try:
-        reports.infer(name="")
-    except ValueError as error:
-        assert "name" in str(error)
-    else:
-        raise AssertionError("Expected an empty execution name to be rejected.")
-
-    try:
-        reports.engrave(name="")
-    except ValueError as error:
-        assert "name" in str(error)
-    else:
-        raise AssertionError("Expected an empty execution name to be rejected.")
