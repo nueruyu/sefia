@@ -5,16 +5,21 @@ import re
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, Protocol, cast
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefia_litellm import LiteLLMClient
 from typer.testing import CliRunner
 
 ROOT = Path(__file__).resolve().parents[2]
-REPORT = {"topic": "durable execution", "summary": "Approved report", "sources": []}
+REPORT: dict[str, Any] = {"topic": "durable execution", "summary": "Approved report", "sources": []}
+
+
+class HTTPClient(Protocol):
+    def post(self, url: str, *, json: object | None = None) -> Response: ...
 
 
 def blocks(path: str) -> list[str]:
@@ -96,7 +101,8 @@ def test_http_pause_resume(path: str, monkeypatch: pytest.MonkeyPatch) -> None:
         load_code(cli_code, "hitl_cli", monkeypatch)
     code = next(c for c in blocks(path) if "app = FastAPI()" in c)
     first = load_code(code, "doc_server", monkeypatch)
-    with TestClient(first.app) as client:
+    with TestClient(first.app) as raw_client:
+        client = cast(HTTPClient, raw_client)
         session_id = client.post("/sessions").json()["session_id"]
         url = f"/sessions/{session_id}/turn"
         paused = client.post(url, json={"task": "durable execution"})
@@ -105,7 +111,8 @@ def test_http_pause_resume(path: str, monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(llm.requests) == 1
 
     resumed = load_code(code, "doc_server", monkeypatch)
-    with TestClient(resumed.app) as client:
+    with TestClient(resumed.app) as raw_client:
+        client = cast(HTTPClient, raw_client)
         done = client.post(
             url, json={"task": "durable execution", "input": "yes, approve"}
         )
@@ -116,9 +123,14 @@ def test_http_pause_resume(path: str, monkeypatch: pytest.MonkeyPatch) -> None:
     assert not llm.completions
 
 
+@pytest.mark.parametrize("path", ["README.md", "docs/tutorial.md"])
 @pytest.mark.usefixtures("isolated_workdir")
-async def test_readme_research_tool(monkeypatch: pytest.MonkeyPatch) -> None:
-    code = next(c for c in blocks("README.md") if "async def main(topic:" in c)
+async def test_research_tool(path: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    if path == "README.md":
+        code = next(c for c in blocks(path) if "async def main(topic:" in c)
+    else:
+        first, tools = blocks(path)[:2]
+        code = first.split('if __name__ == "__main__":')[0] + tools
     module = load_code(code, "doc_research", monkeypatch)
     llm = MockLLMClient(
         [
@@ -145,8 +157,11 @@ async def test_readme_research_tool(monkeypatch: pytest.MonkeyPatch) -> None:
     import ddgs
 
     monkeypatch.setattr(ddgs, "DDGS", Search)
-    report = await module.main("durable execution")
-    assert report.summary == REPORT["summary"]
+    if path == "README.md":
+        report = await module.main("durable execution")
+        assert report.summary == REPORT["summary"]
+    else:
+        await module.main()
     assert calls == ["durable execution"]
     assert len(llm.requests) == 2
     assert "Error executing tool" not in str(llm.requests)

@@ -95,10 +95,12 @@ context helpers such as `current_tool_call_id_for`.
 
 ## Quickstart
 
-A plain Python class that holds a dependency, runs an inferred step, and persists its
-run.
+Save this as `research.py`, set `OPENAI_API_KEY`, and run `python research.py`.
+The class holds a web dependency, runs an inferred step, and persists its run.
 
 ```python
+import asyncio
+
 from pydantic import BaseModel
 from sefios import SQLitePersistence, SessionScope, Tools, domain
 from sefios.tools import WebSearch
@@ -133,6 +135,10 @@ async def main(topic: str) -> Report:
     service = ResearchService(web=WebSearch())
     async with scope.session(session_id="demo") as _:
         return await service.run(topic)       # the engraved run can pause and resume
+
+
+if __name__ == "__main__":
+    print(asyncio.run(main("durable execution for LLM applications")))
 ```
 
 `SessionScope` wires the LLM client, the glyff session, and a shared SQLite database
