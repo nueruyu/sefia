@@ -25,6 +25,12 @@ process may restart before the human approves.
 - resume is re-invoking the same session;
 - the orchestration stays ordinary Python.
 
+This is orchestration pseudocode with application-defined helpers: model steps
+use `@infer`, `human.ask` provides replayable input, and `publish` is engraved
+with a downstream idempotency key. `human.ask` is not a direct call to
+`Input.get_input`, which requires a dispatched tool-call context. The Python
+branch enforces approval; an LLM instruction alone does not.
+
 ```python
 async def research(task, drafter, human) -> Outcome:
     d = await drafter.draft(task)

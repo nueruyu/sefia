@@ -22,10 +22,11 @@ client = sefia_litellm.LiteLLMClient(model="gpt-4o")
 
 ## Provider compatibility
 
-The adapter uses LiteLLM's provider integrations. Its full Sefia flow — plain and
-structured results plus a tool-call round trip — is currently verified by live E2E
-tests against OpenAI, Anthropic, and Gemini. Other LiteLLM providers may work, but
-they are not yet covered by the live compatibility suite.
+The opt-in live compatibility suite covers OpenAI, Anthropic, Gemini, xAI,
+Mistral, Groq, DeepSeek, and local Ollama. Each provider is skipped unless its
+enabling environment variable is set; suite coverage does not imply that every
+provider was exercised in a given test run. See the provider table in
+[CONTRIBUTING.md](../../CONTRIBUTING.md#end-to-end-tests-against-real-providers).
 
 See the live-provider table and opt-in test command in the repository's
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md#end-to-end-tests-against-real-providers).

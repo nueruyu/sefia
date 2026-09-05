@@ -75,14 +75,15 @@ const events = new EventSource(`/sessions/${sessionId}/events`)
 events.addEventListener("delta", (event) => console.log(JSON.parse(event.data)))
 events.addEventListener("completed", (event) => console.log(JSON.parse(event.data)))
 events.addEventListener("input_required", (event) => console.log(JSON.parse(event.data)))
-events.addEventListener("error", (event) => console.error(JSON.parse(event.data)))
+events.addEventListener("execution_failed", (event) => console.error(JSON.parse(event.data)))
+events.addEventListener("error", () => console.error("SSE connection interrupted"))
 ```
 
 ## What it shows
 
 - Writing FastAPI endpoints as ordinary HTTP request handlers
 - Running a Sefia workflow with a CLI-like procedural session block
-- Streaming parsed `delta` text (with a `type` of `input`/`output`) and publishing `completed`, `input_required`, and `error` events through a separate SSE channel
+- Streaming parsed `delta` text (with a `type` of `input`/`output`) and publishing `completed`, `input_required`, and `execution_failed` events through a separate SSE channel
 - Keeping SSE wiring out of the application workflow body
 - Serving a dependency-free HITL chat UI from the same FastAPI process
 

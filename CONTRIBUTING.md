@@ -12,7 +12,7 @@ explained in [`docs/how-it-works.md`](./docs/how-it-works.md).
 ## Setup & commands
 
 ```bash
-uv sync                       # install the workspace
+uv sync --all-packages --dev   # install all workspace packages and test dependencies
 uv run pytest                 # run all tests (asyncio auto-mode; skips e2e)
 uv run pytest packages/sefia  # run one package's tests
 uv run pytest -m e2e          # live-provider e2e tests (needs API keys, see below)
@@ -105,6 +105,9 @@ treat updating them as part of the change, not a follow-up. The mapping:
 
 When in doubt, grep the docs for the symbol or filename you touched. A change that
 makes a doc's example or file reference wrong is incomplete until the doc is fixed.
+
+After editing runnable examples, run `uv run pytest examples/tests/test_documentation.py`.
+These tests execute the documentation blocks with mocked model/search responses.
 
 ## Pre-1.0
 

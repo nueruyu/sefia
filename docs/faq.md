@@ -19,8 +19,8 @@ functions and classes.
 The closest neighbor on typed ergonomics, and a good library. Two differences: **how
 you get durability** (Pydantic AI via native deferred tools or an adopted
 `TemporalAgent`/`DBOSAgent` engine; sefia native to `@infer`, no engine) and **provider
-coupling** (Pydantic AI binds to per-provider native tool-calling; sefia uses one
-unified schema, at the cost below). The full comparison is in
+coupling** (sefia defaults to a unified structured decision schema and also offers
+`NativeDecisionTransport` for provider-native function calls). The full comparison is in
 [tradeoffs.md](./tradeoffs.md) and [choosing.md](./choosing.md).
 
 ### How is it different from LangGraph?
@@ -35,8 +35,8 @@ diagram is the artifact; sefia when it's ordinary code.
 
 All three are checkpoint-and-replay at heart. The difference is **where the paused
 run lives and what you operate**: Temporal keeps a suspended workflow in a
-cluster + workers; DBOS keeps a background workflow in your process plus a mandatory
-Postgres; sefia keeps **nothing** running between requests — state is in a store and
+cluster + workers; DBOS keeps a background workflow in your process with configured
+persistence; sefia keeps **nothing** running between requests — state is in a store and
 the next request replays. That makes sefia lighter and stateless-HTTP-native, and
 makes it *unable to wake itself* (see timers, below). See
 [tradeoffs.md](./tradeoffs.md).
@@ -47,7 +47,7 @@ Long-horizon autonomous waits (days/weeks on a self-firing timer), cross-service
 sagas with compensation, distributed fan-out of a single workflow across machines,
 or audit-grade exactly-once history as a product requirement. Those justify a real
 workflow engine. Multi-agent role-play orchestration is also out of scope. The full
-boundary is in [tradeoffs — when you need the engine](./tradeoffs.md#when-a-workflow-engine-fits-better);
+boundary is in [tradeoffs — when you need the engine](./tradeoffs.md#when-to-use-another-layer);
 the decision guide is [choosing.md](./choosing.md).
 
 ## Mechanics

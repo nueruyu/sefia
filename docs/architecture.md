@@ -13,8 +13,8 @@ A `uv` workspace (`pyproject.toml` → `[tool.uv.workspace]`) of small packages:
 | **sefia** | `packages/sefia` | The core: `@infer`, the inference loop, tool model, sessions, the default LLM strategy. |
 | **sefios** | `packages/sefios` | Opinionated batteries and integration layer: `SessionScope`, default policies/middleware/handlers, ready-made tools, and the extra-gated CLI/HTTP facades. |
 | **sefia_litellm** | `packages/sefia_litellm` | Provider adapter — an `LLMClient` implemented over LiteLLM. |
-| **sefia_typer** | `packages/sefia_typer` | Typer (CLI) building blocks: the shared input channel with CLI reporting hooks, and the reporter surface. |
-| **sefia_fastapi** | `packages/sefia_fastapi` | FastAPI (HTTP) building blocks: the shared input channel, SSE streams (`sefia_fastapi.events.SessionEvents`) with the SSE event names as the single source of truth (`SSEEvent`), and HTTP-facing exceptions in `sefia_fastapi.exceptions`. |
+| **sefia_typer** | `packages/sefia_typer` | Typer (CLI) building blocks: CLI reporter types and exceptions; input routing lives in `sefios`. |
+| **sefia_fastapi** | `packages/sefia_fastapi` | FastAPI (HTTP) building blocks: SSE streams (`sefia_fastapi.events.SessionEvents`) with the SSE event names as the single source of truth (`SSEEvent`), and HTTP-facing exceptions in `sefia_fastapi.exceptions`. |
 | **examples** | `examples` | Runnable end-to-end workflows. |
 | **glyff** | *(separate repo)* | Content-addressed durable execution. A dependency, not vendored. |
 | **jsonweir** | *(separate repo / PyPI)* | Standalone incremental JSON parser used for streaming tool args. |
@@ -27,7 +27,9 @@ Arrows point from a package to what it imports or depends on.
 examples ─▶ sefios[all]
 
 sefios ─┬▶ sefia
-        ├▶ glyff / glyff-file-store / glyff-pydantic
+        ├▶ glyff / glyff-pydantic
+        ├▶ glyff-sqlite         (optional: sefios[sqlite])
+        ├▶ glyff-file-store     (optional: sefios[file-store])
         ├▶ sefia_litellm        (optional: sefios[litellm])
         ├▶ ddgs                 (optional: sefios[web])
         ├▶ sefia_typer          (optional: sefios[cli])
@@ -43,7 +45,7 @@ sefia_typer ─┬▶ sefia
 sefia_fastapi ─┬▶ sefia
                └▶ fastapi
 
-sefia ─┬▶ pydantic
+sefia ─┬▶ pydantic / jsonschema / jsonweir
        └▶ glyff / glyff-file-store / glyff-pydantic
 
 jsonweir is a separate package published on PyPI, not a workspace member.
@@ -166,7 +168,7 @@ implementation noted in parentheses.
 | Change CLI rendering / input callbacks | `packages/sefia_typer` |
 | Change HTTP events / SSE | `packages/sefia_fastapi` |
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |
-| Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role alias in `_tool_system.py`, scanners in `_introspection.py` |
+| Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role alias in `_tool_system/roles.py`, scanners in `_introspection.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
 | Support a new authoring type system | implement `ModelBackend`; reference `pydantic/_model_backend.py` and `_result_format.py` |
 | Register a tool from a raw JSON Schema (no signature) | `JsonSchemaToolEntry` / `ToolRegistry.add_json_tool` in `_tool_system/` |

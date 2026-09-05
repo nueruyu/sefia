@@ -33,5 +33,5 @@ the map of everything else. A reasonable first path:
   "keep the docs in sync" rule.
 - **[Architecture map](./architecture.md)** — where things live.
 
-> Pre-1.0: docs show the **release-target API**. Some surfaces still differ today —
-> see each doc's status note and [DESIGN.md](../DESIGN.md).
+> Pre-1.0: examples target the current repository implementation. Published
+> packages may lag behind `main`; see [Contributing](../CONTRIBUTING.md) for setup.

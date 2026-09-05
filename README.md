@@ -62,7 +62,7 @@ and **[the positioning argument](./docs/tradeoffs.md)**. For a
 ## Install
 
 ```bash
-pip install 'sefios[litellm,sqlite]'
+pip install 'sefios[litellm,web,sqlite]'
 ```
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
@@ -74,9 +74,11 @@ pip install 'sefios[litellm,sqlite]'
   `sefios.fastapi` integrations — Typer and FastAPI apps with persisted sessions
   and human-in-the-loop pause/resume.
 
-Live end-to-end compatibility is currently verified against OpenAI, Anthropic, and
-Gemini. Other LiteLLM providers may work but are not yet covered by the live
-compatibility suite.
+The opt-in live compatibility suite covers OpenAI, Anthropic, Gemini, xAI,
+Mistral, Groq, DeepSeek, and local Ollama. Each provider is skipped unless its
+enabling environment variable is set; suite coverage does not imply that every
+provider was exercised in a given test run. See the provider table in
+[CONTRIBUTING.md](./CONTRIBUTING.md#end-to-end-tests-against-real-providers).
 
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
@@ -93,10 +95,13 @@ context helpers such as `current_tool_call_id_for`.
 
 ## Quickstart
 
-A plain Python class that holds a dependency, runs an inferred step, and persists its
-run.
+Save this as `research.py`, set `OPENAI_API_KEY`, and run `python research.py`.
+The class holds a web dependency, runs an inferred step, and persists its run.
 
+<!-- example: readme-quickstart -->
 ```python
+import asyncio
+
 from pydantic import BaseModel
 from sefios import SQLitePersistence, SessionScope, Tools, domain
 from sefios.tools import WebSearch
@@ -131,6 +136,10 @@ async def main(topic: str) -> Report:
     service = ResearchService(web=WebSearch())
     async with scope.session(session_id="demo") as _:
         return await service.run(topic)       # the engraved run can pause and resume
+
+
+if __name__ == "__main__":
+    print(asyncio.run(main("durable execution for LLM applications")))
 ```
 
 `SessionScope` wires the LLM client, the glyff session, and a shared SQLite database
@@ -174,16 +183,31 @@ A turn that pauses for a human and resumes after a restart, served on an ordinar
 request/response handler: the pause is a tool that **raises**, and resume is calling
 the endpoint again.
 
-This example uses the FastAPI integration with SQLite persistence, so install both
-extras — `pip install 'sefios[litellm,fastapi,sqlite]'`.
+This example uses the FastAPI integration with SQLite persistence, so install the required
+extras — `pip install 'sefios[litellm,web,fastapi,sqlite]'`.
 
+<!-- example: readme-http -->
 ```python
+from fastapi import FastAPI
+from pydantic import BaseModel
 from sefios import SQLitePersistence, Tools, domain
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input, WebSearch
 
 
+class Report(BaseModel):
+    topic: str
+    summary: str
+    sources: list[str]
+
+
+class TurnBody(BaseModel):
+    task: str
+    input: str | None = None
+
+
+app = FastAPI()
 infer = domain("myapp").infer
 
 class ResearchService:
@@ -224,6 +248,9 @@ async def turn(session_id: str, body: TurnBody):
         return {"status": "needs_input", "prompt": e.prompt}
 ```
 
+See the [tutorial](./docs/tutorial.md#4-serve-it-over-http) for run commands,
+resume constraints, and the distinction between requested and enforced approval.
+
 When the input tool has no recorded input it raises `InputRequired`; `SefiaHTTP`
 publishes the pause as an SSE event and re-raises it after the session context exits,
 and the handler returns "needs input". The input arrives in a later request and is delivered
@@ -256,6 +283,6 @@ and what it removes.
 
 ## Status
 
-Pre-1.0 — the API is unstable and will change. The code in these docs targets the 1.0
-API; some surfaces still differ today. See [DESIGN.md](./DESIGN.md) and the issue
-tracker for what is settled and what is in flight.
+Pre-1.0 — the API is unstable and will change. These examples target the current
+repository implementation; a published package may lag behind `main`. See
+[CONTRIBUTING.md](./CONTRIBUTING.md) to run against the checkout.

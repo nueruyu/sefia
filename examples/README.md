@@ -3,7 +3,7 @@
 These examples demonstrate small LLM workflows built with `sefia`.
 
 Run commands from the repository root. Install dependencies with the root
-project setup, such as `uv sync`.
+project setup, with `uv sync --all-packages --dev`.
 
 ## Setup
 

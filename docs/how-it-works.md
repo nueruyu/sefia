@@ -76,7 +76,7 @@ loop:
 
 ## Turning a function into a prompt
 
-`LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) coordinates five
+`LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) coordinates six
 domain concepts:
 
 1. `DecisionSpec` describes which next decisions are valid.
@@ -206,8 +206,8 @@ prompt. Model-facing prose keeps this loose on purpose: a prompt says "use the
 the entry behind it.
 
 **Schema** (`_strategy.py`): each entry produces a `ToolDefinition`
-(`ToolEntry.definition()`), embedded as JSON in the system prompt — not sent as a
-native tool spec. A
+(`ToolEntry.definition()`). Structured and prompted transports render tools in
+the prompt; `NativeDecisionTransport` sends them as native tool specifications. A
 `SignatureToolEntry` reflects its definition from a callable's signature via the
 inspector; its `schema_source` is the *interface* method (a `Protocol`'s own
 docstring and signature when the field was narrowed that way), while the callable
@@ -235,7 +235,7 @@ in the registry and dispatched through `ToolEntry.invoke(arguments)`; sync or as
 returns are normalized. For a `SignatureToolEntry` the decoded arguments are coerced to
 the callable's declared types before the call; a `JsonSchemaToolEntry` forwards them to
 its handler verbatim. A tool that
-**raises `InputRequired` propagates** — that is the durable pause (see below)
+**raises `PauseException` (including `InputRequired` and `InferenceError`) propagates** — that is the durable pause (see below)
 — so it reaches your handler; any *other* tool exception is stringified into the
 history and fed back to the model so it can recover and continue, rather than failing
 the run.
