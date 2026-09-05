@@ -45,9 +45,7 @@ class _StrategyDecisionObserver(DecisionObserver):
     @override
     async def before_request(self, prompt: str) -> None:
         await self._publisher.publish(
-            events.BeforeLLMCall(
-                prompt=prompt, decision_spec=self._decision_spec
-            )
+            events.BeforeLLMCall(prompt=prompt, decision_spec=self._decision_spec)
         )
 
     @override

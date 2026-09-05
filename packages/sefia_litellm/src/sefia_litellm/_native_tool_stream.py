@@ -64,9 +64,7 @@ class NativeToolStreamDecoder:
         self._tool_data_formats = tool_data_formats
         self._calls: dict[int, _ToolCallState] = {}
 
-    def feed(
-        self, fragments: list[NativeToolCallFragment]
-    ) -> list[OutputStreamEvent]:
+    def feed(self, fragments: list[NativeToolCallFragment]) -> list[OutputStreamEvent]:
         events: list[OutputStreamEvent] = []
         for fragment in fragments:
             state = self._calls.setdefault(fragment.index, _ToolCallState())

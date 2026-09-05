@@ -59,9 +59,7 @@ class PromptedDecisionTransport(DecisionTransport):
                 completion, "LLM did not provide response content."
             )
         try:
-            data = StructuredData.parse_json(
-                extract_prompted_json(completion.content)
-            )
+            data = StructuredData.parse_json(extract_prompted_json(completion.content))
         except ValueError as error:
             raise DecisionDecodingError(completion, str(error)) from error
         return DecodedDecision(decision_data=data, completion=completion)
