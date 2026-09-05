@@ -32,7 +32,8 @@ re-sending.
 
 ## Hand-rolled
 
-A competent first attempt. Note how much of it is bookkeeping, not logic:
+Illustrative pseudocode: `db`, model calls, `Paused`, and `send_report` are
+application-defined. Note how much of it is bookkeeping, not logic:
 
 ```python
 async def research_turn(session_id: str, task: str, approval: str | None = None):
@@ -91,26 +92,47 @@ async def research_turn(session_id: str, task: str, approval: str | None = None)
 
 ## With sefia
 
-The turn is an ordinary typed function; the pause is a tool that raises:
+This runnable FastAPI app researches and returns a report; it does not send or
+publish anything. Install `sefios[litellm,web,fastapi,sqlite]` and `uvicorn`, set
+`OPENAI_API_KEY`, save the block as `server.py`, and run `uvicorn server:app`.
+Create a session with `POST /sessions` before calling its `/turn` endpoint.
+The model chooses when to ask for approval; for an enforced gate, see
+[use case 02](./02-approval-gated-workflow.md).
 
 ```python
-from sefios import SQLitePersistence, domain
+from fastapi import FastAPI
+from pydantic import BaseModel
+from sefios import SQLitePersistence, Tools, domain
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
-from sefios.tools import Input
+from sefios.tools import Input, WebSearch
 
+
+class Report(BaseModel):
+    topic: str
+    summary: str
+    sources: list[str]
+
+
+class TurnBody(BaseModel):
+    task: str
+    input: str | None = None
+
+
+app = FastAPI()
 infer = domain("myapp").infer
 
+class ResearchService:
+    _web: Tools[WebSearch]
+    _input: Tools[Input]
 
-class Research:
-    def __init__(self, web: WebToolkit, input_tool: Input):
+    def __init__(self, web: WebSearch, input_tool: Input):
         self._web = web
         self._input = input_tool
 
     @infer
     async def run(self, task: str) -> Report:
-        """Clarify the task, research it with web search, draft a report, get the
-        human's approval of the draft, then finalize and send."""
+        """Research the task, draft a report, ask the human to approve it, then finalize."""
         ...
 
 
@@ -118,16 +140,22 @@ api = SefiaHTTP(
     model="gpt-4o",
     persistence=SQLitePersistence(),
 )
-service = Research(web=WebToolkit(), input_tool=api.input_tool)
+research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
 
 
-# the endpoint stays an ordinary request/response handler
-@app.post("/sessions/{id}/research")
-async def research(id, body):
+@app.post("/sessions")
+def create_session():
+    return {"session_id": api.create_session()}
+
+
+@app.post("/sessions/{session_id}/turn")
+async def turn(session_id: str, body: TurnBody):
     try:
-        async with api.session(session_id=id) as session:
-            await session.accept_input(body.input)
-            return await service.run(body.task)    # resumes where it paused
+        async with api.session(session_id=session_id) as session:
+            if body.input is not None:
+                await session.accept_input(body.input)
+            report = await research_service.run(body.task)
+            return {"status": "done", "report": report}
     except InputRequired as e:
         return {"status": "needs_input", "prompt": e.prompt}
 ```
@@ -149,7 +177,7 @@ turn. The pause is just the input tool raising when no input is recorded yet.
 | Fire side effects once                  | per-step idempotency keys            | replay of completed steps; a key only at the side-effect boundary |
 | Survive a process restart               | load state, reconstruct the loop     | re-invoke; completed work replays |
 | Pause / resume for a human              | `Paused`, `approval=None`, 202 dance | a tool raises; re-invoke resumes |
-| Not double-run on concurrent re-entry   | a lock you write                     | session-scoped |
+| Not double-run on concurrent re-entry   | application lock/serialization       | application lock/serialization; the HTTP facade does not serialize turns |
 
 Most of that resume logic exists for *correctness* (non-determinism, exactly-once),
 not convenience. Your database still stores your data; sefia stores just enough to

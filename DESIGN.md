@@ -1,8 +1,8 @@
 # Design
 
-> Status: pre-1.0, API unstable. The code here shows the **release-target (1.0) API** —
-> the design we are building toward; some surfaces still differ today (see the issue
-> tracker).
+> Status: pre-1.0, API unstable. This describes the current implementation.
+> The snippets below illustrate the design; see the [tutorial](./docs/tutorial.md)
+> for complete runnable programs.
 
 **`@infer` turns a typed Python function into an LLM-backed call whose completed steps
 are engraved and replay on re-invocation.** A paused run is just an engraved call that
@@ -99,7 +99,7 @@ class UserInput:
 
 @app.post("/sessions/{id}/turn")
 async def turn(id, body):
-    async with scope.session(session_id=id) as s:
+    async with api.session(session_id=id) as s:
         await s.accept_input(body.input)
         return await service.run(body.task)        # resumes where it paused
 ```
@@ -118,11 +118,11 @@ tradeoffs behind the design are in [docs/tradeoffs.md](./docs/tradeoffs.md).
 
 ## Non-goals & tradeoffs
 
-- **Not native tool-calling.** A single unified schema (`final_answer |
-  tool_calls`) plus strict structured output where supported → provider-portable,
-  full return-type expressiveness; at the cost of native parallel tools and some
-  frontier-model tuning on complex agents. Concurrency and prompt caching are tracked
-  on the issue tracker, not guaranteed. Full argument:
+- **Structured decisions by default.** A unified logical schema (`result |
+  tool_calls`) supports structured and prompted output. `NativeDecisionTransport`
+  also supports provider-native function calls. Tool execution is serial by default;
+  `@concurrent` opts safe tools into overlapping execution in every transport.
+  Provider-managed execution and caching are not framework guarantees. Full argument:
   [tradeoffs.md](./docs/tradeoffs.md).
 - **Lighter than Temporal, not a replacement.** Single-process /
   resume-on-fresh-request, plus horizontal scale across independent sessions.

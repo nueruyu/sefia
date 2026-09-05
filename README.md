@@ -62,7 +62,7 @@ and **[the positioning argument](./docs/tradeoffs.md)**. For a
 ## Install
 
 ```bash
-pip install 'sefios[litellm,sqlite]'
+pip install 'sefios[litellm,web,sqlite]'
 ```
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
@@ -74,9 +74,11 @@ pip install 'sefios[litellm,sqlite]'
   `sefios.fastapi` integrations — Typer and FastAPI apps with persisted sessions
   and human-in-the-loop pause/resume.
 
-Live end-to-end compatibility is currently verified against OpenAI, Anthropic, and
-Gemini. Other LiteLLM providers may work but are not yet covered by the live
-compatibility suite.
+The opt-in live compatibility suite covers OpenAI, Anthropic, Gemini, xAI,
+Mistral, Groq, DeepSeek, and local Ollama. Each provider is skipped unless its
+enabling environment variable is set; suite coverage does not imply that every
+provider was exercised in a given test run. See the provider table in
+[CONTRIBUTING.md](./CONTRIBUTING.md#end-to-end-tests-against-real-providers).
 
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
@@ -174,16 +176,30 @@ A turn that pauses for a human and resumes after a restart, served on an ordinar
 request/response handler: the pause is a tool that **raises**, and resume is calling
 the endpoint again.
 
-This example uses the FastAPI integration with SQLite persistence, so install both
-extras — `pip install 'sefios[litellm,fastapi,sqlite]'`.
+This example uses the FastAPI integration with SQLite persistence, so install the required
+extras — `pip install 'sefios[litellm,web,fastapi,sqlite]'`.
 
 ```python
+from fastapi import FastAPI
+from pydantic import BaseModel
 from sefios import SQLitePersistence, Tools, domain
 from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import Input, WebSearch
 
 
+class Report(BaseModel):
+    topic: str
+    summary: str
+    sources: list[str]
+
+
+class TurnBody(BaseModel):
+    task: str
+    input: str | None = None
+
+
+app = FastAPI()
 infer = domain("myapp").infer
 
 class ResearchService:
@@ -224,6 +240,11 @@ async def turn(session_id: str, body: TurnBody):
         return {"status": "needs_input", "prompt": e.prompt}
 ```
 
+Keep the same `task` on resume, and serialize requests for each session in the
+application. The approval instruction is model-directed, not an enforced gate;
+use explicit Python control flow for mandatory approval (see
+[use case 02](./docs/usecases/02-approval-gated-workflow.md)).
+
 When the input tool has no recorded input it raises `InputRequired`; `SefiaHTTP`
 publishes the pause as an SSE event and re-raises it after the session context exits,
 and the handler returns "needs input". The input arrives in a later request and is delivered
@@ -256,6 +277,6 @@ and what it removes.
 
 ## Status
 
-Pre-1.0 — the API is unstable and will change. The code in these docs targets the 1.0
-API; some surfaces still differ today. See [DESIGN.md](./DESIGN.md) and the issue
-tracker for what is settled and what is in flight.
+Pre-1.0 — the API is unstable and will change. These examples target the current
+repository implementation; a published package may lag behind `main`. See
+[CONTRIBUTING.md](./CONTRIBUTING.md) to run against the checkout.

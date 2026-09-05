@@ -4,9 +4,8 @@ A progressive walk from a single inferred function to a human-in-the-loop servic
 served over HTTP that resumes after a restart. About fifteen minutes. For the minimal
 example, see the [README](../README.md).
 
-> This tutorial is written against the **release-target API**. sefia is pre-1.0 and
-> parts (notably the tool model) are being finalized, so names may shift before
-> 1.0; see [DESIGN.md](../DESIGN.md) for what is settled.
+> These examples target the current repository implementation. Published packages
+> may lag behind `main`; see [CONTRIBUTING.md](../CONTRIBUTING.md) for checkout setup.
 
 ## Install
 
@@ -14,7 +13,7 @@ The tutorial builds up to the CLI and HTTP integrations, so install their extras
 alongside the provider:
 
 ```bash
-pip install 'sefios[litellm,cli,fastapi,sqlite]'
+pip install 'sefios[litellm,web,cli,fastapi,sqlite]' uvicorn
 ```
 
 Set whatever credentials your model needs (LiteLLM reads provider env vars):
@@ -62,7 +61,8 @@ async def main() -> None:
         print(result.key_points)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ```bash
@@ -92,6 +92,10 @@ the same observable behavior.
 Tools are the **public methods of fields granted with the `Tools[...]` annotation**
 — no decorator, no registry, no base class. Hold a dependency in a class-level field
 annotated `Tools[...]`, and its public methods become callable by the inferred step.
+
+Replace the `main` function in `quickstart.py` with the code below, keeping the
+imports, models, `infer`, and `scope` above it. Keep the `if __name__` block last
+so it calls the new `main`.
 
 ```python
 from sefios import Tools
@@ -205,7 +209,7 @@ service = ResearchService(web=WebSearch(), input_tool=cli.input_tool)
 @app.command()
 def run(answer: str | None = None) -> None:
     async def _run() -> None:
-        async with cli.session(session_id="approval-demo") as session:
+        async with cli.session() as session:
             await session.accept_input(answer)
             report = await service.run("the state of durable LLM applications")
             print("DONE:", report.summary)
@@ -233,11 +237,13 @@ steps are not re-run; they **replay their exact stored outputs**, so the model i
 approving the *same* draft, and only the finalize step executes:
 
 ```bash
-python hitl_cli.py "yes, approve"
+python hitl_cli.py --answer "yes, approve"
 # DONE: ...
 ```
 
-That second invocation could be on another machine, after a deploy, or days later.
+Resume from the same working directory so the SQLite database and active-session
+file are found. Another machine or deployment needs those same persisted resources
+and stable domain/function identities; local files are not replicated automatically.
 There was no checkpoint code, no step keys, no idempotency bookkeeping; just a tool
 that raised and a session that replays.
 
@@ -256,7 +262,7 @@ from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import WebSearch
 
-# (ResearchService, Report from hitl_cli.py)
+from hitl_cli import ResearchService
 
 app = FastAPI()
 api = SefiaHTTP(
@@ -309,6 +315,11 @@ curl -X POST localhost:8000/sessions/$SID/turn \
   -d '{"task": "the state of durable LLM applications", "input": "yes, approve"}'
 # {"status":"done","report":{...}}
 ```
+
+Keep `task` unchanged when resuming and send requests for a given session one at
+a time; the facade does not serialize concurrent turns. Asking for approval in
+an LLM instruction is not an enforced approval gate. For a mandatory gate, use
+explicit application control flow as in [use case 02](./usecases/02-approval-gated-workflow.md).
 
 The handler is an ordinary stateless endpoint. The durable run lives in the store
 under `.sefios/`, not in the process, so killing and restarting the server

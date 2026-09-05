@@ -25,6 +25,15 @@ process may restart before the human approves.
 - resume is re-invoking the same session;
 - the orchestration stays ordinary Python.
 
+This is orchestration pseudocode, not a standalone program. `Outcome`, `critique`,
+`revise`, `drafter`, `human`, and `publish` are application-defined. Model steps
+must be `@infer` calls; `human.ask` must implement a replayable pause/resume
+boundary, and `publish` must be engraved and use a downstream idempotency key.
+Do not substitute a direct call to `sefios.tools.Input.get_input`: that method
+requires a dispatched tool-call context. A mandatory approval check belongs in
+application control flow, as below, rather than only in an LLM instruction.
+Use durable persistence and serialize invocations for each session.
+
 ```python
 async def research(task, drafter, human) -> Outcome:
     d = await drafter.draft(task)
