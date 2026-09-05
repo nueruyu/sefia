@@ -280,8 +280,35 @@ async def turn(session_id: str, body: TurnBody):
         return {"status": "needs_input", "prompt": e.prompt}
 ```
 
-See the [tutorial](./docs/tutorial.md#4-serve-it-over-http) for run commands,
-resume constraints, and the distinction between requested and enforced approval.
+In another terminal in the same project directory (Bash/Zsh):
+
+```bash
+# Create a session
+SESSION_ID=$(curl -fsS -X POST http://127.0.0.1:8000/sessions |
+  uv run python -c 'import json, sys; print(json.load(sys.stdin)["session_id"])')
+
+# Start the research turn
+curl -fsS -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/turn" \
+  -H 'Content-Type: application/json' \
+  -d '{"task": "the state of durable LLM applications"}'
+```
+
+If the response is `{"status":"needs_input","prompt":"..."}`, send the reply
+below with the same session ID and `task`. To try resuming after a restart, stop
+and restart the server from the same directory before sending the reply, keeping
+its `.sefios/` database.
+
+```bash
+curl -fsS -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/turn" \
+  -H 'Content-Type: application/json' \
+  -d '{"task": "the state of durable LLM applications", "input": "yes, approve"}'
+```
+
+A completed turn returns `{"status":"done","report":{...}}`; if it asks for
+more input, repeat the reply request with your next answer.
+
+See the [tutorial](./docs/tutorial.md#4-serve-it-over-http) for resume constraints
+and the distinction between requested and enforced approval.
 
 When the input tool has no recorded input it raises `InputRequired`; `SefiaHTTP`
 publishes the pause as an SSE event and re-raises it after the session context exits,
