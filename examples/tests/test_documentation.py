@@ -149,25 +149,27 @@ def test_tutorial_cli_pause_resume(
     assert not llm.completions
 
 
-@pytest.mark.parametrize(
-    ("path", "example_id"),
-    [
-        ("README.md", "readme-http"),
-        (TUTORIAL, "tutorial-http"),
-    ],
-)
-def test_http_pause_resume(
-    path: str, example_id: str, llm: MockLLMClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_readme_http_excerpt_matches_tutorial() -> None:
+    excerpt = ast.parse(example("README.md", "readme-http"))
+    tutorial = ast.parse(example(TUTORIAL, "tutorial-http"))
+    endpoint = next(
+        node
+        for node in tutorial.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "turn"
+    )
+    expected = ast.Module(body=[endpoint], type_ignores=[])
+    assert ast.dump(excerpt) == ast.dump(expected)
+
+
+def test_http_pause_resume(llm: MockLLMClient, monkeypatch: pytest.MonkeyPatch) -> None:
     llm.completions.extend(
         [
             tool_calls_completion(("Input_get_input", {"prompt": "Approve draft?"})),
             result_completion(REPORT),
         ]
     )
-    if path == TUTORIAL:
-        load_code(example(TUTORIAL, "tutorial-cli"), "hitl_cli", monkeypatch)
-    code = example(path, example_id)
+    load_code(example(TUTORIAL, "tutorial-cli"), "hitl_cli", monkeypatch)
+    code = example(TUTORIAL, "tutorial-http")
     first = load_code(code, "doc_server", monkeypatch)
     with TestClient(first.app) as raw_client:
         client = cast(HTTPClient, raw_client)

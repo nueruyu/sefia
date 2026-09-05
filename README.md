@@ -203,122 +203,26 @@ behavior as the other transports.
 
 ## Pause for a human, resume after a restart
 
-A turn that pauses for a human and resumes after a restart, served on an ordinary
-request/response handler: the pause is a tool that **raises**, and resume is calling
-the endpoint again.
+An input tool pauses the run by raising `InputRequired`. A later HTTP request
+supplies the reply and re-invokes the same call; with durable persistence,
+completed steps replay even after a server restart.
 
-This example also needs the FastAPI extra and an HTTP server:
-
-```bash
-uv add 'sefios[litellm,web,fastapi,sqlite]' uvicorn
-```
-
-With pip: `pip install 'sefios[litellm,web,fastapi,sqlite]' uvicorn`.
-Save the code as `server.py`. With the key already set in your environment, run
-`uv run uvicorn server:app` (or `uvicorn server:app` in the virtual environment
-used for pip). With a `.env` file, use `uv run --env-file .env uvicorn server:app`.
+Endpoint excerpt from the [HTTP tutorial](./docs/tutorial.md#4-serve-it-over-http).
+The tutorial defines `app`, `api` (with SQLite persistence), `TurnBody`, and
+`research_service`, and includes the imports, setup, and curl commands.
 
 <!-- example: readme-http -->
 ```python
-from fastapi import FastAPI
-from pydantic import BaseModel
-from sefios import SQLitePersistence, Tools, domain
-from sefios.fastapi import SefiaHTTP
-from sefios.fastapi.exceptions import InputRequired
-from sefios.tools import Input, WebSearch
-
-
-class Report(BaseModel):
-    topic: str
-    summary: str
-    sources: list[str]
-
-
-class TurnBody(BaseModel):
-    task: str
-    input: str | None = None
-
-
-app = FastAPI()
-infer = domain("myapp").infer
-
-class ResearchService:
-    _web: Tools[WebSearch]
-    _input: Tools[Input]
-
-    def __init__(self, web: WebSearch, input_tool: Input):
-        self._web = web
-        self._input = input_tool
-
-    @infer
-    async def run(self, task: str) -> Report:
-        """Research the task, draft a report, ask the human to approve it, then finalize."""
-        ...
-
-
-api = SefiaHTTP(
-    model="gpt-4o",
-    persistence=SQLitePersistence(),
-)
-research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
-
-
-@app.post("/sessions")
-def create_session():
-    return {"session_id": api.create_session()}
-
-
 @app.post("/sessions/{session_id}/turn")
 async def turn(session_id: str, body: TurnBody):
     try:
         async with api.session(session_id=session_id) as session:
-            if body.input is not None:
-                await session.accept_input(body.input)
+            await session.accept_input(body.input)
             report = await research_service.run(body.task)
             return {"status": "done", "report": report}
     except InputRequired as e:
         return {"status": "needs_input", "prompt": e.prompt}
 ```
-
-In another terminal in the same project directory (Bash/Zsh):
-
-```bash
-# Create a session
-SESSION_ID=$(curl -fsS -X POST http://127.0.0.1:8000/sessions |
-  uv run python -c 'import json, sys; print(json.load(sys.stdin)["session_id"])')
-
-# Start the research turn
-curl -fsS -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/turn" \
-  -H 'Content-Type: application/json' \
-  -d '{"task": "the state of durable LLM applications"}'
-```
-
-If the response is `{"status":"needs_input","prompt":"..."}`, send the reply
-below with the same session ID and `task`. To try resuming after a restart, stop
-and restart the server from the same directory before sending the reply, keeping
-its `.sefios/` database.
-
-```bash
-curl -fsS -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/turn" \
-  -H 'Content-Type: application/json' \
-  -d '{"task": "the state of durable LLM applications", "input": "yes, approve"}'
-```
-
-A completed turn returns `{"status":"done","report":{...}}`; if it asks for
-more input, repeat the reply request with your next answer.
-
-See the [tutorial](./docs/tutorial.md#4-serve-it-over-http) for resume constraints
-and the distinction between requested and enforced approval.
-
-When the input tool has no recorded input it raises `InputRequired`; `SefiaHTTP`
-publishes the pause as an SSE event and re-raises it after the session context exits,
-and the handler returns "needs input". The input arrives in a later request and is delivered
-with `session.accept_input`; the same endpoint re-invokes, every completed LLM/tool
-call **replays its exact output** (the approved draft is byte-for-byte the same), and
-only the pending step runs. You write no checkpoint code, step keys, idempotency
-plumbing, or 202 dance; see
-[use case 01](./docs/usecases/01-human-in-the-loop.md) for the same turn hand-rolled,
-and what it removes.
 
 ## Core concepts
 
