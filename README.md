@@ -107,13 +107,19 @@ uv add 'sefios[litellm,web,sqlite]'
 With pip: `pip install 'sefios[litellm,web,sqlite]'`.
 Memory is the default; this example selects `SQLitePersistence` to survive restarts.
 
-Choose a model from [LiteLLM's provider guide](https://docs.litellm.ai/docs/providers),
-set `model=` to its LiteLLM model name, and configure the credentials required by
-that provider. The code below uses `gpt-4o` with `OPENAI_API_KEY` as an example;
-you can use another provider by changing the model and its credentials.
+Choose a model from [LiteLLM's provider guide](https://docs.litellm.ai/docs/providers)
+and set `model=` to its LiteLLM model name. Set the provider's API key as an
+environment variable or as `NAME=value` in a `.env` file in your project directory:
+for example, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`.
+The code below uses `gpt-4o` as an example; choose the model and key for your provider.
 
-Save this as `research.py` and run `uv run python research.py`
-(or `python research.py` in the virtual environment used for pip).
+Save this as `research.py`. With the key already set in your environment, run
+`uv run python research.py` (or `python research.py` in the virtual environment
+used for pip). To load the key from `.env`, run:
+
+```bash
+uv run --env-file .env python research.py
+```
 The class holds a web dependency, runs an inferred step, and persists its run.
 
 <!-- example: readme-quickstart -->
@@ -208,8 +214,9 @@ uv add 'sefios[litellm,web,fastapi,sqlite]' uvicorn
 ```
 
 With pip: `pip install 'sefios[litellm,web,fastapi,sqlite]' uvicorn`.
-Save the code as `server.py` and run `uv run uvicorn server:app`
-(or `uvicorn server:app` in the virtual environment used for pip).
+Save the code as `server.py`. With the key already set in your environment, run
+`uv run uvicorn server:app` (or `uvicorn server:app` in the virtual environment
+used for pip). With a `.env` file, use `uv run --env-file .env uvicorn server:app`.
 
 <!-- example: readme-http -->
 ```python
