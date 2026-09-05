@@ -92,73 +92,9 @@ async def research_turn(session_id: str, task: str, approval: str | None = None)
 
 ## With sefia
 
-This runnable FastAPI app researches and returns a report; it does not send or
-publish anything. Install `sefios[litellm,web,fastapi,sqlite]` and `uvicorn`, set
-`OPENAI_API_KEY`, save the block as `server.py`, and run `uvicorn server:app`.
-Create a session with `POST /sessions` before calling its `/turn` endpoint.
-The model chooses when to ask for approval; for an enforced gate, see
-[use case 02](./02-approval-gated-workflow.md).
-
-```python
-from fastapi import FastAPI
-from pydantic import BaseModel
-from sefios import SQLitePersistence, Tools, domain
-from sefios.fastapi import SefiaHTTP
-from sefios.fastapi.exceptions import InputRequired
-from sefios.tools import Input, WebSearch
-
-
-class Report(BaseModel):
-    topic: str
-    summary: str
-    sources: list[str]
-
-
-class TurnBody(BaseModel):
-    task: str
-    input: str | None = None
-
-
-app = FastAPI()
-infer = domain("myapp").infer
-
-class ResearchService:
-    _web: Tools[WebSearch]
-    _input: Tools[Input]
-
-    def __init__(self, web: WebSearch, input_tool: Input):
-        self._web = web
-        self._input = input_tool
-
-    @infer
-    async def run(self, task: str) -> Report:
-        """Research the task, draft a report, ask the human to approve it, then finalize."""
-        ...
-
-
-api = SefiaHTTP(
-    model="gpt-4o",
-    persistence=SQLitePersistence(),
-)
-research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
-
-
-@app.post("/sessions")
-def create_session():
-    return {"session_id": api.create_session()}
-
-
-@app.post("/sessions/{session_id}/turn")
-async def turn(session_id: str, body: TurnBody):
-    try:
-        async with api.session(session_id=session_id) as session:
-            if body.input is not None:
-                await session.accept_input(body.input)
-            report = await research_service.run(body.task)
-            return {"status": "done", "report": report}
-    except InputRequired as e:
-        return {"status": "needs_input", "prompt": e.prompt}
-```
+The [tutorial's HTTP example](../tutorial.md#4-serve-it-over-http) provides the
+complete app and run commands. It researches and returns a report; publishing is
+an application-owned side effect, as in [use case 02](./02-approval-gated-workflow.md).
 
 The service has no checkpoint code, step keys, or 202 plumbing. Each LLM call and
 tool call is engraved automatically; on re-invocation the completed ones **replay

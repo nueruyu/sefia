@@ -106,11 +106,8 @@ treat updating them as part of the change, not a follow-up. The mapping:
 When in doubt, grep the docs for the symbol or filename you touched. A change that
 makes a doc's example or file reference wrong is incomplete until the doc is fixed.
 
-`examples/tests/test_documentation.py` extracts Python blocks from the docs and
-exercises the quickstart, web tool dispatch, CLI pause/resume, and HTTP pause/resume
-with scripted model responses. Run `uv run pytest examples/tests/test_documentation.py`
-after changing these examples. This checks runtime wiring and SQLite persistence,
-not live-provider behavior or whether a model follows approval instructions.
+After editing runnable examples, run `uv run pytest examples/tests/test_documentation.py`.
+These tests execute the documentation blocks with mocked model/search responses.
 
 ## Pre-1.0
 

@@ -246,10 +246,8 @@ async def turn(session_id: str, body: TurnBody):
         return {"status": "needs_input", "prompt": e.prompt}
 ```
 
-Keep the same `task` on resume, and serialize requests for each session in the
-application. The approval instruction is model-directed, not an enforced gate;
-use explicit Python control flow for mandatory approval (see
-[use case 02](./docs/usecases/02-approval-gated-workflow.md)).
+See the [tutorial](./docs/tutorial.md#4-serve-it-over-http) for run commands,
+resume constraints, and the distinction between requested and enforced approval.
 
 When the input tool has no recorded input it raises `InputRequired`; `SefiaHTTP`
 publishes the pause as an SSE event and re-raises it after the session context exits,

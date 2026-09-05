@@ -94,9 +94,7 @@ def test_tutorial_cli_pause_resume(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not llm.completions
 
 
-@pytest.mark.parametrize(
-    "path", ["README.md", "docs/tutorial.md", "docs/usecases/01-human-in-the-loop.md"]
-)
+@pytest.mark.parametrize("path", ["README.md", "docs/tutorial.md"])
 @pytest.mark.usefixtures("isolated_workdir")
 def test_http_pause_resume(path: str, monkeypatch: pytest.MonkeyPatch) -> None:
     llm = script(monkeypatch, pause=True)
