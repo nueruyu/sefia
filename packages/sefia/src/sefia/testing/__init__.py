@@ -1,11 +1,11 @@
-"""Test doubles and helpers for writing tests against sefia.
+"""Test helpers and conformance contracts for building against sefia.
 
 This is a public, supported surface: applications embedding sefia can use it
 in their own test suites, and the workspace packages' tests use it too. It
 gives shared helpers a collision-free import path (``sefia.testing``) so test
 trees themselves can stay plain, non-importable directories.
 
-Typical shape of a test::
+Application tests can use the scripted client and in-memory session::
 
     from sefia.testing import MockLLMClient, memory_session, result_completion
 
@@ -13,6 +13,9 @@ Typical shape of a test::
         llm = MockLLMClient(completions=[result_completion("hi")])
         async with memory_session(llm):
             assert await my_agent.answer(question="greet") == "hi"
+
+Extension authors can install ``sefia[testing]`` and subclass the exported
+conformance contracts in their own pytest suites.
 """
 
 from __future__ import annotations
@@ -33,15 +36,20 @@ from glyff_pydantic import (
 )
 from typing_extensions import final, override
 
-from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
-from ._session import Session
-from .llm import LLMClient, LLMCompletion, Message
-from .llm.step_decision import DecisionSpec, StepTool
-from .llm.structured_data import StructuredData
-from .llm.streaming import OutputStreamCallback
-from .llm.streaming import OutputStreamEvent
-from .llm.transports import DecisionObserver
-from .pydantic._json_utils import pydantic_json_default
+from .._interfaces.history_storage import HistorySnapshot, HistoryStorage
+from .._session import Session
+from ..llm import LLMClient, LLMCompletion, Message
+from ..llm.step_decision import DecisionSpec, StepTool
+from ..llm.structured_data import StructuredData
+from ..llm.streaming import OutputStreamCallback, OutputStreamEvent
+from ..llm.transports import DecisionObserver
+from ..pydantic._json_utils import pydantic_json_default
+from ._decision_transport_contract import (
+    DecisionTransportCase,
+    DecisionTransportContract,
+)
+from ._history_storage_contract import HistoryStorageContract
+from ._tool_collector_contract import ToolCollectorCase, ToolCollectorContract
 
 
 def _snapshot_value(value: Any) -> Any:
@@ -221,3 +229,18 @@ async def memory_session(
             llm_client=llm_client, glyff_session=glyff_session, **session_kwargs
         ) as session:
             yield session
+
+
+__all__ = [
+    "DecisionTransportCase",
+    "DecisionTransportContract",
+    "HistoryStorageContract",
+    "MemoryHistoryStorage",
+    "MockLLMClient",
+    "RecordingDecisionObserver",
+    "ToolCollectorCase",
+    "ToolCollectorContract",
+    "memory_session",
+    "result_completion",
+    "tool_calls_completion",
+]

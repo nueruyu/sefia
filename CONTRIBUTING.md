@@ -29,7 +29,9 @@ are plain directories, not importable packages (no `__init__.py`). Add tests at
 the narrowest layer that owns the behavior.
 Shared test doubles and helpers live in the public `sefia.testing` module
 (`MockLLMClient`, `memory_session`, scripted-response builders) rather than
-in conftest imports.
+in conftest imports. Extension interfaces with shared observable behavior expose
+reusable conformance classes from `sefia.testing` or `sefios.testing`; built-in
+implementations apply those same public contracts in `tests/contracts/`.
 
 ### End-to-end tests against real providers
 

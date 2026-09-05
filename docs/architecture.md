@@ -94,7 +94,7 @@ submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 | `llm/` | The **default** `InferenceStrategy`: `LLMClient` returns a normalized completion; transports decode it to decision data; `step_decision.py` validates that data; prompt renderers own text; `streaming.py` decodes incremental JSON; and `_strategy.py` coordinates repair. | `LLMInferenceStrategy`, `LLMClient`, `LLMCompletion`, `StructuredData`, `DecodedDecision`, `DecisionSpec`, `DecisionTransport`, `PromptRenderer` |
 | `llm/transports/` | Transport contract and structured, prompted, and native protocols. The private `_native/` package separates native orchestration, prompt/history conversion, result-tool construction, and decoding. | `DecisionTransport`, `StructuredDecisionTransport`, `PromptedDecisionTransport`, `NativeDecisionTransport` |
 | `pydantic/` | The default `ModelBackend`: callable inspection plus result JSON Schema generation and restoration. It does not know the logical step-decision shape. | `PydanticModelBackend` |
-| `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_completion`, `tool_calls_completion`, `memory_session` |
+| `testing/` | Public test doubles/helpers for applications plus reusable conformance contracts for extension implementations. | `MockLLMClient`, `MemoryHistoryStorage`, `HistoryStorageContract`, `DecisionTransportContract`, `ToolCollectorContract` |
 
 ### The seams (`_interfaces/`) — the extension ports
 
@@ -129,6 +129,7 @@ implementation noted in parentheses.
 | `tools/` | `input.py` (external input, pause-by-raise), `output.py` (agent-authored, non-blocking output), `web.py` (DuckDuckGo search). |
 | `storage/` | Session-scoped persistence: the `SessionStorage` interface + memory, SQLite, and JSON-file implementations. |
 | `sessions/` | Durable `SessionRegistry` implementations, local `ActiveSessionStore`, and the CLI-oriented `SessionManager` that composes them. |
+| `testing/` | Public conformance contracts for `SessionStorage`, `SessionRegistry`, `ActiveSessionStore`, and `PersistenceProvider` implementations. |
 | `cli/` | Gated on `sefios[cli]`: `_app.py` owns the `SefiaCLI` session facade, `_reporting.py` bridges tool/session events to reporter DTOs, and `_cost_reporter.py` adds cost output; the package re-exports the `sefia_typer` reporter surface. |
 | `fastapi/` | Gated on `sefios[fastapi]`: the `SefiaHTTP` facade composing `sefia_fastapi` with `SessionScope`, `Input`, `Output`, and SSE lifecycle/delta streaming; integration exceptions live in `sefios.fastapi.exceptions`. |
 | `_state_store.py` / `_session_state.py` | Typed `StateStore`; the session-state binding and its accessors (`get_state`'s type-keyed tier sits on top; `get_call_state_store` / `get_session_storage` are the tool-facing tier). |

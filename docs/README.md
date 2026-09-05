@@ -18,6 +18,8 @@ the map of everything else. A reasonable first path:
   references: the loop, the unified schema, content-addressed replay.
 - **[Architecture map](./architecture.md)** — package layout, dependency direction,
   and where to change what.
+- **[Testing extension implementations](./conformance-testing.md)** — reusable
+  conformance suites for custom transports, collectors, and persistence backends.
 
 ## Compare & decide
 - **[Concept surface, provider leakage, operational weight](./tradeoffs.md)** — the

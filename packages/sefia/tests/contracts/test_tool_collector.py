@@ -1,27 +1,20 @@
-"""Shared behavior required of every tool collector."""
+"""Apply the public tool-collector contract to every built-in collector."""
 
 import inspect
-from dataclasses import dataclass
-from typing import TypeAlias
 
 import pytest
 
 import sefia.tool_collectors as collectors
 from sefia import JsonSchemaToolEntry, ToolCollector, Tools
 from sefia.inference import Capability
+from sefia.testing import ToolCollectorCase, ToolCollectorContract
 from sefia.tool_collectors import (
     CompositeToolCollector,
     DefaultToolCollector,
     StaticToolCollector,
 )
 
-
-CollectorType: TypeAlias = (
-    type[CompositeToolCollector]
-    | type[DefaultToolCollector]
-    | type[StaticToolCollector]
-)
-COLLECTOR_TYPES: tuple[CollectorType, ...] = (
+COLLECTOR_TYPES = (
     CompositeToolCollector,
     DefaultToolCollector,
     StaticToolCollector,
@@ -40,38 +33,53 @@ class _Agent:
         self.toolkit = _Toolkit()
 
 
-@dataclass(frozen=True)
-class _CollectorCase:
-    collector: ToolCollector
-    capabilities: list[Capability]
-
-
-def _static_tool() -> JsonSchemaToolEntry:
+def _static_collector() -> StaticToolCollector:
     async def lookup() -> str:
         return "ok"
 
-    return JsonSchemaToolEntry(
-        lookup,
-        name="lookup",
-        parameters={
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
+    return StaticToolCollector(
+        [
+            JsonSchemaToolEntry(
+                lookup,
+                name="lookup",
+                parameters={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            )
+        ]
     )
 
 
-@pytest.fixture(
-    params=COLLECTOR_TYPES, ids=lambda collector_type: collector_type.__name__
-)
-def collector_case(request: pytest.FixtureRequest) -> _CollectorCase:
-    collector_type = request.param
-    if collector_type is DefaultToolCollector:
-        return _CollectorCase(collector_type(), [Capability(_Agent(), _Agent)])
-    static = StaticToolCollector([_static_tool()])
-    if collector_type is CompositeToolCollector:
-        return _CollectorCase(collector_type([static]), [])
-    return _CollectorCase(static, [])
+class TestDefaultToolCollectorContract(ToolCollectorContract):
+    @pytest.fixture
+    def tool_collector_case(self) -> ToolCollectorCase:
+        return ToolCollectorCase(
+            DefaultToolCollector(),
+            [Capability(_Agent(), _Agent)],
+            "_Toolkit_lookup",
+            expected_result="ok",
+        )
+
+
+class TestStaticToolCollectorContract(ToolCollectorContract):
+    @pytest.fixture
+    def tool_collector_case(self) -> ToolCollectorCase:
+        return ToolCollectorCase(
+            _static_collector(), [], "lookup", expected_result="ok"
+        )
+
+
+class TestCompositeToolCollectorContract(ToolCollectorContract):
+    @pytest.fixture
+    def tool_collector_case(self) -> ToolCollectorCase:
+        return ToolCollectorCase(
+            CompositeToolCollector([_static_collector()]),
+            [],
+            "lookup",
+            expected_result="ok",
+        )
 
 
 def test_contract_covers_all_exported_implementations() -> None:
@@ -83,12 +91,3 @@ def test_contract_covers_all_exported_implementations() -> None:
     }
 
     assert set(COLLECTOR_TYPES) == exported
-
-
-async def test_contract_collects_executable_tools(
-    collector_case: _CollectorCase,
-) -> None:
-    registry = collector_case.collector.collect(collector_case.capabilities)
-
-    assert len(registry.get_all()) == 1
-    assert await registry.get_all()[0].invoke({}) == "ok"
