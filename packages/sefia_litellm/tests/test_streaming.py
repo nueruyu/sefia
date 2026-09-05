@@ -78,12 +78,15 @@ def _tool_response(name: str, arguments: str) -> ModelResponse:
     )
 
 
-def _structured_decision_format() -> StructuredDecisionFormat:
+def _structured_decision_format(
+    *, include_tools: bool = True
+) -> StructuredDecisionFormat:
     def lookup(key: str) -> str:
         return key
 
     registry = ToolRegistry()
-    registry.add(lookup, name="lookup")
+    if include_tools:
+        registry.add(lookup, name="lookup")
     return StructuredDecisionFormat.from_spec(
         DecisionSpec.for_inference(
             output_type=str,
@@ -201,6 +204,45 @@ async def test_decodes_enveloped_structured_decision_and_streams_logical_paths(
     assert response.structured_output.tree == {
         "decision": "tool_calls",
         "tool_calls": [{"name": "lookup", "arguments": {"key": "item"}}],
+    }
+
+
+async def test_result_only_stream_uses_logical_paths_without_payload(
+    mocker: MockerFixture,
+) -> None:
+    content = '{"payload":{"decision":"result","result":"done"}}'
+    mocker.patch(
+        "litellm.stream_chunk_builder",
+        return_value=ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(role="assistant", content=content),
+                )
+            ]
+        ),
+    )
+    events: list[OutputStreamEvent] = []
+
+    async def collect(event: OutputStreamEvent) -> None:
+        events.append(event)
+
+    response = await consume_completion_stream(
+        _stream(_chunk(content=content)),
+        content_callback=None,
+        output_callback=collect,
+        reasoning_callback=None,
+        messages=[],
+        decision_format=_structured_decision_format(include_tools=False),
+        requested_model="gpt-4o",
+    )
+
+    assert OutputStringEnd(("result",), "done") in events
+    assert response.structured_output is not None
+    assert response.structured_output.tree == {
+        "decision": "result",
+        "result": "done",
     }
 
 

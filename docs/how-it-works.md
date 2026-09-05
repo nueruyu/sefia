@@ -105,9 +105,9 @@ value types and `SchemaNode` accessors keep schema traversal out of `dict[str, A
 Every transport returns the same logical decision:
 `{"decision":"tool_calls",...}` or `{"decision":"result",...}`. A provider adapter
 may change the wire representation to satisfy a structured-output API. The LiteLLM
-adapter nests the `TOOLS_OR_RESULT` union under a required `payload` property so the
-wire schema has an object root, then removes that envelope from completed output and
-stream paths.
+adapter nests every structured decision under a required `payload` property, giving
+all decision modes the same object-root wire shape. It removes that envelope from
+completed output and stream paths.
 
 The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
 reflects callable parameters, while `_result_format.py` produces a JSON Schema and

@@ -23,6 +23,7 @@ from sefia.llm.streaming import OutputStreamEvent, Scalar, StringDelta, StringEn
 from ._data_format import StructuredDataFormat
 
 K = SchemaKeyword
+_PAYLOAD_FIELD = "payload"
 
 
 @final
@@ -43,7 +44,6 @@ class StructuredDecisionFormat:
         self._schema = schema
         self._result_format = result_format
         self._tool_formats = tool_formats
-        self._uses_payload_envelope = set(schema.root().properties()) == {"payload"}
 
     @classmethod
     def from_spec(cls, spec: DecisionSpec) -> "StructuredDecisionFormat":
@@ -73,14 +73,12 @@ class StructuredDecisionFormat:
         return self._decode(StructuredData.from_json(data))
 
     def _decode(self, data: StructuredData) -> StructuredData:
-        if self._uses_payload_envelope:
-            try:
-                envelope = data.to_object("structured decision envelope")
-            except ValueError:
-                return data
-            if set(envelope) != {"payload"}:
-                return data
-            data = envelope["payload"]
+        envelope = data.to_object("structured decision envelope")
+        if set(envelope) != {_PAYLOAD_FIELD}:
+            raise ValueError(
+                "structured decision envelope must contain only the payload field"
+            )
+        data = envelope[_PAYLOAD_FIELD]
 
         try:
             fields = data.to_object()
@@ -148,9 +146,7 @@ class StructuredDecisionFormat:
         )
 
     def decode_stream_event(self, event: OutputStreamEvent) -> OutputStreamEvent | None:
-        if not self._uses_payload_envelope:
-            return event
-        if not event.path or event.path[0] != "payload":
+        if not event.path or event.path[0] != _PAYLOAD_FIELD:
             return None
         path = event.path[1:]
         if isinstance(event, StringDelta):
@@ -179,12 +175,7 @@ def _build_schema(
         tool_formats,
         registry,
     )
-    uses_payload_envelope = K.ANY_OF in decision
-    root = (
-        SchemaNode.object_schema({"payload": decision})
-        if uses_payload_envelope
-        else SchemaNode(decision)
-    )
+    root = SchemaNode.object_schema({_PAYLOAD_FIELD: decision})
     if definitions:
         root.set_definitions(definitions)
     return root.value

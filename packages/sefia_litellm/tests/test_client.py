@@ -148,7 +148,9 @@ class TestLiteLLMClient:
         }
         assert call_args["response_format"]["type"] == "json_schema"
         wire_schema = call_args["response_format"]["json_schema"]["schema"]
-        city_schema = wire_schema["properties"]["result"]["properties"]["city"]
+        city_schema = wire_schema["properties"]["payload"]["properties"]["result"][
+            "properties"
+        ]["city"]
         assert city_schema["type"] == "string"
         assert call_args["temperature"] == 0.5
 
@@ -165,8 +167,8 @@ class TestLiteLLMClient:
                     message=LiteLLMMessage(
                         role="assistant",
                         content=(
-                            '```json\n{"decision":"result",'
-                            '"result":{"city":"Tokyo"}}\n```'
+                            '```json\n{"payload":{"decision":"result",'
+                            '"result":{"city":"Tokyo"}}}\n```'
                         ),
                     ),
                 )
@@ -197,7 +199,10 @@ class TestLiteLLMClient:
                     index=0,
                     message=LiteLLMMessage(
                         role="assistant",
-                        content=('{"decision":"result","result":{"city":"Tokyo"}}'),
+                        content=(
+                            '{"payload":{"decision":"result",'
+                            '"result":{"city":"Tokyo"}}}'
+                        ),
                     ),
                 )
             ]

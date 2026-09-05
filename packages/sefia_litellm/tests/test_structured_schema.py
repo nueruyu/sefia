@@ -48,10 +48,7 @@ def _process(
     tool_call_ids: ToolCallIdRegistry | None = None,
 ) -> StepDecision:
     prepared = _prepare(decision)
-    wire_data = (
-        {"payload": data} if decision.mode is StepDecisionMode.TOOLS_OR_RESULT else data
-    )
-    return decision.validate(prepared.decode(wire_data), tool_call_ids)
+    return decision.validate(prepared.decode({"payload": data}), tool_call_ids)
 
 
 def test_structured_decision_format_returns_defensive_schema_copies() -> None:
@@ -179,15 +176,9 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decision_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    properties = schema.get("properties")
-    if not isinstance(properties, dict):
-        return schema
-    payload = cast(dict[str, Any], properties).get("payload")
-    return (
-        _resolve(cast(dict[str, Any], payload), schema)
-        if isinstance(payload, dict)
-        else schema
-    )
+    properties = cast(dict[str, Any], schema["properties"])
+    payload = cast(dict[str, Any], properties["payload"])
+    return _resolve(payload, schema)
 
 
 def _tool_calls_array(schema: dict[str, Any]) -> dict[str, Any]:
@@ -227,16 +218,40 @@ def test_tool_only_schema_embeds_tool_argument_schema() -> None:
     assert arguments["properties"]["question"]["minLength"] == 1
 
 
-def test_tool_or_result_schema_nests_union_in_an_object_envelope() -> None:
-    schema = _prepare(_decision_model(str, [_tool()])).schema.to_dict()
+def test_structured_decision_schema_always_uses_payload_envelope() -> None:
+    specs = (
+        _decision_model(Never, [_tool()]),
+        _decision_model(str, [_tool()]),
+        _decision_model(str, []),
+    )
 
-    assert schema["type"] == "object"
-    assert schema["required"] == ["payload"]
-    assert schema["additionalProperties"] is False
-    assert "anyOf" not in schema
-    properties = cast(dict[str, Any], schema["properties"])
-    payload = cast(dict[str, Any], properties["payload"])
-    assert "anyOf" in payload
+    schemas = [_prepare(spec).schema.to_dict() for spec in specs]
+
+    for schema in schemas:
+        assert schema["type"] == "object"
+        assert schema["required"] == ["payload"]
+        assert schema["additionalProperties"] is False
+        assert "anyOf" not in schema
+        assert set(cast(dict[str, Any], schema["properties"])) == {"payload"}
+    assert "anyOf" not in _decision_schema(schemas[0])
+    assert "anyOf" in _decision_schema(schemas[1])
+    assert "anyOf" not in _decision_schema(schemas[2])
+
+
+@pytest.mark.parametrize(
+    "wire_data",
+    [
+        {"decision": "result", "result": "done"},
+        {"payload": {"decision": "result", "result": "done"}, "extra": None},
+    ],
+)
+def test_structured_decision_decode_requires_exact_payload_envelope(
+    wire_data: Any,
+) -> None:
+    decision_format = _prepare(_decision_model(str, []))
+
+    with pytest.raises(ValueError, match="structured decision envelope"):
+        decision_format.decode(wire_data)
 
 
 @dataclass
