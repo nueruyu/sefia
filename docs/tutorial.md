@@ -290,7 +290,8 @@ def create_session():
 async def turn(session_id: str, body: TurnBody):
     try:
         async with api.session(session_id=session_id) as session:
-            await session.accept_input(body.input)
+            if body.input is not None:
+                await session.accept_input(body.input)
             report = await research_service.run(body.task)
             return {"status": "done", "report": report}
     except InputRequired as e:
@@ -301,24 +302,35 @@ async def turn(session_id: str, body: TurnBody):
 uvicorn server:app
 ```
 
+For a uv project, use `uv run uvicorn server:app`. To load credentials from
+`.env`, use `uv run --env-file .env uvicorn server:app`.
+
+In another terminal in the same project directory (Bash/Zsh):
+
 ```bash
-# create a session
-SID=$(curl -s -X POST localhost:8000/sessions | python -c 'import sys,json;print(json.load(sys.stdin)["session_id"])')
+# Create a session
+SESSION_ID=$(curl -fsS -X POST http://127.0.0.1:8000/sessions |
+  python -c 'import json, sys; print(json.load(sys.stdin)["session_id"])')
 
-# first request: pauses for approval
-curl -X POST localhost:8000/sessions/$SID/turn \
-  -H 'content-type: application/json' \
+# Start the research turn
+curl -fsS -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/turn" \
+  -H 'Content-Type: application/json' \
   -d '{"task": "the state of durable LLM applications"}'
-# {"status":"needs_input","prompt":"Here's the draft ... Approve it?"}
-
-# restart the server here if you like; the paused run survives
-
-# second request: resumes and finalizes
-curl -X POST localhost:8000/sessions/$SID/turn \
-  -H 'content-type: application/json' \
-  -d '{"task": "the state of durable LLM applications", "input": "yes, approve"}'
-# {"status":"done","report":{...}}
 ```
+
+If the response is `{"status":"needs_input","prompt":"..."}`, send the reply
+below with the same session ID and `task`. To try resuming after a restart, stop
+and restart the server from the same directory before sending the reply, keeping
+its `.sefios/` database.
+
+```bash
+curl -fsS -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/turn" \
+  -H 'Content-Type: application/json' \
+  -d '{"task": "the state of durable LLM applications", "input": "yes, approve"}'
+```
+
+A completed turn returns `{"status":"done","report":{...}}`; if it asks for
+more input, repeat the reply request with your next answer.
 
 Keep `task` unchanged when resuming and send requests for a given session one at
 a time; the facade does not serialize concurrent turns. Asking for approval in

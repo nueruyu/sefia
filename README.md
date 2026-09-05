@@ -203,45 +203,19 @@ behavior as the other transports.
 
 ## Pause for a human, resume after a restart
 
-A turn that pauses for a human and resumes after a restart, served on an ordinary
-request/response handler: the pause is a tool that **raises**, and resume is calling
-the endpoint again.
+An input tool pauses the run by raising `InputRequired`. A later HTTP request
+supplies the reply and re-invokes the same call; with durable persistence,
+completed steps replay even after a server restart.
 
-This example also needs the FastAPI extra and an HTTP server:
+The service receives `api.input_tool` as its human-input tool. The endpoints
+create a session, run the research, and accept a reply when it pauses.
 
-```bash
-uv add 'sefios[litellm,web,fastapi,sqlite]' uvicorn
-```
-
-With pip: `pip install 'sefios[litellm,web,fastapi,sqlite]' uvicorn`.
-Save the code as `server.py`. With the key already set in your environment, run
-`uv run uvicorn server:app` (or `uvicorn server:app` in the virtual environment
-used for pip). With a `.env` file, use `uv run --env-file .env uvicorn server:app`.
+This excerpt omits imports and the definitions of `infer`, `Report`, `app`, and
+`TurnBody`; see the [HTTP tutorial](./docs/tutorial.md#4-serve-it-over-http)
+for the complete setup and curl commands.
 
 <!-- example: readme-http -->
 ```python
-from fastapi import FastAPI
-from pydantic import BaseModel
-from sefios import SQLitePersistence, Tools, domain
-from sefios.fastapi import SefiaHTTP
-from sefios.fastapi.exceptions import InputRequired
-from sefios.tools import Input, WebSearch
-
-
-class Report(BaseModel):
-    topic: str
-    summary: str
-    sources: list[str]
-
-
-class TurnBody(BaseModel):
-    task: str
-    input: str | None = None
-
-
-app = FastAPI()
-infer = domain("myapp").infer
-
 class ResearchService:
     _web: Tools[WebSearch]
     _input: Tools[Input]
@@ -279,19 +253,6 @@ async def turn(session_id: str, body: TurnBody):
     except InputRequired as e:
         return {"status": "needs_input", "prompt": e.prompt}
 ```
-
-See the [tutorial](./docs/tutorial.md#4-serve-it-over-http) for run commands,
-resume constraints, and the distinction between requested and enforced approval.
-
-When the input tool has no recorded input it raises `InputRequired`; `SefiaHTTP`
-publishes the pause as an SSE event and re-raises it after the session context exits,
-and the handler returns "needs input". The input arrives in a later request and is delivered
-with `session.accept_input`; the same endpoint re-invokes, every completed LLM/tool
-call **replays its exact output** (the approved draft is byte-for-byte the same), and
-only the pending step runs. You write no checkpoint code, step keys, idempotency
-plumbing, or 202 dance; see
-[use case 01](./docs/usecases/01-human-in-the-loop.md) for the same turn hand-rolled,
-and what it removes.
 
 ## Core concepts
 
