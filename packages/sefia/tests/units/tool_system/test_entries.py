@@ -7,7 +7,7 @@ from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import ToolConflictError
 from sefia.inference import ToolCallsDecision
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.llm_output import LLMOutput
+from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import PydanticModelBackend
 
@@ -120,15 +120,15 @@ def test_a_schema_is_validated_under_its_declared_dialect():
     }
 
     tool = JsonSchemaToolEntry(_noop, name="pair", parameters=schema)
-    decision_model = DecisionSpec.for_inference(
+    decision_spec = DecisionSpec.for_inference(
         output_type=Never,
         tools=[tool],
         result_format_factory=PydanticModelBackend(),
     )
     tool_call_ids = ToolCallIdRegistry()
 
-    valid = decision_model.validate(
-        LLMOutput.from_json(
+    valid = decision_spec.validate(
+        StructuredData.from_json(
             {
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "pair", "arguments": {"pair": ["a", 1]}}],
@@ -140,8 +140,8 @@ def test_a_schema_is_validated_under_its_declared_dialect():
     assert valid.calls[0].arguments == {"pair": ["a", 1]}
 
     with pytest.raises(ValueError, match="Step decision validation failed"):
-        decision_model.validate(
-            LLMOutput.from_json(
+        decision_spec.validate(
+            StructuredData.from_json(
                 {
                     "decision": "tool_calls",
                     "tool_calls": [{"name": "pair", "arguments": {"pair": [1, "a"]}}],

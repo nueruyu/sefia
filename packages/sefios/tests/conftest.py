@@ -11,16 +11,16 @@ import pytest
 from glyff import ArgumentCanonicalizer, Serializer
 from glyff.serialization import FallbackByTypeQualname
 from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
-from sefia.llm import LLMResponse
+from sefia.llm import LLMCompletion
 from sefia.testing import MockLLMClient
 
 
 @pytest.fixture
-def make_mock_llm() -> Callable[[list[LLMResponse]], MockLLMClient]:
+def make_mock_llm() -> Callable[[list[LLMCompletion]], MockLLMClient]:
     """Factory for the shared mock LLM client."""
 
-    def factory(responses: list[LLMResponse]) -> MockLLMClient:
-        return MockLLMClient(responses=responses)
+    def factory(completions: list[LLMCompletion]) -> MockLLMClient:
+        return MockLLMClient(completions=completions)
 
     return factory
 

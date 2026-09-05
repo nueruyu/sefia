@@ -16,14 +16,20 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMInferenceStrategy, LLMResponse, MarkdownPromptRenderer
+from sefia.llm import (
+    LLMCompletion,
+    LLMInferenceStrategy,
+    MarkdownPromptRenderer,
+    ToolCall,
+)
+from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.events import (
     LLMReasoningTokenReceived,
-    LLMResponseRepairAttempt,
+    DecisionRepairAttempt,
     LLMTokenReceived,
 )
-from sefia.llm.llm_output import LLMOutput
-from sefia.llm.transports import StructuredDecisionTransport
+from sefia.llm.structured_data import StructuredData
+from sefia.llm.transports import NativeDecisionTransport, StructuredDecisionTransport
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -93,10 +99,10 @@ def _make_strategy(
     )
 
 
-def _structured_response(content: str) -> LLMResponse:
-    return LLMResponse(
+def _structured_completion(content: str) -> LLMCompletion:
+    return LLMCompletion(
         content=content,
-        structured_output=LLMOutput.parse_json(content),
+        structured_output=StructuredData.parse_json(content),
     )
 
 
@@ -127,7 +133,9 @@ class TestLLMInferenceStrategy:
                 "tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}],
             }
         )
-        mock_llm_client.complete.return_value = _structured_response(tool_calls_payload)
+        mock_llm_client.complete.return_value = _structured_completion(
+            tool_calls_payload
+        )
         strategy = _make_strategy(mock_llm_client, stream=True)
 
         decision = await strategy.decide_next_step(
@@ -152,7 +160,7 @@ class TestLLMInferenceStrategy:
                 "result": {"name": "test", "value": 42},
             }
         )
-        mock_llm_client.complete.return_value = _structured_response(result_payload)
+        mock_llm_client.complete.return_value = _structured_completion(result_payload)
         strategy = _make_strategy(mock_llm_client, stream=True)
         publisher = MockEventPublisher()
 
@@ -182,8 +190,8 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_accepts_client_decoded_output(
         self, mock_llm_client: AsyncMock
     ) -> None:
-        mock_llm_client.complete.return_value = LLMResponse(
-            structured_output=LLMOutput.from_json(
+        mock_llm_client.complete.return_value = LLMCompletion(
+            structured_output=StructuredData.from_json(
                 {"decision": "result", "result": "done"}
             )
         )
@@ -202,7 +210,7 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_publishes_reasoning_tokens(
         self, mock_llm_client: AsyncMock
     ):
-        mock_llm_client.complete.return_value = _structured_response(
+        mock_llm_client.complete.return_value = _structured_completion(
             '{"decision": "result", "result": "done"}'
         )
         strategy = _make_strategy(mock_llm_client, stream=True)
@@ -231,7 +239,7 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_does_not_set_reasoning_callback_by_default(
         self, mock_llm_client: AsyncMock
     ):
-        mock_llm_client.complete.return_value = _structured_response(
+        mock_llm_client.complete.return_value = _structured_completion(
             '{"decision": "result", "result": "done"}'
         )
         strategy = _make_strategy(mock_llm_client)
@@ -248,7 +256,7 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_does_not_set_stream_callback_by_default(
         self, mock_llm_client: AsyncMock
     ):
-        mock_llm_client.complete.return_value = _structured_response(
+        mock_llm_client.complete.return_value = _structured_completion(
             '{"decision": "result", "result": "done"}'
         )
         strategy = _make_strategy(mock_llm_client)
@@ -267,13 +275,13 @@ class TestLLMInferenceStrategy:
         self, mock_llm_client: AsyncMock
     ):
         # result is missing required 'value' field — Pydantic should reject it
-        mock_llm_client.complete.return_value = _structured_response(
+        mock_llm_client.complete.return_value = _structured_completion(
             '{"decision": "result", "result": {"name": "test"}}'
         )
         strategy = _make_strategy(mock_llm_client)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output failed validation"
+            InvalidInferenceResponseError, match="LLM decision failed validation"
         ):
             await strategy.decide_next_step(
                 _function_info(return_type=MyOutput, instructions="do it"),
@@ -285,7 +293,7 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_handles_plain_string_output(
         self, mock_llm_client: AsyncMock
     ):
-        mock_llm_client.complete.return_value = _structured_response(
+        mock_llm_client.complete.return_value = _structured_completion(
             '{"decision": "result", "result": "Hello, world!"}'
         )
         strategy = _make_strategy(mock_llm_client)
@@ -303,13 +311,13 @@ class TestLLMInferenceStrategy:
     async def test_decide_next_step_raises_when_result_null(
         self, mock_llm_client: AsyncMock
     ):
-        mock_llm_client.complete.return_value = _structured_response(
+        mock_llm_client.complete.return_value = _structured_completion(
             '{"decision": "result", "result": null}'
         )
         strategy = _make_strategy(mock_llm_client)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output failed validation"
+            InvalidInferenceResponseError, match="LLM decision failed validation"
         ):
             await strategy.decide_next_step(
                 _function_info(instructions="do it"),
@@ -331,8 +339,8 @@ class TestResponseRepair:
     async def test_repairs_empty_response(self):
         client = AsyncMock()
         client.complete.side_effect = [
-            LLMResponse(content=""),
-            _structured_response(self.VALID_RESULT),
+            LLMCompletion(content=""),
+            _structured_completion(self.VALID_RESULT),
         ]
         strategy = _make_strategy(client)
         publisher = MockEventPublisher()
@@ -352,15 +360,15 @@ class TestResponseRepair:
         assert "Reason:" in str(feedback.content)
 
         assert any(
-            isinstance(event, LLMResponseRepairAttempt) and event.attempt == 1
+            isinstance(event, DecisionRepairAttempt) and event.attempt == 1
             for event in publisher.events
         )
 
     async def test_repairs_none_content(self):
         client = AsyncMock()
         client.complete.side_effect = [
-            LLMResponse(content=None),
-            _structured_response(self.VALID_RESULT),
+            LLMCompletion(content=None),
+            _structured_completion(self.VALID_RESULT),
         ]
         strategy = _make_strategy(client)
 
@@ -374,13 +382,32 @@ class TestResponseRepair:
         retry_messages = client.complete.await_args_list[1].kwargs["messages"]
         assert "did not return structured output" in str(retry_messages[-1].content)
 
+    async def test_repairs_client_completion_decoding_error(self) -> None:
+        partial = LLMCompletion(content="malformed provider response")
+        client = AsyncMock()
+        client.complete.side_effect = [
+            LLMCompletionDecodingError(partial, "response could not be decoded"),
+            _structured_completion(self.VALID_RESULT),
+        ]
+        strategy = _make_strategy(client)
+
+        decision = await strategy.decide_next_step(
+            _function_info(), [], _tool_registry(), MockEventPublisher()
+        )
+
+        assert isinstance(decision, ResultDecision)
+        assert decision.result == "done"
+        retry_prompt = client.complete.await_args_list[1].kwargs["messages"][0]
+        assert "malformed provider response" in str(retry_prompt.content)
+        assert "response could not be decoded" in str(retry_prompt.content)
+
     async def test_repairs_schema_violation_and_echoes_invalid_output(self):
         invalid = '{"decision": "result", "result": {"name": "test"}}'
         valid = '{"decision": "result", "result": {"name": "test", "value": 42}}'
         client = AsyncMock()
         client.complete.side_effect = [
-            _structured_response(invalid),
-            _structured_response(valid),
+            _structured_completion(invalid),
+            _structured_completion(valid),
         ]
         strategy = _make_strategy(client)
 
@@ -414,8 +441,8 @@ class TestResponseRepair:
         )
         client = AsyncMock()
         client.complete.side_effect = [
-            _structured_response(invalid),
-            _structured_response(valid),
+            _structured_completion(invalid),
+            _structured_completion(valid),
         ]
         strategy = _make_strategy(client)
 
@@ -427,11 +454,49 @@ class TestResponseRepair:
         assert decision.calls[0].name == "my_tool"
         assert client.complete.await_count == 2
 
+    async def test_native_repair_includes_rejected_tool_call(self) -> None:
+        client = AsyncMock()
+        client.complete.side_effect = [
+            LLMCompletion(
+                tool_calls=[
+                    ToolCall(
+                        id="call-1",
+                        name="no_such_tool",
+                        arguments=StructuredData.from_json({"query": "lost"}),
+                    )
+                ]
+            ),
+            LLMCompletion(
+                tool_calls=[
+                    ToolCall(
+                        id="call-2",
+                        name="return_result",
+                        arguments=StructuredData.from_json({"result": "done"}),
+                    )
+                ]
+            ),
+        ]
+        strategy = LLMInferenceStrategy(
+            llm_client=client,
+            result_format_factory=PydanticModelBackend(),
+            prompt_renderer=MarkdownPromptRenderer(json_default=pydantic_json_default),
+            decision_transport=NativeDecisionTransport(),
+        )
+
+        decision = await strategy.decide_next_step(
+            _function_info(), [], _tool_registry(my_tool), MockEventPublisher()
+        )
+
+        assert isinstance(decision, ResultDecision)
+        retry_prompt = client.complete.await_args_list[1].kwargs["messages"][0]
+        assert '"name":"no_such_tool"' in str(retry_prompt.content)
+        assert '"arguments":{"query":"lost"}' in str(retry_prompt.content)
+
     async def test_repair_does_not_mutate_history(self):
         client = AsyncMock()
         client.complete.side_effect = [
-            LLMResponse(content="not json"),
-            _structured_response(self.VALID_RESULT),
+            LLMCompletion(content="not json"),
+            _structured_completion(self.VALID_RESULT),
         ]
         strategy = _make_strategy(client)
         history = [
@@ -457,11 +522,11 @@ class TestResponseRepair:
     async def test_raises_original_error_after_budget_exhausted(self):
         invalid = "not json"
         client = AsyncMock()
-        client.complete.return_value = LLMResponse(content=invalid)
+        client.complete.return_value = LLMCompletion(content=invalid)
         strategy = _make_strategy(client, max_repair_attempts=2)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output could not be decoded"
+            InvalidInferenceResponseError, match="LLM decision could not be decoded"
         ) as exc_info:
             await strategy.decide_next_step(
                 _function_info(), [], _tool_registry(), MockEventPublisher()
@@ -469,11 +534,11 @@ class TestResponseRepair:
 
         assert client.complete.await_count == 3
         assert exc_info.value.raw_content == invalid
-        assert exc_info.value.detail.startswith("LLM output could not be decoded")
+        assert exc_info.value.detail.startswith("LLM decision could not be decoded")
 
     async def test_zero_budget_disables_repair(self):
         client = AsyncMock()
-        client.complete.return_value = LLMResponse(content="not json")
+        client.complete.return_value = LLMCompletion(content="not json")
         strategy = _make_strategy(client, max_repair_attempts=0)
 
         with pytest.raises(InvalidInferenceResponseError):

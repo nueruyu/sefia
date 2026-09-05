@@ -1,7 +1,7 @@
 from importlib import import_module
 
 from sefia._tool_system import SignatureToolEntry, ToolEntry
-from sefia.llm.json_schema import SchemaNode
+from sefia.llm.json_schema import JsonObject, SchemaNode
 from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._schema import StructuredDecisionFormat
@@ -20,6 +20,10 @@ def _decision_schema(output_type: object, tools: list[ToolEntry]):
     )
 
 
+def _wire_decision_schema(schema: JsonObject) -> SchemaNode:
+    return SchemaNode(schema).properties()["payload"]
+
+
 def test_news_writer_schema_composes_nested_research_tool_types() -> None:
     backend = PydanticModelBackend()
     researcher = news_agents.Researcher(WebSearch())
@@ -31,21 +35,23 @@ def test_news_writer_schema_composes_nested_research_tool_types() -> None:
         inspector=backend,
     )
 
-    model = _decision_schema(news_models.NewsArticle, [tool])
-    schema = StructuredDecisionFormat.from_model(model).schema.to_dict()
+    decision_spec = _decision_schema(news_models.NewsArticle, [tool])
+    schema = StructuredDecisionFormat.from_spec(decision_spec).schema.to_dict()
 
     assert all(
         branch.additional_properties() is False
-        for branch in SchemaNode(schema).any_of()
+        for branch in _wire_decision_schema(schema).any_of()
     )
 
 
 def test_code_quality_report_schema_lowers_perspective_mapping() -> None:
-    model = _decision_schema(quality_models.QualityReport, [])
-    schema = StructuredDecisionFormat.from_model(model).schema.to_dict()
+    decision_spec = _decision_schema(quality_models.QualityReport, [])
+    schema = StructuredDecisionFormat.from_spec(decision_spec).schema.to_dict()
 
     perspective_issues = (
-        SchemaNode(schema).properties()["result"].properties()["issues_by_perspective"]
+        _wire_decision_schema(schema)
+        .properties()["result"]
+        .properties()["issues_by_perspective"]
     )
     assert perspective_issues.type == "array"
     items = perspective_issues.child("items")

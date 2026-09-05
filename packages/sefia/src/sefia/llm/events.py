@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from ..event_system import Event
 from ..exceptions import InvalidInferenceResponseError
-from ._messages import LLMResponse
+from ._messages import LLMCompletion
 from .step_decision import DecisionSpec
 
 
@@ -13,13 +13,13 @@ class BeforeLLMCall(Event):
     """Event fired just before a call to the LLM."""
 
     prompt: str
-    decision: DecisionSpec
+    decision_spec: DecisionSpec
 
 
 @dataclass(frozen=True)
-class LLMResponseRepairAttempt(Event):
+class DecisionRepairAttempt(Event):
     """
-    Event fired when an invalid LLM response is about to be retried with
+    Event fired when an invalid LLM decision is about to be retried with
     corrective feedback included in a newly rendered prompt.
 
     ``attempt`` is the 1-based number of the repair attempt about to run.
@@ -31,9 +31,9 @@ class LLMResponseRepairAttempt(Event):
 
 @dataclass(frozen=True)
 class AfterLLMCall(Event):
-    """Event fired just after a response is received from the LLM."""
+    """Event fired just after a completion is received from the LLM."""
 
-    response: LLMResponse
+    completion: LLMCompletion
 
 
 @dataclass(frozen=True)

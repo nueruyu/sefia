@@ -2,12 +2,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from sefia import Policy, Tools, policy
-from sefia.llm import LLMResponse
+from sefia.llm import LLMCompletion
 from sefia.testing import (
     MockLLMClient,
     memory_session,
-    result_response,
-    tool_calls_response,
+    result_completion,
+    tool_calls_completion,
 )
 from sefios import domain
 from sefios.middleware import StagnationDetector
@@ -57,12 +57,12 @@ class Researcher:
 
 
 async def test_stagnation_state_is_isolated_between_infer_calls(
-    make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+    make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
 ) -> None:
-    repeated_call_response = tool_calls_response(
+    repeated_call_response = tool_calls_completion(
         ("WebToolkit_search", {"query": "sefia"})
     )
-    final_response = result_response(
+    final_response = result_completion(
         Report(
             topic="sefia",
             summary="Sefia is a framework for building LLM agents.",
@@ -73,7 +73,7 @@ async def test_stagnation_state_is_isolated_between_infer_calls(
     mock_llm = make_mock_llm(
         [
             repeated_call_response,
-            result_response(
+            result_completion(
                 Report(topic="sefia", summary="first call done", sources=[])
             ),
             # The second @infer call repeats the same tool call twice before

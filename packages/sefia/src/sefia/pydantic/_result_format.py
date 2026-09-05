@@ -5,7 +5,7 @@ from typing_extensions import final, override
 
 from ..llm.json_schema import JsonSchemaDocument
 from ..llm.result_format import ResultFormat, ResultFormatFactory
-from ..llm.llm_output import LLMOutput
+from ..llm.structured_data import StructuredData
 
 
 @final
@@ -20,9 +20,9 @@ class PydanticResultFormat(ResultFormat):
         return self._schema
 
     @override
-    def validate(self, value: LLMOutput) -> Any:
+    def validate(self, data: StructuredData) -> Any:
         try:
-            return self._adapter.validate_python(value.data)
+            return self._adapter.validate_python(data.tree)
         except ValidationError as error:
             raise ValueError(str(error)) from error
 

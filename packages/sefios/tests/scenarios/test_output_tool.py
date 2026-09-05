@@ -6,7 +6,7 @@ from glyff import ArgumentCanonicalizer, Serializer
 from glyff.store import MemoryBackend
 
 from sefia import Session, Tools
-from sefia.llm import LLMResponse
+from sefia.llm import LLMCompletion
 from sefia.testing import MockLLMClient
 from sefios import domain, MemorySessionStorage
 from sefios._session_state import bind_session_storage
@@ -27,9 +27,9 @@ class Agent:
         ...
 
 
-def _responses() -> list[LLMResponse]:
+def _responses() -> list[LLMCompletion]:
     return [
-        LLMResponse(
+        LLMCompletion(
             content=json.dumps(
                 {
                     "decision": "tool_calls",
@@ -42,7 +42,7 @@ def _responses() -> list[LLMResponse]:
                 }
             )
         ),
-        LLMResponse(content=json.dumps({"decision": "result", "result": "sent"})),
+        LLMCompletion(content=json.dumps({"decision": "result", "result": "sent"})),
     ]
 
 
@@ -51,7 +51,7 @@ class TestOutput:
         self,
         serializer: Serializer,
         hasher: ArgumentCanonicalizer,
-        make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+        make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
     ) -> None:
         emitted: list[OutputMessage] = []
         agent = Agent(Output(on_output=emitted.append))

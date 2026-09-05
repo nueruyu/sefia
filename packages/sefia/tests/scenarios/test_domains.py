@@ -2,7 +2,7 @@ import glyff
 from glyff.store import MemoryBackend
 
 from sefia import Domain
-from sefia.testing import MockLLMClient, memory_session, result_response
+from sefia.testing import MockLLMClient, memory_session, result_completion
 
 
 async def test_domain_inference_records_stable_application_and_runtime_boundaries():
@@ -13,7 +13,7 @@ async def test_domain_inference_records_stable_application_and_runtime_boundarie
     async def summarize(document: str) -> str: ...
 
     async with memory_session(
-        MockLLMClient([result_response("summary")]),
+        MockLLMClient([result_completion("summary")]),
         session_id="domain-identities",
         backend=backend,
     ):
@@ -43,7 +43,7 @@ async def test_domain_infer_uses_the_qualified_function_name():
         async def prepare(self, document: str) -> str: ...
 
     async with memory_session(
-        MockLLMClient([result_response("summary")]),
+        MockLLMClient([result_completion("summary")]),
         session_id="implicit-inference-name",
         backend=backend,
     ):

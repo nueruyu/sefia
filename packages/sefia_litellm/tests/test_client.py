@@ -1,8 +1,6 @@
 import logging
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from types import SimpleNamespace
-from typing import Any, Never, Self
+from typing import Never, Self
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,7 +9,6 @@ from litellm import (
     Choices,
     Message as LiteLLMMessage,
     ModelResponse,
-    Usage,
 )
 from litellm.exceptions import (
     AuthenticationError,
@@ -19,13 +16,17 @@ from litellm.exceptions import (
     RateLimitError,
     Timeout,
 )
-from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
-    ChatCompletionCustomToolCallPayload,
-    ChatCompletionMessageCustomToolCall,
-)
 from pytest_mock import MockerFixture
-from sefia.llm import LLMResponse, Message
-from sefia.llm.step_decision import DecisionSpec
+from sefia._tool_system import ToolRegistry
+from sefia.llm import (
+    LLMCompletion,
+    Message,
+    ToolCall,
+)
+from sefia.llm.exceptions import LLMCompletionDecodingError
+from sefia.llm.json_schema import JsonSchemaDocument
+from sefia.llm.structured_data import StructuredData
+from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._client import (
     _SILENCE_LEVEL,
@@ -38,7 +39,6 @@ from sefia_litellm.exceptions import (
     InferenceTemporarilyUnavailableError,
     InferenceTimeoutError,
 )
-from sefia_litellm._response import handle_response, handle_stream
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ class _CityResult:
     city: str
 
 
-def _decision_model() -> DecisionSpec:
+def _decision_spec() -> DecisionSpec:
     return DecisionSpec.for_inference(
         output_type=_CityResult,
         tools=[],
@@ -85,15 +85,41 @@ class TestLiteLLMClient:
         assert "response_format" not in call_args
         assert call_args["messages"] == [{"role": "user", "content": "Hello"}]
 
+    async def test_complete_rejects_non_litellm_completion(
+        self, mock_acompletion: AsyncMock
+    ) -> None:
+        mock_acompletion.return_value = object()
+
+        with pytest.raises(
+            LLMCompletionDecodingError, match="unsupported completion response"
+        ) as exc_info:
+            await LiteLLMClient(model="gpt-4o").complete(
+                [Message(role="user", content="Hello")]
+            )
+
+        assert exc_info.value.completion.model == "gpt-4o"
+
     async def test_complete_sends_correct_request_to_litellm(
         self, mock_acompletion: AsyncMock
     ):
         client = LiteLLMClient(model="gpt-4o", temperature=0.5)
         messages = [Message(role="user", content="Hello")]
-        tools: list[dict[str, Any]] = [
-            {"type": "function", "function": {"name": "get_weather"}}
+        tools = [
+            StepTool(
+                name="get_weather",
+                description="",
+                arguments=JsonSchemaDocument.from_mapping(
+                    {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": False,
+                    }
+                ),
+                schema_source=ToolSchemaSource.GENERATED,
+            )
         ]
-        decision_model = _decision_model()
+        decision_spec = _decision_spec()
 
         mock_acompletion.return_value = ModelResponse(
             choices=[
@@ -105,16 +131,26 @@ class TestLiteLLMClient:
             ]
         )
 
-        await client.complete(messages, tools=tools, decision_model=decision_model)
+        await client.complete(messages, tools=tools, decision_spec=decision_spec)
 
         mock_acompletion.assert_called_once()
         call_args = mock_acompletion.call_args[1]
         assert call_args["model"] == "gpt-4o"
         assert call_args["messages"] == [{"role": "user", "content": "Hello"}]
-        assert call_args["tools"] == tools
+        assert call_args["tools"][0]["function"] == {
+            "name": "get_weather",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            },
+        }
         assert call_args["response_format"]["type"] == "json_schema"
         wire_schema = call_args["response_format"]["json_schema"]["schema"]
-        city_schema = wire_schema["properties"]["result"]["properties"]["city"]
+        city_schema = wire_schema["properties"]["payload"]["properties"]["result"][
+            "properties"
+        ]["city"]
         assert city_schema["type"] == "string"
         assert call_args["temperature"] == 0.5
 
@@ -122,7 +158,7 @@ class TestLiteLLMClient:
         self, mock_acompletion: AsyncMock
     ) -> None:
         client = LiteLLMClient(model="gpt-4o")
-        model = _decision_model()
+        decision_spec = _decision_spec()
         mock_acompletion.return_value = ModelResponse(
             choices=[
                 Choices(
@@ -131,8 +167,8 @@ class TestLiteLLMClient:
                     message=LiteLLMMessage(
                         role="assistant",
                         content=(
-                            '```json\n{"decision":"result",'
-                            '"result":{"city":"Tokyo"}}\n```'
+                            '```json\n{"payload":{"decision":"result",'
+                            '"result":{"city":"Tokyo"}}}\n```'
                         ),
                     ),
                 )
@@ -141,7 +177,7 @@ class TestLiteLLMClient:
 
         response = await client.complete(
             [Message(role="user", content="Follow the task.")],
-            decision_model=model,
+            decision_spec=decision_spec,
         )
 
         call_args = mock_acompletion.call_args.kwargs
@@ -155,7 +191,7 @@ class TestLiteLLMClient:
         self, mock_acompletion: AsyncMock
     ) -> None:
         client = LiteLLMClient(model="gpt-4o")
-        model = _decision_model()
+        decision_spec = _decision_spec()
         mock_acompletion.return_value = ModelResponse(
             choices=[
                 Choices(
@@ -163,7 +199,10 @@ class TestLiteLLMClient:
                     index=0,
                     message=LiteLLMMessage(
                         role="assistant",
-                        content=('{"decision":"result","result":{"city":"Tokyo"}}'),
+                        content=(
+                            '{"payload":{"decision":"result",'
+                            '"result":{"city":"Tokyo"}}}'
+                        ),
                     ),
                 )
             ]
@@ -171,120 +210,177 @@ class TestLiteLLMClient:
 
         response = await client.complete(
             [Message(role="user", content="Follow the task.")],
-            decision_model=model,
+            decision_spec=decision_spec,
         )
 
         assert response.structured_output is not None
-        assert response.structured_output.data == {
+        assert response.structured_output.tree == {
             "decision": "result",
             "result": {"city": "Tokyo"},
         }
 
-    async def test_complete_parses_litellm_response_and_calculates_cost(
-        self, mock_acompletion: AsyncMock, mocker: MockerFixture
-    ):
-        mocker.patch("litellm.cost_per_token", return_value=(0.001, 0.002))
-        mock_response = ModelResponse(
-            id="chatcmpl-123",
-            model="gpt-4o",
-            usage=Usage(prompt_tokens=10, completion_tokens=20, total_tokens=30),
+    async def test_complete_envelopes_tool_or_result_union(
+        self, mock_acompletion: AsyncMock
+    ) -> None:
+        def lookup(key: str) -> str:
+            return key
+
+        registry = ToolRegistry()
+        registry.add(lookup, name="lookup")
+        decision_spec = DecisionSpec.for_inference(
+            output_type=str,
+            tools=registry.get_all(),
+            result_format_factory=PydanticModelBackend(),
+        )
+        mock_acompletion.return_value = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant",
+                        content=(
+                            '{"payload":{"decision":"tool_calls","tool_calls":['
+                            '{"name":"lookup","arguments":{"key":"item"}}]}}'
+                        ),
+                    ),
+                )
+            ]
+        )
+
+        response = await LiteLLMClient(model="gpt-4o").complete(
+            [Message(role="user", content="Look up the item.")],
+            decision_spec=decision_spec,
+        )
+
+        schema = mock_acompletion.call_args.kwargs["response_format"]["json_schema"][
+            "schema"
+        ]
+        assert schema["type"] == "object"
+        assert "anyOf" not in schema
+        assert "anyOf" in schema["properties"]["payload"]
+        assert response.structured_output is not None
+        assert response.structured_output.tree == {
+            "decision": "tool_calls",
+            "tool_calls": [{"name": "lookup", "arguments": {"key": "item"}}],
+        }
+
+    async def test_complete_translates_native_tool_schema_and_arguments(
+        self,
+        mock_acompletion: AsyncMock,
+    ) -> None:
+        tool = StepTool(
+            name="categorize",
+            description="Categorize labels.",
+            arguments=JsonSchemaDocument.from_mapping(
+                {
+                    "type": "object",
+                    "properties": {
+                        "labels": {
+                            "type": "object",
+                            "additionalProperties": {"type": "integer"},
+                        }
+                    },
+                    "required": ["labels"],
+                    "additionalProperties": False,
+                }
+            ),
+            schema_source=ToolSchemaSource.GENERATED,
+        )
+        mock_acompletion.return_value = ModelResponse(
             choices=[
                 Choices(
                     finish_reason="tool_calls",
                     index=0,
                     message=LiteLLMMessage(
                         role="assistant",
-                        content=None,
                         tool_calls=[
                             ChatCompletionMessageToolCall(
-                                id="call_abc",
+                                id="call-1",
                                 function={
-                                    "name": "get_weather",
-                                    "arguments": '{"city": "Tokyo"}',
+                                    "name": "categorize",
+                                    "arguments": (
+                                        '{"labels":[{"key":"important","value":2}]}'
+                                    ),
                                 },
                                 type="function",
                             )
                         ],
                     ),
                 )
-            ],
+            ]
         )
-        mock_acompletion.return_value = mock_response
-        client = LiteLLMClient(model="gpt-4o")
 
-        response = await client.complete([])
+        response = await LiteLLMClient(model="gpt-4o").complete(
+            [Message(role="user", content="Categorize.")],
+            tools=[tool],
+        )
 
-        assert response.model == "gpt-4o"
-        assert response.cost == 0.003
-        assert response.content is None
-        assert response.stop_reason == "tool_calls"
-        assert response.usage is not None
-        assert response.usage["prompt_tokens"] == 10
-        assert len(response.tool_calls) == 1
+        sent_schema = mock_acompletion.call_args.kwargs["tools"][0]["function"][
+            "parameters"
+        ]
+        assert sent_schema["properties"]["labels"]["type"] == "array"
+        assert response.tool_calls[0].arguments.tree == {"labels": {"important": 2}}
 
-    def test_handle_response_rejects_custom_tool_calls(self) -> None:
-        response = ModelResponse(
-            model="gpt-4o",
+    async def test_complete_encodes_native_tool_call_history_for_wire_schema(
+        self,
+        mock_acompletion: AsyncMock,
+    ) -> None:
+        tool = StepTool(
+            name="categorize",
+            description="",
+            arguments=JsonSchemaDocument.from_mapping(
+                {
+                    "type": "object",
+                    "properties": {
+                        "labels": {
+                            "type": "object",
+                            "additionalProperties": {"type": "integer"},
+                        }
+                    },
+                    "required": ["labels"],
+                    "additionalProperties": False,
+                }
+            ),
+            schema_source=ToolSchemaSource.GENERATED,
+        )
+        mock_acompletion.return_value = ModelResponse(
             choices=[
                 Choices(
-                    finish_reason="tool_calls",
+                    finish_reason="stop",
                     index=0,
-                    message=LiteLLMMessage(
-                        role="assistant",
-                        tool_calls=[
-                            ChatCompletionMessageCustomToolCall(
-                                id="call_custom",
-                                type="custom",
-                                custom=ChatCompletionCustomToolCallPayload(
-                                    name="shell", input="pwd"
-                                ),
-                            )
-                        ],
-                    ),
+                    message=LiteLLMMessage(role="assistant", content="done"),
                 )
-            ],
+            ]
         )
+        messages = [
+            Message(role="user", content="Categorize."),
+            Message(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id="call-1",
+                        name="categorize",
+                        arguments=StructuredData.from_json(
+                            {"labels": {"important": 2}}
+                        ),
+                    )
+                ],
+            ),
+            Message(role="tool", content="done", tool_call_id="call-1"),
+        ]
 
-        with pytest.raises(RuntimeError, match="unsupported custom tool call"):
-            handle_response(response, requested_model="gpt-4o", output=None)
+        await LiteLLMClient(model="gpt-4o").complete(messages, tools=[tool])
 
-    async def test_complete_captures_reasoning_content(
-        self, mock_acompletion: AsyncMock
-    ):
-        message = LiteLLMMessage(role="assistant", content='{"decision":...}')
-        message.reasoning_content = "The user wants the weather."
-        mock_acompletion.return_value = ModelResponse(
-            model="gpt-4o",
-            choices=[Choices(finish_reason="stop", index=0, message=message)],
-        )
-        client = LiteLLMClient(model="gpt-4o")
-
-        response = await client.complete([])
-
-        assert response.reasoning_content == "The user wants the weather."
-
-    async def test_cost_is_none_if_calculation_fails(
-        self, mock_acompletion: AsyncMock, mocker: MockerFixture
-    ):
-        mocker.patch("litellm.cost_per_token", side_effect=Exception("API error"))
-        mock_response = ModelResponse(
-            model="gpt-4o",
-            usage=Usage(prompt_tokens=10, completion_tokens=20),
-            choices=[Choices(index=0, message=LiteLLMMessage(role="assistant"))],
-        )
-        mock_acompletion.return_value = mock_response
-        client = LiteLLMClient(model="gpt-4o")
-
-        response = await client.complete([])
-
-        assert response.cost is None
-
-    async def test_raises_error_on_empty_choices(self, mock_acompletion: AsyncMock):
-        mock_acompletion.return_value = ModelResponse(choices=[])
-        client = LiteLLMClient(model="gpt-4o")
-
-        with pytest.raises(RuntimeError, match="LLM returned empty choices"):
-            await client.complete([])
+        sent_call = mock_acompletion.call_args.kwargs["messages"][1]["tool_calls"][0]
+        assert sent_call == {
+            "id": "call-1",
+            "type": "function",
+            "function": {
+                "name": "categorize",
+                "arguments": ('{"labels":[{"key":"important","value":2}]}'),
+            },
+        }
 
     @pytest.mark.parametrize(
         ("provider_error", "expected_error"),
@@ -412,9 +508,9 @@ class TestLiteLLMClient:
 
         stream = FakeStream()
         client = LiteLLMClient(model="gpt-4o")
-        stream_response = LLMResponse(content="streamed")
+        stream_response = LLMCompletion(content="streamed")
         stream_handler = mocker.patch(
-            "sefia_litellm._client.handle_stream",
+            "sefia_litellm._client.consume_completion_stream",
             new_callable=AsyncMock,
             return_value=stream_response,
         )
@@ -434,7 +530,8 @@ class TestLiteLLMClient:
             output_callback=None,
             reasoning_callback=None,
             messages=[{"role": "user", "content": "Hello"}],
-            output=None,
+            decision_format=None,
+            tool_data_formats={},
             requested_model="gpt-4o",
         )
 
@@ -450,9 +547,9 @@ class TestLiteLLMClient:
 
         stream = FakeStream()
         client = LiteLLMClient(model="gpt-4o")
-        stream_response = LLMResponse(content="streamed")
+        stream_response = LLMCompletion(content="streamed")
         stream_handler = mocker.patch(
-            "sefia_litellm._client.handle_stream",
+            "sefia_litellm._client.consume_completion_stream",
             new_callable=AsyncMock,
             return_value=stream_response,
         )
@@ -469,60 +566,7 @@ class TestLiteLLMClient:
             output_callback=None,
             reasoning_callback=reasoning_callback,
             messages=[{"role": "user", "content": "Hello"}],
-            output=None,
+            decision_format=None,
+            tool_data_formats={},
             requested_model="gpt-4o",
         )
-
-    async def test_handle_stream_routes_reasoning_and_content_separately(
-        self, mocker: MockerFixture
-    ) -> None:
-        def chunk(
-            *, content: str | None = None, reasoning: str | None = None
-        ) -> SimpleNamespace:
-            delta = SimpleNamespace(content=content, reasoning_content=reasoning)
-            return SimpleNamespace(choices=[SimpleNamespace(delta=delta)])
-
-        async def fake_stream() -> AsyncIterator[SimpleNamespace]:
-            yield chunk(reasoning="Let me ")
-            yield chunk(reasoning="think.")
-            yield chunk(content='{"decision"')
-            yield chunk(content=":...}")
-
-        built = ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(
-                        role="assistant", content='{"decision":...}'
-                    ),
-                )
-            ]
-        )
-        mocker.patch(
-            "litellm.stream_chunk_builder",
-            return_value=built,
-        )
-
-        content_tokens: list[str] = []
-        reasoning_tokens: list[str] = []
-
-        async def on_content(token: str) -> None:
-            content_tokens.append(token)
-
-        async def on_reasoning(token: str) -> None:
-            reasoning_tokens.append(token)
-
-        response = await handle_stream(
-            fake_stream(),
-            content_callback=on_content,
-            output_callback=None,
-            reasoning_callback=on_reasoning,
-            messages=[],
-            output=None,
-            requested_model="gpt-4o",
-        )
-
-        assert reasoning_tokens == ["Let me ", "think."]
-        assert content_tokens == ['{"decision"', ":...}"]
-        assert response.reasoning_content == "Let me think."

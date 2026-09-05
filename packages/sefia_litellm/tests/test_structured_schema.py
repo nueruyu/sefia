@@ -16,14 +16,14 @@ from sefia.event_system import Event, EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.inference import FunctionInfo, StepDecision, ToolCallsDecision
 from sefia.inference import ResultDecision
-from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
+from sefia.llm import LLMClient, LLMInferenceStrategy, LLMCompletion
 from sefia.llm.json_schema import SchemaNode
 from sefia.llm.streaming import (
     JsonOutputStreamDecoder,
     StringEnd as OutputStringEnd,
 )
 from sefia.llm.transports import StructuredDecisionTransport
-from sefia.llm.llm_output import LLMOutput
+from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.pydantic import PydanticModelBackend
@@ -39,7 +39,7 @@ def _decision_model(output_type: Any, tools: list[ToolEntry]) -> DecisionSpec:
 
 
 def _prepare(decision: DecisionSpec):
-    return StructuredDecisionFormat.from_model(decision)
+    return StructuredDecisionFormat.from_spec(decision)
 
 
 def _process(
@@ -48,7 +48,7 @@ def _process(
     tool_call_ids: ToolCallIdRegistry | None = None,
 ) -> StepDecision:
     prepared = _prepare(decision)
-    return decision.validate(prepared.decode(data), tool_call_ids)
+    return decision.validate(prepared.decode({"payload": data}), tool_call_ids)
 
 
 def test_structured_decision_format_returns_defensive_schema_copies() -> None:
@@ -175,8 +175,14 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
     return schema
 
 
+def _decision_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    properties = cast(dict[str, Any], schema["properties"])
+    payload = cast(dict[str, Any], properties["payload"])
+    return _resolve(payload, schema)
+
+
 def _tool_calls_array(schema: dict[str, Any]) -> dict[str, Any]:
-    decision = _resolve(schema, schema)
+    decision = _decision_schema(schema)
     tool_calls = decision["properties"]["tool_calls"]
     if "anyOf" in tool_calls:
         return next(
@@ -210,6 +216,42 @@ def test_tool_only_schema_embeds_tool_argument_schema() -> None:
     assert arguments["required"] == ["question"]
     assert arguments["additionalProperties"] is False
     assert arguments["properties"]["question"]["minLength"] == 1
+
+
+def test_structured_decision_schema_always_uses_payload_envelope() -> None:
+    specs = (
+        _decision_model(Never, [_tool()]),
+        _decision_model(str, [_tool()]),
+        _decision_model(str, []),
+    )
+
+    schemas = [_prepare(spec).schema.to_dict() for spec in specs]
+
+    for schema in schemas:
+        assert schema["type"] == "object"
+        assert schema["required"] == ["payload"]
+        assert schema["additionalProperties"] is False
+        assert "anyOf" not in schema
+        assert set(cast(dict[str, Any], schema["properties"])) == {"payload"}
+    assert "anyOf" not in _decision_schema(schemas[0])
+    assert "anyOf" in _decision_schema(schemas[1])
+    assert "anyOf" not in _decision_schema(schemas[2])
+
+
+@pytest.mark.parametrize(
+    "wire_data",
+    [
+        {"decision": "result", "result": "done"},
+        {"payload": {"decision": "result", "result": "done"}, "extra": None},
+    ],
+)
+def test_structured_decision_decode_requires_exact_payload_envelope(
+    wire_data: Any,
+) -> None:
+    decision_format = _prepare(_decision_model(str, []))
+
+    with pytest.raises(ValueError, match="structured decision envelope"):
+        decision_format.decode(wire_data)
 
 
 @dataclass
@@ -251,7 +293,7 @@ def test_result_shape_cannot_be_mistaken_for_a_tool_call() -> None:
     schema = _prepare(definition).schema.to_dict()
     result_branch = next(
         branch
-        for branch in SchemaNode(schema).any_of()
+        for branch in SchemaNode(_decision_schema(schema)).any_of()
         if branch.properties()["decision"].value["const"] == "result"
     )
     output = result_branch.properties()["result"]
@@ -315,7 +357,7 @@ def test_raw_definition_is_not_normalized_with_typed_decision_model() -> None:
     )
 
     with pytest.raises(ValueError, match=r"missing \['name'\]"):
-        StructuredDecisionFormat.from_model(definition)
+        StructuredDecisionFormat.from_spec(definition)
 
 
 def test_conflicting_tool_definition_names_are_renamed() -> None:
@@ -592,7 +634,7 @@ def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
 
 
 def _result_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    decision = _resolve(schema, schema)
+    decision = _decision_schema(schema)
     return _resolve(decision["properties"]["result"], schema)
 
 
@@ -932,9 +974,9 @@ class TestToolCallValidation:
 
     def _strategy(self, content: str) -> LLMInferenceStrategy:
         client = Mock(spec=LLMClient)
-        client.complete.return_value = LLMResponse(
+        client.complete.return_value = LLMCompletion(
             content=content,
-            structured_output=LLMOutput.from_json(
+            structured_output=StructuredData.from_json(
                 cast(dict[str, Any], json.loads(content))
             ),
         )
@@ -1000,7 +1042,7 @@ class TestToolCallValidation:
             )
 
     async def test_rejects_unknown_argument(self) -> None:
-        with pytest.raises(InvalidInferenceResponseError, match="LLM output failed"):
+        with pytest.raises(InvalidInferenceResponseError, match="LLM decision failed"):
             await self._decide(
                 {
                     "decision": "tool_calls",

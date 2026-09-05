@@ -70,8 +70,9 @@ Rules that keep the layering clean — worth preserving in any change:
 
 ## Inside `sefia` (the core)
 
-Modules with a leading underscore are internal; the public surface is whatever
-`packages/sefia/src/sefia/__init__.py` re-exports.
+Modules with a leading underscore are internal. The package root is the primary
+authoring surface; categorized extension APIs may also live in named public
+submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 
 | Module | Responsibility | Key symbols |
 | --- | --- | --- |
@@ -90,9 +91,10 @@ Modules with a leading underscore are internal; the public surface is whatever
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `streaming.py` | The tool-arg streaming side channel (`preview`). | `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: `step_decision.py` owns the provider-neutral decision specification and validation; prompt renderers own textual representation; transports own response instructions, communication, decoding, and logical progress; `streaming.py` decodes incremental JSON; and `_strategy.py` coordinates transport, validation, and repair. | `LLMInferenceStrategy`, `LLMClient`, `PromptRenderer`, `MarkdownPromptRenderer`, `DecisionSpec`, `DecisionTransport`, `StructuredDecisionTransport`, `PromptedDecisionTransport`, `LLMOutput`, `ResultFormat` |
+| `llm/` | The **default** `InferenceStrategy`: `LLMClient` returns a normalized completion; transports decode it to decision data; `step_decision.py` validates that data; prompt renderers own text; `streaming.py` decodes incremental JSON; and `_strategy.py` coordinates repair. | `LLMInferenceStrategy`, `LLMClient`, `LLMCompletion`, `StructuredData`, `DecodedDecision`, `DecisionSpec`, `DecisionTransport`, `PromptRenderer` |
+| `llm/transports/` | Transport contract and structured, prompted, and native protocols. The private `_native/` package separates native orchestration, prompt/history conversion, result-tool construction, and decoding. | `DecisionTransport`, `StructuredDecisionTransport`, `PromptedDecisionTransport`, `NativeDecisionTransport` |
 | `pydantic/` | The default `ModelBackend`: callable inspection plus result JSON Schema generation and restoration. It does not know the logical step-decision shape. | `PydanticModelBackend` |
-| `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_response`, `tool_calls_response`, `memory_session` |
+| `testing.py` | Public test doubles/helpers for testing sefia-based code (used by the workspace's own tests and available to applications). | `MockLLMClient`, `MemoryHistoryStorage`, `result_completion`, `tool_calls_completion`, `memory_session` |
 
 ### The seams (`_interfaces/`) — the extension ports
 
@@ -102,9 +104,9 @@ implementation noted in parentheses.
 | Interface | Swap to… | Default |
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
-| `PromptRenderer` | change the complete prompt's text format and wording | `llm/MarkdownPromptRenderer` |
-| `DecisionTransport` | change how a decision request is prompted, sent, and decoded | `llm.transports/StructuredDecisionTransport` |
-| `LLMClient` (in `llm/_client.py`) | add an LLM provider | `sefia_litellm.LiteLLMClient` |
+| `PromptRenderer` | change decision-prompt and tool-result text representation | `llm/MarkdownPromptRenderer` |
+| `DecisionTransport` | change how a decision request is prompted, sent, and decoded; raise `sefia.llm.exceptions.DecisionDecodingError` when a completion cannot be decoded as a decision | `llm/transports/` |
+| `LLMClient` (in `llm/_client.py`) | add an LLM provider; raise `sefia.llm.exceptions.LLMCompletionDecodingError` for received responses that cannot be represented safely | `sefia_litellm.LiteLLMClient` |
 | `ModelBackend` | replace callable inspection and result schema generation/restoration together | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `InferenceMiddleware`/`StepMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
@@ -137,12 +139,14 @@ implementation noted in parentheses.
 | Path | Responsibility |
 | --- | --- |
 | `_client.py` | `LiteLLMClient` orchestration, runtime logging configuration, and LiteLLM exception mapping. |
-| `_request.py` | Converts core messages and a logical decision model into LiteLLM messages, kwargs, and native `response_format`. |
-| `_response.py` | Converts completed responses and streams into `LLMResponse`, including callbacks, usage, cost, final output decoding, and shared core JSON stream decoding. |
-| `_schema/_structured_decision.py` | Builds the provider-compatible decision schema and restores provider representations to the logical `DecisionSpec` shape. |
+| `_request.py` | Converts core messages, tools, and a logical decision spec into LiteLLM wire messages and kwargs; selects the adapter schema policy for each tool. |
+| `_response.py` | Decodes one completed LiteLLM response into `LLMCompletion`, including tool-argument restoration, usage, cost, and structured decision data. |
+| `_streaming.py` | Consumes LiteLLM streams, accumulates completion text, and dispatches text, reasoning, and structured-data callbacks before delegating the completed response to `_response.py`. |
+| `_native_tool_stream.py` | Decodes LiteLLM native tool-call fragments into provider-neutral argument progress events. |
+| `_schema/_structured_decision.py` | Builds the provider-compatible decision schema inside a uniform object-root payload envelope, and restores completed output and stream paths to the logical `DecisionSpec` shape. |
 | `_schema/_policy.py` | Declares independent generated/user-defined schema policies, applies permitted corrections, and validates the shared strict-output constraints. |
-| `_schema/_uniform_dictionary.py` | Define uniform-dictionary entry-array encoding and decoding. |
-| `_schema/_value_format.py` | Defines how each result or tool-argument value is represented on the wire and restored at runtime. |
+| `_schema/_uniform_dictionary.py` | Defines uniform-dictionary entry-array encoding and decoding. |
+| `_schema/_data_format.py` | Translates provider-neutral structured data to and from one prepared wire schema; it has no tool knowledge. |
 
 ## Where to change what
 

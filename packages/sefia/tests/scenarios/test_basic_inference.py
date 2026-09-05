@@ -9,14 +9,14 @@ import sefia
 from sefia import Policy, Tools, policy
 from sefia._authoring.metadata import get_metadata
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
-from sefia.llm import LLMResponse, PromptRenderer
+from sefia.llm import LLMCompletion, PromptRenderer
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.llm.transports import PromptedDecisionTransport
 from sefia.testing import (
     MockLLMClient,
     memory_session,
-    result_response,
-    tool_calls_response,
+    result_completion,
+    tool_calls_completion,
 )
 
 infer = sefia.Domain(
@@ -100,15 +100,15 @@ class _PolicyFixture(Policy):
 
 async def test_inference_with_tool_calls():
     mock_llm = MockLLMClient(
-        responses=[
+        completions=[
             # 1. LLM decides to search
-            tool_calls_response(("WebToolkit_search", {"query": "sefia"})),
+            tool_calls_completion(("WebToolkit_search", {"query": "sefia"})),
             # 2. LLM decides to fetch content based on search result
-            tool_calls_response(
+            tool_calls_completion(
                 ("WebToolkit_fetch_content", {"url": "https://example.com/sefia"})
             ),
             # 3. LLM generates the final report
-            result_response(
+            result_completion(
                 Report(
                     topic="sefia",
                     summary="Sefia is a framework for building LLM agents.",
@@ -137,8 +137,8 @@ async def test_inference_with_tool_calls():
 async def test_inference_without_tool_calls():
     # Scenario: The LLM can generate the output in a single step.
     mock_llm = MockLLMClient(
-        responses=[
-            result_response(
+        completions=[
+            result_completion(
                 Report(topic="direct", summary="This is a direct answer.", sources=[])
             )
         ]
@@ -162,8 +162,8 @@ async def test_inference_without_tool_calls():
 
 async def test_session_accepts_a_custom_prompt_renderer():
     mock_llm = MockLLMClient(
-        responses=[
-            result_response(
+        completions=[
+            result_completion(
                 Report(topic="custom", summary="Custom prompt.", sources=[])
             )
         ]
@@ -186,8 +186,8 @@ async def test_session_accepts_a_custom_prompt_renderer():
 
 async def test_session_accepts_a_prompted_decision_transport() -> None:
     mock_llm = MockLLMClient(
-        responses=[
-            LLMResponse(
+        completions=[
+            LLMCompletion(
                 content=json.dumps(
                     {
                         "decision": "result",
@@ -210,17 +210,17 @@ async def test_session_accepts_a_prompted_decision_transport() -> None:
         report = await SimpleAgent().generate_report(topic="prompted")
 
     assert report.topic == "prompted"
-    assert mock_llm.requests[0]["decision_model"] is None
+    assert mock_llm.requests[0]["decision_spec"] is None
     assert '"decision":"result"' in mock_llm.requests[0]["messages"][0]["content"]
 
 
 async def test_inference_with_tool_exception():
     # Scenario: A tool fails, and the error is reported back to the LLM.
     mock_llm = MockLLMClient(
-        responses=[
-            tool_calls_response(("BrokenToolkit_always_fail", {"reason": "test"})),
+        completions=[
+            tool_calls_completion(("BrokenToolkit_always_fail", {"reason": "test"})),
             # LLM receives the error and generates a final report about the failure.
-            result_response(
+            result_completion(
                 Report(
                     topic="failure",
                     summary="The tool failed with a ValueError.",
@@ -257,7 +257,9 @@ async def test_inference_with_tool_exception():
 async def test_inference_with_nonexistent_tool_call():
     # Scenario: LLM calls a tool that does not exist. This is a recoverable
     # malformed decision, not an executor-level tool failure.
-    mock_llm = MockLLMClient(responses=[tool_calls_response(("NonExistent_tool", {}))])
+    mock_llm = MockLLMClient(
+        completions=[tool_calls_completion(("NonExistent_tool", {}))]
+    )
 
     # Repair is disabled so the propagation path itself is under test.
     async with memory_session(
@@ -278,7 +280,7 @@ async def test_inference_with_invalid_decision_model():
     # failure: it surfaces as an InvalidInferenceResponseError (a PauseException),
     # leaving the step resumable on re-invocation.
     mock_llm = MockLLMClient(
-        responses=[result_response({"summary": "This is missing the topic field."})]
+        completions=[result_completion({"summary": "This is missing the topic field."})]
     )
 
     # Repair is disabled so the propagation path itself is under test.
@@ -287,7 +289,7 @@ async def test_inference_with_invalid_decision_model():
     ):
         agent = SimpleAgent()
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output failed validation"
+            InvalidInferenceResponseError, match="LLM decision failed validation"
         ):
             await agent.generate_report(topic="invalid")
 
@@ -297,9 +299,9 @@ async def test_invalid_response_is_repaired_with_feedback():
     # failure from issue #35), then a valid decision once the validation error
     # is fed back. The run succeeds without ever surfacing an error.
     mock_llm = MockLLMClient(
-        responses=[
-            LLMResponse(content=""),
-            result_response(Report(topic="sefia", summary="Repaired.", sources=[])),
+        completions=[
+            LLMCompletion(content=""),
+            result_completion(Report(topic="sefia", summary="Repaired.", sources=[])),
         ]
     )
 
@@ -323,17 +325,17 @@ async def test_inference_on_standalone_function():
         """Summarize the given text to the specified length in sentences."""
         ...
 
-    mock_llm = MockLLMClient(responses=[result_response("This is a summary.")])
+    mock_llm = MockLLMClient(completions=[result_completion("This is a summary.")])
 
     async with memory_session(mock_llm, session_id="standalone-function-test"):
         summary = await summarize_text(text="This is a long text...", length=1)
 
     assert summary == "This is a summary."
     assert len(mock_llm.requests) == 1
-    decision_model = mock_llm.requests[0].get("decision_model")
-    assert isinstance(decision_model, DecisionSpec)
-    assert decision_model.mode is StepDecisionMode.RESULT_ONLY
-    assert decision_model.tools == ()
+    decision_spec = mock_llm.requests[0].get("decision_spec")
+    assert isinstance(decision_spec, DecisionSpec)
+    assert decision_spec.mode is StepDecisionMode.RESULT_ONLY
+    assert decision_spec.tools == ()
 
 
 def test_policy_attaches_metadata():

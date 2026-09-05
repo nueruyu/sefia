@@ -1,10 +1,10 @@
 import pytest
 
-from sefia.llm.llm_output import LLMOutput
+from sefia.llm.structured_data import StructuredData
 
 
-def test_from_json_builds_nested_llm_output() -> None:
-    value = LLMOutput.from_json(
+def test_from_json_builds_nested_structured_data() -> None:
+    value = StructuredData.from_json(
         {"name": "report", "items": [1, True, None], "metadata": {"count": 3}}
     )
 
@@ -16,22 +16,22 @@ def test_from_json_builds_nested_llm_output() -> None:
         None,
     ]
     assert fields["metadata"].to_object()["count"].to_scalar() == 3
-    assert value.data == {
+    assert value.tree == {
         "name": "report",
         "items": [1, True, None],
         "metadata": {"count": 3},
     }
 
 
-def test_parse_json_builds_validated_llm_output() -> None:
-    value = LLMOutput.parse_json('{"items": [1, true, null]}')
+def test_parse_json_builds_validated_structured_data() -> None:
+    value = StructuredData.parse_json('{"items": [1, true, null]}')
 
-    assert value.data == {"items": [1, True, None]}
+    assert value.tree == {"items": [1, True, None]}
 
 
 def test_parse_json_rejects_invalid_json() -> None:
     with pytest.raises(ValueError):
-        LLMOutput.parse_json("not json")
+        StructuredData.parse_json("not json")
 
 
 @pytest.mark.parametrize(
@@ -43,14 +43,14 @@ def test_parse_json_rejects_invalid_json() -> None:
     ],
 )
 def test_shape_accessors_reject_wrong_shape(method: str, message: str) -> None:
-    value = LLMOutput.from_scalar(1)
+    value = StructuredData.from_scalar(1)
 
     with pytest.raises(ValueError, match=message):
         getattr(value, method)()
 
 
 def test_to_object_rejects_mapping_keys() -> None:
-    value = LLMOutput.from_mapping({1: LLMOutput.from_scalar("one")})
+    value = StructuredData.from_mapping({1: StructuredData.from_scalar("one")})
 
     with pytest.raises(ValueError, match="must have string keys"):
         value.to_object("record")
@@ -58,4 +58,4 @@ def test_to_object_rejects_mapping_keys() -> None:
 
 def test_to_scalar_rejects_container() -> None:
     with pytest.raises(ValueError, match="must be a scalar"):
-        LLMOutput.from_array([]).to_scalar()
+        StructuredData.from_array([]).to_scalar()

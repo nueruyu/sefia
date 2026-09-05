@@ -153,6 +153,21 @@ scope = SessionScope(
 Both transports use the same decision format and support token, reasoning-token,
 and streamed tool-argument previews.
 
+LiteLLM can instead expose decisions as provider-native function calls:
+
+```python
+from sefia.llm.transports import NativeDecisionTransport
+
+scope = SessionScope(
+    model="gpt-4o",
+    decision_transport=NativeDecisionTransport(),
+)
+```
+
+The native transport exposes application tools directly and represents a final value
+with a synthetic result tool. It preserves the same validation, repair, and streaming
+behavior as the other transports.
+
 ## Pause for a human, resume after a restart
 
 A turn that pauses for a human and resumes after a restart, served on an ordinary

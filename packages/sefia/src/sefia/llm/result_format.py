@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from .json_schema import JsonSchemaDocument
-from .llm_output import LLMOutput
+from .structured_data import StructuredData
 
 
 class ResultFormat(ABC):
@@ -11,7 +11,7 @@ class ResultFormat(ABC):
     def schema(self) -> JsonSchemaDocument: ...
 
     @abstractmethod
-    def validate(self, value: LLMOutput) -> Any: ...
+    def validate(self, data: StructuredData) -> Any: ...
 
 
 class ResultFormatFactory(ABC):

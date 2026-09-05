@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 
 from typing_extensions import final, override
@@ -13,6 +14,8 @@ from ..streaming import ArgEvent, Scalar, StreamHandler, StringDelta, StringEnd
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
+from ._messages import LLMCompletion
+from .exceptions import DecisionDecodingError, LLMCompletionDecodingError
 from ._prompt_renderer import PromptRenderer, RejectedDecision
 from ._tool_call_ids import ToolCallIdRegistry
 from .result_format import ResultFormatFactory
@@ -23,7 +26,6 @@ from .streaming import (
     StringEnd as OutputStringEnd,
 )
 from .transports import (
-    DecisionDecodingError,
     DecisionObserver,
     DecisionRequest,
     DecisionTransport,
@@ -31,21 +33,28 @@ from .transports import (
 
 
 @final
+class _InvalidDecisionCompletionError(InvalidInferenceResponseError):
+    def __init__(self, detail: str, completion: LLMCompletion) -> None:
+        super().__init__(detail, raw_content=completion.content)
+        self.completion = completion
+
+
+@final
 class _StrategyDecisionObserver(DecisionObserver):
     def __init__(
         self,
         publisher: EventPublisher,
-        decision: DecisionSpec,
+        decision_spec: DecisionSpec,
         tool_arg_streamer: ToolArgStreamer | None,
     ) -> None:
         self._publisher = publisher
-        self._decision = decision
+        self._decision_spec = decision_spec
         self._tool_arg_streamer = tool_arg_streamer
 
     @override
     async def before_request(self, prompt: str) -> None:
         await self._publisher.publish(
-            events.BeforeLLMCall(prompt=prompt, decision=self._decision)
+            events.BeforeLLMCall(prompt=prompt, decision_spec=self._decision_spec)
         )
 
     @override
@@ -123,7 +132,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> StepDecision:
-        decision = DecisionSpec.for_inference(
+        decision_spec = DecisionSpec.for_inference(
             output_type=function_info.return_type,
             tools=tools.get_all(),
             result_format_factory=self._result_format_factory,
@@ -133,7 +142,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         for attempt in range(self._max_repair_attempts + 1):
             request = DecisionRequest(
                 function=function_info,
-                spec=decision,
+                decision_spec=decision_spec,
                 history=tuple(history),
                 rejected=rejected,
             )
@@ -147,10 +156,14 @@ class LLMInferenceStrategy(InferenceStrategy):
                 if attempt == self._max_repair_attempts:
                     raise
                 await publisher.publish(
-                    events.LLMResponseRepairAttempt(error=error, attempt=attempt + 1)
+                    events.DecisionRepairAttempt(error=error, attempt=attempt + 1)
                 )
                 rejected = RejectedDecision(
-                    content=error.raw_content,
+                    content=(
+                        _rejected_completion_content(error.completion)
+                        if isinstance(error, _InvalidDecisionCompletionError)
+                        else error.raw_content
+                    ),
                     reason=error.detail,
                 )
 
@@ -166,39 +179,39 @@ class LLMInferenceStrategy(InferenceStrategy):
         tool_arg_streamer = self._tool_arg_streamer(tools, tool_call_ids)
         observer = _StrategyDecisionObserver(
             publisher,
-            request.spec,
+            request.decision_spec,
             tool_arg_streamer,
         )
 
         try:
-            response = await self._decision_transport.request_decision(
+            decoded = await self._decision_transport.request_decision(
                 client=self.llm_client,
                 prompt_renderer=self._prompt_renderer,
                 request=request,
                 observer=observer,
                 stream=self._stream,
             )
-        except DecisionDecodingError as error:
-            raise InvalidInferenceResponseError(
-                f"LLM output could not be decoded: {error}",
-                raw_content=error.response.content,
+        except (DecisionDecodingError, LLMCompletionDecodingError) as error:
+            raise _InvalidDecisionCompletionError(
+                f"LLM decision could not be decoded: {error}",
+                error.completion,
             ) from error
         finally:
             if tool_arg_streamer is not None:
                 await tool_arg_streamer.close()
 
-        await publisher.publish(events.AfterLLMCall(response.raw))
+        await publisher.publish(events.AfterLLMCall(decoded.completion))
         try:
-            return request.spec.validate(response.output, tool_call_ids)
+            return request.decision_spec.validate(decoded.decision_data, tool_call_ids)
         except UnknownToolDecisionError as error:
-            raise InvalidInferenceResponseError(
-                f"LLM output requested an unknown tool: {error.tool_name!r}",
-                raw_content=response.raw.content,
+            raise _InvalidDecisionCompletionError(
+                f"LLM decision requested an unknown tool: {error.tool_name!r}",
+                decoded.completion,
             ) from error
         except ValueError as error:
-            raise InvalidInferenceResponseError(
-                f"LLM output failed validation: {error}",
-                raw_content=response.raw.content,
+            raise _InvalidDecisionCompletionError(
+                f"LLM decision failed validation: {error}",
+                decoded.completion,
             ) from error
 
     def _tool_arg_streamer(
@@ -218,3 +231,27 @@ def _tool_stream_handlers(tools: ToolRegistry) -> dict[str, StreamHandler]:
         for tool in tools.get_all()
         if tool.stream_handler is not None
     }
+
+
+def _rejected_completion_content(completion: LLMCompletion) -> str | None:
+    if not completion.tool_calls and completion.content is not None:
+        return completion.content
+
+    if not completion.tool_calls and completion.structured_output is None:
+        return None
+
+    response: dict[str, object] = {}
+    if completion.content is not None:
+        response["content"] = completion.content
+    if completion.tool_calls:
+        response["tool_calls"] = [
+            {
+                "id": call.id,
+                "name": call.name,
+                "arguments": call.arguments.tree,
+            }
+            for call in completion.tool_calls
+        ]
+    if completion.structured_output is not None:
+        response["structured_output"] = completion.structured_output.tree
+    return json.dumps(response, ensure_ascii=False, separators=(",", ":"))

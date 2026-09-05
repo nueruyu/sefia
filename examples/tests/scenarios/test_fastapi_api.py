@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import Response
-from sefia.testing import MockLLMClient, result_response, tool_calls_response
+from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefios.fastapi import SefiaHTTP
 
 app_module: ModuleType = import_module("examples.03_fastapi_api.app")
@@ -66,14 +66,14 @@ class TestInterviewFlow:
     def test_pauses_then_resumes_to_completion(self, api: _API) -> None:
         question = "Who is the target audience?"
         api.service._session_scope.llm_client = MockLLMClient(
-            responses=[
-                tool_calls_response(
+            completions=[
+                tool_calls_completion(
                     ("Input_get_input", {"prompt": "What should this be about?"}),
                 ),
-                tool_calls_response(
+                tool_calls_completion(
                     ("Input_get_input", {"prompt": question}),
                 ),
-                result_response(
+                result_completion(
                     Brief(
                         topic="Write about our product.",
                         goal="Inform",

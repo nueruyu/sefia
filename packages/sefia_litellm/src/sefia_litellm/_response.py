@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator, Callable
-from typing import TYPE_CHECKING, Any, Coroutine, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from sefia.llm import LLMResponse, ToolCall
-from sefia.llm.streaming import JsonOutputStreamDecoder, OutputStreamCallback
+from sefia.llm import LLMCompletion, ToolCall
+from sefia.llm.exceptions import LLMCompletionDecodingError
+from sefia.llm.structured_data import StructuredData
 
 from ._schema import StructuredDecisionFormat
+from ._schema._data_format import StructuredDataFormat
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage
@@ -19,112 +20,71 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def handle_response(
+def decode_completion(
     response: ModelResponse,
     *,
     requested_model: str,
-    output: StructuredDecisionFormat | None,
-) -> LLMResponse:
+    decision_format: StructuredDecisionFormat | None,
+    tool_data_formats: dict[str, StructuredDataFormat] | None = None,
+) -> LLMCompletion:
     if not response.choices:
-        raise RuntimeError(
+        raise LLMCompletionDecodingError(
+            LLMCompletion(model=response.model),
             f"LLM returned empty choices (model={requested_model}). "
-            "This may indicate a content filter, provider error, or a LiteLLM bug."
+            "This may indicate a content filter, provider error, or a LiteLLM bug.",
         )
 
     choice: Choices = response.choices[0]
     message = choice.message
-    tool_calls = [_function_tool_call(call) for call in (message.tool_calls or [])]
     usage = cast("Usage | None", cast(dict[str, Any], response).get("usage"))
-    result = LLMResponse(
+    completion = LLMCompletion(
         model=response.model,
         content=message.content,
         reasoning_content=getattr(message, "reasoning_content", None),
-        tool_calls=tool_calls,
         usage=usage.model_dump() if usage else None,
         stop_reason=choice.finish_reason,
         cost=_calculate_cost(response),
     )
-    _decode_output(result, output)
-    return result
+    try:
+        argument_formats = tool_data_formats or {}
+        completion.tool_calls = [
+            _decode_tool_call(call, argument_formats)
+            for call in (message.tool_calls or [])
+        ]
+    except ValueError as error:
+        raise LLMCompletionDecodingError(completion, str(error)) from error
+    _decode_structured_data(completion, decision_format)
+    return completion
 
 
-def _function_tool_call(
+def _decode_tool_call(
     call: ChatCompletionMessageToolCall | ChatCompletionMessageCustomToolCall,
+    tool_data_formats: dict[str, StructuredDataFormat],
 ) -> ToolCall:
     if getattr(call, "type", None) == "custom":
-        raise RuntimeError("LLM returned an unsupported custom tool call")
+        raise ValueError("LLM returned an unsupported custom tool call")
     function_call = cast("ChatCompletionMessageToolCall", call)
-    return ToolCall(
-        id=function_call.id,
-        function=function_call.function.model_dump(),
-    )
+    name = function_call.function.name
+    if not isinstance(name, str) or not name:
+        raise ValueError("Native tool call has no function name.")
+    arguments_json = cast(object, function_call.function.arguments)
+    if not isinstance(arguments_json, str):
+        raise ValueError(f"Native tool call {name!r} has no JSON arguments.")
+    arguments = StructuredData.parse_json(arguments_json)
+    data_format = tool_data_formats.get(name)
+    if data_format is not None:
+        arguments = data_format.decode(arguments)
+    return ToolCall(id=function_call.id, name=name, arguments=arguments)
 
 
-async def handle_stream(
-    stream: AsyncIterator[Any],
-    *,
-    content_callback: Callable[[str], Coroutine[None, None, None]] | None,
-    output_callback: OutputStreamCallback | None,
-    reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
-    messages: list[dict[str, Any]],
-    output: StructuredDecisionFormat | None,
-    requested_model: str,
-) -> LLMResponse:
-    import litellm
-    from litellm import ModelResponse
-
-    chunks: list[Any] = []
-    reasoning_parts: list[str] = []
-    event_decoder = (
-        JsonOutputStreamDecoder()
-        if output is not None and output_callback is not None
-        else None
-    )
-    async for chunk in stream:
-        chunks.append(chunk)
-        choices = getattr(chunk, "choices", None)
-        if not choices:
-            continue
-        delta = getattr(choices[0], "delta", None)
-        reasoning = getattr(delta, "reasoning_content", None)
-        if reasoning:
-            reasoning_parts.append(reasoning)
-            if reasoning_callback is not None:
-                await reasoning_callback(reasoning)
-        content = getattr(delta, "content", None)
-        if content:
-            if content_callback is not None:
-                await content_callback(content)
-            if event_decoder is not None:
-                assert output_callback is not None
-                for event in event_decoder.feed(content):
-                    await output_callback(event)
-
-    build_stream_response = cast(
-        Callable[..., ModelResponse | None],
-        getattr(cast(object, litellm), "stream_chunk_builder"),
-    )
-    response = build_stream_response(chunks=chunks, messages=messages)
-    if not isinstance(response, ModelResponse):
-        raise RuntimeError("Invalid model response")
-
-    result = handle_response(
-        response,
-        requested_model=requested_model,
-        output=output,
-    )
-    if reasoning_parts and result.reasoning_content is None:
-        result.reasoning_content = "".join(reasoning_parts)
-    return result
-
-
-def _decode_output(
-    response: LLMResponse, output: StructuredDecisionFormat | None
+def _decode_structured_data(
+    completion: LLMCompletion,
+    decision_format: StructuredDecisionFormat | None,
 ) -> None:
-    if output is None or response.content is None:
+    if decision_format is None or completion.content is None:
         return
     try:
-        response.structured_output = output.decode_json(response.content)
+        completion.structured_output = decision_format.decode_json(completion.content)
     except ValueError:
         return
 
@@ -148,4 +108,4 @@ def _calculate_cost(response: ModelResponse) -> float | None:
         return None
 
 
-__all__ = ["handle_response", "handle_stream"]
+__all__ = ["decode_completion"]

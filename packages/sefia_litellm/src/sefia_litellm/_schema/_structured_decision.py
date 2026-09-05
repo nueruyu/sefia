@@ -11,18 +11,25 @@ from sefia.llm.json_schema import (
     SchemaKeyword,
     SchemaNode,
 )
-from sefia.llm.llm_output import LLMOutput
-from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
+from sefia.llm.structured_data import StructuredData
+from sefia.llm.step_decision import (
+    DecisionSpec,
+    StepDecisionMode,
+    StepTool,
+    ToolSchemaSource,
+)
+from sefia.llm.streaming import OutputStreamEvent, Scalar, StringDelta, StringEnd
 
-from ._value_format import StructuredValueFormat
+from ._data_format import StructuredDataFormat
 
 K = SchemaKeyword
+_PAYLOAD_FIELD = "payload"
 
 
 @final
 @dataclass(frozen=True)
 class _ToolFormat:
-    arguments: StructuredValueFormat
+    arguments: StructuredDataFormat
     description: str | None
 
 
@@ -31,7 +38,7 @@ class StructuredDecisionFormat:
     def __init__(
         self,
         schema: JsonSchemaDocument,
-        result_format: StructuredValueFormat | None,
+        result_format: StructuredDataFormat | None,
         tool_formats: dict[str, _ToolFormat],
     ) -> None:
         self._schema = schema
@@ -39,114 +46,136 @@ class StructuredDecisionFormat:
         self._tool_formats = tool_formats
 
     @classmethod
-    def from_model(cls, model: DecisionSpec) -> "StructuredDecisionFormat":
+    def from_spec(cls, spec: DecisionSpec) -> "StructuredDecisionFormat":
         result_format = (
-            StructuredValueFormat.from_generated_schema(model.result.schema)
-            if model.result is not None
+            StructuredDataFormat.from_generated_schema(spec.result.schema)
+            if spec.result is not None
             else None
         )
         tool_formats = {
             tool.name: _ToolFormat(
-                arguments=StructuredValueFormat.from_tool(tool),
+                arguments=_tool_data_format(tool),
                 description=tool.description,
             )
-            for tool in model.tools
+            for tool in spec.tools
         }
-        schema = _build_schema(model.mode, result_format, tool_formats)
+        schema = _build_schema(spec.mode, result_format, tool_formats)
         return cls(JsonSchemaDocument(schema), result_format, tool_formats)
 
     @property
     def schema(self) -> JsonSchemaDocument:
         return self._schema
 
-    def decode_json(self, text: str) -> LLMOutput:
-        return self._decode(LLMOutput.parse_json(text))
+    def decode_json(self, text: str) -> StructuredData:
+        return self._decode(StructuredData.parse_json(text))
 
-    def decode(self, data: JsonValue) -> LLMOutput:
-        return self._decode(LLMOutput.from_json(data))
+    def decode(self, data: JsonValue) -> StructuredData:
+        return self._decode(StructuredData.from_json(data))
 
-    def _decode(self, output: LLMOutput) -> LLMOutput:
+    def _decode(self, data: StructuredData) -> StructuredData:
+        envelope = data.to_object("structured decision envelope")
+        if set(envelope) != {_PAYLOAD_FIELD}:
+            raise ValueError(
+                "structured decision envelope must contain only the payload field"
+            )
+        data = envelope[_PAYLOAD_FIELD]
+
         try:
-            fields = output.to_object()
+            fields = data.to_object()
         except ValueError:
-            return output
+            return data
         decision = fields.get("decision")
         try:
             decision_name = decision.to_string() if decision is not None else None
         except ValueError:
-            return output
+            return data
         if decision_name == "result":
-            return self._decode_result(output, fields)
+            return self._decode_result(data, fields)
         if decision_name == "tool_calls":
-            return self._decode_tool_calls(output, fields)
-        return output
+            return self._decode_tool_calls(data, fields)
+        return data
 
     def _decode_result(
-        self, output: LLMOutput, fields: dict[str, LLMOutput]
-    ) -> LLMOutput:
+        self, data: StructuredData, fields: dict[str, StructuredData]
+    ) -> StructuredData:
         if self._result_format is None or "result" not in fields:
-            return output
-        return LLMOutput.from_object(
+            return data
+        return StructuredData.from_object(
             {**fields, "result": self._result_format.decode(fields["result"])}
         )
 
     def _decode_tool_calls(
-        self, output: LLMOutput, fields: dict[str, LLMOutput]
-    ) -> LLMOutput:
+        self, data: StructuredData, fields: dict[str, StructuredData]
+    ) -> StructuredData:
         tool_calls = fields.get("tool_calls")
         if tool_calls is None:
-            return output
+            return data
         try:
             calls = tool_calls.to_array()
         except ValueError:
-            return output
-        return LLMOutput.from_object(
+            return data
+        return StructuredData.from_object(
             {
                 **fields,
-                "tool_calls": LLMOutput.from_array(
+                "tool_calls": StructuredData.from_array(
                     self._decode_tool_call(call) for call in calls
                 ),
             }
         )
 
-    def _decode_tool_call(self, output: LLMOutput) -> LLMOutput:
+    def _decode_tool_call(self, data: StructuredData) -> StructuredData:
         try:
-            fields = output.to_object()
+            fields = data.to_object()
         except ValueError:
-            return output
+            return data
         name = fields.get("name")
         try:
             tool_name = name.to_string() if name is not None else None
         except ValueError:
-            return output
+            return data
         tool_format = (
             self._tool_formats.get(tool_name) if tool_name is not None else None
         )
         if tool_format is None or "arguments" not in fields:
-            return output
-        return LLMOutput.from_object(
+            return data
+        return StructuredData.from_object(
             {
                 **fields,
                 "arguments": tool_format.arguments.decode(fields["arguments"]),
             }
         )
 
+    def decode_stream_event(self, event: OutputStreamEvent) -> OutputStreamEvent | None:
+        if not event.path or event.path[0] != _PAYLOAD_FIELD:
+            return None
+        path = event.path[1:]
+        if isinstance(event, StringDelta):
+            return StringDelta(path, event.text)
+        if isinstance(event, StringEnd):
+            return StringEnd(path, event.value)
+        return Scalar(path, event.value)
+
+
+def _tool_data_format(tool: StepTool) -> StructuredDataFormat:
+    if tool.schema_source is ToolSchemaSource.GENERATED:
+        return StructuredDataFormat.from_generated_schema(tool.arguments)
+    return StructuredDataFormat.from_user_schema(tool.arguments)
+
 
 def _build_schema(
     mode: StepDecisionMode,
-    result_format: StructuredValueFormat | None,
+    result_format: StructuredDataFormat | None,
     tool_formats: dict[str, _ToolFormat],
 ) -> JsonObject:
     definitions: JsonObject = {}
     registry = DefinitionRegistry(definitions)
-    root = SchemaNode(
-        _decision_schema(
-            mode,
-            result_format,
-            tool_formats,
-            registry,
-        )
+    decision = _decision_schema(
+        mode,
+        result_format,
+        tool_formats,
+        registry,
     )
+    root = SchemaNode.object_schema({_PAYLOAD_FIELD: decision})
     if definitions:
         root.set_definitions(definitions)
     return root.value
@@ -154,7 +183,7 @@ def _build_schema(
 
 def _decision_schema(
     mode: StepDecisionMode,
-    result_format: StructuredValueFormat | None,
+    result_format: StructuredDataFormat | None,
     tool_formats: dict[str, _ToolFormat],
     registry: DefinitionRegistry,
 ) -> JsonObject:

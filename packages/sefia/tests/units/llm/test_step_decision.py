@@ -13,12 +13,12 @@ from sefia.inference import (
     ResultDecision,
     ToolCallsDecision,
 )
-from sefia.llm import LLMClient, LLMInferenceStrategy, LLMResponse
+from sefia.llm import LLMClient, LLMInferenceStrategy, LLMCompletion
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.llm.transports import StructuredDecisionTransport
 from sefia.llm.json_schema import JsonValue
-from sefia.llm.llm_output import LLMOutput
+from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticModelBackend
 
 
@@ -66,10 +66,12 @@ class _StepDecisionFixture:
 
     def validate(
         self,
-        data: LLMOutput | JsonValue,
+        data: StructuredData | JsonValue,
         tool_call_ids: ToolCallIdRegistry | None = None,
     ):
-        value = data if isinstance(data, LLMOutput) else LLMOutput.from_json(data)
+        value = (
+            data if isinstance(data, StructuredData) else StructuredData.from_json(data)
+        )
         return self.decision.validate(value, tool_call_ids)
 
 
@@ -157,7 +159,7 @@ class TestToolsRequiredDecision:
     def test_process_decision_accepts_tool_calls(self):
         step = _step(Never, [_tool(chat_tool)])
 
-        data = LLMOutput.from_json(
+        data = StructuredData.from_json(
             {
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "chat_tool", "arguments": {}}],
@@ -174,9 +176,9 @@ class TestToolsRequiredDecision:
             '{"decision": "tool_calls", '
             '"tool_calls": [{"name": "chat_tool", "arguments": {}}]}'
         )
-        mock_client.complete.return_value = LLMResponse(
+        mock_client.complete.return_value = LLMCompletion(
             content=content,
-            structured_output=LLMOutput.parse_json(content),
+            structured_output=StructuredData.parse_json(content),
         )
         strategy = _make_strategy(mock_client)
 
@@ -194,14 +196,14 @@ class TestToolsRequiredDecision:
     ):
         mock_client = AsyncMock()
         content = '{"decision": "result", "result": "bye"}'
-        mock_client.complete.return_value = LLMResponse(
+        mock_client.complete.return_value = LLMCompletion(
             content=content,
-            structured_output=LLMOutput.parse_json(content),
+            structured_output=StructuredData.parse_json(content),
         )
         strategy = _make_strategy(mock_client)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output failed validation"
+            InvalidInferenceResponseError, match="LLM decision failed validation"
         ):
             await strategy.decide_next_step(
                 _function_info(return_type=Never, instructions="chat"),

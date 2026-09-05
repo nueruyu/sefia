@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from pytest_mock import MockerFixture
 
-from sefia.llm import LLMResponse
+from sefia.llm import LLMCompletion
 from sefia.llm.events import AfterLLMCall
 from sefios.handlers import CostCalculator, CostState
 
@@ -23,7 +23,7 @@ class TestCostCalculator:
     async def test_calculates_and_saves_cost(self, mock_state_store: Mock) -> None:
         handler = CostCalculator()
         event = AfterLLMCall(
-            LLMResponse(
+            LLMCompletion(
                 model="gpt-4",
                 usage={"completion_tokens": 50, "prompt_tokens": 100},
                 cost=0.0015,
@@ -38,7 +38,7 @@ class TestCostCalculator:
         mock_state_store.ensure.return_value = CostState(cost=0.01)
         handler = CostCalculator()
         event = AfterLLMCall(
-            LLMResponse(
+            LLMCompletion(
                 model="gpt-4",
                 usage={"completion_tokens": 10, "prompt_tokens": 20},
                 cost=0.0005,
@@ -53,7 +53,7 @@ class TestCostCalculator:
         self, mock_state_store: Mock
     ) -> None:
         handler = CostCalculator()
-        event = AfterLLMCall(LLMResponse(model="gpt-4", cost=None))
+        event = AfterLLMCall(LLMCompletion(model="gpt-4", cost=None))
 
         await handler.handle(event)
 

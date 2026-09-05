@@ -6,8 +6,8 @@ from sefia import JsonSchemaToolEntry
 from sefia.testing import (
     MockLLMClient,
     memory_session,
-    result_response,
-    tool_calls_response,
+    result_completion,
+    tool_calls_completion,
 )
 from sefia.tool_collectors import StaticToolCollector
 
@@ -58,9 +58,9 @@ async def test_json_schema_tool_reaches_the_llm_and_is_dispatched():
     )
 
     mock_llm = MockLLMClient(
-        responses=[
-            tool_calls_response(("search", {"query": "sefia"})),
-            result_response(
+        completions=[
+            tool_calls_completion(("search", {"query": "sefia"})),
+            result_completion(
                 Report(
                     topic="sefia",
                     summary="Sefia is a framework for building LLM agents.",
@@ -83,9 +83,9 @@ async def test_json_schema_tool_reaches_the_llm_and_is_dispatched():
     # The handler was dispatched with the decoded arguments.
     assert calls == [{"query": "sefia"}]
 
-    decision_model = mock_llm.requests[0]["decision_model"]
-    assert decision_model is not None
-    tool = decision_model.tools[0]
+    decision_spec = mock_llm.requests[0]["decision_spec"]
+    assert decision_spec is not None
+    tool = decision_spec.tools[0]
     assert tool.name == "search"
     assert tool.description == "Search the corpus for a query."
     assert tool.arguments.to_dict() == _SEARCH_SCHEMA

@@ -9,8 +9,8 @@ from glyff.store import MemoryBackend
 
 from sefia import Session, Tools
 from sefia.exceptions import PauseException
-from sefia.llm import LLMResponse
-from sefia.testing import MockLLMClient, result_response, tool_calls_response
+from sefia.llm import LLMCompletion
+from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefios import domain, MemorySessionStorage, get_call_state_store
 from sefios._session_state import bind_session_storage, get_state_store
 
@@ -80,11 +80,11 @@ class TestStatefulTool:
         self,
         serializer: Serializer,
         hasher: ArgumentCanonicalizer,
-        make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+        make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
     ) -> None:
         mock_responses = [
-            tool_calls_response(("Input_ask_user", {"prompt": "What is your name?"})),
-            result_response(
+            tool_calls_completion(("Input_ask_user", {"prompt": "What is your name?"})),
+            result_completion(
                 Report(
                     topic="User Info",
                     summary="The user's name is Alice.",
@@ -156,12 +156,12 @@ class TestStatefulTool:
         self,
         serializer: Serializer,
         hasher: ArgumentCanonicalizer,
-        make_mock_llm: Callable[[list[LLMResponse]], MockLLMClient],
+        make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
     ) -> None:
         mock_responses = [
-            tool_calls_response(("Input_ask_user", {"prompt": "Name?"})),
-            tool_calls_response(("Input_ask_user", {"prompt": "Age?"})),
-            result_response(
+            tool_calls_completion(("Input_ask_user", {"prompt": "Name?"})),
+            tool_calls_completion(("Input_ask_user", {"prompt": "Age?"})),
+            result_completion(
                 Report(topic="Profile", summary="Alice is 99.", sources=[])
             ),
         ]

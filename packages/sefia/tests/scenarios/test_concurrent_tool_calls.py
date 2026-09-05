@@ -12,8 +12,8 @@ from sefia.exceptions import PauseException
 from sefia.testing import (
     MockLLMClient,
     memory_session,
-    result_response,
-    tool_calls_response,
+    result_completion,
+    tool_calls_completion,
 )
 
 infer = sefia.Domain(
@@ -63,12 +63,12 @@ class Researcher:
 
 async def test_concurrent_calls_in_one_decision_overlap():
     mock_llm = MockLLMClient(
-        responses=[
-            tool_calls_response(
+        completions=[
+            tool_calls_completion(
                 ("HandshakeToolkit_wait_for_peer", {}),
                 ("HandshakeToolkit_release_peer", {}),
             ),
-            result_response(Report(topic="t", summary="s", sources=[])),
+            result_completion(Report(topic="t", summary="s", sources=[])),
         ]
     )
 
@@ -118,12 +118,12 @@ class Assistant:
 
 async def test_pause_in_concurrent_batch_resumes_without_rerunning_sibling():
     mock_llm = MockLLMClient(
-        responses=[
-            tool_calls_response(
+        completions=[
+            tool_calls_completion(
                 ("PausingToolkit_fetch_data", {"key": "alpha"}),
                 ("PausingToolkit_ask_user", {"question": "Proceed?"}),
             ),
-            result_response(Report(topic="t", summary="approved", sources=[])),
+            result_completion(Report(topic="t", summary="approved", sources=[])),
         ]
     )
     toolkit = PausingToolkit()

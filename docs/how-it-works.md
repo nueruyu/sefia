@@ -83,9 +83,11 @@ domain concepts:
 2. `DecisionRequest` gathers the task, available tools, prior interactions, and any
    rejected response.
 3. `DecisionTransport` supplies the response instructions for its protocol and asks
-   `PromptRenderer` to produce one complete text string.
-4. The transport sends that text and decodes the reply as a logical decision response.
-5. `DecisionSpec` validates that response as a `StepDecision`.
+   `PromptRenderer` to produce the required text.
+4. `LLMClient.complete()` returns a provider-neutral `LLMCompletion`.
+5. The transport decodes its protocol into `DecodedDecision`; its `decision_data` is
+   structured but not yet semantically valid.
+6. `DecisionSpec` validates that data as a `StepDecision`.
 
 `DecisionSpec` selects one of three shapes:
 
@@ -100,15 +102,17 @@ domain concepts:
 `StepDecision`s. `llm/json_schema` imports `$defs`, resolves name collisions, and
 rewrites local references without knowing about tools or Pydantic. Recursive JSON
 value types and `SchemaNode` accessors keep schema traversal out of `dict[str, Any]`.
-The same decision object is visible to the model regardless of transport:
+Every transport returns the same logical decision:
 `{"decision":"tool_calls",...}` or `{"decision":"result",...}`. A provider adapter
-may change how values are represented to satisfy a structured-output API, but it
-restores the same logical decision before returning it.
+may change the wire representation to satisfy a structured-output API. The LiteLLM
+adapter nests every structured decision under a required `payload` property, giving
+all decision modes the same object-root wire shape. It removes that envelope from
+completed output and stream paths.
 
 The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
 reflects callable parameters, while `_result_format.py` produces a JSON Schema and
-restores a decoded result to its declared Python type. Generic decoded-value shape
-operations live on `LLMOutput`; the backend does not know the step-decision
+restores a decoded result to its declared Python type. Provider-neutral tree
+operations live on `StructuredData`; the backend does not know the step-decision
 shape. Provider-side response decoding and stream-path normalization stay inside the
 client implementation.
 
@@ -116,18 +120,23 @@ client implementation.
 result format, and tools, and validates a returned value as the corresponding
 `StepDecision`. Step-decision specifications live in `sefia.llm.step_decision`;
 result schema interfaces and decoded values live in `sefia.llm.result_format` and
-`sefia.llm.llm_output`.
+`sefia.llm.structured_data`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 `MarkdownPromptRenderer` owns the textual representation of instructions, arguments,
-tool descriptions, prior tool interactions, response forms, and repair feedback. It
-returns text, not protocol messages. A transport owns the response instructions,
-invokes the renderer, sends the resulting prompt, and decodes the reply.
+tool descriptions, prior tool interactions, tool results, response forms, and repair
+feedback. It returns text, not protocol messages. A
+transport chooses which concepts are textual, owns the response instructions, invokes
+the renderer, sends protocol messages, and decodes the reply.
 `StructuredDecisionTransport` requests structured output;
 `PromptedDecisionTransport` asks for the same JSON decision in ordinary response
-text. Both return the same `DecisionResponse` and logical progress events, so final
-results, repair, token streams, reasoning streams, and tool-argument previews do not
-depend on the selected transport.
+text; `sefia.llm.transports.NativeDecisionTransport` exposes application tools and a
+synthetic result tool through the client's function-call protocol, and represents
+prior calls and results as native messages. All return the
+same `DecodedDecision` (`decision_data` plus its originating `completion`) and logical
+progress events, so final results, repair, token
+streams, reasoning streams, and tool-argument previews do not depend on the selected
+transport.
 
 An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
 first **repaired in place**: the strategy creates a new request containing the

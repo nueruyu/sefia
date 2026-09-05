@@ -1,26 +1,9 @@
-from dataclasses import asdict, dataclass, field, is_dataclass
-from typing import Any, Literal, cast
+from __future__ import annotations
 
-from .llm_output import LLMOutput
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
-
-def _to_serializable(value: Any, exclude_none: bool) -> Any:
-    if is_dataclass(value) and not isinstance(value, type):
-        return _to_serializable(asdict(value), exclude_none=exclude_none)
-    if isinstance(value, dict):
-        result: dict[str, Any] = {}
-        for key, item in cast(dict[str, Any], value).items():
-            converted = _to_serializable(item, exclude_none=exclude_none)
-            if exclude_none and converted is None:
-                continue
-            result[key] = converted
-        return result
-    if isinstance(value, list):
-        return [
-            _to_serializable(item, exclude_none=exclude_none)
-            for item in cast(list[Any], value)
-        ]
-    return value
+from .structured_data import StructuredData
 
 
 @dataclass
@@ -30,12 +13,7 @@ class Message:
     role: Literal["system", "user", "assistant", "tool"]
     content: str | list[Any] | None = None
     tool_call_id: str | None = None  # Required for role="tool" messages
-    tool_calls: list[Any] | None = (
-        None  # Present on role="assistant" messages with tool calls
-    )
-
-    def to_dict(self, *, exclude_none: bool = False) -> dict[str, Any]:
-        return _to_serializable(self, exclude_none=exclude_none)
+    tool_calls: list[ToolCall] | None = None
 
 
 @dataclass
@@ -43,12 +21,13 @@ class ToolCall:
     """Represents a tool call requested by the LLM."""
 
     id: str
-    function: dict[str, Any]  # {"name": "...", "arguments": "..."}
+    name: str
+    arguments: StructuredData
 
 
 @dataclass
-class LLMResponse:
-    """Represents a response from an LLM."""
+class LLMCompletion:
+    """A provider-neutral completion returned by an ``LLMClient``."""
 
     model: str | None = None
     content: str | None = None
@@ -57,4 +36,4 @@ class LLMResponse:
     usage: dict[str, Any] | None = None
     stop_reason: str | None = None
     cost: float | None = None
-    structured_output: LLMOutput | None = None
+    structured_output: StructuredData | None = None
