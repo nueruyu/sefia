@@ -16,7 +16,12 @@ from sefia.inference import (
     ToolCallRequest,
     ToolCallResult,
 )
-from sefia.llm import LLMInferenceStrategy, LLMCompletion, MarkdownPromptRenderer
+from sefia.llm import (
+    LLMCompletion,
+    LLMInferenceStrategy,
+    MarkdownPromptRenderer,
+    ToolCall,
+)
 from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.events import (
     LLMReasoningTokenReceived,
@@ -24,7 +29,7 @@ from sefia.llm.events import (
     LLMTokenReceived,
 )
 from sefia.llm.structured_data import StructuredData
-from sefia.llm.transports import StructuredDecisionTransport
+from sefia.llm.transports import NativeDecisionTransport, StructuredDecisionTransport
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
 
@@ -448,6 +453,44 @@ class TestResponseRepair:
         assert isinstance(decision, ToolCallsDecision)
         assert decision.calls[0].name == "my_tool"
         assert client.complete.await_count == 2
+
+    async def test_native_repair_includes_rejected_tool_call(self) -> None:
+        client = AsyncMock()
+        client.complete.side_effect = [
+            LLMCompletion(
+                tool_calls=[
+                    ToolCall(
+                        id="call-1",
+                        name="no_such_tool",
+                        arguments=StructuredData.from_json({"query": "lost"}),
+                    )
+                ]
+            ),
+            LLMCompletion(
+                tool_calls=[
+                    ToolCall(
+                        id="call-2",
+                        name="return_result",
+                        arguments=StructuredData.from_json({"result": "done"}),
+                    )
+                ]
+            ),
+        ]
+        strategy = LLMInferenceStrategy(
+            llm_client=client,
+            result_format_factory=PydanticModelBackend(),
+            prompt_renderer=MarkdownPromptRenderer(json_default=pydantic_json_default),
+            decision_transport=NativeDecisionTransport(),
+        )
+
+        decision = await strategy.decide_next_step(
+            _function_info(), [], _tool_registry(my_tool), MockEventPublisher()
+        )
+
+        assert isinstance(decision, ResultDecision)
+        retry_prompt = client.complete.await_args_list[1].kwargs["messages"][0]
+        assert '"name":"no_such_tool"' in str(retry_prompt.content)
+        assert '"arguments":{"query":"lost"}' in str(retry_prompt.content)
 
     async def test_repair_does_not_mutate_history(self):
         client = AsyncMock()

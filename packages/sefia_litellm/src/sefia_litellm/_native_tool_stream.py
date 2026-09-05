@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import cast
+from typing import Protocol
 
 from typing_extensions import final
 
@@ -15,11 +15,20 @@ from sefia.llm.streaming import (
 from ._schema._data_format import StructuredDataFormat
 
 
-@dataclass(frozen=True)
-class NativeToolCallFragment:
-    index: int
-    name: str | None
-    arguments_json: str | None
+class _FunctionCallDelta(Protocol):
+    @property
+    def name(self) -> str | None: ...
+
+    @property
+    def arguments(self) -> str: ...
+
+
+class NativeToolCallDelta(Protocol):
+    @property
+    def index(self) -> int: ...
+
+    @property
+    def function(self) -> _FunctionCallDelta: ...
 
 
 @dataclass
@@ -30,52 +39,25 @@ class _ToolCallState:
     decoder: JsonOutputStreamDecoder = field(default_factory=JsonOutputStreamDecoder)
 
 
-def extract_native_tool_call_fragments(
-    calls: object,
-) -> list[NativeToolCallFragment]:
-    if not isinstance(calls, list):
-        return []
-
-    fragments: list[NativeToolCallFragment] = []
-    for call in cast(list[object], calls):
-        index = getattr(call, "index", None)
-        function = getattr(call, "function", None)
-        if not isinstance(index, int) or function is None:
-            continue
-        name = getattr(function, "name", None)
-        arguments = getattr(function, "arguments", None)
-        fragments.append(
-            NativeToolCallFragment(
-                index=index,
-                name=name if isinstance(name, str) and name else None,
-                arguments_json=(
-                    arguments if isinstance(arguments, str) and arguments else None
-                ),
-            )
-        )
-    return fragments
-
-
 @final
-class NativeToolStreamDecoder:
+class NativeToolCallStreamDecoder:
     """Decodes LiteLLM tool-call fragments into logical decision events."""
 
     def __init__(self, tool_data_formats: dict[str, StructuredDataFormat]) -> None:
         self._tool_data_formats = tool_data_formats
         self._calls: dict[int, _ToolCallState] = {}
 
-    def feed(self, fragments: list[NativeToolCallFragment]) -> list[OutputStreamEvent]:
+    def feed(self, calls: list[NativeToolCallDelta]) -> list[OutputStreamEvent]:
         events: list[OutputStreamEvent] = []
-        for fragment in fragments:
-            state = self._calls.setdefault(fragment.index, _ToolCallState())
-            if fragment.name is not None and state.name is None:
-                state.name = fragment.name
-                events.append(
-                    StringEnd(("tool_calls", fragment.index, "name"), fragment.name)
-                )
-            if fragment.arguments_json:
-                state.arguments_json += fragment.arguments_json
-            events.extend(self._decode_available(fragment.index, state))
+        for call in calls:
+            state = self._calls.setdefault(call.index, _ToolCallState())
+            name = call.function.name
+            if name and state.name is None:
+                state.name = name
+                events.append(StringEnd(("tool_calls", call.index, "name"), name))
+            if call.function.arguments:
+                state.arguments_json += call.function.arguments
+            events.extend(self._decode_available(call.index, state))
         return events
 
     def finish(self) -> list[OutputStreamEvent]:
@@ -153,10 +135,3 @@ def _tool_argument_event(index: int, event: OutputStreamEvent) -> OutputStreamEv
         return StringEnd(path, event.value)
     assert isinstance(event, Scalar)
     return Scalar(path, event.value)
-
-
-__all__ = [
-    "NativeToolCallFragment",
-    "NativeToolStreamDecoder",
-    "extract_native_tool_call_fragments",
-]

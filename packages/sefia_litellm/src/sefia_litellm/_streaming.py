@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
-from typing import Any, Coroutine, cast
+from typing import Any, Coroutine, Protocol, cast
 
 from typing_extensions import final
 
@@ -13,13 +13,16 @@ from sefia.llm.streaming import (
     OutputStreamEvent,
 )
 
-from ._native_tool_stream import (
-    NativeToolStreamDecoder,
-    extract_native_tool_call_fragments,
-)
+from ._native_tool_stream import NativeToolCallDelta, NativeToolCallStreamDecoder
 from ._response import decode_completion
 from ._schema import StructuredDecisionFormat
 from ._schema._data_format import StructuredDataFormat
+
+
+class _CompletionDelta(Protocol):
+    content: str | None
+    reasoning_content: str | None
+    tool_calls: list[NativeToolCallDelta] | None
 
 
 async def consume_completion_stream(
@@ -49,7 +52,9 @@ async def consume_completion_stream(
         choices = getattr(chunk, "choices", None)
         if not choices:
             continue
-        await state.feed(getattr(choices[0], "delta", None))
+        await state.feed(
+            cast(_CompletionDelta | None, getattr(choices[0], "delta", None))
+        )
 
     await state.finish()
 
@@ -100,7 +105,7 @@ class _CompletionStreamState:
             else None
         )
         self._native_decoder = (
-            NativeToolStreamDecoder(tool_data_formats)
+            NativeToolCallStreamDecoder(tool_data_formats)
             if tool_data_formats and output_callback is not None
             else None
         )
@@ -113,15 +118,18 @@ class _CompletionStreamState:
     def content_text(self) -> str:
         return "".join(self._content_parts)
 
-    async def feed(self, delta: object) -> None:
+    async def feed(self, delta: _CompletionDelta | None) -> None:
+        if delta is None:
+            return
+
         reasoning = getattr(delta, "reasoning_content", None)
         if isinstance(reasoning, str) and reasoning:
             self._reasoning_parts.append(reasoning)
             if self._reasoning_callback is not None:
                 await self._reasoning_callback(reasoning)
 
-        content = getattr(delta, "content", None)
-        if isinstance(content, str) and content:
+        content = delta.content
+        if content:
             self._content_parts.append(content)
             if self._content_callback is not None:
                 await self._content_callback(content)
@@ -129,10 +137,7 @@ class _CompletionStreamState:
                 await self._emit(self._structured_decoder.feed(content))
 
         if self._native_decoder is not None:
-            fragments = extract_native_tool_call_fragments(
-                getattr(delta, "tool_calls", None)
-            )
-            await self._emit(self._native_decoder.feed(fragments))
+            await self._emit(self._native_decoder.feed(delta.tool_calls or []))
 
     async def finish(self) -> None:
         if self._native_decoder is not None:

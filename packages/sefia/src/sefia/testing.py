@@ -53,12 +53,10 @@ def _snapshot_value(value: Any) -> Any:
                 result[item.name] = converted
         return result
     if isinstance(value, dict):
-        result = {}
-        for key, item in cast(dict[str, Any], value).items():
-            converted = _snapshot_value(item)
-            if converted is not None:
-                result[key] = converted
-        return result
+        return {
+            key: _snapshot_value(item)
+            for key, item in cast(dict[str, Any], value).items()
+        }
     if isinstance(value, list):
         return [_snapshot_value(item) for item in cast(list[Any], value)]
     return value

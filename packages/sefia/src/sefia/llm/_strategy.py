@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 
 from typing_extensions import final, override
@@ -13,6 +14,7 @@ from ..streaming import ArgEvent, Scalar, StreamHandler, StringDelta, StringEnd
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
+from ._messages import LLMCompletion
 from .exceptions import DecisionDecodingError, LLMCompletionDecodingError
 from ._prompt_renderer import PromptRenderer, RejectedDecision
 from ._tool_call_ids import ToolCallIdRegistry
@@ -28,6 +30,13 @@ from .transports import (
     DecisionRequest,
     DecisionTransport,
 )
+
+
+@final
+class _InvalidDecisionCompletionError(InvalidInferenceResponseError):
+    def __init__(self, detail: str, completion: LLMCompletion) -> None:
+        super().__init__(detail, raw_content=completion.content)
+        self.completion = completion
 
 
 @final
@@ -150,7 +159,11 @@ class LLMInferenceStrategy(InferenceStrategy):
                     events.DecisionRepairAttempt(error=error, attempt=attempt + 1)
                 )
                 rejected = RejectedDecision(
-                    content=error.raw_content,
+                    content=(
+                        _rejected_completion_content(error.completion)
+                        if isinstance(error, _InvalidDecisionCompletionError)
+                        else error.raw_content
+                    ),
                     reason=error.detail,
                 )
 
@@ -179,9 +192,9 @@ class LLMInferenceStrategy(InferenceStrategy):
                 stream=self._stream,
             )
         except (DecisionDecodingError, LLMCompletionDecodingError) as error:
-            raise InvalidInferenceResponseError(
+            raise _InvalidDecisionCompletionError(
                 f"LLM decision could not be decoded: {error}",
-                raw_content=error.completion.content,
+                error.completion,
             ) from error
         finally:
             if tool_arg_streamer is not None:
@@ -191,14 +204,14 @@ class LLMInferenceStrategy(InferenceStrategy):
         try:
             return request.decision_spec.validate(decoded.decision_data, tool_call_ids)
         except UnknownToolDecisionError as error:
-            raise InvalidInferenceResponseError(
+            raise _InvalidDecisionCompletionError(
                 f"LLM decision requested an unknown tool: {error.tool_name!r}",
-                raw_content=decoded.completion.content,
+                decoded.completion,
             ) from error
         except ValueError as error:
-            raise InvalidInferenceResponseError(
+            raise _InvalidDecisionCompletionError(
                 f"LLM decision failed validation: {error}",
-                raw_content=decoded.completion.content,
+                decoded.completion,
             ) from error
 
     def _tool_arg_streamer(
@@ -218,3 +231,27 @@ def _tool_stream_handlers(tools: ToolRegistry) -> dict[str, StreamHandler]:
         for tool in tools.get_all()
         if tool.stream_handler is not None
     }
+
+
+def _rejected_completion_content(completion: LLMCompletion) -> str | None:
+    if not completion.tool_calls and completion.content is not None:
+        return completion.content
+
+    if not completion.tool_calls and completion.structured_output is None:
+        return None
+
+    response: dict[str, object] = {}
+    if completion.content is not None:
+        response["content"] = completion.content
+    if completion.tool_calls:
+        response["tool_calls"] = [
+            {
+                "id": call.id,
+                "name": call.name,
+                "arguments": call.arguments.tree,
+            }
+            for call in completion.tool_calls
+        ]
+    if completion.structured_output is not None:
+        response["structured_output"] = completion.structured_output.tree
+    return json.dumps(response, ensure_ascii=False, separators=(",", ":"))

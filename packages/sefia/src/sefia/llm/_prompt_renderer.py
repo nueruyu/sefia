@@ -26,10 +26,9 @@ class PromptRenderer(ABC):
     @abstractmethod
     def render(self, prompt: DecisionPrompt) -> str: ...
 
-    @abstractmethod
     def render_tool_result(self, result: object) -> str:
         """Render a tool result for a native tool-result message."""
-        ...
+        return str(result)
 
 
 __all__ = [

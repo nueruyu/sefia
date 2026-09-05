@@ -1,21 +1,34 @@
-from types import SimpleNamespace
+from dataclasses import dataclass
+
+from sefia.llm.streaming import StringEnd
 
 from sefia_litellm._native_tool_stream import (
-    extract_native_tool_call_fragments,
+    NativeToolCallDelta,
+    NativeToolCallStreamDecoder,
 )
 
 
-def test_extracts_fragments_without_decoding_argument_json() -> None:
-    fragments = extract_native_tool_call_fragments(
-        [
-            SimpleNamespace(
-                index=2,
-                function=SimpleNamespace(name="lookup", arguments='{"key":"'),
-            )
-        ]
-    )
+@dataclass
+class _FunctionDelta:
+    name: str | None
+    arguments: str
 
-    assert len(fragments) == 1
-    assert fragments[0].index == 2
-    assert fragments[0].name == "lookup"
-    assert fragments[0].arguments_json == '{"key":"'
+
+@dataclass
+class _CallDelta:
+    index: int
+    function: _FunctionDelta
+
+
+def test_decodes_typed_tool_call_fragments() -> None:
+    decoder = NativeToolCallStreamDecoder({})
+    calls: list[NativeToolCallDelta] = [
+        _CallDelta(
+            index=2,
+            function=_FunctionDelta(name="lookup", arguments='{"key":"'),
+        )
+    ]
+
+    events = decoder.feed(calls)
+
+    assert StringEnd(("tool_calls", 2, "name"), "lookup") in events

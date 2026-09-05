@@ -14,7 +14,9 @@ async def test_mock_llm_client_snapshots_core_messages() -> None:
                     ToolCall(
                         id="call-1",
                         name="lookup",
-                        arguments=StructuredData.from_json({"key": "item"}),
+                        arguments=StructuredData.from_json(
+                            {"key": "item", "filter": None}
+                        ),
                     )
                 ],
             )
@@ -28,7 +30,7 @@ async def test_mock_llm_client_snapshots_core_messages() -> None:
                 {
                     "id": "call-1",
                     "name": "lookup",
-                    "arguments": {"key": "item"},
+                    "arguments": {"key": "item", "filter": None},
                 }
             ],
         }
