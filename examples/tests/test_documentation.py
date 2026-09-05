@@ -161,7 +161,6 @@ def test_readme_http_excerpt_matches_tutorial() -> None:
         assert ast.dump(node) in tutorial_nodes
 
 
-
 def test_http_pause_resume(llm: MockLLMClient, monkeypatch: pytest.MonkeyPatch) -> None:
     llm.completions.extend(
         [
