@@ -74,8 +74,8 @@ def _renderer() -> Mock:
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "prompt"
 
-    def render_tool_result(value: object) -> str:
-        return json.dumps(value)
+    def render_tool_result(result: ToolCallResult) -> str:
+        return json.dumps(result.result)
 
     renderer.render_tool_result.side_effect = render_tool_result
     return renderer

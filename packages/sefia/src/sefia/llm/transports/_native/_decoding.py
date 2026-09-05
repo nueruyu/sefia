@@ -1,6 +1,6 @@
-from .._messages import ToolCall
-from ..structured_data import StructuredData
-from ..step_decision import StepTool
+from ..._messages import ToolCall
+from ...structured_data import StructuredData
+from ...step_decision import StepTool
 
 
 def decode_native_tool_calls(
@@ -41,6 +41,3 @@ def decode_native_tool_calls(
             ),
         }
     )
-
-
-__all__ = ["decode_native_tool_calls"]

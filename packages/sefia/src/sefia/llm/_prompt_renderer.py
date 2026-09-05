@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from ..inference import FunctionInfo, HistoryItem
+from ..inference import FunctionInfo, HistoryItem, ToolCallResult
 from .step_decision import StepTool
 
 
@@ -26,9 +26,8 @@ class PromptRenderer(ABC):
     @abstractmethod
     def render(self, prompt: DecisionPrompt) -> str: ...
 
-    def render_tool_result(self, result: object) -> str:
-        """Render a tool result for a native tool-result message."""
-        return str(result)
+    @abstractmethod
+    def render_tool_result(self, result: ToolCallResult) -> str: ...
 
 
 __all__ = [

@@ -1,17 +1,17 @@
 from typing_extensions import final, override
 
-from .._client import LLMClient
-from .._messages import Message
-from .._prompt_renderer import PromptRenderer
-from ..exceptions import DecisionDecodingError
-from ._base import (
+from ..._client import LLMClient
+from ..._messages import Message
+from ..._prompt_renderer import PromptRenderer
+from ...exceptions import DecisionDecodingError
+from .._base import (
     DecisionObserver,
     DecisionRequest,
     DecodedDecision,
     DecisionTransport,
 )
-from ._native_decoding import decode_native_tool_calls
-from ._native_prompt import native_history_messages, render_native_prompt
+from ._decoding import decode_native_tool_calls
+from ._prompt import native_history_messages, render_native_prompt
 from ._result_tool import create_result_tool
 
 

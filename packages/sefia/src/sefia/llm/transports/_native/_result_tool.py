@@ -1,5 +1,5 @@
-from ..json_schema import JsonSchemaDocument
-from ..step_decision import DecisionSpec, StepTool, ToolSchemaSource
+from ...json_schema import JsonSchemaDocument
+from ...step_decision import DecisionSpec, StepTool, ToolSchemaSource
 
 _BASE_NAME = "return_result"
 
@@ -29,6 +29,3 @@ def _available_name(existing: set[str]) -> str:
         name = f"{_BASE_NAME}_{suffix}"
         suffix += 1
     return name
-
-
-__all__ = ["create_result_tool"]

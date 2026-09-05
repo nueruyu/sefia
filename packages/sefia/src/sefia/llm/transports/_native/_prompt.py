@@ -1,11 +1,11 @@
 from typing import cast
 
-from ...inference import HistoryItem, ToolCallsDecision
-from .._messages import Message, ToolCall
-from .._prompt_renderer import PromptRenderer
-from ..structured_data import StructuredData, StructuredDataTree
-from ..step_decision import DecisionSpec, StepDecisionMode, StepTool
-from ._base import DecisionRequest
+from ....inference import HistoryItem, ToolCallsDecision
+from ..._messages import Message, ToolCall
+from ..._prompt_renderer import PromptRenderer
+from ...structured_data import StructuredData, StructuredDataTree
+from ...step_decision import DecisionSpec, StepDecisionMode, StepTool
+from .._base import DecisionRequest
 
 
 def render_native_prompt(
@@ -66,11 +66,8 @@ def native_history_messages(
             messages.append(
                 Message(
                     role="tool",
-                    content=renderer.render_tool_result(item.result),
+                    content=renderer.render_tool_result(item),
                     tool_call_id=item.tool_call_id,
                 )
             )
     return messages
-
-
-__all__ = ["native_history_messages", "render_native_prompt"]

@@ -1,3 +1,5 @@
+import inspect
+
 from sefia.llm import DecisionPrompt, PromptRenderer
 
 
@@ -6,7 +8,5 @@ class _RenderOnlyPromptRenderer(PromptRenderer):
         return prompt.response_instructions
 
 
-def test_prompt_renderer_has_default_tool_result_rendering() -> None:
-    renderer = _RenderOnlyPromptRenderer()
-
-    assert renderer.render_tool_result("result") == "result"
+def test_prompt_renderer_requires_tool_result_rendering() -> None:
+    assert inspect.isabstract(_RenderOnlyPromptRenderer)

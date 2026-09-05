@@ -5,7 +5,7 @@ from typing import cast
 
 from typing_extensions import final, override
 
-from ..inference import ToolCallsDecision
+from ..inference import ToolCallResult, ToolCallsDecision
 from ._prompt_renderer import DecisionPrompt, PromptRenderer
 from .json_schema import JsonValue
 from .step_decision import StepTool
@@ -42,8 +42,8 @@ class MarkdownPromptRenderer(PromptRenderer):
         return "\n\n".join(sections)
 
     @override
-    def render_tool_result(self, result: object) -> str:
-        return self._compact_json(result)
+    def render_tool_result(self, result: ToolCallResult) -> str:
+        return self._compact_json(result.result)
 
     def _render_arguments(self, prompt: DecisionPrompt) -> str:
         arguments = prompt.function.prompt_arguments

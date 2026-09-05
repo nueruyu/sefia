@@ -5,7 +5,7 @@ from uuid import UUID
 
 import pytest
 
-from sefia.inference import FunctionInfo
+from sefia.inference import FunctionInfo, ToolCallResult
 from sefia.llm import (
     DecisionPrompt,
     MarkdownPromptRenderer,
@@ -126,9 +126,11 @@ def test_render_uses_json_default():
 
 
 def test_render_tool_result_uses_the_same_json_representation() -> None:
-    assert _renderer().render_tool_result(_CustomValue("serialized")) == (
-        '{"value":"serialized"}'
+    rendered = _renderer().render_tool_result(
+        ToolCallResult("call-1", _CustomValue("serialized"))
     )
+
+    assert rendered == '{"value":"serialized"}'
 
 
 def test_render_normalizes_nested_mapping_keys():
