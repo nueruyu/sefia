@@ -31,8 +31,8 @@ def test_news_writer_schema_composes_nested_research_tool_types() -> None:
         inspector=backend,
     )
 
-    model = _decision_schema(news_models.NewsArticle, [tool])
-    schema = StructuredDecisionFormat.from_model(model).schema.to_dict()
+    decision_spec = _decision_schema(news_models.NewsArticle, [tool])
+    schema = StructuredDecisionFormat.from_spec(decision_spec).schema.to_dict()
 
     assert all(
         branch.additional_properties() is False
@@ -41,8 +41,8 @@ def test_news_writer_schema_composes_nested_research_tool_types() -> None:
 
 
 def test_code_quality_report_schema_lowers_perspective_mapping() -> None:
-    model = _decision_schema(quality_models.QualityReport, [])
-    schema = StructuredDecisionFormat.from_model(model).schema.to_dict()
+    decision_spec = _decision_schema(quality_models.QualityReport, [])
+    schema = StructuredDecisionFormat.from_spec(decision_spec).schema.to_dict()
 
     perspective_issues = (
         SchemaNode(schema).properties()["result"].properties()["issues_by_perspective"]

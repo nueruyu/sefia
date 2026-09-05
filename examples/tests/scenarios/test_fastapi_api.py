@@ -66,7 +66,7 @@ class TestInterviewFlow:
     def test_pauses_then_resumes_to_completion(self, api: _API) -> None:
         question = "Who is the target audience?"
         api.service._session_scope.llm_client = MockLLMClient(
-            responses=[
+            completions=[
                 tool_calls_completion(
                     ("Input_get_input", {"prompt": "What should this be about?"}),
                 ),
