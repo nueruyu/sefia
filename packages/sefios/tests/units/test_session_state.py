@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from unittest.mock import MagicMock
 
 import pytest
-from glyff import ArgumentsDigest, DomainId, ExecutionId, ExecutionName
+from glyff import DomainId, ExecutionId
+from glyff.testing import make_execution_id
 from pytest_mock import MockerFixture
 
 from sefios._session_state import _SessionState
@@ -21,12 +22,11 @@ class StateB:
 def _execution_id(
     name: str, digest: str, parent_id: ExecutionId | None = None
 ) -> ExecutionId:
-    return ExecutionId(
-        parent_id=parent_id,
+    return make_execution_id(
+        name,
+        parent=parent_id,
         domain_id=DomainId("sefios.tests"),
-        name=ExecutionName(name),
-        sequence=0,
-        arguments_digest=ArgumentsDigest(digest),
+        arguments={"digest": digest},
     )
 
 

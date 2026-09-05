@@ -15,6 +15,7 @@ from sefia.llm._markdown_prompt_renderer import _markdown_fence
 from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
+from sefia.testing import make_function_info
 
 
 @dataclass
@@ -27,15 +28,7 @@ def _renderer() -> MarkdownPromptRenderer:
 
 
 def _function_info(arguments: dict[str, Any] | None = None) -> FunctionInfo:
-    return FunctionInfo(
-        qualname="test",
-        instructions="instructions",
-        bound_arguments=arguments or {},
-        type_hints={},
-        return_type=str,
-        args=(),
-        kwargs={},
-    )
+    return make_function_info(bound_arguments=arguments)
 
 
 def _decision_spec() -> DecisionSpec:

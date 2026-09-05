@@ -1,15 +1,11 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Never, Self
 from unittest.mock import AsyncMock
 
 import pytest
-from litellm import (
-    ChatCompletionMessageToolCall,
-    Choices,
-    Message as LiteLLMMessage,
-    ModelResponse,
-)
+from litellm import ChatCompletionMessageToolCall, ModelResponse
 from litellm.exceptions import (
     AuthenticationError,
     InternalServerError,
@@ -40,10 +36,7 @@ from sefia_litellm.exceptions import (
     InferenceTimeoutError,
 )
 
-
-@pytest.fixture
-def mock_acompletion(mocker: MockerFixture) -> AsyncMock:
-    return mocker.patch("litellm.acompletion", new_callable=AsyncMock)
+_ResponseFactory = Callable[..., ModelResponse]
 
 
 @dataclass
@@ -65,17 +58,11 @@ class TestLiteLLMClient:
             LiteLLMClient(model="legacy-model", native_structured_output=False)
 
     async def test_complete_skips_structured_output_without_decision_model(
-        self, mock_acompletion: AsyncMock
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
     ) -> None:
-        mock_acompletion.return_value = ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(role="assistant", content="Hi"),
-                )
-            ]
-        )
+        mock_acompletion.return_value = make_litellm_response(content="Hi")
 
         await LiteLLMClient(model="gpt-4o").complete(
             [Message(role="user", content="Hello")]
@@ -100,7 +87,9 @@ class TestLiteLLMClient:
         assert exc_info.value.completion.model == "gpt-4o"
 
     async def test_complete_sends_correct_request_to_litellm(
-        self, mock_acompletion: AsyncMock
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
     ):
         client = LiteLLMClient(model="gpt-4o", temperature=0.5)
         messages = [Message(role="user", content="Hello")]
@@ -121,15 +110,7 @@ class TestLiteLLMClient:
         ]
         decision_spec = _decision_spec()
 
-        mock_acompletion.return_value = ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(role="assistant", content="Hi"),
-                )
-            ]
-        )
+        mock_acompletion.return_value = make_litellm_response(content="Hi")
 
         await client.complete(messages, tools=tools, decision_spec=decision_spec)
 
@@ -155,24 +136,17 @@ class TestLiteLLMClient:
         assert call_args["temperature"] == 0.5
 
     async def test_complete_does_not_accept_fenced_structured_output(
-        self, mock_acompletion: AsyncMock
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
     ) -> None:
         client = LiteLLMClient(model="gpt-4o")
         decision_spec = _decision_spec()
-        mock_acompletion.return_value = ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(
-                        role="assistant",
-                        content=(
-                            '```json\n{"payload":{"decision":"result",'
-                            '"result":{"city":"Tokyo"}}}\n```'
-                        ),
-                    ),
-                )
-            ]
+        mock_acompletion.return_value = make_litellm_response(
+            content=(
+                '```json\n{"payload":{"decision":"result",'
+                '"result":{"city":"Tokyo"}}}\n```'
+            )
         )
 
         response = await client.complete(
@@ -188,24 +162,14 @@ class TestLiteLLMClient:
         assert response.structured_output is None
 
     async def test_complete_decodes_native_structured_output(
-        self, mock_acompletion: AsyncMock
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
     ) -> None:
         client = LiteLLMClient(model="gpt-4o")
         decision_spec = _decision_spec()
-        mock_acompletion.return_value = ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(
-                        role="assistant",
-                        content=(
-                            '{"payload":{"decision":"result",'
-                            '"result":{"city":"Tokyo"}}}'
-                        ),
-                    ),
-                )
-            ]
+        mock_acompletion.return_value = make_litellm_response(
+            content=('{"payload":{"decision":"result","result":{"city":"Tokyo"}}}')
         )
 
         response = await client.complete(
@@ -220,7 +184,9 @@ class TestLiteLLMClient:
         }
 
     async def test_complete_envelopes_tool_or_result_union(
-        self, mock_acompletion: AsyncMock
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
     ) -> None:
         def lookup(key: str) -> str:
             return key
@@ -232,20 +198,11 @@ class TestLiteLLMClient:
             tools=registry.get_all(),
             result_format_factory=PydanticModelBackend(),
         )
-        mock_acompletion.return_value = ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(
-                        role="assistant",
-                        content=(
-                            '{"payload":{"decision":"tool_calls","tool_calls":['
-                            '{"name":"lookup","arguments":{"key":"item"}}]}}'
-                        ),
-                    ),
-                )
-            ]
+        mock_acompletion.return_value = make_litellm_response(
+            content=(
+                '{"payload":{"decision":"tool_calls","tool_calls":['
+                '{"name":"lookup","arguments":{"key":"item"}}]}}'
+            )
         )
 
         response = await LiteLLMClient(model="gpt-4o").complete(
@@ -268,6 +225,7 @@ class TestLiteLLMClient:
     async def test_complete_translates_native_tool_schema_and_arguments(
         self,
         mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
     ) -> None:
         tool = StepTool(
             name="categorize",
@@ -287,28 +245,18 @@ class TestLiteLLMClient:
             ),
             schema_source=ToolSchemaSource.GENERATED,
         )
-        mock_acompletion.return_value = ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="tool_calls",
-                    index=0,
-                    message=LiteLLMMessage(
-                        role="assistant",
-                        tool_calls=[
-                            ChatCompletionMessageToolCall(
-                                id="call-1",
-                                function={
-                                    "name": "categorize",
-                                    "arguments": (
-                                        '{"labels":[{"key":"important","value":2}]}'
-                                    ),
-                                },
-                                type="function",
-                            )
-                        ],
-                    ),
+        mock_acompletion.return_value = make_litellm_response(
+            finish_reason="tool_calls",
+            tool_calls=[
+                ChatCompletionMessageToolCall(
+                    id="call-1",
+                    function={
+                        "name": "categorize",
+                        "arguments": ('{"labels":[{"key":"important","value":2}]}'),
+                    },
+                    type="function",
                 )
-            ]
+            ],
         )
 
         response = await LiteLLMClient(model="gpt-4o").complete(
@@ -325,6 +273,7 @@ class TestLiteLLMClient:
     async def test_complete_encodes_native_tool_call_history_for_wire_schema(
         self,
         mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
     ) -> None:
         tool = StepTool(
             name="categorize",
@@ -344,15 +293,7 @@ class TestLiteLLMClient:
             ),
             schema_source=ToolSchemaSource.GENERATED,
         )
-        mock_acompletion.return_value = ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(role="assistant", content="done"),
-                )
-            ]
-        )
+        mock_acompletion.return_value = make_litellm_response(content="done")
         messages = [
             Message(role="user", content="Categorize."),
             Message(
@@ -427,21 +368,16 @@ class TestLiteLLMClient:
             await client.complete([])
 
     async def test_complete_suppresses_litellm_logging_by_default(
-        self, mock_acompletion: AsyncMock, monkeypatch: pytest.MonkeyPatch
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         import litellm
 
         monkeypatch.setattr(litellm, "suppress_debug_info", False, raising=False)
         logging.getLogger("LiteLLM").setLevel(logging.NOTSET)
-        mock_acompletion.return_value = ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(role="assistant", content="Hi"),
-                )
-            ]
-        )
+        mock_acompletion.return_value = make_litellm_response(content="Hi")
         client = LiteLLMClient(model="gpt-4o")
 
         await client.complete([])
@@ -450,21 +386,16 @@ class TestLiteLLMClient:
         assert logging.getLogger("LiteLLM").level == _SILENCE_LEVEL
 
     async def test_complete_restores_litellm_logging_when_disabled(
-        self, mock_acompletion: AsyncMock, monkeypatch: pytest.MonkeyPatch
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         import litellm
 
         monkeypatch.setattr(litellm, "suppress_debug_info", True, raising=False)
         logging.getLogger("LiteLLM").setLevel(_SILENCE_LEVEL)
-        mock_acompletion.return_value = ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(role="assistant", content="Hi"),
-                )
-            ]
-        )
+        mock_acompletion.return_value = make_litellm_response(content="Hi")
         client = LiteLLMClient(model="gpt-4o", suppress_logs=False)
 
         await client.complete([])

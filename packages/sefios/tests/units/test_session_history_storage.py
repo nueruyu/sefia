@@ -1,10 +1,12 @@
 from unittest.mock import MagicMock
 
 import pytest
-from glyff import ArgumentsDigest, DomainId, ExecutionId, ExecutionName
+from glyff import DomainId, ExecutionId
+from glyff.testing import make_execution_id
 from pytest_mock import MockerFixture
 from sefia import HistorySnapshot
-from sefia.inference import ToolCallsDecision, ToolCallRequest, ToolCallResult
+from sefia.inference import ToolCallsDecision, ToolCallResult
+from sefia.testing import make_tool_call_request
 
 from sefios import MemorySessionStorage
 from sefios.history_storages import SessionHistoryStorage
@@ -12,12 +14,10 @@ from sefios._session_state import bind_session_storage
 
 
 def _execution_id(args_hash: str = "hash-a") -> ExecutionId:
-    return ExecutionId(
-        parent_id=None,
+    return make_execution_id(
+        "Agent.chat",
         domain_id=DomainId("sefios.tests"),
-        name=ExecutionName("Agent.chat"),
-        sequence=0,
-        arguments_digest=ArgumentsDigest(args_hash),
+        arguments={"run": args_hash},
     )
 
 
@@ -37,7 +37,11 @@ class TestSessionHistoryStorage:
         snapshot = HistorySnapshot(
             items=(
                 ToolCallsDecision(
-                    calls=[ToolCallRequest(id="1", name="add_note", arguments={"x": 1})]
+                    calls=[
+                        make_tool_call_request(
+                            id="1", name="add_note", arguments={"x": 1}
+                        )
+                    ]
                 ),
                 ToolCallResult(tool_call_id="1", result="noted"),
             ),

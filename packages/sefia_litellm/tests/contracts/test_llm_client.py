@@ -1,6 +1,6 @@
 """Apply the public LLM-client contracts to the LiteLLM adapter."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -8,8 +8,6 @@ from unittest.mock import AsyncMock
 import pytest
 from litellm import (
     ChatCompletionMessageToolCall,
-    Choices,
-    Message as LiteLLMMessage,
     ModelResponse,
 )
 from pytest_mock import MockerFixture
@@ -27,44 +25,34 @@ from sefia.testing import (
 )
 from sefia_litellm import LiteLLMClient
 
-
-def _response(
-    *,
-    content: str | None = None,
-    finish_reason: str = "stop",
-    tool_calls: list[ChatCompletionMessageToolCall] | None = None,
-) -> ModelResponse:
-    return ModelResponse(
-        model="gpt-4o",
-        choices=[
-            Choices(
-                finish_reason=finish_reason,
-                index=0,
-                message=LiteLLMMessage(
-                    role="assistant", content=content, tool_calls=tool_calls
-                ),
-            )
-        ],
-    )
-
-
-def _patch_response(mocker: MockerFixture, response: object) -> None:
-    mocker.patch("litellm.acompletion", new=AsyncMock(return_value=response))
+_ResponseFactory = Callable[..., ModelResponse]
 
 
 class TestLiteLLMPlainCompletionContract(LLMClientContract):
     @pytest.fixture
-    def llm_client_case(self, mocker: MockerFixture) -> LLMClientCase:
-        _patch_response(mocker, _response(content="Hello"))
+    def llm_client_case(
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
+    ) -> LLMClientCase:
+        mock_acompletion.return_value = make_litellm_response(
+            content="Hello", model="gpt-4o"
+        )
         expected = LLMCompletion(model="gpt-4o", content="Hello", stop_reason="stop")
         return LLMClientCase(LiteLLMClient(model="gpt-4o"), expected)
 
 
 class TestLiteLLMStructuredCompletionContract(LLMClientContract):
     @pytest.fixture
-    def llm_client_case(self, mocker: MockerFixture) -> LLMClientCase:
+    def llm_client_case(
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
+    ) -> LLMClientCase:
         content = '{"payload":{"decision":"result","result":"done"}}'
-        _patch_response(mocker, _response(content=content))
+        mock_acompletion.return_value = make_litellm_response(
+            content=content, model="gpt-4o"
+        )
         decision_spec = DecisionSpec.for_inference(
             output_type=str,
             tools=[],
@@ -87,15 +75,20 @@ class TestLiteLLMStructuredCompletionContract(LLMClientContract):
 
 class TestLiteLLMNativeToolContract(LLMClientContract):
     @pytest.fixture
-    def llm_client_case(self, mocker: MockerFixture) -> LLMClientCase:
+    def llm_client_case(
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
+    ) -> LLMClientCase:
         upstream_call = ChatCompletionMessageToolCall(
             id="call-1",
             function={"name": "lookup", "arguments": '{"key":"item"}'},
             type="function",
         )
-        _patch_response(
-            mocker,
-            _response(finish_reason="tool_calls", tool_calls=[upstream_call]),
+        mock_acompletion.return_value = make_litellm_response(
+            finish_reason="tool_calls",
+            tool_calls=[upstream_call],
+            model="gpt-4o",
         )
         tool = StepTool(
             name="lookup",
@@ -139,19 +132,20 @@ async def _stream(*deltas: _Delta) -> AsyncIterator[SimpleNamespace]:
 class TestLiteLLMStreamingContract(StreamingLLMClientContract):
     @pytest.fixture
     def streaming_llm_client_case(
-        self, mocker: MockerFixture
+        self,
+        mocker: MockerFixture,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
     ) -> StreamingLLMClientCase:
-        _patch_response(
-            mocker,
-            _stream(
-                _Delta(reasoning_content="Let me "),
-                _Delta(reasoning_content="think."),
-                _Delta(content="Hel"),
-                _Delta(content="lo"),
-            ),
+        mock_acompletion.return_value = _stream(
+            _Delta(reasoning_content="Let me "),
+            _Delta(reasoning_content="think."),
+            _Delta(content="Hel"),
+            _Delta(content="lo"),
         )
         mocker.patch(
-            "litellm.stream_chunk_builder", return_value=_response(content="Hello")
+            "litellm.stream_chunk_builder",
+            return_value=make_litellm_response(content="Hello", model="gpt-4o"),
         )
         expected = LLMCompletion(
             model="gpt-4o",

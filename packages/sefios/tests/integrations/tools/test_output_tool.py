@@ -5,9 +5,9 @@ import pytest
 from sefia import ToolRegistry, Tools
 from sefia._tool_execution import call_tools
 from sefia.event_system import EventPublisher
-from sefia.inference import Capability, ToolCallRequest
+from sefia.inference import Capability
 from sefia.streaming import ArgEvent, StringDelta
-from sefia.testing import MockLLMClient, memory_session
+from sefia.testing import MockLLMClient, make_tool_call_request, memory_session
 from sefia.tool_collectors import DefaultToolCollector
 from sefios.tools import Output, OutputMessage
 
@@ -65,7 +65,7 @@ async def test_nested_output_fails_instead_of_reusing_parent_call_id():
 
     async with memory_session(MockLLMClient([])):
         results = await call_tools(
-            [ToolCallRequest(id="parent-call", name="parent", arguments={})],
+            [make_tool_call_request(id="parent-call", name="parent", arguments={})],
             registry,
             EventPublisher([]),
         )

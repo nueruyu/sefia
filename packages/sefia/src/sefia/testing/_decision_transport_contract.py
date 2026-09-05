@@ -3,7 +3,7 @@
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 
-from ..inference import FunctionInfo, ToolCallResult
+from ..inference import ToolCallResult
 from ..llm._client import LLMClient
 from ..llm._messages import LLMCompletion, Message
 from ..llm._prompt_renderer import DecisionPrompt, PromptRenderer
@@ -12,6 +12,7 @@ from ..llm.streaming import OutputStreamCallback, OutputStreamEvent
 from ..llm.structured_data import StructuredData
 from ..llm.transports import DecisionObserver, DecisionRequest, DecisionTransport
 from ..pydantic import PydanticModelBackend
+from ._factories import make_decision_request
 
 
 @dataclass(frozen=True)
@@ -73,22 +74,12 @@ class _CompletionClient(LLMClient):
 
 
 def _request() -> DecisionRequest:
-    return DecisionRequest(
-        function=FunctionInfo(
-            qualname="answer",
-            instructions="Return the answer.",
-            bound_arguments={},
-            type_hints={},
-            return_type=str,
-            args=(),
-            kwargs={},
-        ),
-        decision_spec=DecisionSpec.for_inference(
+    return make_decision_request(
+        DecisionSpec.for_inference(
             output_type=str,
             tools=[],
             result_format_factory=PydanticModelBackend(),
         ),
-        history=(),
     )
 
 

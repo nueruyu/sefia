@@ -13,7 +13,6 @@ from sefia.inference import (
     FunctionInfo,
     ResultDecision,
     ToolCallsDecision,
-    ToolCallRequest,
     ToolCallResult,
 )
 from sefia.llm import (
@@ -34,6 +33,7 @@ from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import NativeDecisionTransport, StructuredDecisionTransport
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
+from sefia.testing import make_function_info, make_tool_call_request
 
 
 class MockEventPublisher(EventPublisher):
@@ -133,14 +133,11 @@ def _function_info(
     type_hints: dict[str, Any] | None = None,
     instructions: str = "instructions",
 ) -> FunctionInfo:
-    return FunctionInfo(
-        qualname="test",
+    return make_function_info(
         instructions=instructions,
-        bound_arguments=arguments or {},
-        type_hints=type_hints or {},
+        bound_arguments=arguments,
+        type_hints=type_hints,
         return_type=return_type,
-        args=(),
-        kwargs={},
     )
 
 
@@ -579,7 +576,9 @@ class TestResponseRepair:
         strategy = _make_strategy(client)
         history = [
             ToolCallsDecision(
-                calls=[ToolCallRequest(id="1", name="search", arguments={"q": "x"})]
+                calls=[
+                    make_tool_call_request(id="1", name="search", arguments={"q": "x"})
+                ]
             ),
             ToolCallResult(tool_call_id="1", result="found"),
         ]

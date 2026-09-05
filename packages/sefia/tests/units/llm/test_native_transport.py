@@ -7,9 +7,7 @@ import pytest
 
 from sefia._tool_system import ToolRegistry
 from sefia.inference import (
-    FunctionInfo,
     ResultDecision,
-    ToolCallRequest,
     ToolCallResult,
     ToolCallsDecision,
 )
@@ -26,7 +24,11 @@ from sefia.llm.structured_data import StructuredData
 from sefia.llm.streaming import StringEnd as OutputStringEnd
 from sefia.llm.transports import DecisionRequest, NativeDecisionTransport
 from sefia.pydantic import PydanticModelBackend
-from sefia.testing import RecordingDecisionObserver
+from sefia.testing import (
+    RecordingDecisionObserver,
+    make_decision_request,
+    make_tool_call_request,
+)
 
 
 def lookup(key: str) -> str:
@@ -52,19 +54,7 @@ def _decision(output_type: Any, *functions: Any) -> DecisionSpec:
 
 
 def _request(decision: DecisionSpec) -> DecisionRequest:
-    return DecisionRequest(
-        function=FunctionInfo(
-            qualname="test",
-            instructions="instructions",
-            bound_arguments={},
-            type_hints={},
-            return_type=str,
-            args=(),
-            kwargs={},
-        ),
-        decision_spec=decision,
-        history=(),
-    )
+    return make_decision_request(decision)
 
 
 def _renderer() -> Mock:
@@ -190,13 +180,13 @@ async def test_native_transport_sends_previous_calls_as_native_history() -> None
     )
     decision = _decision(Never, lookup)
     request = _request(decision)
-    request = DecisionRequest(
+    request = make_decision_request(
+        request.decision_spec,
         function=request.function,
-        decision_spec=request.decision_spec,
         history=(
             ToolCallsDecision(
                 [
-                    ToolCallRequest(
+                    make_tool_call_request(
                         id="call-1",
                         name="lookup",
                         arguments={"key": "first"},

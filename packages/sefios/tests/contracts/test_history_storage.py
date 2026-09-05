@@ -4,7 +4,8 @@ from collections.abc import Iterator
 from unittest.mock import MagicMock
 
 import pytest
-from glyff import ArgumentsDigest, DomainId, ExecutionId, ExecutionName, Serializer
+from glyff import DomainId, ExecutionId, Serializer
+from glyff.testing import make_execution_id
 from pytest_mock import MockerFixture
 
 from sefia import HistoryStorage
@@ -16,12 +17,10 @@ from sefios.history_storages import SessionHistoryStorage
 
 
 def _execution_id() -> ExecutionId:
-    return ExecutionId(
-        parent_id=None,
+    return make_execution_id(
+        "Agent.chat",
         domain_id=DomainId("sefios.tests"),
-        name=ExecutionName("Agent.chat"),
-        sequence=0,
-        arguments_digest=ArgumentsDigest("history-contract"),
+        arguments={"case": "history-contract"},
     )
 
 

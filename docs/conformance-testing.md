@@ -50,3 +50,8 @@ the same backing resource. Async contracts require pytest-asyncio; configure
 These suites cover the behavior visible through the Sefia interfaces. A custom
 `PersistenceProvider` that supplies its own glyff backend should also apply the
 appropriate contracts from `glyff.testing` to that backend.
+
+Consumer tests can use `make_function_info`, `make_decision_request`,
+`make_step_context`, and `make_tool_call_request` from `sefia.testing`. These
+factories provide isolated defaults while keeping behavior-specific values explicit,
+so unrelated tests do not depend on every constructor field.

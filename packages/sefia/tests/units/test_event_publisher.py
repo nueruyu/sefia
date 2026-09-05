@@ -7,7 +7,7 @@ from pytest_mock import MockerFixture
 
 from sefia.event_system import Event, EventHandler, EventPublisher
 from sefia.events import AfterToolCall, BeforeToolCall, ToolExecutionFailed
-from sefia.inference import ToolCallRequest
+from sefia.testing import make_tool_call_request
 
 T = TypeVar("T")
 
@@ -67,7 +67,9 @@ MultiInheritedEventHandler = type(
 
 @pytest.fixture
 def before_tool_call_event() -> BeforeToolCall:
-    return BeforeToolCall(tool_call=ToolCallRequest(id="1", name="test", arguments={}))
+    return BeforeToolCall(
+        tool_call=make_tool_call_request(id="1", name="test", arguments={})
+    )
 
 
 class TestEventPublisher:
@@ -87,10 +89,11 @@ class TestEventPublisher:
         spy = mocker.spy(handler, "handle")
         publisher = EventPublisher(handlers=[handler])
         event1 = AfterToolCall(
-            tool_call=ToolCallRequest(id="1", name="test", arguments={}), result="ok"
+            tool_call=make_tool_call_request(id="1", name="test", arguments={}),
+            result="ok",
         )
         event2 = ToolExecutionFailed(
-            tool_call=ToolCallRequest(id="2", name="test", arguments={}),
+            tool_call=make_tool_call_request(id="2", name="test", arguments={}),
             error=ValueError(),
         )
 
@@ -106,10 +109,11 @@ class TestEventPublisher:
         spy = mocker.spy(handler, "handle")
         publisher = EventPublisher(handlers=[handler])
         event1 = AfterToolCall(
-            tool_call=ToolCallRequest(id="1", name="test", arguments={}), result="ok"
+            tool_call=make_tool_call_request(id="1", name="test", arguments={}),
+            result="ok",
         )
         event2 = ToolExecutionFailed(
-            tool_call=ToolCallRequest(id="2", name="test", arguments={}),
+            tool_call=make_tool_call_request(id="2", name="test", arguments={}),
             error=ValueError(),
         )
 
@@ -137,10 +141,11 @@ class TestEventPublisher:
         spy = mocker.spy(handler, "handle")
         publisher = EventPublisher(handlers=[handler])
         event1 = AfterToolCall(
-            tool_call=ToolCallRequest(id="1", name="test", arguments={}), result="ok"
+            tool_call=make_tool_call_request(id="1", name="test", arguments={}),
+            result="ok",
         )
         event2 = ToolExecutionFailed(
-            tool_call=ToolCallRequest(id="2", name="test", arguments={}),
+            tool_call=make_tool_call_request(id="2", name="test", arguments={}),
             error=ValueError(),
         )
 

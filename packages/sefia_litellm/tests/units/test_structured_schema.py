@@ -14,7 +14,7 @@ from sefia._tool_system import (
 )
 from sefia.event_system import Event, EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
-from sefia.inference import FunctionInfo, StepDecision, ToolCallsDecision
+from sefia.inference import StepDecision, ToolCallsDecision
 from sefia.inference import ResultDecision
 from sefia.llm import LLMClient, LLMInferenceStrategy, LLMCompletion
 from sefia.llm.json_schema import SchemaNode
@@ -27,6 +27,7 @@ from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.pydantic import PydanticModelBackend
+from sefia.testing import make_function_info
 from sefia_litellm._schema import StructuredDecisionFormat
 
 
@@ -997,14 +998,9 @@ class TestToolCallValidation:
     async def _decide(self, decision: dict[str, Any]) -> StepDecision:
         strategy = self._strategy(json.dumps(decision))
         return await strategy.decide_next_step(
-            FunctionInfo(
-                qualname="test",
+            make_function_info(
                 instructions="chat",
-                bound_arguments={},
-                type_hints={},
                 return_type=Never,
-                args=(),
-                kwargs={},
             ),
             [],
             self._registry(),

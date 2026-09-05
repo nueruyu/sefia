@@ -1,21 +1,14 @@
 from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock
 
-import pytest
 from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
     Delta,
     ModelResponseStream,
     StreamingChoices,
 )
-from pytest_mock import MockerFixture
 
 from sefia.llm import Message
 from sefia_litellm import LiteLLMClient
-
-
-@pytest.fixture
-def mock_acompletion(mocker: MockerFixture) -> AsyncMock:
-    return mocker.patch("litellm.acompletion", new_callable=AsyncMock)
 
 
 async def _completion_stream(

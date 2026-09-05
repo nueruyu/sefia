@@ -94,7 +94,7 @@ submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 | `llm/` | The **default** `InferenceStrategy`: `LLMClient` returns a normalized completion; transports decode it to decision data; `step_decision.py` validates that data; prompt renderers own text; `streaming.py` decodes incremental JSON; and `_strategy.py` coordinates repair. | `LLMInferenceStrategy`, `LLMClient`, `LLMCompletion`, `StructuredData`, `DecodedDecision`, `DecisionSpec`, `DecisionTransport`, `PromptRenderer` |
 | `llm/transports/` | Transport contract and structured, prompted, and native protocols. The private `_native/` package separates native orchestration, prompt/history conversion, result-tool construction, and decoding. | `DecisionTransport`, `StructuredDecisionTransport`, `PromptedDecisionTransport`, `NativeDecisionTransport` |
 | `pydantic/` | The default `ModelBackend`: callable inspection plus result JSON Schema generation and restoration. It does not know the logical step-decision shape. | `PydanticModelBackend` |
-| `testing/` | Public test doubles/helpers for applications plus reusable conformance contracts for extension implementations. | `MockLLMClient`, `MemoryHistoryStorage`, `LLMClientContract`, `HistoryStorageContract`, `DecisionTransportContract`, `ToolCollectorContract` |
+| `testing/` | Public test doubles, stable test-data factories, and reusable conformance contracts for applications and extension implementations. | `MockLLMClient`, `MemoryHistoryStorage`, `make_decision_request`, `make_step_context`, `LLMClientContract`, `HistoryStorageContract`, `DecisionTransportContract`, `ToolCollectorContract` |
 
 ### The seams (`_interfaces/`) — the extension ports
 

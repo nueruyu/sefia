@@ -25,6 +25,7 @@ from sefia.llm.transports import (
 )
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import ArgStream, StringDelta, StringEnd
+from sefia.testing import make_function_info
 
 
 class _Collector:
@@ -79,14 +80,9 @@ class _StreamingClient(LLMClient):
 
 
 def _function_info() -> FunctionInfo:
-    return FunctionInfo(
+    return make_function_info(
         qualname="step",
         instructions="do it",
-        bound_arguments={},
-        type_hints={},
-        return_type=str,
-        args=(),
-        kwargs={},
     )
 
 

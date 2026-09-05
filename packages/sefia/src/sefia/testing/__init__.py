@@ -48,6 +48,12 @@ from ._decision_transport_contract import (
     DecisionTransportCase,
     DecisionTransportContract,
 )
+from ._factories import (
+    make_decision_request,
+    make_function_info,
+    make_step_context,
+    make_tool_call_request,
+)
 from ._history_storage_contract import HistoryStorageContract
 from ._llm_client_contract import (
     LLMClientCase,
@@ -250,6 +256,10 @@ __all__ = [
     "StreamingLLMClientContract",
     "ToolCollectorCase",
     "ToolCollectorContract",
+    "make_decision_request",
+    "make_function_info",
+    "make_step_context",
+    "make_tool_call_request",
     "memory_session",
     "result_completion",
     "tool_calls_completion",
