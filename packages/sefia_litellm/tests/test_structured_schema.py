@@ -48,7 +48,10 @@ def _process(
     tool_call_ids: ToolCallIdRegistry | None = None,
 ) -> StepDecision:
     prepared = _prepare(decision)
-    return decision.validate(prepared.decode(data), tool_call_ids)
+    wire_data = (
+        {"payload": data} if decision.mode is StepDecisionMode.TOOLS_OR_RESULT else data
+    )
+    return decision.validate(prepared.decode(wire_data), tool_call_ids)
 
 
 def test_structured_decision_format_returns_defensive_schema_copies() -> None:
@@ -175,8 +178,20 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
     return schema
 
 
+def _decision_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return schema
+    payload = cast(dict[str, Any], properties).get("payload")
+    return (
+        _resolve(cast(dict[str, Any], payload), schema)
+        if isinstance(payload, dict)
+        else schema
+    )
+
+
 def _tool_calls_array(schema: dict[str, Any]) -> dict[str, Any]:
-    decision = _resolve(schema, schema)
+    decision = _decision_schema(schema)
     tool_calls = decision["properties"]["tool_calls"]
     if "anyOf" in tool_calls:
         return next(
@@ -210,6 +225,18 @@ def test_tool_only_schema_embeds_tool_argument_schema() -> None:
     assert arguments["required"] == ["question"]
     assert arguments["additionalProperties"] is False
     assert arguments["properties"]["question"]["minLength"] == 1
+
+
+def test_tool_or_result_schema_nests_union_in_an_object_envelope() -> None:
+    schema = _prepare(_decision_model(str, [_tool()])).schema.to_dict()
+
+    assert schema["type"] == "object"
+    assert schema["required"] == ["payload"]
+    assert schema["additionalProperties"] is False
+    assert "anyOf" not in schema
+    properties = cast(dict[str, Any], schema["properties"])
+    payload = cast(dict[str, Any], properties["payload"])
+    assert "anyOf" in payload
 
 
 @dataclass
@@ -251,7 +278,7 @@ def test_result_shape_cannot_be_mistaken_for_a_tool_call() -> None:
     schema = _prepare(definition).schema.to_dict()
     result_branch = next(
         branch
-        for branch in SchemaNode(schema).any_of()
+        for branch in SchemaNode(_decision_schema(schema)).any_of()
         if branch.properties()["decision"].value["const"] == "result"
     )
     output = result_branch.properties()["result"]
@@ -592,7 +619,7 @@ def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
 
 
 def _result_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    decision = _resolve(schema, schema)
+    decision = _decision_schema(schema)
     return _resolve(decision["properties"]["result"], schema)
 
 

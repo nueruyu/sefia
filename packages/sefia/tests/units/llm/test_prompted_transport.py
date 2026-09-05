@@ -1,9 +1,10 @@
+from typing import cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from sefia.inference import FunctionInfo
-from sefia.llm import LLMCompletion, Message, PromptRenderer
+from sefia.llm import DecisionPrompt, LLMCompletion, Message, PromptRenderer
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import OutputStreamEvent, StringEnd
@@ -67,9 +68,10 @@ async def test_uses_the_rendered_prompt_without_a_model() -> None:
     completion = LLMCompletion(content='{"decision":"result","result":"done"}')
     client.complete.return_value = completion
     observer = _RecordingObserver()
+    renderer = _renderer()
 
     decoded = await PromptedDecisionTransport().request_decision(
-        client, _renderer(), _request(), observer, stream=False
+        client, renderer, _request(), observer, stream=False
     )
 
     sent = client.complete.await_args.kwargs
@@ -78,6 +80,11 @@ async def test_uses_the_rendered_prompt_without_a_model() -> None:
     assert observer.prompt == "complete prompt"
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
     assert decoded.completion is completion
+    rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
+    assert '{"decision":"result"' in rendered_prompt.response_instructions
+    assert "provided structured output schema" not in (
+        rendered_prompt.response_instructions
+    )
 
 
 async def test_streams_fenced_json_after_prose() -> None:

@@ -17,6 +17,7 @@ from litellm.exceptions import (
     Timeout,
 )
 from pytest_mock import MockerFixture
+from sefia._tool_system import ToolRegistry
 from sefia.llm import (
     LLMCompletion,
     Message,
@@ -211,6 +212,52 @@ class TestLiteLLMClient:
         assert response.structured_output.tree == {
             "decision": "result",
             "result": {"city": "Tokyo"},
+        }
+
+    async def test_complete_envelopes_tool_or_result_union(
+        self, mock_acompletion: AsyncMock
+    ) -> None:
+        def lookup(key: str) -> str:
+            return key
+
+        registry = ToolRegistry()
+        registry.add(lookup, name="lookup")
+        decision_spec = DecisionSpec.for_inference(
+            output_type=str,
+            tools=registry.get_all(),
+            result_format_factory=PydanticModelBackend(),
+        )
+        mock_acompletion.return_value = ModelResponse(
+            choices=[
+                Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=LiteLLMMessage(
+                        role="assistant",
+                        content=(
+                            '{"payload":{"decision":"tool_calls","tool_calls":['
+                            '{"name":"lookup","arguments":{"key":"item"}}]}}'
+                        ),
+                    ),
+                )
+            ]
+        )
+
+        response = await LiteLLMClient(model="gpt-4o").complete(
+            [Message(role="user", content="Look up the item.")],
+            decision_spec=decision_spec,
+        )
+
+        schema = mock_acompletion.call_args.kwargs["response_format"]["json_schema"][
+            "schema"
+        ]
+        assert schema["type"] == "object"
+        assert "anyOf" not in schema
+        assert "anyOf" in schema["properties"]["payload"]
+        assert response.structured_output is not None
+        assert response.structured_output.tree == {
+            "decision": "tool_calls",
+            "tool_calls": [{"name": "lookup", "arguments": {"key": "item"}}],
         }
 
     async def test_complete_translates_native_tool_schema_and_arguments(

@@ -44,7 +44,7 @@ async def consume_completion_stream(
         content_callback=content_callback,
         output_callback=output_callback,
         reasoning_callback=reasoning_callback,
-        structured=decision_format is not None,
+        decision_format=decision_format,
         tool_data_formats=tool_data_formats or {},
     )
     async for chunk in stream:
@@ -91,17 +91,18 @@ class _CompletionStreamState:
         content_callback: Callable[[str], Coroutine[None, None, None]] | None,
         output_callback: OutputStreamCallback | None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
-        structured: bool,
+        decision_format: StructuredDecisionFormat | None,
         tool_data_formats: dict[str, StructuredDataFormat],
     ) -> None:
         self._content_callback = content_callback
         self._output_callback = output_callback
         self._reasoning_callback = reasoning_callback
+        self._decision_format = decision_format
         self._content_parts: list[str] = []
         self._reasoning_parts: list[str] = []
         self._structured_decoder = (
             JsonOutputStreamDecoder()
-            if structured and output_callback is not None
+            if decision_format is not None and output_callback is not None
             else None
         )
         self._native_decoder = (
@@ -134,7 +135,13 @@ class _CompletionStreamState:
             if self._content_callback is not None:
                 await self._content_callback(content)
             if self._structured_decoder is not None:
-                await self._emit(self._structured_decoder.feed(content))
+                assert self._decision_format is not None
+                events: list[OutputStreamEvent] = []
+                for event in self._structured_decoder.feed(content):
+                    decoded = self._decision_format.decode_stream_event(event)
+                    if decoded is not None:
+                        events.append(decoded)
+                await self._emit(events)
 
         if self._native_decoder is not None:
             await self._emit(self._native_decoder.feed(delta.tool_calls or []))

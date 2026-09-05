@@ -13,7 +13,7 @@ from ._base import (
     DecodedDecision,
     DecisionTransport,
 )
-from ._json_decision import json_response_instructions
+from ._decision_instructions import json_response_instructions
 
 
 @final

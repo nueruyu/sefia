@@ -18,6 +18,7 @@ from sefia.llm.step_decision import (
     StepTool,
     ToolSchemaSource,
 )
+from sefia.llm.streaming import OutputStreamEvent, Scalar, StringDelta, StringEnd
 
 from ._data_format import StructuredDataFormat
 
@@ -42,6 +43,7 @@ class StructuredDecisionFormat:
         self._schema = schema
         self._result_format = result_format
         self._tool_formats = tool_formats
+        self._uses_payload_envelope = set(schema.root().properties()) == {"payload"}
 
     @classmethod
     def from_spec(cls, spec: DecisionSpec) -> "StructuredDecisionFormat":
@@ -71,6 +73,15 @@ class StructuredDecisionFormat:
         return self._decode(StructuredData.from_json(data))
 
     def _decode(self, data: StructuredData) -> StructuredData:
+        if self._uses_payload_envelope:
+            try:
+                envelope = data.to_object("structured decision envelope")
+            except ValueError:
+                return data
+            if set(envelope) != {"payload"}:
+                return data
+            data = envelope["payload"]
+
         try:
             fields = data.to_object()
         except ValueError:
@@ -136,6 +147,18 @@ class StructuredDecisionFormat:
             }
         )
 
+    def decode_stream_event(self, event: OutputStreamEvent) -> OutputStreamEvent | None:
+        if not self._uses_payload_envelope:
+            return event
+        if not event.path or event.path[0] != "payload":
+            return None
+        path = event.path[1:]
+        if isinstance(event, StringDelta):
+            return StringDelta(path, event.text)
+        if isinstance(event, StringEnd):
+            return StringEnd(path, event.value)
+        return Scalar(path, event.value)
+
 
 def _tool_data_format(tool: StepTool) -> StructuredDataFormat:
     if tool.schema_source is ToolSchemaSource.GENERATED:
@@ -150,13 +173,17 @@ def _build_schema(
 ) -> JsonObject:
     definitions: JsonObject = {}
     registry = DefinitionRegistry(definitions)
-    root = SchemaNode(
-        _decision_schema(
-            mode,
-            result_format,
-            tool_formats,
-            registry,
-        )
+    decision = _decision_schema(
+        mode,
+        result_format,
+        tool_formats,
+        registry,
+    )
+    uses_payload_envelope = K.ANY_OF in decision
+    root = (
+        SchemaNode.object_schema({"payload": decision})
+        if uses_payload_envelope
+        else SchemaNode(decision)
     )
     if definitions:
         root.set_definitions(definitions)

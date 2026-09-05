@@ -10,7 +10,7 @@ from ._base import (
     DecodedDecision,
     DecisionTransport,
 )
-from ._json_decision import json_response_instructions
+from ._decision_instructions import structured_response_instructions
 
 
 @final
@@ -26,7 +26,7 @@ class StructuredDecisionTransport(DecisionTransport):
     ) -> DecodedDecision:
         prompt = prompt_renderer.render(
             request.to_prompt(
-                json_response_instructions(request.decision_spec),
+                structured_response_instructions(request.decision_spec),
                 tools=request.decision_spec.tools,
                 history=request.history,
             )

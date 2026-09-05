@@ -89,8 +89,10 @@ async def test_renders_and_delivers_one_complete_prompt() -> None:
     assert decoded.completion is completion
     renderer.render.assert_called_once()
     rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
-    assert "Return exactly one JSON object" in rendered_prompt.response_instructions
-    assert "JSON Schema" in rendered_prompt.response_instructions
+    assert "provided structured output schema" in (
+        rendered_prompt.response_instructions
+    )
+    assert '"decision"' not in rendered_prompt.response_instructions
 
 
 async def test_observer_finishes_before_the_client_request() -> None:
