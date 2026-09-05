@@ -1,11 +1,12 @@
-"""Exercise the documented programs with scripted model and search responses."""
+"""Run documentation examples with real sessions and mocked external services."""
 
 import ast
 import re
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Protocol, cast
+from typing import Protocol, cast
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,7 +16,9 @@ from sefia_litellm import LiteLLMClient
 from typer.testing import CliRunner
 
 ROOT = Path(__file__).resolve().parents[2]
-REPORT: dict[str, Any] = {
+TUTORIAL = "docs/tutorial.md"
+CLI_SECTION = "3. Make it pause for a human - and survive a restart"
+REPORT: dict[str, str | list[str]] = {
     "topic": "durable execution",
     "summary": "Approved report",
     "sources": [],
@@ -26,57 +29,71 @@ class HTTPClient(Protocol):
     def post(self, url: str, *, json: object | None = None) -> Response: ...
 
 
-def blocks(path: str) -> list[str]:
-    return re.findall(r"^```python\n(.*?)^```", (ROOT / path).read_text(), re.M | re.S)
+def python_blocks(markdown: str) -> list[str]:
+    return re.findall(r"^```python\n(.*?)^```", markdown, re.M | re.S)
 
 
-def load_code(code: str, name: str, monkeypatch: pytest.MonkeyPatch) -> Any:
+def example(path: str, section: str) -> str:
+    markdown = (ROOT / path).read_text(encoding="utf-8")
+    _, heading, body = markdown.partition(f"## {section}\n")
+    assert heading, f"Missing section {section!r} in {path}"
+    return python_blocks(body.split("\n## ", 1)[0])[0]
+
+
+def load_code(code: str, name: str, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     module = ModuleType(name)
+    # Type-hint resolution and persisted results need an importable module name.
     monkeypatch.setitem(sys.modules, name, module)
     exec(compile(code, name, "exec"), module.__dict__)
     return module
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def isolated_workdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
 
 
-def script(monkeypatch: pytest.MonkeyPatch, *, pause: bool = False) -> MockLLMClient:
-    completions = [result_completion(REPORT)]
-    if pause:
-        completions.insert(
-            0, tool_calls_completion(("Input_get_input", {"prompt": "Approve draft?"}))
-        )
-    llm = MockLLMClient(completions)
-    monkeypatch.setattr(LiteLLMClient, "complete", llm.complete)
-    return llm
+@pytest.fixture
+def llm(monkeypatch: pytest.MonkeyPatch) -> MockLLMClient:
+    client = MockLLMClient([])
+    monkeypatch.setattr(LiteLLMClient, "complete", client.complete)
+    return client
 
 
 def test_python_blocks_compile() -> None:
     for path in ROOT.rglob("*.md"):
         if any(part.startswith(".") for part in path.relative_to(ROOT).parts):
             continue
-        for index, code in enumerate(blocks(str(path.relative_to(ROOT)))):
+        for index, code in enumerate(python_blocks(path.read_text(encoding="utf-8"))):
             compile(
                 code, f"{path}:{index}", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
             )
 
 
-@pytest.mark.usefixtures("isolated_workdir")
-def test_tutorial_quickstart(monkeypatch: pytest.MonkeyPatch) -> None:
-    llm = MockLLMClient(
-        [result_completion({"key_points": ["Durable calls"], "uncertainty": "None"})]
+def test_tutorial_quickstart(
+    llm: MockLLMClient,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    llm.completions.append(
+        result_completion({"key_points": ["Durable calls"], "uncertainty": "None"})
     )
-    monkeypatch.setattr(LiteLLMClient, "complete", llm.complete)
-    load_code(blocks("docs/tutorial.md")[0], "__main__", monkeypatch)
+    code = example(TUTORIAL, "1. Your first inferred function")
+    load_code(code, "__main__", monkeypatch)
+    assert "Durable calls" in capsys.readouterr().out
     assert len(llm.requests) == 1
 
 
-@pytest.mark.usefixtures("isolated_workdir")
-def test_tutorial_cli_pause_resume(monkeypatch: pytest.MonkeyPatch) -> None:
-    llm = script(monkeypatch, pause=True)
-    code = next(c for c in blocks("docs/tutorial.md") if "# hitl_cli.py" in c)
+def test_tutorial_cli_pause_resume(
+    llm: MockLLMClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    llm.completions.extend(
+        [
+            tool_calls_completion(("Input_get_input", {"prompt": "Approve draft?"})),
+            result_completion(REPORT),
+        ]
+    )
+    code = example(TUTORIAL, CLI_SECTION)
     first = load_code(code, "hitl_cli", monkeypatch)
     paused = CliRunner().invoke(first.app, [])
     assert paused.exit_code == 0, paused.output
@@ -94,14 +111,25 @@ def test_tutorial_cli_pause_resume(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not llm.completions
 
 
-@pytest.mark.parametrize("path", ["README.md", "docs/tutorial.md"])
-@pytest.mark.usefixtures("isolated_workdir")
-def test_http_pause_resume(path: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    llm = script(monkeypatch, pause=True)
-    if path == "docs/tutorial.md":
-        cli_code = next(c for c in blocks(path) if "# hitl_cli.py" in c)
-        load_code(cli_code, "hitl_cli", monkeypatch)
-    code = next(c for c in blocks(path) if "app = FastAPI()" in c)
+@pytest.mark.parametrize(
+    ("path", "section"),
+    [
+        ("README.md", "Pause for a human, resume after a restart"),
+        (TUTORIAL, "4. Serve it over HTTP"),
+    ],
+)
+def test_http_pause_resume(
+    path: str, section: str, llm: MockLLMClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    llm.completions.extend(
+        [
+            tool_calls_completion(("Input_get_input", {"prompt": "Approve draft?"})),
+            result_completion(REPORT),
+        ]
+    )
+    if path == TUTORIAL:
+        load_code(example(TUTORIAL, CLI_SECTION), "hitl_cli", monkeypatch)
+    code = example(path, section)
     first = load_code(code, "doc_server", monkeypatch)
     with TestClient(first.app) as raw_client:
         client = cast(HTTPClient, raw_client)
@@ -125,45 +153,37 @@ def test_http_pause_resume(path: str, monkeypatch: pytest.MonkeyPatch) -> None:
     assert not llm.completions
 
 
-@pytest.mark.parametrize("path", ["README.md", "docs/tutorial.md"])
-@pytest.mark.usefixtures("isolated_workdir")
-async def test_research_tool(path: str, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("path", ["README.md", TUTORIAL])
+async def test_research_tool(
+    path: str,
+    llm: MockLLMClient,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     if path == "README.md":
-        code = next(c for c in blocks(path) if "async def main(topic:" in c)
+        code = example(path, "Quickstart")
     else:
-        first, tools = blocks(path)[:2]
-        code = first.split('if __name__ == "__main__":')[0] + tools
+        code = example(path, "1. Your first inferred function")
+        code += "\n" + example(path, "2. Give it a tool")
     module = load_code(code, "doc_research", monkeypatch)
-    llm = MockLLMClient(
+    llm.completions.extend(
         [
             tool_calls_completion(("WebSearch_search", {"query": "durable execution"})),
             result_completion(REPORT),
         ]
     )
-    monkeypatch.setattr(LiteLLMClient, "complete", llm.complete)
-    calls: list[str] = []
-
-    class Search:
-        def __enter__(self) -> "Search":
-            return self
-
-        def __exit__(self, *args: object) -> None:
-            pass
-
-        def text(self, query: str, *, max_results: int) -> list[dict[str, str]]:
-            calls.append(query)
-            return [
-                {"title": "Example", "href": "https://example.com", "body": "Source"}
-            ]
-
-    import ddgs
-
-    monkeypatch.setattr(ddgs, "DDGS", Search)
-    if path == "README.md":
-        report = await module.main("durable execution")
-        assert report.summary == REPORT["summary"]
-    else:
-        await module.main()
-    assert calls == ["durable execution"]
+    with patch("ddgs.DDGS") as search_factory:
+        search = search_factory.return_value.__enter__.return_value.text
+        search.return_value = [
+            {"title": "Example", "href": "https://example.com", "body": "Source"}
+        ]
+        if path == "README.md":
+            report = await module.main("durable execution")
+            assert report.summary == REPORT["summary"]
+        else:
+            await module.main()
+            assert "Approved report" in capsys.readouterr().out
+        search.assert_called_once_with("durable execution", max_results=5)
     assert len(llm.requests) == 2
-    assert "Error executing tool" not in str(llm.requests)
+    assert not llm.completions
+    assert "Error executing tool" not in str(llm.requests[-1]["messages"])
