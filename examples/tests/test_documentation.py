@@ -15,7 +15,11 @@ from sefia_litellm import LiteLLMClient
 from typer.testing import CliRunner
 
 ROOT = Path(__file__).resolve().parents[2]
-REPORT: dict[str, Any] = {"topic": "durable execution", "summary": "Approved report", "sources": []}
+REPORT: dict[str, Any] = {
+    "topic": "durable execution",
+    "summary": "Approved report",
+    "sources": [],
+}
 
 
 class HTTPClient(Protocol):
