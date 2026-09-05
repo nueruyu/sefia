@@ -276,7 +276,7 @@ class TestLLMInferenceStrategy:
         strategy = _make_strategy(mock_llm_client)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output failed validation"
+            InvalidInferenceResponseError, match="LLM decision failed validation"
         ):
             await strategy.decide_next_step(
                 _function_info(return_type=MyOutput, instructions="do it"),
@@ -312,7 +312,7 @@ class TestLLMInferenceStrategy:
         strategy = _make_strategy(mock_llm_client)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output failed validation"
+            InvalidInferenceResponseError, match="LLM decision failed validation"
         ):
             await strategy.decide_next_step(
                 _function_info(instructions="do it"),
@@ -483,7 +483,7 @@ class TestResponseRepair:
         strategy = _make_strategy(client, max_repair_attempts=2)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output could not be decoded"
+            InvalidInferenceResponseError, match="LLM decision could not be decoded"
         ) as exc_info:
             await strategy.decide_next_step(
                 _function_info(), [], _tool_registry(), MockEventPublisher()
@@ -491,7 +491,7 @@ class TestResponseRepair:
 
         assert client.complete.await_count == 3
         assert exc_info.value.raw_content == invalid
-        assert exc_info.value.detail.startswith("LLM output could not be decoded")
+        assert exc_info.value.detail.startswith("LLM decision could not be decoded")
 
     async def test_zero_budget_disables_repair(self):
         client = AsyncMock()

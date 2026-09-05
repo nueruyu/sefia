@@ -203,7 +203,7 @@ class TestToolsRequiredDecision:
         strategy = _make_strategy(mock_client)
 
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output failed validation"
+            InvalidInferenceResponseError, match="LLM decision failed validation"
         ):
             await strategy.decide_next_step(
                 _function_info(return_type=Never, instructions="chat"),

@@ -1000,7 +1000,7 @@ class TestToolCallValidation:
             )
 
     async def test_rejects_unknown_argument(self) -> None:
-        with pytest.raises(InvalidInferenceResponseError, match="LLM output failed"):
+        with pytest.raises(InvalidInferenceResponseError, match="LLM decision failed"):
             await self._decide(
                 {
                     "decision": "tool_calls",

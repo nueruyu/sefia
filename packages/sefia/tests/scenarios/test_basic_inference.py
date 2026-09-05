@@ -289,7 +289,7 @@ async def test_inference_with_invalid_decision_model():
     ):
         agent = SimpleAgent()
         with pytest.raises(
-            InvalidInferenceResponseError, match="LLM output failed validation"
+            InvalidInferenceResponseError, match="LLM decision failed validation"
         ):
             await agent.generate_report(topic="invalid")
 
