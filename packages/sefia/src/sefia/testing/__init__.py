@@ -49,6 +49,12 @@ from ._decision_transport_contract import (
     DecisionTransportContract,
 )
 from ._history_storage_contract import HistoryStorageContract
+from ._llm_client_contract import (
+    LLMClientCase,
+    LLMClientContract,
+    StreamingLLMClientCase,
+    StreamingLLMClientContract,
+)
 from ._tool_collector_contract import ToolCollectorCase, ToolCollectorContract
 
 
@@ -235,9 +241,13 @@ __all__ = [
     "DecisionTransportCase",
     "DecisionTransportContract",
     "HistoryStorageContract",
+    "LLMClientCase",
+    "LLMClientContract",
     "MemoryHistoryStorage",
     "MockLLMClient",
     "RecordingDecisionObserver",
+    "StreamingLLMClientCase",
+    "StreamingLLMClientContract",
     "ToolCollectorCase",
     "ToolCollectorContract",
     "memory_session",

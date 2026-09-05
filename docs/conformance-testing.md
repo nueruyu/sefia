@@ -25,6 +25,10 @@ class TestPostgresHistoryStorage(HistoryStorageContract):
 
 The core package exports these contracts:
 
+- `LLMClientContract`, using an `llm_client_case` fixture that returns
+  `LLMClientCase`.
+- `StreamingLLMClientContract`, using a `streaming_llm_client_case` fixture that
+  returns `StreamingLLMClientCase`; apply it only to clients supporting streaming.
 - `HistoryStorageContract`, using the `history_storage` fixture.
 - `DecisionTransportContract`, using a `decision_transport_case` fixture that
   returns `DecisionTransportCase`.
