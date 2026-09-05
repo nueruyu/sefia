@@ -66,11 +66,11 @@ Requires Python 3.11+. In your application project, install with
 have not created a project yet):
 
 ```bash
-uv add 'sefios[litellm,web,sqlite]'
+uv add 'sefios[litellm]'
 ```
 
 Or, with pip in an activated virtual environment:
-`pip install 'sefios[litellm,web,sqlite]'`.
+`pip install 'sefios[litellm]'`.
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
 - **`sefios`** — the opinionated batteries: the `SessionScope` front door, ready-made
@@ -89,9 +89,6 @@ selected model and decision transport.
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
 
-Persistence is process-local by default. The quickstart installs the `sqlite` extra
-and selects `SQLitePersistence` explicitly so its sessions survive restarts.
-
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
 `domain` / `concurrent` / `preview` / `policy` / `profile` decorators,
 `Tools` and `Policy` / `Profile` — alongside its own `SessionScope` and
@@ -100,6 +97,15 @@ extension seams (a custom policy, strategy, client, or tool collector) and tool-
 context helpers such as `current_tool_call_id_for`.
 
 ## Quickstart
+
+This example uses web search and SQLite persistence. Add their optional extras:
+
+```bash
+uv add 'sefios[litellm,web,sqlite]'
+```
+
+With pip: `pip install 'sefios[litellm,web,sqlite]'`.
+Memory is the default; this example selects `SQLitePersistence` to survive restarts.
 
 Choose a model from [LiteLLM's provider guide](https://docs.litellm.ai/docs/providers),
 set `model=` to its LiteLLM model name, and configure the credentials required by
