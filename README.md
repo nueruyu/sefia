@@ -61,9 +61,16 @@ and **[the positioning argument](./docs/tradeoffs.md)**. For a
 
 ## Install
 
+Requires Python 3.11+. In your application project, install with
+[uv](https://docs.astral.sh/uv/guides/projects/) (run `uv init` first if you
+have not created a project yet):
+
 ```bash
-pip install 'sefios[litellm,web,sqlite]'
+uv add 'sefios[litellm]'
 ```
+
+Or, with pip in an activated virtual environment:
+`pip install 'sefios[litellm]'`.
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
 - **`sefios`** — the opinionated batteries: the `SessionScope` front door, ready-made
@@ -74,17 +81,13 @@ pip install 'sefios[litellm,web,sqlite]'
   `sefios.fastapi` integrations — Typer and FastAPI apps with persisted sessions
   and human-in-the-loop pause/resume.
 
-The opt-in live compatibility suite covers OpenAI, Anthropic, Gemini, xAI,
-Mistral, Groq, DeepSeek, and local Ollama. Each provider is skipped unless its
-enabling environment variable is set; suite coverage does not imply that every
-provider was exercised in a given test run. See the provider table in
-[CONTRIBUTING.md](./CONTRIBUTING.md#end-to-end-tests-against-real-providers).
+Sefia connects to [LiteLLM-supported LLM providers](https://docs.litellm.ai/docs/providers)
+through the LiteLLM adapter. End-to-end operation has currently been verified
+with **OpenAI, Anthropic, and Gemini** only. Available features depend on the
+selected model and decision transport.
 
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
-
-Persistence is process-local by default. The quickstart installs the `sqlite` extra
-and selects `SQLitePersistence` explicitly so its sessions survive restarts.
 
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
 `domain` / `concurrent` / `preview` / `policy` / `profile` decorators,
@@ -95,7 +98,28 @@ context helpers such as `current_tool_call_id_for`.
 
 ## Quickstart
 
-Save this as `research.py`, set `OPENAI_API_KEY`, and run `python research.py`.
+This example uses web search and SQLite persistence. Add their optional extras:
+
+```bash
+uv add 'sefios[litellm,web,sqlite]'
+```
+
+With pip: `pip install 'sefios[litellm,web,sqlite]'`.
+Memory is the default; this example selects `SQLitePersistence` to survive restarts.
+
+Choose a model from [LiteLLM's provider guide](https://docs.litellm.ai/docs/providers)
+and set `model=` to its LiteLLM model name. Set the provider's API key as an
+environment variable or as `NAME=value` in a `.env` file in your project directory:
+for example, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`.
+The code below uses `gpt-4o` as an example; choose the model and key for your provider.
+
+Save this as `research.py`. With the key already set in your environment, run
+`uv run python research.py` (or `python research.py` in the virtual environment
+used for pip). To load the key from `.env`, run:
+
+```bash
+uv run --env-file .env python research.py
+```
 The class holds a web dependency, runs an inferred step, and persists its run.
 
 <!-- example: readme-quickstart -->
@@ -183,8 +207,16 @@ A turn that pauses for a human and resumes after a restart, served on an ordinar
 request/response handler: the pause is a tool that **raises**, and resume is calling
 the endpoint again.
 
-This example uses the FastAPI integration with SQLite persistence, so install the required
-extras — `pip install 'sefios[litellm,web,fastapi,sqlite]'`.
+This example also needs the FastAPI extra and an HTTP server:
+
+```bash
+uv add 'sefios[litellm,web,fastapi,sqlite]' uvicorn
+```
+
+With pip: `pip install 'sefios[litellm,web,fastapi,sqlite]' uvicorn`.
+Save the code as `server.py`. With the key already set in your environment, run
+`uv run uvicorn server:app` (or `uvicorn server:app` in the virtual environment
+used for pip). With a `.env` file, use `uv run --env-file .env uvicorn server:app`.
 
 <!-- example: readme-http -->
 ```python
