@@ -41,7 +41,9 @@ function boundary is where durability and replay are expressed.
 sefia does not use native provider tool-calling by default. It asks the model for
 one decision shape: final answer or tool calls.
 
-The upside is a provider-portable result shape. The cost is that applications
+`NativeDecisionTransport` is also available for provider-native function calls,
+and `@concurrent` enables overlapping safe tool calls with any transport.
+Applications
 that rely on native parallel tool calls, provider-specific tuning, or
 provider-managed caching may fit better with a native-tooling framework.
 

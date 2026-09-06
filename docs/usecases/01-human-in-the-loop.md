@@ -32,7 +32,8 @@ re-sending.
 
 ## Hand-rolled
 
-A competent first attempt. Note how much of it is bookkeeping, not logic:
+Illustrative pseudocode: `db`, model calls, `Paused`, and `send_report` are
+application-defined. Note how much of it is bookkeeping, not logic:
 
 ```python
 async def research_turn(session_id: str, task: str, approval: str | None = None):
@@ -91,46 +92,9 @@ async def research_turn(session_id: str, task: str, approval: str | None = None)
 
 ## With sefia
 
-The turn is an ordinary typed function; the pause is a tool that raises:
-
-```python
-from sefios import SQLitePersistence, domain
-from sefios.fastapi import SefiaHTTP
-from sefios.fastapi.exceptions import InputRequired
-from sefios.tools import Input
-
-infer = domain("myapp").infer
-
-
-class Research:
-    def __init__(self, web: WebToolkit, input_tool: Input):
-        self._web = web
-        self._input = input_tool
-
-    @infer
-    async def run(self, task: str) -> Report:
-        """Clarify the task, research it with web search, draft a report, get the
-        human's approval of the draft, then finalize and send."""
-        ...
-
-
-api = SefiaHTTP(
-    model="gpt-4o",
-    persistence=SQLitePersistence(),
-)
-service = Research(web=WebToolkit(), input_tool=api.input_tool)
-
-
-# the endpoint stays an ordinary request/response handler
-@app.post("/sessions/{id}/research")
-async def research(id, body):
-    try:
-        async with api.session(session_id=id) as session:
-            await session.accept_input(body.input)
-            return await service.run(body.task)    # resumes where it paused
-    except InputRequired as e:
-        return {"status": "needs_input", "prompt": e.prompt}
-```
+The [tutorial's HTTP example](../tutorial.md#4-serve-it-over-http) provides the
+complete app and run commands. It researches and returns a report; publishing is
+an application-owned side effect, as in [use case 02](./02-approval-gated-workflow.md).
 
 The service has no checkpoint code, step keys, or 202 plumbing. Each LLM call and
 tool call is engraved automatically; on re-invocation the completed ones **replay
@@ -149,7 +113,7 @@ turn. The pause is just the input tool raising when no input is recorded yet.
 | Fire side effects once                  | per-step idempotency keys            | replay of completed steps; a key only at the side-effect boundary |
 | Survive a process restart               | load state, reconstruct the loop     | re-invoke; completed work replays |
 | Pause / resume for a human              | `Paused`, `approval=None`, 202 dance | a tool raises; re-invoke resumes |
-| Not double-run on concurrent re-entry   | a lock you write                     | session-scoped |
+| Not double-run on concurrent re-entry   | application lock/serialization       | application lock/serialization; the HTTP facade does not serialize turns |
 
 Most of that resume logic exists for *correctness* (non-determinism, exactly-once),
 not convenience. Your database still stores your data; sefia stores just enough to

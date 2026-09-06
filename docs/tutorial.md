@@ -4,9 +4,8 @@ A progressive walk from a single inferred function to a human-in-the-loop servic
 served over HTTP that resumes after a restart. About fifteen minutes. For the minimal
 example, see the [README](../README.md).
 
-> This tutorial is written against the **release-target API**. sefia is pre-1.0 and
-> parts (notably the tool model) are being finalized, so names may shift before
-> 1.0; see [DESIGN.md](../DESIGN.md) for what is settled.
+> These examples target the current repository implementation. Published packages
+> may lag behind `main`; see [CONTRIBUTING.md](../CONTRIBUTING.md) for checkout setup.
 
 ## Install
 
@@ -14,7 +13,7 @@ The tutorial builds up to the CLI and HTTP integrations, so install their extras
 alongside the provider:
 
 ```bash
-pip install 'sefios[litellm,cli,fastapi,sqlite]'
+pip install 'sefios[litellm,web,cli,fastapi,sqlite]' uvicorn
 ```
 
 Set whatever credentials your model needs (LiteLLM reads provider env vars):
@@ -29,6 +28,7 @@ An `@infer` function is an abstract method whose implementer is an LLM: the
 signature is the input/output contract, the docstring is the instruction, the body
 is `...`. You run it inside a **session**, which gives it durability and a store.
 
+<!-- example: tutorial-quickstart -->
 ```python
 # quickstart.py
 import asyncio
@@ -62,7 +62,8 @@ async def main() -> None:
         print(result.key_points)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ```bash
@@ -93,6 +94,11 @@ Tools are the **public methods of fields granted with the `Tools[...]` annotatio
 — no decorator, no registry, no base class. Hold a dependency in a class-level field
 annotated `Tools[...]`, and its public methods become callable by the inferred step.
 
+Replace the `main` function in `quickstart.py` with the code below, keeping the
+imports, models, `infer`, and `scope` above it. Keep the `if __name__` block last
+so it calls the new `main`.
+
+<!-- example: tutorial-tools -->
 ```python
 from sefios import Tools
 from sefios.tools import WebSearch
@@ -158,6 +164,7 @@ facade. When it has no input it records the prompt and **raises**; `SefiaCLI`
 renders the prompt and exits cleanly. Because the session is engraved, you can resume
 in a **completely new process** and the completed steps replay instead of re-running.
 
+<!-- example: tutorial-cli -->
 ```python
 # hitl_cli.py
 import asyncio
@@ -205,7 +212,7 @@ service = ResearchService(web=WebSearch(), input_tool=cli.input_tool)
 @app.command()
 def run(answer: str | None = None) -> None:
     async def _run() -> None:
-        async with cli.session(session_id="approval-demo") as session:
+        async with cli.session() as session:
             await session.accept_input(answer)
             report = await service.run("the state of durable LLM applications")
             print("DONE:", report.summary)
@@ -233,11 +240,13 @@ steps are not re-run; they **replay their exact stored outputs**, so the model i
 approving the *same* draft, and only the finalize step executes:
 
 ```bash
-python hitl_cli.py "yes, approve"
+python hitl_cli.py --answer "yes, approve"
 # DONE: ...
 ```
 
-That second invocation could be on another machine, after a deploy, or days later.
+Resume from the same working directory so the SQLite database and active-session
+file are found. Another machine or deployment needs those same persisted resources
+and stable domain/function identities; local files are not replicated automatically.
 There was no checkpoint code, no step keys, no idempotency bookkeeping; just a tool
 that raised and a session that replays.
 
@@ -247,6 +256,7 @@ The same service behind a stateless request/response handler. A pause returns
 "needs input"; the input arrives in a later request to the same session id, and the
 run resumes. Nothing runs in the background between the two requests.
 
+<!-- example: tutorial-http -->
 ```python
 # server.py
 from fastapi import FastAPI
@@ -256,7 +266,7 @@ from sefios.fastapi import SefiaHTTP
 from sefios.fastapi.exceptions import InputRequired
 from sefios.tools import WebSearch
 
-# (ResearchService, Report from hitl_cli.py)
+from hitl_cli import ResearchService
 
 app = FastAPI()
 api = SefiaHTTP(
@@ -280,7 +290,8 @@ def create_session():
 async def turn(session_id: str, body: TurnBody):
     try:
         async with api.session(session_id=session_id) as session:
-            await session.accept_input(body.input)
+            if body.input is not None:
+                await session.accept_input(body.input)
             report = await research_service.run(body.task)
             return {"status": "done", "report": report}
     except InputRequired as e:
@@ -294,24 +305,40 @@ custom `LLMClient`, such as a test double or a provider-specific adapter.
 uvicorn server:app
 ```
 
+For a uv project, use `uv run uvicorn server:app`. To load credentials from
+`.env`, use `uv run --env-file .env uvicorn server:app`.
+
+In another terminal in the same project directory (Bash/Zsh):
+
 ```bash
-# create a session
-SID=$(curl -s -X POST localhost:8000/sessions | python -c 'import sys,json;print(json.load(sys.stdin)["session_id"])')
+# Create a session
+SESSION_ID=$(curl -fsS -X POST http://127.0.0.1:8000/sessions |
+  python -c 'import json, sys; print(json.load(sys.stdin)["session_id"])')
 
-# first request: pauses for approval
-curl -X POST localhost:8000/sessions/$SID/turn \
-  -H 'content-type: application/json' \
+# Start the research turn
+curl -fsS -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/turn" \
+  -H 'Content-Type: application/json' \
   -d '{"task": "the state of durable LLM applications"}'
-# {"status":"needs_input","prompt":"Here's the draft ... Approve it?"}
-
-# restart the server here if you like; the paused run survives
-
-# second request: resumes and finalizes
-curl -X POST localhost:8000/sessions/$SID/turn \
-  -H 'content-type: application/json' \
-  -d '{"task": "the state of durable LLM applications", "input": "yes, approve"}'
-# {"status":"done","report":{...}}
 ```
+
+If the response is `{"status":"needs_input","prompt":"..."}`, send the reply
+below with the same session ID and `task`. To try resuming after a restart, stop
+and restart the server from the same directory before sending the reply, keeping
+its `.sefios/` database.
+
+```bash
+curl -fsS -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/turn" \
+  -H 'Content-Type: application/json' \
+  -d '{"task": "the state of durable LLM applications", "input": "yes, approve"}'
+```
+
+A completed turn returns `{"status":"done","report":{...}}`; if it asks for
+more input, repeat the reply request with your next answer.
+
+Keep `task` unchanged when resuming and send requests for a given session one at
+a time; the facade does not serialize concurrent turns. Asking for approval in
+an LLM instruction is not an enforced approval gate. For a mandatory gate, use
+explicit application control flow as in [use case 02](./usecases/02-approval-gated-workflow.md).
 
 The handler is an ordinary stateless endpoint. The durable run lives in the store
 under `.sefios/`, not in the process, so killing and restarting the server

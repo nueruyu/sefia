@@ -61,9 +61,16 @@ and **[the positioning argument](./docs/tradeoffs.md)**. For a
 
 ## Install
 
+Requires Python 3.11+. In your application project, install with
+[uv](https://docs.astral.sh/uv/guides/projects/) (run `uv init` first if you
+have not created a project yet):
+
 ```bash
-pip install 'sefios[litellm,sqlite]'
+uv add 'sefios[litellm]'
 ```
+
+Or, with pip in an activated virtual environment:
+`pip install 'sefios[litellm]'`.
 
 - **`sefia`** — the core: `@infer`, the tool model, sessions, and replay.
 - **`sefios`** — the opinionated batteries: the `SessionScope` front door, ready-made
@@ -74,15 +81,13 @@ pip install 'sefios[litellm,sqlite]'
   `sefios.fastapi` integrations — Typer and FastAPI apps with persisted sessions
   and human-in-the-loop pause/resume.
 
-Live end-to-end compatibility is currently verified against OpenAI, Anthropic, and
-Gemini. Other LiteLLM providers may work but are not yet covered by the live
-compatibility suite.
+Sefia connects to [LiteLLM-supported LLM providers](https://docs.litellm.ai/docs/providers)
+through the LiteLLM adapter. End-to-end operation has currently been verified
+with **OpenAI, Anthropic, and Gemini** only. Available features depend on the
+selected model and decision transport.
 
 The replay engine underneath, [glyff](https://github.com/nueruyu/glyff), is installed
 automatically.
-
-Persistence is process-local by default. The quickstart installs the `sqlite` extra
-and selects `SQLitePersistence` explicitly so its sessions survive restarts.
 
 **Import from `sefios`.** It re-exports the everyday authoring surface — the
 `domain` / `concurrent` / `preview` / `policy` / `profile` decorators,
@@ -93,10 +98,34 @@ context helpers such as `current_tool_call_id_for`.
 
 ## Quickstart
 
-A plain Python class that holds a dependency, runs an inferred step, and persists its
-run.
+This example uses web search and SQLite persistence. Add their optional extras:
 
+```bash
+uv add 'sefios[litellm,web,sqlite]'
+```
+
+With pip: `pip install 'sefios[litellm,web,sqlite]'`.
+Memory is the default; this example selects `SQLitePersistence` to survive restarts.
+
+Choose a model from [LiteLLM's provider guide](https://docs.litellm.ai/docs/providers)
+and set `model=` to its LiteLLM model name. Set the provider's API key as an
+environment variable or as `NAME=value` in a `.env` file in your project directory:
+for example, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`.
+The code below uses `gpt-4o` as an example; choose the model and key for your provider.
+
+Save this as `research.py`. With the key already set in your environment, run
+`uv run python research.py` (or `python research.py` in the virtual environment
+used for pip). To load the key from `.env`, run:
+
+```bash
+uv run --env-file .env python research.py
+```
+The class holds a web dependency, runs an inferred step, and persists its run.
+
+<!-- example: readme-quickstart -->
 ```python
+import asyncio
+
 from pydantic import BaseModel
 from sefios import SQLitePersistence, SessionScope, Tools, domain
 from sefios.tools import WebSearch
@@ -131,6 +160,10 @@ async def main(topic: str) -> Report:
     service = ResearchService(web=WebSearch())
     async with scope.session(session_id="demo") as _:
         return await service.run(topic)       # the engraved run can pause and resume
+
+
+if __name__ == "__main__":
+    print(asyncio.run(main("durable execution for LLM applications")))
 ```
 
 `SessionScope` wires the LLM client, the glyff session, and a shared SQLite database
@@ -170,24 +203,21 @@ behavior as the other transports.
 
 ## Pause for a human, resume after a restart
 
-A turn that pauses for a human and resumes after a restart, served on an ordinary
-request/response handler: the pause is a tool that **raises**, and resume is calling
-the endpoint again.
+An input tool pauses the run by raising `InputRequired`. A later HTTP request
+supplies the reply and re-invokes the same call; with durable persistence,
+completed steps replay even after a server restart.
 
-This example uses the FastAPI integration with SQLite persistence, so install both
-extras — `pip install 'sefios[litellm,fastapi,sqlite]'`.
+The service receives `api.input_tool` as its human-input tool. The endpoints
+create a session, run the research, and accept a reply when it pauses.
 Pass `llm_client=` instead of `model=` to use a custom `LLMClient`, including a
 test double or a provider-specific adapter.
 
+This excerpt omits imports and the definitions of `infer`, `Report`, `app`, and
+`TurnBody`; see the [HTTP tutorial](./docs/tutorial.md#4-serve-it-over-http)
+for the complete setup and curl commands.
+
+<!-- example: readme-http -->
 ```python
-from sefios import SQLitePersistence, Tools, domain
-from sefios.fastapi import SefiaHTTP
-from sefios.fastapi.exceptions import InputRequired
-from sefios.tools import Input, WebSearch
-
-
-infer = domain("myapp").infer
-
 class ResearchService:
     _web: Tools[WebSearch]
     _input: Tools[Input]
@@ -226,16 +256,6 @@ async def turn(session_id: str, body: TurnBody):
         return {"status": "needs_input", "prompt": e.prompt}
 ```
 
-When the input tool has no recorded input it raises `InputRequired`; `SefiaHTTP`
-publishes the pause as an SSE event and re-raises it after the session context exits,
-and the handler returns "needs input". The input arrives in a later request and is delivered
-with `session.accept_input`; the same endpoint re-invokes, every completed LLM/tool
-call **replays its exact output** (the approved draft is byte-for-byte the same), and
-only the pending step runs. You write no checkpoint code, step keys, idempotency
-plumbing, or 202 dance; see
-[use case 01](./docs/usecases/01-human-in-the-loop.md) for the same turn hand-rolled,
-and what it removes.
-
 ## Core concepts
 
 | Concept | What it is |
@@ -258,6 +278,6 @@ and what it removes.
 
 ## Status
 
-Pre-1.0 — the API is unstable and will change. The code in these docs targets the 1.0
-API; some surfaces still differ today. See [DESIGN.md](./DESIGN.md) and the issue
-tracker for what is settled and what is in flight.
+Pre-1.0 — the API is unstable and will change. These examples target the current
+repository implementation; a published package may lag behind `main`. See
+[CONTRIBUTING.md](./CONTRIBUTING.md) to run against the checkout.

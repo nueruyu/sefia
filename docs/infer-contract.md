@@ -4,6 +4,10 @@ An `@infer` function is an ordinary Python function or method whose body is not
 executed. Its signature, type hints, return annotation, and docstring are the
 contract used to run an LLM-backed call.
 
+The snippets on this page illustrate individual contracts, not standalone scripts;
+`Summary`, `Report`, and toolkit/config types stand for application-defined types.
+For complete imports, implementations, and session setup, see the [tutorial](./tutorial.md).
+
 ## Function shape
 
 Use explicit parameters, an explicit return type, and a docstring instruction.
