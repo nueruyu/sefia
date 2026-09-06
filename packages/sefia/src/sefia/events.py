@@ -4,6 +4,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from glyff import ExecutionId
+
 from .event_system import Event
 from .inference import HistoryItem, StepDecision, ToolCallRequest
 
@@ -104,3 +106,11 @@ class InferenceFailed(Event):
 @dataclass(frozen=True)
 class AttemptStart(Event):
     """Event fired at the beginning of each inference attempt."""
+
+
+@dataclass(frozen=True)
+class ToolExecutionBound(Event):
+    """A dispatched tool entered its engraved body; cached bodies do not emit."""
+
+    tool_call_id: str
+    execution_id: ExecutionId

@@ -1,13 +1,14 @@
 """Persisted routing between sefios input tools and host integrations."""
 
+import asyncio
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Protocol, TypeAlias, TypedDict, TypeVar, cast
 
 from ._async import MaybeAwaitable, maybe_await
+from ._input import InputRequest
 from .exceptions import AmbiguousInputError, UnknownInputError
-from .tools.input import InputRequest
 
 _DEFAULT_NAMESPACE = "input_channel"
 
@@ -38,7 +39,9 @@ class InputChannel:
     """Routes external input to persisted pending requests.
 
     A channel binds persistence per context so one shared instance remains safe
-    across concurrent sessions. Optional callbacks let an adapter observe new
+    across concurrent sessions. Sibling tasks in one binding serialize channel
+    updates; separate bindings must not concurrently write the same session.
+    Optional callbacks let an adapter observe new
     requests and streamed prompt text without changing the routing state machine.
     """
 
@@ -56,6 +59,7 @@ class InputChannel:
         self._active_store: ContextVar[KeyValueStore | None] = ContextVar(
             "input_active_store", default=None
         )
+        self._active_lock: ContextVar[asyncio.Lock] = ContextVar("input_lock")
         self._on_request = on_request
         self._on_prompt_delta = on_prompt_delta
 
@@ -63,18 +67,23 @@ class InputChannel:
     def use_store(self, store: KeyValueStore) -> Generator[None]:
         """Bind the persistence backing this channel for the enclosed block."""
         token = self._active_store.set(store)
+        lock_token = self._active_lock.set(asyncio.Lock())
+        channel_token = _active_channel.set(self)
         try:
             yield
         finally:
+            _active_channel.reset(channel_token)
+            self._active_lock.reset(lock_token)
             self._active_store.reset(token)
 
     async def pending(self) -> list[InputRequest]:
         """Return requests still waiting for input, ordered by interaction id."""
-        pending = await self._pending_map()
-        return [
-            InputRequest(interaction_id=entry["id"], prompt=entry["prompt"])
-            for _, entry in sorted(pending.items())
-        ]
+        async with self._lock():
+            pending = await self._pending_map()
+            return [
+                InputRequest(interaction_id=entry["id"], prompt=entry["prompt"])
+                for _, entry in sorted(pending.items())
+            ]
 
     async def receive_input(
         self,
@@ -83,45 +92,53 @@ class InputChannel:
         reply_to: str | None = None,
     ) -> None:
         """Route input to a pending request, or queue it for the next one."""
-        if input_value is None:
-            return
-        input_text = _to_input_text(input_value)
-        if not input_text:
-            return
+        async with self._lock():
+            if input_value is None:
+                return
+            input_text = _to_input_text(input_value)
+            if not input_text:
+                return
 
-        pending = await self._pending_map()
+            pending = await self._pending_map()
 
-        if reply_to is not None:
-            if reply_to not in pending:
-                raise UnknownInputError(reply_to)
-            await self._store_input(reply_to, input_text)
-            return
+            if reply_to is not None:
+                if reply_to not in pending:
+                    raise UnknownInputError(reply_to)
+                await self._store_input(reply_to, input_text)
+                return
 
-        if len(pending) == 1:
-            await self._store_input(next(iter(pending)), input_text)
-            return
+            if len(pending) == 1:
+                await self._store_input(next(iter(pending)), input_text)
+                return
 
-        if len(pending) > 1:
-            raise AmbiguousInputError(sorted(pending))
+            if len(pending) > 1:
+                raise AmbiguousInputError(sorted(pending))
 
-        await self._queue_input(input_text)
+            await self._queue_input(input_text)
 
-    async def provide_input(self, interaction_id: str) -> str | None:
+    async def provide_input(
+        self, interaction_id: str, *, allow_queued: bool = True
+    ) -> str | None:
         """Return stored input, or claim a queued input when unambiguous."""
-        provided = await self._stored_input(interaction_id)
-        if provided is not None:
-            return provided
+        async with self._lock():
+            provided = await self._stored_input(interaction_id)
+            if provided is not None:
+                return provided
 
-        pending = await self._pending_map()
-        if any(other_id != interaction_id for other_id in pending):
-            return None
+            if not allow_queued:
+                return None
 
-        return await self._pop_queued_input()
+            pending = await self._pending_map()
+            if any(other_id != interaction_id for other_id in pending):
+                return None
+
+            return await self._pop_queued_input()
 
     async def record_request(self, interaction_id: str, prompt: str) -> None:
-        pending = await self._pending_map()
-        pending[interaction_id] = {"id": interaction_id, "prompt": prompt}
-        await self._save_pending(pending)
+        async with self._lock():
+            pending = await self._pending_map()
+            pending[interaction_id] = {"id": interaction_id, "prompt": prompt}
+            await self._save_pending(pending)
         if self._on_request is not None:
             await maybe_await(
                 self._on_request(
@@ -130,13 +147,14 @@ class InputChannel:
             )
 
     async def complete_request(self, interaction_id: str) -> None:
-        pending = await self._pending_map()
-        pending.pop(interaction_id, None)
-        await self._save_pending(pending)
+        async with self._lock():
+            pending = await self._pending_map()
+            pending.pop(interaction_id, None)
+            await self._save_pending(pending)
 
-    async def notify_prompt_delta(self, interaction_id: str, text: str) -> None:
+    async def notify_prompt_delta(self, preview_id: str, text: str) -> None:
         if self._on_prompt_delta is not None:
-            await maybe_await(self._on_prompt_delta(interaction_id, text))
+            await maybe_await(self._on_prompt_delta(preview_id, text))
 
     async def _pending_map(self) -> _PendingMap:
         store = self._store()
@@ -150,7 +168,6 @@ class InputChannel:
             if provided is None:
                 unresolved[interaction_id] = request
 
-        await self._save_pending(unresolved)
         return dict(unresolved)
 
     async def _save_pending(self, pending: _PendingMap) -> None:
@@ -185,6 +202,10 @@ class InputChannel:
             await store.delete(self._queued_key)
         return next_input
 
+    def _lock(self) -> asyncio.Lock:
+        self._store()
+        return self._active_lock.get()
+
     def _store(self) -> KeyValueStore:
         store = self._active_store.get()
         if store is None:
@@ -207,3 +228,15 @@ def _to_input_text(input_value: str | list[str]) -> str:
     if isinstance(input_value, str):
         return input_value.strip()
     return " ".join(input_value).strip()
+
+
+_active_channel: ContextVar[InputChannel] = ContextVar("active_input_channel")
+
+
+def get_input_channel() -> InputChannel:
+    try:
+        return _active_channel.get()
+    except LookupError:
+        raise RuntimeError(
+            "External input requires an active sefios session."
+        ) from None
