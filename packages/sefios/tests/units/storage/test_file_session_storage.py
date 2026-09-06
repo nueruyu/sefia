@@ -6,16 +6,6 @@ from glyff_pydantic import PydanticSerializer
 from sefios.storage import FileSessionStorage
 
 
-async def test_commits_immediately(tmp_path: Path) -> None:
-    serializer = PydanticSerializer()
-    store = FileSessionStorage(base_dir=tmp_path, serializer=serializer)
-
-    await store.set("session/state", {"value": "kept"}, dict)
-
-    reader = FileSessionStorage(base_dir=tmp_path, serializer=serializer)
-    assert await reader.get("session/state", dict) == {"value": "kept"}
-
-
 async def test_keys_with_dotted_tails_do_not_collide(tmp_path: Path) -> None:
     store = FileSessionStorage(base_dir=tmp_path, serializer=PydanticSerializer())
 

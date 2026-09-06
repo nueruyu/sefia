@@ -176,6 +176,8 @@ the endpoint again.
 
 This example uses the FastAPI integration with SQLite persistence, so install both
 extras — `pip install 'sefios[litellm,fastapi,sqlite]'`.
+Pass `llm_client=` instead of `model=` to use a custom `LLMClient`, including a
+test double or a provider-specific adapter.
 
 ```python
 from sefios import SQLitePersistence, Tools, domain

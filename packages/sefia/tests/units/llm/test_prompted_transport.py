@@ -88,20 +88,3 @@ async def test_reports_undecodable_response() -> None:
         )
 
     assert exc_info.value.completion is completion
-
-
-async def test_reports_text_and_reasoning_progress() -> None:
-    client = AsyncMock()
-    client.complete.return_value = LLMCompletion(
-        content='{"decision":"result","result":"done"}'
-    )
-    observer = RecordingDecisionObserver()
-
-    await PromptedDecisionTransport().request_decision(
-        client, _renderer(), _request(), observer, stream=True
-    )
-
-    await client.complete.await_args.kwargs["stream_callback"]("text")
-    await client.complete.await_args.kwargs["reasoning_callback"]("reasoning")
-    assert observer.response_texts == ["text"]
-    assert observer.reasoning_texts == ["reasoning"]

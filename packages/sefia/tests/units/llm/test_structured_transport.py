@@ -1,14 +1,13 @@
-from collections.abc import Awaitable, Callable
 from typing import cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from typing_extensions import override
 
 from sefia.llm import DecisionPrompt, LLMCompletion, Message, PromptRenderer
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.streaming import StringEnd
 from sefia.llm.transports import DecisionRequest, StructuredDecisionTransport
 from sefia.pydantic import PydanticModelBackend
 from sefia.testing import RecordingDecisionObserver, make_decision_request
@@ -74,6 +73,7 @@ async def test_observer_finishes_before_the_client_request() -> None:
     client.complete.side_effect = complete
 
     class Observer(RecordingDecisionObserver):
+        @override
         async def before_request(self, prompt: str) -> None:
             await super().before_request(prompt)
             order.append("observed")
@@ -116,43 +116,3 @@ async def test_rejects_raw_json_content() -> None:
             RecordingDecisionObserver(),
             stream=False,
         )
-
-
-async def test_reports_text_and_reasoning_progress() -> None:
-    client = AsyncMock()
-    client.complete.return_value = LLMCompletion(
-        structured_output=StructuredData.from_json(
-            {"decision": "result", "result": "done"}
-        )
-    )
-    observer = RecordingDecisionObserver()
-
-    await StructuredDecisionTransport().request_decision(
-        client, _renderer(), _request(), observer, stream=True
-    )
-
-    await client.complete.await_args.kwargs["stream_callback"]("text")
-    await client.complete.await_args.kwargs["reasoning_callback"]("reasoning")
-    assert observer.response_texts == ["text"]
-    assert observer.reasoning_texts == ["reasoning"]
-
-
-async def test_reports_logical_tool_progress() -> None:
-    client = AsyncMock()
-    client.complete.return_value = LLMCompletion(
-        structured_output=StructuredData.from_json(
-            {"decision": "tool_calls", "tool_calls": []}
-        )
-    )
-    observer = RecordingDecisionObserver()
-
-    await StructuredDecisionTransport().request_decision(
-        client, _renderer(), _request(), observer, stream=True
-    )
-
-    callback = cast(
-        Callable[[StringEnd], Awaitable[None]],
-        client.complete.await_args.kwargs["output_callback"],
-    )
-    await callback(StringEnd(("tool_calls", 0, "name"), "search"))
-    assert observer.output_events == [StringEnd(("tool_calls", 0, "name"), "search")]

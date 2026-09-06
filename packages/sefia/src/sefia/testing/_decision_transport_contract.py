@@ -10,15 +10,25 @@ from ..llm._client import LLMClient
 from ..llm._messages import LLMCompletion, Message
 from ..llm._prompt_renderer import DecisionPrompt, PromptRenderer
 from ..llm.step_decision import DecisionSpec, StepTool
-from ..llm.streaming import OutputStreamCallback, OutputStreamEvent, Scalar
+from ..llm.streaming import (
+    OutputStreamCallback,
+    OutputStreamEvent,
+    StringDelta,
+    StringEnd,
+)
 from ..llm.structured_data import StructuredData
 from ..llm.transports import DecisionObserver, DecisionRequest, DecisionTransport
 from ..pydantic import PydanticModelBackend
 from ._factories import make_decision_request
 
 
-_STREAM_TEXT = '{"contract":1}'
-_OUTPUT_EVENT = Scalar(("contract",), 1)
+_STREAM_TEXT = '{"decision":"result","result":"done"}'
+_OUTPUT_EVENTS: tuple[OutputStreamEvent, ...] = (
+    StringDelta(("decision",), "result"),
+    StringEnd(("decision",), "result"),
+    StringDelta(("result",), "done"),
+    StringEnd(("result",), "done"),
+)
 
 
 @dataclass(frozen=True)
@@ -83,7 +93,8 @@ class _CompletionClient(LLMClient):
         if stream_callback is not None:
             await stream_callback(_STREAM_TEXT)
         if output_callback is not None:
-            await output_callback(_OUTPUT_EVENT)
+            for event in _OUTPUT_EVENTS:
+                await output_callback(event)
         if reasoning_callback is not None:
             await reasoning_callback("reasoning")
         return self.completion
@@ -132,7 +143,7 @@ class DecisionTransportContract:
 
         assert observer.response_texts == [_STREAM_TEXT]
         assert observer.reasoning_texts == ["reasoning"]
-        assert observer.output_events == [_OUTPUT_EVENT]
+        assert observer.output_events == list(_OUTPUT_EVENTS)
 
 
 __all__ = ["DecisionTransportCase", "DecisionTransportContract"]

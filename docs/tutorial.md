@@ -287,6 +287,9 @@ async def turn(session_id: str, body: TurnBody):
         return {"status": "needs_input", "prompt": e.prompt}
 ```
 
+Pass `llm_client=` instead of `model=` when the HTTP integration should use a
+custom `LLMClient`, such as a test double or a provider-specific adapter.
+
 ```bash
 uvicorn server:app
 ```

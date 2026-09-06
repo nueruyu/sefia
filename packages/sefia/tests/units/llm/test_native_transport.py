@@ -21,7 +21,6 @@ from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
-from sefia.llm.streaming import StringEnd as OutputStringEnd
 from sefia.llm.transports import DecisionRequest, NativeDecisionTransport
 from sefia.pydantic import PydanticModelBackend
 from sefia.testing import (
@@ -242,39 +241,3 @@ async def test_native_transport_requires_object_arguments() -> None:
             RecordingDecisionObserver(),
             stream=False,
         )
-
-
-async def test_native_transport_forwards_all_progress_kinds() -> None:
-    client = AsyncMock()
-    client.complete.return_value = LLMCompletion(
-        tool_calls=[_call("lookup", '{"key":"item"}')]
-    )
-    observer = RecordingDecisionObserver()
-
-    async def native_complete(**kwargs: Any) -> LLMCompletion:
-        await kwargs["stream_callback"]("text")
-        await kwargs["reasoning_callback"]("reasoning")
-        await kwargs["output_callback"](
-            OutputStringEnd(("tool_calls", 0, "name"), "lookup")
-        )
-        await kwargs["output_callback"](
-            OutputStringEnd(("tool_calls", 0, "arguments", "key"), "item")
-        )
-        return client.complete.return_value
-
-    client.complete.side_effect = native_complete
-    decision = _decision(Never, lookup)
-    await NativeDecisionTransport().request_decision(
-        client,
-        _renderer(),
-        _request(decision),
-        observer,
-        stream=True,
-    )
-
-    assert observer.response_texts == ["text"]
-    assert observer.reasoning_texts == ["reasoning"]
-    assert observer.output_events == [
-        OutputStringEnd(("tool_calls", 0, "name"), "lookup"),
-        OutputStringEnd(("tool_calls", 0, "arguments", "key"), "item"),
-    ]

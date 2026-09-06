@@ -14,6 +14,7 @@ from sefia import HistoryStorage, Policy, Tools
 from sefia.inference import ToolCallResult
 from sefia.llm import DecisionPrompt, LLMCompletion, PromptRenderer
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
+from typing_extensions import override
 
 from sefios import SessionScope, SQLitePersistence, domain
 from sefios.exceptions import InputRequired
@@ -49,10 +50,12 @@ class _RecordingRenderer(PromptRenderer):
     def __init__(self) -> None:
         self.prompts: list[DecisionPrompt] = []
 
+    @override
     def render(self, prompt: DecisionPrompt) -> str:
         self.prompts.append(prompt)
         return "prompt"
 
+    @override
     def render_tool_result(self, result: ToolCallResult) -> str:
         return str(result.result)
 

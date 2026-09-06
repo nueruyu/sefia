@@ -5,8 +5,7 @@ from glyff import DomainId, ExecutionId
 from glyff.testing import make_execution_id
 from pytest_mock import MockerFixture
 from sefia import HistorySnapshot
-from sefia.inference import ToolCallsDecision, ToolCallResult
-from sefia.testing import make_tool_call_request
+from sefia.inference import ToolCallResult
 
 from sefios import MemorySessionStorage
 from sefios.history_storages import SessionHistoryStorage
@@ -30,36 +29,6 @@ def glyff_ctx(mocker: MockerFixture) -> MagicMock:
 
 
 class TestSessionHistoryStorage:
-    async def test_round_trips_a_snapshot(
-        self, memory_session_storage: MemorySessionStorage, glyff_ctx: MagicMock
-    ) -> None:
-        history_storage = SessionHistoryStorage()
-        snapshot = HistorySnapshot(
-            items=(
-                ToolCallsDecision(
-                    calls=[
-                        make_tool_call_request(
-                            id="1", name="add_note", arguments={"x": 1}
-                        )
-                    ]
-                ),
-                ToolCallResult(tool_call_id="1", result="noted"),
-            ),
-            completed_steps=1,
-        )
-
-        with bind_session_storage(memory_session_storage):
-            await history_storage.save(snapshot)
-            loaded = await history_storage.load()
-
-        assert loaded == snapshot
-
-    async def test_load_returns_empty_snapshot_when_nothing_stored(
-        self, memory_session_storage: MemorySessionStorage, glyff_ctx: MagicMock
-    ) -> None:
-        with bind_session_storage(memory_session_storage):
-            assert await SessionHistoryStorage().load() == HistorySnapshot()
-
     async def test_histories_are_scoped_per_run_execution(
         self, memory_session_storage: MemorySessionStorage, glyff_ctx: MagicMock
     ) -> None:

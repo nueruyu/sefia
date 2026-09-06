@@ -16,6 +16,7 @@ from sefia.llm import LLMCompletion, ToolCall
 from sefia.llm.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.llm.structured_data import StructuredData
+from sefia.llm.streaming import StringDelta, StringEnd
 from sefia.pydantic import PydanticModelBackend
 from sefia.testing import (
     LLMClientCase,
@@ -137,25 +138,44 @@ class TestLiteLLMStreamingContract(StreamingLLMClientContract):
         mock_acompletion: AsyncMock,
         make_litellm_response: _ResponseFactory,
     ) -> StreamingLLMClientCase:
+        content_chunks = (
+            '{"payload":{"decision":"result",',
+            '"result":"done"}}',
+        )
+        content = "".join(content_chunks)
         mock_acompletion.return_value = _stream(
             _Delta(reasoning_content="Let me "),
             _Delta(reasoning_content="think."),
-            _Delta(content="Hel"),
-            _Delta(content="lo"),
+            *(_Delta(content=chunk) for chunk in content_chunks),
         )
         mocker.patch(
             "litellm.stream_chunk_builder",
-            return_value=make_litellm_response(content="Hello", model="gpt-4o"),
+            return_value=make_litellm_response(content=content, model="gpt-4o"),
+        )
+        decision_spec = DecisionSpec.for_inference(
+            output_type=str,
+            tools=[],
+            result_format_factory=PydanticModelBackend(),
         )
         expected = LLMCompletion(
             model="gpt-4o",
-            content="Hello",
+            content=content,
             reasoning_content="Let me think.",
             stop_reason="stop",
+            structured_output=StructuredData.from_json(
+                {"decision": "result", "result": "done"}
+            ),
         )
         return StreamingLLMClientCase(
             LiteLLMClient(model="gpt-4o"),
             expected,
-            content_chunks=("Hel", "lo"),
+            decision_spec=decision_spec,
+            content_chunks=content_chunks,
             reasoning_chunks=("Let me ", "think."),
+            output_events=(
+                StringDelta(("decision",), "result"),
+                StringEnd(("decision",), "result"),
+                StringDelta(("result",), "done"),
+                StringEnd(("result",), "done"),
+            ),
         )

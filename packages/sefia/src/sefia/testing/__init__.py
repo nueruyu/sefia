@@ -138,9 +138,9 @@ class MockLLMClient(LLMClient):
 class MemoryHistoryStorage(HistoryStorage):
     """In-memory ``HistoryStorage``; records every saved snapshot in ``saves``.
 
-    Each entry is its own ``HistorySnapshot`` (the items tuple is copied on
-    save), so later saves cannot rewrite earlier records. The history items
-    themselves are shared by reference.
+    Each entry is its own ``HistorySnapshot``, so replacing the current
+    snapshot cannot rewrite earlier records. History items are shared by
+    reference.
     """
 
     def __init__(self, initial: HistorySnapshot | None = None):

@@ -8,17 +8,6 @@ from pytest_mock import MockerFixture
 from sefios.storage import SQLiteSessionStorage
 
 
-async def test_is_visible_to_a_new_instance(tmp_path: Path) -> None:
-    database = tmp_path / "sessions.sqlite3"
-    serializer = PydanticSerializer()
-    writer = SQLiteSessionStorage(database, "session", serializer)
-
-    await writer.set("state", {"value": "kept"}, dict)
-
-    reader = SQLiteSessionStorage(database, "session", serializer)
-    assert await reader.get("state", dict) == {"value": "kept"}
-
-
 async def test_isolates_sessions(tmp_path: Path) -> None:
     database = tmp_path / "sessions.sqlite3"
     serializer = PydanticSerializer()

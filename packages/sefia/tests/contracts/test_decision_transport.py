@@ -28,23 +28,25 @@ TRANSPORT_TYPES: tuple[TransportType, ...] = (
 )
 
 _EXPECTED = StructuredData.from_json({"decision": "result", "result": "done"})
+_CONTENT = '{"decision":"result","result":"done"}'
 
 
 def _case(transport_type: TransportType) -> DecisionTransportCase:
     if transport_type is NativeDecisionTransport:
         completion = LLMCompletion(
+            content=_CONTENT,
             tool_calls=[
                 ToolCall(
                     id="call-1",
                     name="return_result",
                     arguments=StructuredData.from_json({"result": "done"}),
                 )
-            ]
+            ],
         )
     elif transport_type is PromptedDecisionTransport:
-        completion = LLMCompletion(content='{"decision":"result","result":"done"}')
+        completion = LLMCompletion(content=_CONTENT)
     else:
-        completion = LLMCompletion(structured_output=_EXPECTED)
+        completion = LLMCompletion(content=_CONTENT, structured_output=_EXPECTED)
     return DecisionTransportCase(transport_type(), completion, _EXPECTED)
 
 

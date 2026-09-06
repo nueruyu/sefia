@@ -48,6 +48,9 @@ class SefiaHTTP:
     accounting installed), forwards the parsed prompt/message deltas to
     per-session SSE streams, and surfaces pauses as
     :class:`~sefios.fastapi.exceptions.InputRequired`.
+
+    Pass ``llm_client`` to use a custom :class:`~sefia.llm.LLMClient` instead
+    of constructing the default LiteLLM-backed client from ``model``.
     """
 
     def __init__(

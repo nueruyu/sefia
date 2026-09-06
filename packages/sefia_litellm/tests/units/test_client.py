@@ -39,6 +39,14 @@ from sefia_litellm.exceptions import (
 _ResponseFactory = Callable[..., ModelResponse]
 
 
+class _EmptyStream:
+    def __aiter__(self) -> Self:
+        return self
+
+    async def __anext__(self) -> Never:
+        raise StopAsyncIteration
+
+
 @dataclass
 class _CityResult:
     city: str
@@ -403,6 +411,24 @@ class TestLiteLLMClient:
         assert litellm.suppress_debug_info is False
         assert logging.getLogger("LiteLLM").level == logging.NOTSET
 
+    async def test_explicit_suppression_overrides_disabled_environment(
+        self,
+        mock_acompletion: AsyncMock,
+        make_litellm_response: _ResponseFactory,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import litellm
+
+        monkeypatch.setenv("SEFIA_LITELLM_SUPPRESS_LOGS", "false")
+        monkeypatch.setattr(litellm, "suppress_debug_info", False, raising=False)
+        logging.getLogger("LiteLLM").setLevel(logging.NOTSET)
+        mock_acompletion.return_value = make_litellm_response(content="Hi")
+
+        await LiteLLMClient(model="gpt-4o", suppress_logs=True).complete([])
+
+        assert litellm.suppress_debug_info is True
+        assert logging.getLogger("LiteLLM").level == _SILENCE_LEVEL
+
     def test_env_suppress_logs_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SEFIA_LITELLM_SUPPRESS_LOGS", raising=False)
         assert _env_suppress_logs_default() is True
@@ -423,14 +449,7 @@ class TestLiteLLMClient:
     async def test_complete_uses_streaming_when_callback_is_provided(
         self, mock_acompletion: AsyncMock, mocker: MockerFixture
     ):
-        class FakeStream:
-            def __aiter__(self) -> Self:
-                return self
-
-            async def __anext__(self) -> Never:
-                raise StopAsyncIteration
-
-        stream = FakeStream()
+        stream = _EmptyStream()
         client = LiteLLMClient(model="gpt-4o")
         stream_response = LLMCompletion(content="streamed")
         stream_handler = mocker.patch(
@@ -462,14 +481,7 @@ class TestLiteLLMClient:
     async def test_complete_streams_when_only_reasoning_callback_is_provided(
         self, mock_acompletion: AsyncMock, mocker: MockerFixture
     ):
-        class FakeStream:
-            def __aiter__(self) -> Self:
-                return self
-
-            async def __anext__(self) -> Never:
-                raise StopAsyncIteration
-
-        stream = FakeStream()
+        stream = _EmptyStream()
         client = LiteLLMClient(model="gpt-4o")
         stream_response = LLMCompletion(content="streamed")
         stream_handler = mocker.patch(
@@ -489,6 +501,35 @@ class TestLiteLLMClient:
             content_callback=None,
             output_callback=None,
             reasoning_callback=reasoning_callback,
+            messages=[{"role": "user", "content": "Hello"}],
+            decision_format=None,
+            tool_data_formats={},
+            requested_model="gpt-4o",
+        )
+
+    async def test_complete_streams_when_only_output_callback_is_provided(
+        self, mock_acompletion: AsyncMock, mocker: MockerFixture
+    ) -> None:
+        stream = _EmptyStream()
+        client = LiteLLMClient(model="gpt-4o")
+        stream_response = LLMCompletion(content="streamed")
+        stream_handler = mocker.patch(
+            "sefia_litellm._client.consume_completion_stream",
+            new_callable=AsyncMock,
+            return_value=stream_response,
+        )
+        output_callback = AsyncMock()
+        messages = [Message(role="user", content="Hello")]
+        mock_acompletion.return_value = stream
+
+        await client.complete(messages, output_callback=output_callback)
+
+        assert mock_acompletion.call_args[1]["stream"] is True
+        stream_handler.assert_awaited_once_with(
+            stream,
+            content_callback=None,
+            output_callback=output_callback,
+            reasoning_callback=None,
             messages=[{"role": "user", "content": "Hello"}],
             decision_format=None,
             tool_data_formats={},
