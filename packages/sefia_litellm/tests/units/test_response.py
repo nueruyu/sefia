@@ -1,10 +1,15 @@
+from collections.abc import Callable
+from dataclasses import dataclass
+
 import pytest
 from litellm import (
     ChatCompletionMessageToolCall,
     Choices,
-    Message as LiteLLMMessage,
     ModelResponse,
     Usage,
+)
+from litellm import (
+    Message as LiteLLMMessage,
 )
 from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
     ChatCompletionCustomToolCallPayload,
@@ -13,8 +18,11 @@ from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
 from pytest_mock import MockerFixture
 from sefia.llm import ToolCall
 from sefia.llm.exceptions import LLMCompletionDecodingError
+from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
+from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._response import decode_completion
+from sefia_litellm._schema import StructuredDecisionFormat
 
 
 def test_converts_response_and_calculates_cost(mocker: MockerFixture) -> None:
@@ -160,3 +168,59 @@ def test_empty_choices_are_a_completion_decoding_error() -> None:
         )
 
     assert exc_info.value.completion.model == "provider-model"
+
+
+_ResponseFactory = Callable[..., ModelResponse]
+
+
+@dataclass
+class _CityResult:
+    city: str
+
+
+def _decision_spec() -> DecisionSpec:
+    return DecisionSpec.for_inference(
+        output_type=_CityResult,
+        tools=[],
+        result_format_factory=PydanticModelBackend(),
+    )
+
+
+def test_response_does_not_accept_fenced_structured_output(
+    make_litellm_response: _ResponseFactory,
+) -> None:
+    decision_spec = _decision_spec()
+    wire_response = make_litellm_response(
+        content=(
+            '```json\n{"payload":{"decision":"result","result":{"city":"Tokyo"}}}\n```'
+        )
+    )
+
+    response = decode_completion(
+        wire_response,
+        requested_model="gpt-4o",
+        decision_format=StructuredDecisionFormat.from_spec(decision_spec),
+    )
+
+    assert response.structured_output is None
+
+
+def test_response_decodes_native_structured_output(
+    make_litellm_response: _ResponseFactory,
+) -> None:
+    decision_spec = _decision_spec()
+    wire_response = make_litellm_response(
+        content=('{"payload":{"decision":"result","result":{"city":"Tokyo"}}}')
+    )
+
+    response = decode_completion(
+        wire_response,
+        requested_model="gpt-4o",
+        decision_format=StructuredDecisionFormat.from_spec(decision_spec),
+    )
+
+    assert response.structured_output is not None
+    assert response.structured_output.tree == {
+        "decision": "result",
+        "result": {"city": "Tokyo"},
+    }

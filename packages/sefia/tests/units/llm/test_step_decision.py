@@ -3,15 +3,14 @@ from dataclasses import dataclass
 from typing import Any, Never
 
 import pytest
-
 from sefia._tool_system import SignatureToolEntry, ToolEntry
 from sefia.inference import (
     ResultDecision,
     ToolCallsDecision,
 )
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.llm.json_schema import JsonValue
+from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticModelBackend
 
@@ -200,3 +199,27 @@ class TestResultOnlyDecision:
         step = self._step()
         with pytest.raises(ValueError, match="Step decision validation failed"):
             step.validate({"decision": "result", "result": None})
+
+
+def test_decision_spec_rejects_tool_modes_without_tools() -> None:
+    with pytest.raises(ValueError, match="require at least one tool"):
+        DecisionSpec(
+            output_type=Never,
+            tools=[],
+            mode=StepDecisionMode.TOOLS_REQUIRED,
+            result_format_factory=PydanticModelBackend(),
+        )
+
+    with pytest.raises(ValueError, match="require at least one tool"):
+        DecisionSpec(
+            output_type=str,
+            tools=[],
+            mode=StepDecisionMode.TOOLS_OR_RESULT,
+            result_format_factory=PydanticModelBackend(),
+        )
+
+
+def test_structured_result_rejects_missing_required_field() -> None:
+    step = _step(MyOutput, [])
+    with pytest.raises(ValueError, match="value"):
+        step.validate({"decision": "result", "result": {"name": "test"}})

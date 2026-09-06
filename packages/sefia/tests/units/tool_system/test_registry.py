@@ -1,6 +1,8 @@
 from typing import Any
 
+import pytest
 from sefia import ToolRegistry
+from sefia.exceptions import ToolConflictError
 
 
 def tool_function() -> str:
@@ -50,3 +52,35 @@ def test_tools_default_to_serial() -> None:
     assert plain is not None and plain.concurrent is False
     assert json_plain is not None and json_plain.concurrent is False
     assert marked is not None and marked.concurrent is True
+
+
+_SEARCH_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "query": {"type": "string"},
+        "limit": {"type": "integer"},
+    },
+    "required": ["query"],
+    "additionalProperties": False,
+}
+
+
+def _noop(**kwargs: Any) -> None:
+    pass
+
+
+def test_registration_shares_the_namespace_with_introspected_tools():
+    def existing_search(query: str) -> str:
+        """A signature-based tool."""
+        raise NotImplementedError
+
+    registry = ToolRegistry()
+    registry.add(existing_search, name="search")
+
+    with pytest.raises(ToolConflictError):
+        registry.add_json_tool(
+            _noop,
+            name="search",
+            description="dup",
+            parameters=_SEARCH_SCHEMA,
+        )

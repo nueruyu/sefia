@@ -1,12 +1,10 @@
 import asyncio
 import json
-from collections.abc import AsyncGenerator, Callable, Coroutine
-from contextlib import aclosing, asynccontextmanager, suppress
-from dataclasses import dataclass
-from typing import Any, cast
+from collections.abc import Callable, Coroutine
+from contextlib import AbstractAsyncContextManager
+from typing import Any
 
 import pytest
-from fastapi.responses import StreamingResponse
 from sefia import Tools
 from sefia.llm import LLMClient, LLMCompletion, Message
 from sefia.llm.step_decision import DecisionSpec, StepTool
@@ -162,46 +160,11 @@ def _tool_response(*calls: tuple[str, dict[str, Any]]) -> str:
     )
 
 
-@dataclass(frozen=True)
-class _Event:
-    name: str
-    data: dict[str, Any]
-
-
-async def _read_until(response: StreamingResponse, terminal_event: str) -> list[_Event]:
-    events: list[_Event] = []
-    stream = response.body_iterator
-    assert isinstance(stream, AsyncGenerator)
-    async with aclosing(cast(AsyncGenerator[object, None], stream)):
-        async for chunk in stream:
-            assert isinstance(chunk, str)
-            lines = chunk.strip().splitlines()
-            event = _Event(
-                name=lines[0].removeprefix("event: "),
-                data=json.loads(lines[1].removeprefix("data: ")),
-            )
-            events.append(event)
-            if event.name == terminal_event:
-                return events
-    raise AssertionError(f"SSE stream ended before {terminal_event!r}")
-
-
-@asynccontextmanager
-async def _read_events(
-    http: SefiaHTTP, session_id: str, terminal_event: str, *, timeout: float = 5
-) -> AsyncGenerator[asyncio.Task[list[_Event]]]:
-    async with asyncio.timeout(timeout):
-        task = asyncio.create_task(_read_until(http.events(session_id), terminal_event))
-        try:
-            await asyncio.sleep(0)
-            yield task
-        finally:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
-
-async def test_output_tool_publishes_deltas_and_output_over_public_sse() -> None:
+async def test_output_tool_publishes_deltas_and_output_over_public_sse(
+    read_sse: Callable[
+        ..., AbstractAsyncContextManager[asyncio.Task[list[dict[str, Any]]]]
+    ],
+) -> None:
     http = SefiaHTTP(
         llm_client=_StreamingClient(
             [
@@ -211,13 +174,15 @@ async def test_output_tool_publishes_deltas_and_output_over_public_sse() -> None
         )
     )
     session_id = http.create_session()
-    async with _read_events(http, session_id, SSEEvent.COMPLETED) as reader:
+    async with read_sse(http.events(session_id), SSEEvent.COMPLETED) as reader:
         async with http.session(session_id=session_id):
             result = await _OutputAgent(http.output_tool).run()
 
         events = await reader
-        deltas = [event.data for event in events if event.name == SSEEvent.DELTA]
-        outputs = [event.data for event in events if event.name == SSEEvent.OUTPUT]
+        deltas = [event["data"] for event in events if event["name"] == SSEEvent.DELTA]
+        outputs = [
+            event["data"] for event in events if event["name"] == SSEEvent.OUTPUT
+        ]
         assert result == "done"
         assert "".join(delta["text"] for delta in deltas) == "Hello"
         assert {delta["type"] for delta in deltas} == {"output"}
@@ -227,13 +192,17 @@ async def test_output_tool_publishes_deltas_and_output_over_public_sse() -> None
         }
 
 
-async def test_concurrent_sessions_do_not_mix_public_output_events() -> None:
+async def test_concurrent_sessions_do_not_mix_public_output_events(
+    read_sse: Callable[
+        ..., AbstractAsyncContextManager[asyncio.Task[list[dict[str, Any]]]]
+    ],
+) -> None:
     http = SefiaHTTP(llm_client=_ConcurrentStreamingClient())
     first_session = http.create_session()
     second_session = http.create_session()
     async with (
-        _read_events(http, first_session, SSEEvent.COMPLETED) as first_reader,
-        _read_events(http, second_session, SSEEvent.COMPLETED) as second_reader,
+        read_sse(http.events(first_session), SSEEvent.COMPLETED) as first_reader,
+        read_sse(http.events(second_session), SSEEvent.COMPLETED) as second_reader,
     ):
 
         async def run(session_id: str, marker: str) -> str:
@@ -246,16 +215,18 @@ async def test_concurrent_sessions_do_not_mix_public_output_events() -> None:
         )
         first_events, second_events = await asyncio.gather(first_reader, second_reader)
 
-        def output_texts(events: list[_Event]) -> list[str]:
+        def output_texts(events: list[dict[str, Any]]) -> list[str]:
             return [
-                event.data["message"]
+                event["data"]["message"]
                 for event in events
-                if event.name == SSEEvent.OUTPUT
+                if event["name"] == SSEEvent.OUTPUT
             ]
 
-        def delta_text(events: list[_Event]) -> str:
+        def delta_text(events: list[dict[str, Any]]) -> str:
             return "".join(
-                event.data["text"] for event in events if event.name == SSEEvent.DELTA
+                event["data"]["text"]
+                for event in events
+                if event["name"] == SSEEvent.DELTA
             )
 
         assert results == ["done", "done"]
@@ -265,22 +236,28 @@ async def test_concurrent_sessions_do_not_mix_public_output_events() -> None:
         assert delta_text(second_events) == "for the second"
 
 
-async def test_input_tool_publishes_deltas_and_pause_over_public_sse() -> None:
+async def test_input_tool_publishes_deltas_and_pause_over_public_sse(
+    read_sse: Callable[
+        ..., AbstractAsyncContextManager[asyncio.Task[list[dict[str, Any]]]]
+    ],
+) -> None:
     http = SefiaHTTP(
         llm_client=_StreamingClient(
             [_tool_response(("Input_get_input", {"prompt": "Your name?"}))]
         )
     )
     session_id = http.create_session()
-    async with _read_events(http, session_id, SSEEvent.INPUT_REQUIRED) as reader:
+    async with read_sse(http.events(session_id), SSEEvent.INPUT_REQUIRED) as reader:
         with pytest.raises(InputRequired) as pause:
             async with http.session(session_id=session_id):
                 await _InputAgent(http.input_tool).run()
 
         events = await reader
-        deltas = [event.data for event in events if event.name == SSEEvent.DELTA]
+        deltas = [event["data"] for event in events if event["name"] == SSEEvent.DELTA]
         required = [
-            event.data for event in events if event.name == SSEEvent.INPUT_REQUIRED
+            event["data"]
+            for event in events
+            if event["name"] == SSEEvent.INPUT_REQUIRED
         ]
         assert "".join(delta["text"] for delta in deltas) == "Your name?"
         assert {delta["type"] for delta in deltas} == {"input"}
@@ -291,7 +268,11 @@ async def test_input_tool_publishes_deltas_and_pause_over_public_sse() -> None:
         }
 
 
-async def test_input_and_output_deltas_use_independent_interaction_ids() -> None:
+async def test_input_and_output_deltas_use_independent_interaction_ids(
+    read_sse: Callable[
+        ..., AbstractAsyncContextManager[asyncio.Task[list[dict[str, Any]]]]
+    ],
+) -> None:
     http = SefiaHTTP(
         llm_client=_StreamingClient(
             [
@@ -303,41 +284,15 @@ async def test_input_and_output_deltas_use_independent_interaction_ids() -> None
         )
     )
     session_id = http.create_session()
-    async with _read_events(http, session_id, SSEEvent.INPUT_REQUIRED) as reader:
+    async with read_sse(http.events(session_id), SSEEvent.INPUT_REQUIRED) as reader:
         with pytest.raises(InputRequired):
             async with http.session(session_id=session_id):
                 await _InputOutputAgent(http.input_tool, http.output_tool).run()
 
         events = await reader
         ids_by_type = {
-            event.data["type"]: event.data["interaction_id"]
+            event["data"]["type"]: event["data"]["interaction_id"]
             for event in events
-            if event.name == SSEEvent.DELTA
+            if event["name"] == SSEEvent.DELTA
         }
         assert ids_by_type["input"] != ids_by_type["output"]
-
-
-async def test_sse_reader_times_out_without_a_terminal_event() -> None:
-    http = SefiaHTTP(llm_client=_StreamingClient([]))
-    session_id = http.create_session()
-
-    reader: asyncio.Task[list[_Event]] | None = None
-    with pytest.raises(TimeoutError):
-        async with _read_events(
-            http, session_id, SSEEvent.COMPLETED, timeout=0.05
-        ) as reader:
-            await reader
-
-    assert reader is not None and reader.cancelled()
-
-
-async def test_sse_reader_is_cancelled_when_the_test_body_fails() -> None:
-    http = SefiaHTTP(llm_client=_StreamingClient([]))
-    session_id = http.create_session()
-
-    reader: asyncio.Task[list[_Event]] | None = None
-    with pytest.raises(RuntimeError, match="test failed"):
-        async with _read_events(http, session_id, SSEEvent.COMPLETED) as reader:
-            raise RuntimeError("test failed")
-
-    assert reader is not None and reader.cancelled()
