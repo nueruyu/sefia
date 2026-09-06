@@ -1,15 +1,7 @@
-import jsonschema
-import pytest
 from collections.abc import Callable
-from typing import Any, Never
+from typing import Any
 
-from sefia import JsonSchemaToolEntry, ToolRegistry
-from sefia.exceptions import ToolConflictError
-from sefia.inference import ToolCallsDecision
-from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.structured_data import StructuredData
-from sefia.llm.step_decision import DecisionSpec
-from sefia.pydantic import PydanticModelBackend
+from sefia import JsonSchemaToolEntry
 
 _SEARCH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -74,78 +66,3 @@ async def test_invoke_supports_a_synchronous_handler():
     tool = _search_tool(_argument_names)
 
     assert await tool.invoke({"query": "x"}) == ["query"]
-
-
-def test_registration_shares_the_namespace_with_introspected_tools():
-    def existing_search(query: str) -> str:
-        """A signature-based tool."""
-        raise NotImplementedError
-
-    registry = ToolRegistry()
-    registry.add(existing_search, name="search")
-
-    with pytest.raises(ToolConflictError):
-        registry.add_json_tool(
-            _noop,
-            name="search",
-            description="dup",
-            parameters=_SEARCH_SCHEMA,
-        )
-
-
-def test_a_malformed_schema_is_rejected_up_front():
-    tool = JsonSchemaToolEntry(
-        _noop,
-        name="invalid",
-        parameters={"type": "not-a-type"},
-    )
-    with pytest.raises(jsonschema.SchemaError):
-        DecisionSpec.for_inference(
-            output_type=Never,
-            tools=[tool],
-            result_format_factory=PydanticModelBackend(),
-        )
-
-
-def test_a_schema_is_validated_under_its_declared_dialect():
-    # Array-form ``items`` (tuple validation) is draft-07; under the default
-    # 2020-12 dialect it would be rejected as malformed.
-    schema = {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "type": "object",
-        "properties": {
-            "pair": {"items": [{"type": "string"}, {"type": "integer"}]},
-        },
-        "required": ["pair"],
-    }
-
-    tool = JsonSchemaToolEntry(_noop, name="pair", parameters=schema)
-    decision_spec = DecisionSpec.for_inference(
-        output_type=Never,
-        tools=[tool],
-        result_format_factory=PydanticModelBackend(),
-    )
-    tool_call_ids = ToolCallIdRegistry()
-
-    valid = decision_spec.validate(
-        StructuredData.from_json(
-            {
-                "decision": "tool_calls",
-                "tool_calls": [{"name": "pair", "arguments": {"pair": ["a", 1]}}],
-            }
-        ),
-        tool_call_ids,
-    )
-    assert isinstance(valid, ToolCallsDecision)
-    assert valid.calls[0].arguments == {"pair": ["a", 1]}
-
-    with pytest.raises(ValueError, match="Step decision validation failed"):
-        decision_spec.validate(
-            StructuredData.from_json(
-                {
-                    "decision": "tool_calls",
-                    "tool_calls": [{"name": "pair", "arguments": {"pair": [1, "a"]}}],
-                }
-            ),
-            tool_call_ids,
-        )

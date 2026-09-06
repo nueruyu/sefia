@@ -1,5 +1,6 @@
-import pytest
+import asyncio
 
+import pytest
 from sefia import current_tool_call_id, current_tool_call_id_for
 from sefia._tool_context import serving_tool_call
 
@@ -45,3 +46,22 @@ def test_matches_bound_methods_by_underlying_function():
     tool = Tool()
     with serving_tool_call("call-1", tool.run):
         assert current_tool_call_id_for(tool.run) == "call-1"
+
+
+async def test_spawned_task_inherits_call_id_after_parent_unbinds() -> None:
+    release = asyncio.Event()
+
+    async def background() -> str:
+        await release.wait()
+        return current_tool_call_id()
+
+    with serving_tool_call("bg-call"):
+        task = asyncio.create_task(background())
+    try:
+        with pytest.raises(RuntimeError):
+            current_tool_call_id()
+        release.set()
+        assert await asyncio.wait_for(task, timeout=1) == "bg-call"
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

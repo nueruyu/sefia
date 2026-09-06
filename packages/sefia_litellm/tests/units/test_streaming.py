@@ -1,22 +1,17 @@
 from collections.abc import AsyncIterator, Callable
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from litellm import (
-    ChatCompletionMessageToolCall,
     ModelResponse,
 )
 from pytest_mock import MockerFixture
-from sefia._tool_system import ToolRegistry
+from sefia.llm import LLMCompletion
 from sefia.llm.exceptions import LLMCompletionDecodingError
-from sefia.llm.json_schema import JsonSchemaDocument
-from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import (
-    OutputStreamEvent,
-    Scalar as OutputScalar,
     StringEnd as OutputStringEnd,
 )
-from sefia.pydantic import PydanticModelBackend
 from sefia_litellm._schema import StructuredDecisionFormat
 from sefia_litellm._schema._data_format import StructuredDataFormat
 from sefia_litellm._streaming import (
@@ -55,32 +50,6 @@ def _chunk(
 async def _stream(*chunks: SimpleNamespace) -> AsyncIterator[SimpleNamespace]:
     for chunk in chunks:
         yield chunk
-
-
-def _tool_call(name: str, arguments: str) -> ChatCompletionMessageToolCall:
-    return ChatCompletionMessageToolCall(
-        id="call-1",
-        function={"name": name, "arguments": arguments},
-        type="function",
-    )
-
-
-def _structured_decision_format(
-    *, include_tools: bool = True
-) -> StructuredDecisionFormat:
-    def lookup(key: str) -> str:
-        return key
-
-    registry = ToolRegistry()
-    if include_tools:
-        registry.add(lookup, name="lookup")
-    return StructuredDecisionFormat.from_spec(
-        DecisionSpec.for_inference(
-            output_type=str,
-            tools=registry.get_all(),
-            result_format_factory=PydanticModelBackend(),
-        )
-    )
 
 
 async def test_routes_reasoning_and_content_separately(
@@ -144,170 +113,57 @@ async def test_invalid_built_response_is_a_decoding_error(
     assert exc_info.value.completion.content == "partial answer"
 
 
-async def test_decodes_enveloped_structured_decision_and_streams_logical_paths(
-    mocker: MockerFixture,
-    make_litellm_response: _ResponseFactory,
+async def test_stream_dispatches_decoder_events_and_forwards_formats(
+    mocker: MockerFixture, make_litellm_response: _ResponseFactory
 ) -> None:
-    content = (
-        '{"payload":{"decision":"tool_calls","tool_calls":['
-        '{"name":"lookup","arguments":{"key":"item"}}]}}'
-    )
-    mocker.patch(
-        "litellm.stream_chunk_builder",
-        return_value=make_litellm_response(content=content),
-    )
-    events: list[OutputStreamEvent] = []
-
-    async def collect(event: OutputStreamEvent) -> None:
-        events.append(event)
-
-    response = await consume_completion_stream(
-        _stream(_chunk(content=content[:40]), _chunk(content=content[40:])),
-        content_callback=None,
-        output_callback=collect,
-        reasoning_callback=None,
-        messages=[],
-        decision_format=_structured_decision_format(),
-        requested_model="gpt-4o",
-    )
-
-    assert OutputStringEnd(("tool_calls", 0, "name"), "lookup") in events
-    assert OutputStringEnd(("tool_calls", 0, "arguments", "key"), "item") in events
-    assert response.structured_output is not None
-    assert response.structured_output.tree == {
-        "decision": "tool_calls",
-        "tool_calls": [{"name": "lookup", "arguments": {"key": "item"}}],
+    native = mocker.patch(
+        "sefia_litellm._streaming.NativeToolCallStreamDecoder"
+    ).return_value
+    parser = mocker.patch(
+        "sefia_litellm._streaming.JsonOutputStreamDecoder"
+    ).return_value
+    event = OutputStringEnd(("payload", "result"), "done")
+    logical = OutputStringEnd(("result",), "done")
+    final_event = OutputStringEnd(("tool_calls", 0, "name"), "lookup")
+    parser.feed.return_value = [event]
+    native.feed.return_value = []
+    native.finish.return_value = [final_event]
+    decision_format = Mock(spec=StructuredDecisionFormat)
+    decision_format.decode_stream_event.return_value = logical
+    tool_formats: dict[str, StructuredDataFormat] = {
+        "lookup": Mock(spec=StructuredDataFormat)
     }
-
-
-async def test_result_only_stream_uses_logical_paths_without_payload(
-    mocker: MockerFixture,
-    make_litellm_response: _ResponseFactory,
-) -> None:
-    content = '{"payload":{"decision":"result","result":"done"}}'
-    mocker.patch(
-        "litellm.stream_chunk_builder",
-        return_value=make_litellm_response(content=content),
+    callback = AsyncMock()
+    wire_response = make_litellm_response(content="done")
+    builder = mocker.patch("litellm.stream_chunk_builder", return_value=wire_response)
+    completion = LLMCompletion(content="done")
+    decode = mocker.patch(
+        "sefia_litellm._streaming.decode_completion", return_value=completion
     )
-    events: list[OutputStreamEvent] = []
+    chunks = [_chunk(content="fragment", tool_name="lookup", tool_arguments="{}")]
+    messages = [{"role": "user", "content": "prompt"}]
 
-    async def collect(event: OutputStreamEvent) -> None:
-        events.append(event)
-
-    response = await consume_completion_stream(
-        _stream(_chunk(content=content)),
+    result = await consume_completion_stream(
+        _stream(*chunks),
         content_callback=None,
-        output_callback=collect,
+        output_callback=callback,
         reasoning_callback=None,
-        messages=[],
-        decision_format=_structured_decision_format(include_tools=False),
+        messages=messages,
+        decision_format=decision_format,
+        tool_data_formats=tool_formats,
         requested_model="gpt-4o",
     )
 
-    assert OutputStringEnd(("result",), "done") in events
-    assert response.structured_output is not None
-    assert response.structured_output.tree == {
-        "decision": "result",
-        "result": "done",
-    }
-
-
-async def test_decodes_native_tool_arguments(
-    mocker: MockerFixture,
-    make_litellm_response: _ResponseFactory,
-) -> None:
-    mocker.patch(
-        "litellm.stream_chunk_builder",
-        return_value=make_litellm_response(
-            finish_reason="tool_calls",
-            tool_calls=[_tool_call("lookup", '{"key":"item"}')],
-        ),
-    )
-    events: list[OutputStreamEvent] = []
-
-    async def collect(event: OutputStreamEvent) -> None:
-        events.append(event)
-
-    await consume_completion_stream(
-        _stream(
-            _chunk(tool_name="lookup", tool_arguments='{"key":"'),
-            _chunk(tool_arguments='item"}'),
-        ),
-        content_callback=None,
-        output_callback=collect,
-        reasoning_callback=None,
-        messages=[],
-        decision_format=None,
-        tool_data_formats={
-            "lookup": StructuredDataFormat.from_generated_schema(
-                JsonSchemaDocument.from_mapping(
-                    {
-                        "type": "object",
-                        "properties": {"key": {"type": "string"}},
-                        "required": ["key"],
-                        "additionalProperties": False,
-                    }
-                )
-            )
-        },
+    assert result is completion
+    parser.feed.assert_called_once_with("fragment")
+    decision_format.decode_stream_event.assert_called_once_with(event)
+    native.feed.assert_called_once_with(chunks[0].choices[0].delta.tool_calls)
+    native.finish.assert_called_once_with()
+    assert [c.args[0] for c in callback.await_args_list] == [logical, final_event]
+    builder.assert_called_once_with(chunks=chunks, messages=messages)
+    decode.assert_called_once_with(
+        wire_response,
         requested_model="gpt-4o",
+        decision_format=decision_format,
+        tool_data_formats=tool_formats,
     )
-
-    assert events.count(OutputStringEnd(("tool_calls", 0, "name"), "lookup")) == 1
-    assert OutputStringEnd(("tool_calls", 0, "arguments", "key"), "item") in events
-
-
-async def test_restores_translated_native_tool_arguments(
-    mocker: MockerFixture,
-    make_litellm_response: _ResponseFactory,
-) -> None:
-    wire_arguments = '{"labels":[{"key":"important","value":2}]}'
-    mocker.patch(
-        "litellm.stream_chunk_builder",
-        return_value=make_litellm_response(
-            finish_reason="tool_calls",
-            tool_calls=[_tool_call("categorize", wire_arguments)],
-        ),
-    )
-    data_format = StructuredDataFormat.from_generated_schema(
-        JsonSchemaDocument.from_mapping(
-            {
-                "type": "object",
-                "properties": {
-                    "labels": {
-                        "type": "object",
-                        "additionalProperties": {"type": "integer"},
-                    }
-                },
-                "required": ["labels"],
-                "additionalProperties": False,
-            }
-        )
-    )
-    events: list[OutputStreamEvent] = []
-
-    async def collect(event: OutputStreamEvent) -> None:
-        events.append(event)
-
-    response = await consume_completion_stream(
-        _stream(
-            _chunk(
-                tool_name="categorize",
-                tool_arguments='{"labels":[{"key":"important",',
-            ),
-            _chunk(tool_arguments='"value":2}]}'),
-        ),
-        content_callback=None,
-        output_callback=collect,
-        reasoning_callback=None,
-        messages=[],
-        decision_format=None,
-        tool_data_formats={"categorize": data_format},
-        requested_model="gpt-4o",
-    )
-
-    assert OutputStringEnd(("tool_calls", 0, "name"), "categorize") in events
-    assert (
-        OutputScalar(("tool_calls", 0, "arguments", "labels", "important"), 2) in events
-    )
-    assert response.tool_calls[0].arguments.tree == {"labels": {"important": 2}}

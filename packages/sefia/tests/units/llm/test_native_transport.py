@@ -1,15 +1,12 @@
 import json
 from dataclasses import dataclass
-from typing import Any, Never, cast
+from typing import Any, cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-
 from sefia._tool_system import ToolRegistry
 from sefia.inference import (
-    ResultDecision,
     ToolCallResult,
-    ToolCallsDecision,
 )
 from sefia.llm import (
     DecisionPrompt,
@@ -17,7 +14,6 @@ from sefia.llm import (
     PromptRenderer,
     ToolCall,
 )
-from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
@@ -26,7 +22,6 @@ from sefia.pydantic import PydanticModelBackend
 from sefia.testing import (
     RecordingDecisionObserver,
     make_decision_request,
-    make_tool_call_request,
 )
 
 
@@ -88,9 +83,10 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
         client, renderer, _request(decision), observer, stream=False
     )
 
-    validated = decision.validate(decoded.decision_data, ToolCallIdRegistry())
-    assert isinstance(validated, ToolCallsDecision)
-    assert validated.calls[0].arguments == {"key": "item"}
+    assert decoded.decision_data.tree == {
+        "decision": "tool_calls",
+        "tool_calls": [{"name": "lookup", "arguments": {"key": "item"}}],
+    }
     sent = client.complete.await_args.kwargs
     assert [tool.name for tool in sent["tools"]] == [
         "lookup",
@@ -118,43 +114,10 @@ async def test_native_transport_decodes_typed_result() -> None:
         stream=False,
     )
 
-    validated = decision.validate(decoded.decision_data, None)
-    assert isinstance(validated, ResultDecision)
-    assert validated.result == Result("done")
-
-
-async def test_native_transport_avoids_result_tool_name_collision() -> None:
-    def return_result(value: str) -> str:
-        return value
-
-    backend = PydanticModelBackend()
-    registry = ToolRegistry()
-    registry.add(return_result, name="return_result")
-    decision = DecisionSpec.for_inference(
-        output_type=str,
-        tools=registry.get_all(),
-        result_format_factory=backend,
-    )
-    client = AsyncMock()
-    client.complete.return_value = LLMCompletion(
-        tool_calls=[_call("return_result_2", '{"result":"done"}')]
-    )
-    renderer = _renderer()
-
-    await NativeDecisionTransport().request_decision(
-        client,
-        renderer,
-        _request(decision),
-        RecordingDecisionObserver(),
-        stream=False,
-    )
-
-    assert [tool.name for tool in client.complete.await_args.kwargs["tools"]] == [
-        "return_result",
-        "return_result_2",
-    ]
-    rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
-    assert "return_result_2" in rendered_prompt.response_instructions
+    assert decoded.decision_data.tree == {
+        "decision": "result",
+        "result": {"value": "done"},
+    }
 
 
 async def test_native_transport_requires_a_tool_call() -> None:
@@ -163,77 +126,6 @@ async def test_native_transport_requires_a_tool_call() -> None:
     decision = _decision(str)
 
     with pytest.raises(DecisionDecodingError, match="did not call"):
-        await NativeDecisionTransport().request_decision(
-            client,
-            _renderer(),
-            _request(decision),
-            RecordingDecisionObserver(),
-            stream=False,
-        )
-
-
-async def test_native_transport_sends_previous_calls_as_native_history() -> None:
-    client = AsyncMock()
-    client.complete.return_value = LLMCompletion(
-        tool_calls=[_call("lookup", '{"key":"next"}')]
-    )
-    decision = _decision(Never, lookup)
-    request = _request(decision)
-    request = make_decision_request(
-        request.decision_spec,
-        function=request.function,
-        history=(
-            ToolCallsDecision(
-                [
-                    make_tool_call_request(
-                        id="call-1",
-                        name="lookup",
-                        arguments={"key": "first"},
-                    )
-                ]
-            ),
-            ToolCallResult(tool_call_id="call-1", result={"value": "found"}),
-        ),
-    )
-    renderer = _renderer()
-
-    await NativeDecisionTransport().request_decision(
-        client,
-        renderer,
-        request,
-        RecordingDecisionObserver(),
-        stream=False,
-    )
-
-    messages = client.complete.await_args.kwargs["messages"]
-    assert [message.role for message in messages] == ["user", "assistant", "tool"]
-    assert messages[1].tool_calls == [
-        ToolCall(
-            id="call-1",
-            name="lookup",
-            arguments=StructuredData.from_json({"key": "first"}),
-        )
-    ]
-    assert messages[2].tool_call_id == "call-1"
-    assert messages[2].content == '{"value": "found"}'
-    rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
-    assert rendered_prompt.history == ()
-
-
-async def test_native_transport_requires_object_arguments() -> None:
-    client = AsyncMock()
-    client.complete.return_value = LLMCompletion(
-        tool_calls=[
-            ToolCall(
-                id="provider-id",
-                name="lookup",
-                arguments=StructuredData.from_json([]),
-            )
-        ]
-    )
-    decision = _decision(Never, lookup)
-
-    with pytest.raises(DecisionDecodingError):
         await NativeDecisionTransport().request_decision(
             client,
             _renderer(),

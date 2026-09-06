@@ -34,6 +34,13 @@ reusable conformance classes from `sefia.testing` or `sefios.testing`; built-in
 implementations apply those same public contracts in `tests/contracts/`, overriding
 their abstract factory methods to supply isolated test resources.
 
+Coordinator tests assert delegation, ordering, lifecycle, and error propagation.
+Test schema transformations, validation rules, and storage details directly in
+those modules; keep representative integration cases for their connections.
+Split large suites by those responsibilities, not by a fixed line-count limit.
+When moving a case, preserve its assertions at the owning layer and consolidate
+only behavior already covered there.
+
 ### End-to-end tests against real providers
 
 `packages/sefia_litellm/tests/e2e/` runs the full stack against live LLM APIs,
