@@ -8,9 +8,14 @@ from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.inference import ResultDecision, ToolCallsDecision
 from sefia.llm import LLMCompletion, LLMInferenceStrategy
-from sefia.llm.events import AfterLLMCall
+from sefia.llm.events import (
+    AfterLLMCall,
+    BeforeLLMCall,
+    LLMReasoningTokenReceived,
+    LLMTokenReceived,
+)
 from sefia.llm.structured_data import StructuredData
-from sefia.llm.transports import DecodedDecision
+from sefia.llm.transports import DecisionObserver, DecodedDecision
 from sefia.testing import make_function_info
 
 
@@ -129,3 +134,31 @@ async def test_argument_streamer_is_closed_after_transport(
         )
 
     streamer.close.assert_awaited_once()
+
+
+async def test_transport_observer_notifies_the_supplied_publisher(
+    transport: AsyncMock, make_strategy: Callable[..., LLMInferenceStrategy]
+) -> None:
+    publisher = AsyncMock(spec=EventPublisher)
+    decoded = transport.request_decision.return_value
+
+    async def respond(
+        *, observer: DecisionObserver, **kwargs: object
+    ) -> DecodedDecision:
+        await observer.before_request("prompt")
+        await observer.response_text("answer")
+        await observer.reasoning_text("thinking")
+        return decoded
+
+    transport.request_decision.side_effect = respond
+    await make_strategy(stream=True).decide_next_step(
+        make_function_info(return_type=str), [], ToolRegistry(), publisher
+    )
+
+    spec = transport.request_decision.await_args.kwargs["request"].decision_spec
+    assert [c.args[0] for c in publisher.publish.await_args_list] == [
+        BeforeLLMCall(prompt="prompt", decision_spec=spec),
+        LLMTokenReceived(token="answer"),
+        LLMReasoningTokenReceived(token="thinking"),
+        AfterLLMCall(decoded.completion),
+    ]

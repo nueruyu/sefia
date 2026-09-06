@@ -267,3 +267,18 @@ async def test_complete_rejects_non_litellm_completion(
         )
 
     assert exc_info.value.completion.model == "gpt-4o"
+
+
+async def test_client_forwards_configured_options_to_provider(
+    mock_acompletion: AsyncMock, make_litellm_response: _ResponseFactory
+) -> None:
+    mock_acompletion.return_value = make_litellm_response(content="done")
+
+    await LiteLLMClient(model="gpt-4o", temperature=0.5, max_tokens=128).complete([])
+
+    mock_acompletion.assert_awaited_once()
+    assert mock_acompletion.await_args is not None
+    sent = mock_acompletion.await_args.kwargs
+    assert sent["model"] == "gpt-4o"
+    assert sent["temperature"] == 0.5
+    assert sent["max_tokens"] == 128

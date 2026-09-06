@@ -92,3 +92,17 @@ def test_dangling_active_session_raises(manager: SessionManager) -> None:
     with pytest.raises(UnknownSessionError) as exc_info:
         manager.resolve_session(None)
     assert exc_info.value.session_id == "ghost"
+
+
+def test_manager_reads_and_updates_the_supplied_active_store() -> None:
+    registry = MemorySessionRegistry()
+    first, second = registry.create_session(), registry.create_session()
+    active = MemoryActiveSessionStore()
+    active.set_active_session_id(first)
+    manager = SessionManager(registry, active)
+
+    assert manager.resolve_session(None).session_id == first
+    manager.switch_active_session(second)
+    assert active.get_active_session_id() == second
+    active.set_active_session_id(first)
+    assert manager.get_active_session_id() == first

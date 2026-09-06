@@ -12,6 +12,7 @@ from sefia.exceptions import PauseException
 from sefia.inference import (
     ResultDecision,
     StepDecision,
+    ToolCallsDecision,
 )
 from sefia.testing import make_step_context
 from typing_extensions import final, override
@@ -106,3 +107,32 @@ async def test_failure_from_reentered_attempt_propagates(
 
     # The second failure propagates out of middleware.
     assert mock_strategy.decide_next_step.call_count == 2
+
+
+async def test_executor_applies_middlewares_in_order_on_every_step(
+    make_executor: Callable[..., InferenceExecutor], mock_strategy: AsyncMock
+) -> None:
+    calls: list[tuple[str, int]] = []
+
+    @final
+    class Record(StepMiddleware):
+        def __init__(self, label: str) -> None:
+            self.label = label
+
+        @override
+        async def wrap(
+            self, ctx: StepContext, nxt: Callable[[], Awaitable[StepDecision]]
+        ) -> StepDecision:
+            calls.append((self.label, ctx.step))
+            return await nxt()
+
+    mock_strategy.decide_next_step.side_effect = [
+        ToolCallsDecision([]),
+        ResultDecision("done"),
+    ]
+    result = await make_executor(
+        step_middlewares=[Record("first"), Record("second")]
+    ).run()
+
+    assert result == "done"
+    assert calls == [("first", 0), ("second", 0), ("first", 1), ("second", 1)]

@@ -174,3 +174,30 @@ def test_mapping_restoration_rejects_invalid_entries(
     data_format = UniformDictionaryFormat.from_schema(_mapping({"type": "string"}))
     with pytest.raises(ValueError, match=message):
         data_format.decode(StructuredData.from_tree(wire))
+
+
+@pytest.mark.parametrize(
+    "logical,wire",
+    [
+        ({"x": {"n": 2}}, {"x": [{"key": "n", "value": 2}]}),
+        ({"x": [1], "y": {"n": 2}}, {"x": [1], "y": [{"key": "n", "value": 2}]}),
+    ],
+)
+def test_union_restoration_resolves_shared_definitions(
+    logical: StructuredDataTree, wire: StructuredDataTree
+) -> None:
+    data_format = UniformDictionaryFormat.from_schema(
+        {
+            "anyOf": [{"$ref": "#/$defs/Mapped"}, {"$ref": "#/$defs/Later"}],
+            "$defs": {
+                "Mapped": _object(x=_mapping({"type": "integer"})),
+                "Later": _object(
+                    x={"type": "array", "items": {"type": "integer"}},
+                    y=_mapping({"type": "integer"}),
+                ),
+            },
+        }
+    )
+
+    assert data_format.decode(StructuredData.from_tree(wire)).tree == logical
+    assert data_format.encode(StructuredData.from_tree(logical)).tree == wire

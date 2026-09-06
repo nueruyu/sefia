@@ -1,12 +1,13 @@
 import json
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, Never, cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sefia._tool_system import ToolRegistry
 from sefia.inference import (
     ToolCallResult,
+    ToolCallsDecision,
 )
 from sefia.llm import (
     DecisionPrompt,
@@ -22,6 +23,7 @@ from sefia.pydantic import PydanticModelBackend
 from sefia.testing import (
     RecordingDecisionObserver,
     make_decision_request,
+    make_tool_call_request,
 )
 
 
@@ -133,3 +135,73 @@ async def test_native_transport_requires_a_tool_call() -> None:
             RecordingDecisionObserver(),
             stream=False,
         )
+
+
+async def test_native_transport_forwards_history_in_tool_only_mode() -> None:
+    client = AsyncMock()
+    client.complete.return_value = LLMCompletion(
+        tool_calls=[_call("lookup", '{"key":"next"}')]
+    )
+    request = make_decision_request(
+        _decision(Never, lookup),
+        history=(
+            ToolCallsDecision(
+                [
+                    make_tool_call_request(
+                        id="call-1", name="lookup", arguments={"key": "first"}
+                    )
+                ]
+            ),
+            ToolCallResult(tool_call_id="call-1", result="found"),
+        ),
+    )
+
+    decoded = await NativeDecisionTransport().request_decision(
+        client, _renderer(), request, RecordingDecisionObserver(), stream=False
+    )
+
+    sent = client.complete.await_args.kwargs
+    assert [tool.name for tool in sent["tools"]] == ["lookup"]
+    assert [message.role for message in sent["messages"]] == [
+        "user",
+        "assistant",
+        "tool",
+    ]
+    assert sent["messages"][1].tool_calls[0].id == "call-1"
+    assert sent["messages"][2].tool_call_id == "call-1"
+    assert decoded.decision_data.tree == {
+        "decision": "tool_calls",
+        "tool_calls": [{"name": "lookup", "arguments": {"key": "next"}}],
+    }
+
+
+async def test_native_transport_uses_collision_free_name_for_prompt_and_decoding() -> (
+    None
+):
+    def return_result(value: str) -> str:
+        return value
+
+    client = AsyncMock()
+    client.complete.return_value = LLMCompletion(
+        tool_calls=[_call("return_result_2", '{"result":"done"}')]
+    )
+    renderer = _renderer()
+    registry = ToolRegistry()
+    registry.add(return_result, name="return_result")
+    decision = DecisionSpec.for_inference(
+        output_type=str,
+        tools=registry.get_all(),
+        result_format_factory=PydanticModelBackend(),
+    )
+    decoded = await NativeDecisionTransport().request_decision(
+        client,
+        renderer,
+        _request(decision),
+        RecordingDecisionObserver(),
+        stream=False,
+    )
+
+    sent = client.complete.await_args.kwargs
+    assert [tool.name for tool in sent["tools"]] == ["return_result", "return_result_2"]
+    assert "return_result_2" in renderer.render.call_args.args[0].response_instructions
+    assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
