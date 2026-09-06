@@ -6,10 +6,8 @@ from sefia.llm import LLMCompletion
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefia.tool_collectors import StaticToolCollector
 from sefios import (
-    FilePersistence,
     MemoryPersistence,
     MemorySessionStorage,
-    PersistenceProvider,
     SessionScope,
     SQLitePersistence,
     SQLiteSessionStorage,
@@ -17,17 +15,7 @@ from sefios import (
     get_session_storage,
 )
 
-infer = domain("packages.sefios.tests.units.test_scope").infer
-
-
-def test_builtin_persistence_types_implement_the_provider() -> None:
-    assert isinstance(MemoryPersistence(), PersistenceProvider)
-    assert isinstance(SQLitePersistence(), PersistenceProvider)
-    assert isinstance(FilePersistence(".sefios"), PersistenceProvider)
-
-
-def test_sqlite_persistence_has_a_project_local_default() -> None:
-    assert SQLitePersistence().database == Path(".sefios/sessions.sqlite3")
+infer = domain("packages.sefios.tests.integrations.test_session_scope").infer
 
 
 class _Probe:

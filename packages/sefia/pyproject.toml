@@ -39,6 +39,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 
+[project.optional-dependencies]
+testing = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
 [project.urls]
 Homepage = "https://github.com/nueruyu/sefia"
 Repository = "https://github.com/nueruyu/sefia"

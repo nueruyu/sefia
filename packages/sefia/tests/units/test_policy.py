@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 
-from sefia import Policy
+import pytest
+
+from sefia import Policy, policy
 from sefia._interfaces import InferenceMiddleware, StepMiddleware
 from sefia.event_system import Event, EventHandler
 
@@ -8,6 +10,11 @@ from sefia.event_system import Event, EventHandler
 class _Handler(EventHandler[Event]):
     async def handle(self, event: Event) -> None:
         pass
+
+
+@dataclass
+class _PolicyFixture(Policy):
+    count: int
 
 
 def test_policy_contributes_nothing_by_default():
@@ -47,3 +54,8 @@ def test_dataclass_subclass_need_not_call_init():
 
     # The non-overridden method falls back to the class-level empty default.
     assert p.create_handlers() == []
+
+
+def test_policy_decorator_rejects_non_policy() -> None:
+    with pytest.raises(TypeError):
+        policy(_PolicyFixture)  # type: ignore

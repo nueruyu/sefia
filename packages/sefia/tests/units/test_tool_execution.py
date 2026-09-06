@@ -8,7 +8,7 @@ from sefia import ToolRegistry, current_tool_call_id
 from sefia._tool_execution import call_tools
 from sefia.event_system import EventPublisher
 from sefia.exceptions import PauseException
-from sefia.inference import ToolCallRequest
+from sefia.testing import make_tool_call_request
 
 
 @pytest.fixture
@@ -35,8 +35,8 @@ async def test_concurrent_calls_overlap(publisher: EventPublisher) -> None:
 
     results = await call_tools(
         [
-            ToolCallRequest(id="1", name="wait_for_peer", arguments={}),
-            ToolCallRequest(id="2", name="release_peer", arguments={}),
+            make_tool_call_request(id="1", name="wait_for_peer", arguments={}),
+            make_tool_call_request(id="2", name="release_peer", arguments={}),
         ],
         registry,
         publisher,
@@ -68,8 +68,8 @@ async def test_unmarked_tools_stay_strictly_serial(publisher: EventPublisher) ->
 
     await call_tools(
         [
-            ToolCallRequest(id="1", name="tool_a", arguments={}),
-            ToolCallRequest(id="2", name="tool_b", arguments={}),
+            make_tool_call_request(id="1", name="tool_a", arguments={}),
+            make_tool_call_request(id="2", name="tool_b", arguments={}),
         ],
         registry,
         publisher,
@@ -99,9 +99,9 @@ async def test_serial_call_is_a_barrier_between_concurrent_calls(
 
     await call_tools(
         [
-            ToolCallRequest(id="1", name="conc_a", arguments={}),
-            ToolCallRequest(id="2", name="serial_s", arguments={}),
-            ToolCallRequest(id="3", name="conc_b", arguments={}),
+            make_tool_call_request(id="1", name="conc_a", arguments={}),
+            make_tool_call_request(id="2", name="serial_s", arguments={}),
+            make_tool_call_request(id="3", name="conc_b", arguments={}),
         ],
         registry,
         publisher,
@@ -138,8 +138,8 @@ async def test_pause_lets_concurrent_siblings_finish(
     with pytest.raises(PauseException, match="needs input"):
         await call_tools(
             [
-                ToolCallRequest(id="1", name="pausing", arguments={}),
-                ToolCallRequest(id="2", name="sibling", arguments={}),
+                make_tool_call_request(id="1", name="pausing", arguments={}),
+                make_tool_call_request(id="2", name="sibling", arguments={}),
             ],
             registry,
             publisher,
@@ -170,8 +170,8 @@ async def test_earliest_pause_in_request_order_wins(
     with pytest.raises(PauseException, match="first in request order"):
         await call_tools(
             [
-                ToolCallRequest(id="1", name="pause_late", arguments={}),
-                ToolCallRequest(id="2", name="pause_early", arguments={}),
+                make_tool_call_request(id="1", name="pause_late", arguments={}),
+                make_tool_call_request(id="2", name="pause_early", arguments={}),
             ],
             registry,
             publisher,
@@ -195,8 +195,8 @@ async def test_tool_failure_in_concurrent_batch_stays_isolated(
 
     results = await call_tools(
         [
-            ToolCallRequest(id="1", name="boom", arguments={}),
-            ToolCallRequest(id="2", name="fine", arguments={}),
+            make_tool_call_request(id="1", name="boom", arguments={}),
+            make_tool_call_request(id="2", name="fine", arguments={}),
         ],
         registry,
         publisher,
@@ -238,9 +238,9 @@ async def test_identical_concurrent_calls_run_serially(
 
     await call_tools(
         [
-            ToolCallRequest(id="1", name="fetch", arguments={"key": "same"}),
-            ToolCallRequest(id="2", name="fetch", arguments={"key": "same"}),
-            ToolCallRequest(id="3", name="fetch", arguments={"key": "other"}),
+            make_tool_call_request(id="1", name="fetch", arguments={"key": "same"}),
+            make_tool_call_request(id="2", name="fetch", arguments={"key": "same"}),
+            make_tool_call_request(id="3", name="fetch", arguments={"key": "other"}),
         ],
         registry,
         publisher,
@@ -274,10 +274,12 @@ async def test_handler_reads_its_own_call_id(publisher: EventPublisher) -> None:
 
     await call_tools(
         [
-            ToolCallRequest(
+            make_tool_call_request(
                 id="sig-call", name="note_signature", arguments={"label": "a"}
             ),
-            ToolCallRequest(id="json-call", name="note_json", arguments={"label": "b"}),
+            make_tool_call_request(
+                id="json-call", name="note_json", arguments={"label": "b"}
+            ),
         ],
         registry,
         publisher,
@@ -293,7 +295,7 @@ async def test_call_id_is_unbound_in_the_caller_after_the_call_returns(
     registry.add(lambda: "ok", name="noop")
 
     await call_tools(
-        [ToolCallRequest(id="1", name="noop", arguments={})],
+        [make_tool_call_request(id="1", name="noop", arguments={})],
         registry,
         publisher,
     )
@@ -321,7 +323,7 @@ async def test_call_id_is_inherited_by_a_task_spawned_during_the_call(
     registry.add(spawns_background, name="spawns_background")
 
     await call_tools(
-        [ToolCallRequest(id="bg-call", name="spawns_background", arguments={})],
+        [make_tool_call_request(id="bg-call", name="spawns_background", arguments={})],
         registry,
         publisher,
     )

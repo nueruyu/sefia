@@ -209,6 +209,8 @@ completed steps replay even after a server restart.
 
 The service receives `api.input_tool` as its human-input tool. The endpoints
 create a session, run the research, and accept a reply when it pauses.
+Pass `llm_client=` instead of `model=` to use a custom `LLMClient`, including a
+test double or a provider-specific adapter.
 
 This excerpt omits imports and the definitions of `infer`, `Report`, `app`, and
 `TurnBody`; see the [HTTP tutorial](./docs/tutorial.md#4-serve-it-over-http)

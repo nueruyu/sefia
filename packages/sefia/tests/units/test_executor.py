@@ -25,11 +25,10 @@ from sefia.inference import (
     ResultDecision,
     StepDecision,
     ToolCallsDecision,
-    ToolCallRequest,
     ToolCallResult,
 )
 
-from sefia.testing import MemoryHistoryStorage
+from sefia.testing import MemoryHistoryStorage, make_tool_call_request
 
 ExecutorDependencies: TypeAlias = tuple[
     AsyncMock,
@@ -161,7 +160,9 @@ class TestInferenceExecutor:
 
         mock_strategy.decide_next_step.side_effect = [
             ToolCallsDecision(
-                calls=[ToolCallRequest(id="1", name="my_tool", arguments={"a": 1})]
+                calls=[
+                    make_tool_call_request(id="1", name="my_tool", arguments={"a": 1})
+                ]
             ),
             ResultDecision(result="final result"),
         ]
@@ -201,7 +202,11 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
             ToolCallsDecision(
-                calls=[ToolCallRequest(id="1", name="nonexistent_tool", arguments={})]
+                calls=[
+                    make_tool_call_request(
+                        id="1", name="nonexistent_tool", arguments={}
+                    )
+                ]
             ),
             ResultDecision(result="recovered"),
         ]
@@ -364,7 +369,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         mock_strategy.decide_next_step.side_effect = [
             ToolCallsDecision(
-                calls=[ToolCallRequest(id="1", name="boom_tool", arguments={})]
+                calls=[make_tool_call_request(id="1", name="boom_tool", arguments={})]
             ),
             ResultDecision(result="recovered"),
         ]
@@ -575,7 +580,7 @@ class TestInferenceExecutor:
         ) = executor_dependencies
         stored_items = (
             ToolCallsDecision(
-                calls=[ToolCallRequest(id="1", name="a_tool", arguments={})]
+                calls=[make_tool_call_request(id="1", name="a_tool", arguments={})]
             ),
             ToolCallResult(tool_call_id="1", result="earlier"),
         )
@@ -618,7 +623,7 @@ class TestInferenceExecutor:
             non_engrave,
         ) = executor_dependencies
         decision = ToolCallsDecision(
-            calls=[ToolCallRequest(id="1", name="my_tool", arguments={"a": 1})]
+            calls=[make_tool_call_request(id="1", name="my_tool", arguments={"a": 1})]
         )
         empty_decision = ToolCallsDecision(calls=[])
         mock_strategy.decide_next_step.side_effect = [

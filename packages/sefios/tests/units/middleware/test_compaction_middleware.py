@@ -1,13 +1,12 @@
 import pytest
-from sefia import StepContext
 from sefia._history import StepHistory
 from sefia.inference import (
     HistoryItem,
     ResultDecision,
     ToolCallsDecision,
-    ToolCallRequest,
     ToolCallResult,
 )
+from sefia.testing import make_step_context, make_tool_call_request
 
 from sefios.middleware import HistoryCompactor
 from sefios.middleware._compaction import _truncate_history
@@ -17,7 +16,7 @@ def _step(i: int) -> list[HistoryItem]:
     """One completed step: a decision and its tool result."""
     return [
         ToolCallsDecision(
-            calls=[ToolCallRequest(id=str(i), name="a_tool", arguments={"i": i})]
+            calls=[make_tool_call_request(id=str(i), name="a_tool", arguments={"i": i})]
         ),
         ToolCallResult(tool_call_id=str(i), result=f"result {i}"),
     ]
@@ -53,7 +52,7 @@ class TestTruncateHistory:
 class TestHistoryCompactor:
     async def test_does_not_compact_under_the_threshold(self):
         history = StepHistory(_history(2))
-        ctx = StepContext(step=2, history=history)
+        ctx = make_step_context(step=2, history=history)
 
         decision = await HistoryCompactor(max_items=4).wrap(ctx, _nxt)
 
@@ -62,7 +61,7 @@ class TestHistoryCompactor:
 
     async def test_compacts_the_history_before_the_step(self):
         history = StepHistory(_history(3))
-        ctx = StepContext(step=3, history=history)
+        ctx = make_step_context(step=3, history=history)
 
         await HistoryCompactor(max_items=5, keep_items=2).wrap(ctx, _nxt)
 

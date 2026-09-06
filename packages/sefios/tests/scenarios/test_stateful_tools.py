@@ -2,17 +2,21 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Callable
 
-import glyff
 import pytest
-from glyff import ArgumentCanonicalizer, Domain, Serializer
-from glyff.store import MemoryBackend
+from glyff import Domain
 
-from sefia import Session, Tools
+from sefia import Tools
 from sefia.exceptions import PauseException
 from sefia.llm import LLMCompletion
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
-from sefios import domain, MemorySessionStorage, get_call_state_store
-from sefios._session_state import bind_session_storage, get_state_store
+from sefios import (
+    MemoryPersistence,
+    SessionScope,
+    domain,
+    get_call_state_store,
+    get_state,
+    state,
+)
 
 infer = domain("packages.sefios.tests.scenarios.test_stateful_tools", version="1").infer
 
@@ -35,6 +39,7 @@ class Answer:
     content: str
 
 
+@state(key="interaction_state")
 @dataclass
 class InteractionState:
     answers: dict[str, Answer] = field(default_factory=lambda: {})
@@ -57,7 +62,7 @@ class Input:
                 await call_store.save(call_state)
                 raise PauseException()
 
-            session_store = get_state_store("interaction_state", InteractionState)
+            session_store = get_state().get(InteractionState)
             interaction_state = await session_store.get()
 
             if (
@@ -78,8 +83,6 @@ class Input:
 class TestStatefulTool:
     async def test_ask_user_interrupts_and_resumes_correctly(
         self,
-        serializer: Serializer,
-        hasher: ArgumentCanonicalizer,
         make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
     ) -> None:
         mock_responses = [
@@ -113,49 +116,32 @@ class TestStatefulTool:
 
         agent = Agent(Input(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-1"
-        glyff_store = MemoryBackend()
-        sefia_store = MemorySessionStorage(serializer=serializer)
+        persistence = MemoryPersistence()
 
-        # --- First run: Should interrupt ---
         with pytest.raises(PauseException):
-            async with glyff.Session(
-                id=glyff.SessionId(session_id),
-                backend=glyff_store,
-                serializer=serializer,
-                argument_canonicalizer=hasher,
-            ) as gs:
-                with bind_session_storage(sefia_store):
-                    async with Session(llm_client=mock_llm, glyff_session=gs):
-                        await agent.get_user_name()
+            async with SessionScope(
+                llm_client=mock_llm, persistence=persistence
+            ).session(session_id=session_id):
+                await agent.get_user_name()
 
         assert "id" in interrupt_details
         assert interrupt_details["prompt"] == "What is your name?"
 
-        # --- Second run (with answer): Should succeed ---
-        async with glyff.Session(
-            id=glyff.SessionId(session_id),
-            backend=glyff_store,
-            serializer=serializer,
-            argument_canonicalizer=hasher,
-        ) as gs:
-            with bind_session_storage(sefia_store):
-                async with Session(llm_client=mock_llm, glyff_session=gs):
-                    interaction_store = get_state_store(
-                        "interaction_state", InteractionState
-                    )
-                    state = await interaction_store.ensure()
-                    state.answers[interrupt_details["id"]] = Answer(content="Alice")
-                    await interaction_store.save(state)
+        async with SessionScope(llm_client=mock_llm, persistence=persistence).session(
+            session_id=session_id
+        ):
+            interaction_store = get_state().get(InteractionState)
+            interaction_state = await interaction_store.ensure()
+            interaction_state.answers[interrupt_details["id"]] = Answer(content="Alice")
+            await interaction_store.save(interaction_state)
 
-                    report = await agent.get_user_name()
+            report = await agent.get_user_name()
 
         assert report.summary == "The user's name is Alice."
         assert len(mock_llm.requests) == 2
 
     async def test_multiple_ask_user_calls_are_independent(
         self,
-        serializer: Serializer,
-        hasher: ArgumentCanonicalizer,
         make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
     ) -> None:
         mock_responses = [
@@ -185,57 +171,34 @@ class TestStatefulTool:
 
         agent = Agent(Input(on_interrupt=on_interrupt))
         session_id = "stateful-tool-test-2"
-        glyff_store = MemoryBackend()
-        sefia_store = MemorySessionStorage(serializer=serializer)
+        persistence = MemoryPersistence()
 
-        # --- 1. Ask for name, should interrupt ---
         with pytest.raises(PauseException):
-            async with glyff.Session(
-                id=glyff.SessionId(session_id),
-                backend=glyff_store,
-                serializer=serializer,
-                argument_canonicalizer=hasher,
-            ) as gs:
-                with bind_session_storage(sefia_store):
-                    async with Session(llm_client=mock_llm, glyff_session=gs):
-                        await agent.get_profile()
+            async with SessionScope(
+                llm_client=mock_llm, persistence=persistence
+            ).session(session_id=session_id):
+                await agent.get_profile()
         assert "Name?" in interrupts
 
-        # --- 2. Provide name, ask for age, should interrupt again ---
         with pytest.raises(PauseException):
-            async with glyff.Session(
-                id=glyff.SessionId(session_id),
-                backend=glyff_store,
-                serializer=serializer,
-                argument_canonicalizer=hasher,
-            ) as gs:
-                with bind_session_storage(sefia_store):
-                    async with Session(llm_client=mock_llm, glyff_session=gs):
-                        interaction_store = get_state_store(
-                            "interaction_state", InteractionState
-                        )
-                        state = await interaction_store.ensure()
-                        state.answers[interrupts["Name?"]] = Answer(content="Alice")
-                        await interaction_store.save(state)
-                        await agent.get_profile()
+            async with SessionScope(
+                llm_client=mock_llm, persistence=persistence
+            ).session(session_id=session_id):
+                interaction_store = get_state().get(InteractionState)
+                interaction_state = await interaction_store.ensure()
+                interaction_state.answers[interrupts["Name?"]] = Answer(content="Alice")
+                await interaction_store.save(interaction_state)
+                await agent.get_profile()
         assert "Age?" in interrupts
 
-        # --- 3. Provide age, should complete ---
-        async with glyff.Session(
-            id=glyff.SessionId(session_id),
-            backend=glyff_store,
-            serializer=serializer,
-            argument_canonicalizer=hasher,
-        ) as gs:
-            with bind_session_storage(sefia_store):
-                async with Session(llm_client=mock_llm, glyff_session=gs):
-                    interaction_store = get_state_store(
-                        "interaction_state", InteractionState
-                    )
-                    state = await interaction_store.ensure()
-                    state.answers[interrupts["Age?"]] = Answer(content="99")
-                    await interaction_store.save(state)
-                    report = await agent.get_profile()
+        async with SessionScope(llm_client=mock_llm, persistence=persistence).session(
+            session_id=session_id
+        ):
+            interaction_store = get_state().get(InteractionState)
+            interaction_state = await interaction_store.ensure()
+            interaction_state.answers[interrupts["Age?"]] = Answer(content="99")
+            await interaction_store.save(interaction_state)
+            report = await agent.get_profile()
 
         assert report.summary == "Alice is 99."
         assert len(mock_llm.requests) == 3

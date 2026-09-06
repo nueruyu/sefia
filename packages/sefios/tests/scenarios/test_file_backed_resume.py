@@ -11,18 +11,13 @@ human-in-the-loop flow.
 from collections.abc import Callable
 from pathlib import Path
 
-import glyff
-from glyff.serialization import FallbackByTypeQualname
 import pytest
-from glyff_pydantic import PydanticArgumentCanonicalizer, PydanticSerializer
-from glyff_sqlite import SQLiteBackend
-from sefia import Session, Tools
+from sefia import Tools
 from sefia.llm import LLMCompletion
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 
-from sefios import SQLiteSessionStorage, domain
+from sefios import SessionScope, SQLitePersistence, domain
 from sefios.exceptions import InputRequired
-from sefios._session_state import bind_session_storage
 from sefios.tools import Input, InputRequest
 
 infer = domain(
@@ -60,29 +55,16 @@ async def test_pause_resume_survives_process_restart(
         seen.append(request)
         return answers.get(request.interaction_id)
 
-    def make_glyff_session() -> glyff.Session:
-        # A fresh backend instance per run, like a new process would create.
-        return glyff.Session(
-            id=glyff.SessionId(_SESSION_ID),
-            backend=SQLiteBackend(tmp_path / "sessions.sqlite3"),
-            serializer=PydanticSerializer(),
-            argument_canonicalizer=PydanticArgumentCanonicalizer(
-                FallbackByTypeQualname()
-            ),
+    def make_scope(client: MockLLMClient) -> SessionScope:
+        return SessionScope(
+            llm_client=client,
+            persistence=SQLitePersistence(tmp_path / "sessions.sqlite3"),
         )
 
-    def make_state_storage() -> SQLiteSessionStorage:
-        return SQLiteSessionStorage(
-            tmp_path / "sessions.sqlite3", _SESSION_ID, PydanticSerializer()
-        )
-
-    # --- First run: no answer available, the run pauses. ---
     mock_llm = make_mock_llm([_TOOL_CALL_RESPONSE])
     with pytest.raises(InputRequired) as pause_info:
-        async with make_glyff_session() as gs:
-            with bind_session_storage(make_state_storage()):
-                async with Session(llm_client=mock_llm, glyff_session=gs):
-                    await _Agent(Input(get_input=get_input)).get_user_name()
+        async with make_scope(mock_llm).session(session_id=_SESSION_ID):
+            await _Agent(Input(get_input=get_input)).get_user_name()
 
     assert len(seen) == 1
     # The pause identifies its own request, so integration layers need not
@@ -91,12 +73,9 @@ async def test_pause_resume_survives_process_restart(
     assert pause_info.value.prompt == seen[0].prompt
     answers[seen[0].interaction_id] = "Alice"
 
-    # --- Second run: everything is rebuilt from disk; the answer is found. ---
     resumed_llm = make_mock_llm([_RESULT_RESPONSE])
-    async with make_glyff_session() as gs:
-        with bind_session_storage(make_state_storage()):
-            async with Session(llm_client=resumed_llm, glyff_session=gs):
-                answer = await _Agent(Input(get_input=get_input)).get_user_name()
+    async with make_scope(resumed_llm).session(session_id=_SESSION_ID):
+        answer = await _Agent(Input(get_input=get_input)).get_user_name()
 
     assert answer == "The user's name is Alice."
     # The resumed call read the same interaction id back from the file store,

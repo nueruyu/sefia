@@ -1,12 +1,13 @@
+from collections.abc import AsyncIterator
+
 import pytest
 
 from sefia import ToolRegistry, Tools
 from sefia._tool_execution import call_tools
 from sefia.event_system import EventPublisher
-from sefia.inference import Capability, ToolCallRequest
-from sefia.llm._arg_stream import _ArgStreamChannel
-from sefia.streaming import StringDelta
-from sefia.testing import MockLLMClient, memory_session
+from sefia.inference import Capability
+from sefia.streaming import ArgEvent, StringDelta
+from sefia.testing import MockLLMClient, make_tool_call_request, memory_session
 from sefia.tool_collectors import DefaultToolCollector
 from sefios.tools import Output, OutputMessage
 
@@ -20,6 +21,11 @@ class Agent:
         self._output = output_tool
 
 
+async def _events(*events: ArgEvent) -> AsyncIterator[ArgEvent]:
+    for event in events:
+        yield event
+
+
 async def test_output_tool_streams_message_deltas():
     seen: list[tuple[str, str]] = []
     agent = Agent(
@@ -29,13 +35,14 @@ async def test_output_tool_streams_message_deltas():
     registered = next(tool for tool in registry.get_all() if "send_output" in tool.name)
     assert registered.stream_handler is not None
 
-    channel = _ArgStreamChannel()
-    channel.feed(StringDelta(name="message", text="Here "))
-    channel.feed(StringDelta(name="message", text="you go."))
-    channel.feed(StringDelta(name="other", text="ignored"))
-    channel.close()
-
-    await registered.stream_handler("call-1", channel)
+    await registered.stream_handler(
+        "call-1",
+        _events(
+            StringDelta(name="message", text="Here "),
+            StringDelta(name="message", text="you go."),
+            StringDelta(name="other", text="ignored"),
+        ),
+    )
 
     assert seen == [("call-1", "Here "), ("call-1", "you go.")]
 
@@ -58,7 +65,7 @@ async def test_nested_output_fails_instead_of_reusing_parent_call_id():
 
     async with memory_session(MockLLMClient([])):
         results = await call_tools(
-            [ToolCallRequest(id="parent-call", name="parent", arguments={})],
+            [make_tool_call_request(id="parent-call", name="parent", arguments={})],
             registry,
             EventPublisher([]),
         )

@@ -6,6 +6,7 @@ from contextvars import ContextVar
 
 from fastapi.responses import StreamingResponse
 from sefia import Policy
+from sefia.llm import LLMClient
 from sefia_fastapi.events import SessionEvents, SSEEvent
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 from typing_extensions import final
@@ -47,12 +48,16 @@ class SefiaHTTP:
     accounting installed), forwards the parsed prompt/message deltas to
     per-session SSE streams, and surfaces pauses as
     :class:`~sefios.fastapi.exceptions.InputRequired`.
+
+    Pass ``llm_client`` to use a custom :class:`~sefia.llm.LLMClient` instead
+    of constructing the default LiteLLM-backed client from ``model``.
     """
 
     def __init__(
         self,
         *,
         model: str | None = None,
+        llm_client: LLMClient | None = None,
         max_steps: int | None = 25,
         policies: list[Policy] | None = None,
         persistence: PersistenceProvider | None = None,
@@ -81,6 +86,7 @@ class SefiaHTTP:
 
         self._session_scope = SessionScope(
             model=model,
+            llm_client=llm_client,
             stream=True,
             max_steps=max_steps,
             policies=scope_policies,

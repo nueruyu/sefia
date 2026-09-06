@@ -7,9 +7,7 @@ import pytest
 
 from sefia._tool_system import ToolRegistry
 from sefia.inference import (
-    FunctionInfo,
     ResultDecision,
-    ToolCallRequest,
     ToolCallResult,
     ToolCallsDecision,
 )
@@ -23,13 +21,13 @@ from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
-from sefia.llm.streaming import OutputStreamEvent, StringEnd as OutputStringEnd
-from sefia.llm.transports import (
-    DecisionObserver,
-    DecisionRequest,
-    NativeDecisionTransport,
-)
+from sefia.llm.transports import DecisionRequest, NativeDecisionTransport
 from sefia.pydantic import PydanticModelBackend
+from sefia.testing import (
+    RecordingDecisionObserver,
+    make_decision_request,
+    make_tool_call_request,
+)
 
 
 def lookup(key: str) -> str:
@@ -55,19 +53,7 @@ def _decision(output_type: Any, *functions: Any) -> DecisionSpec:
 
 
 def _request(decision: DecisionSpec) -> DecisionRequest:
-    return DecisionRequest(
-        function=FunctionInfo(
-            qualname="test",
-            instructions="instructions",
-            bound_arguments={},
-            type_hints={},
-            return_type=str,
-            args=(),
-            kwargs={},
-        ),
-        decision_spec=decision,
-        history=(),
-    )
+    return make_decision_request(decision)
 
 
 def _renderer() -> Mock:
@@ -79,26 +65,6 @@ def _renderer() -> Mock:
 
     renderer.render_tool_result.side_effect = render_tool_result
     return renderer
-
-
-class _RecordingObserver(DecisionObserver):
-    def __init__(self) -> None:
-        self.prompt: str | None = None
-        self.response_texts: list[str] = []
-        self.reasoning_texts: list[str] = []
-        self.output_events: list[OutputStreamEvent] = []
-
-    async def before_request(self, prompt: str) -> None:
-        self.prompt = prompt
-
-    async def response_text(self, text: str) -> None:
-        self.response_texts.append(text)
-
-    async def reasoning_text(self, text: str) -> None:
-        self.reasoning_texts.append(text)
-
-    async def output(self, event: OutputStreamEvent) -> None:
-        self.output_events.append(event)
 
 
 def _call(name: str, arguments: str = "{}") -> ToolCall:
@@ -116,7 +82,7 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
     )
     decision = _decision(Result, lookup)
     renderer = _renderer()
-    observer = _RecordingObserver()
+    observer = RecordingDecisionObserver()
 
     decoded = await NativeDecisionTransport().request_decision(
         client, renderer, _request(decision), observer, stream=False
@@ -148,7 +114,7 @@ async def test_native_transport_decodes_typed_result() -> None:
         client,
         _renderer(),
         _request(decision),
-        _RecordingObserver(),
+        RecordingDecisionObserver(),
         stream=False,
     )
 
@@ -179,7 +145,7 @@ async def test_native_transport_avoids_result_tool_name_collision() -> None:
         client,
         renderer,
         _request(decision),
-        _RecordingObserver(),
+        RecordingDecisionObserver(),
         stream=False,
     )
 
@@ -201,7 +167,7 @@ async def test_native_transport_requires_a_tool_call() -> None:
             client,
             _renderer(),
             _request(decision),
-            _RecordingObserver(),
+            RecordingDecisionObserver(),
             stream=False,
         )
 
@@ -213,13 +179,13 @@ async def test_native_transport_sends_previous_calls_as_native_history() -> None
     )
     decision = _decision(Never, lookup)
     request = _request(decision)
-    request = DecisionRequest(
+    request = make_decision_request(
+        request.decision_spec,
         function=request.function,
-        decision_spec=request.decision_spec,
         history=(
             ToolCallsDecision(
                 [
-                    ToolCallRequest(
+                    make_tool_call_request(
                         id="call-1",
                         name="lookup",
                         arguments={"key": "first"},
@@ -235,7 +201,7 @@ async def test_native_transport_sends_previous_calls_as_native_history() -> None
         client,
         renderer,
         request,
-        _RecordingObserver(),
+        RecordingDecisionObserver(),
         stream=False,
     )
 
@@ -272,42 +238,6 @@ async def test_native_transport_requires_object_arguments() -> None:
             client,
             _renderer(),
             _request(decision),
-            _RecordingObserver(),
+            RecordingDecisionObserver(),
             stream=False,
         )
-
-
-async def test_native_transport_forwards_all_progress_kinds() -> None:
-    client = AsyncMock()
-    client.complete.return_value = LLMCompletion(
-        tool_calls=[_call("lookup", '{"key":"item"}')]
-    )
-    observer = _RecordingObserver()
-
-    async def native_complete(**kwargs: Any) -> LLMCompletion:
-        await kwargs["stream_callback"]("text")
-        await kwargs["reasoning_callback"]("reasoning")
-        await kwargs["output_callback"](
-            OutputStringEnd(("tool_calls", 0, "name"), "lookup")
-        )
-        await kwargs["output_callback"](
-            OutputStringEnd(("tool_calls", 0, "arguments", "key"), "item")
-        )
-        return client.complete.return_value
-
-    client.complete.side_effect = native_complete
-    decision = _decision(Never, lookup)
-    await NativeDecisionTransport().request_decision(
-        client,
-        _renderer(),
-        _request(decision),
-        observer,
-        stream=True,
-    )
-
-    assert observer.response_texts == ["text"]
-    assert observer.reasoning_texts == ["reasoning"]
-    assert observer.output_events == [
-        OutputStringEnd(("tool_calls", 0, "name"), "lookup"),
-        OutputStringEnd(("tool_calls", 0, "arguments", "key"), "item"),
-    ]

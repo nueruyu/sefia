@@ -1,11 +1,9 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from types import SimpleNamespace
 
 import pytest
 from litellm import (
     ChatCompletionMessageToolCall,
-    Choices,
-    Message as LiteLLMMessage,
     ModelResponse,
 )
 from pytest_mock import MockerFixture
@@ -24,6 +22,8 @@ from sefia_litellm._schema._data_format import StructuredDataFormat
 from sefia_litellm._streaming import (
     consume_completion_stream,
 )
+
+_ResponseFactory = Callable[..., ModelResponse]
 
 
 def _chunk(
@@ -57,24 +57,11 @@ async def _stream(*chunks: SimpleNamespace) -> AsyncIterator[SimpleNamespace]:
         yield chunk
 
 
-def _tool_response(name: str, arguments: str) -> ModelResponse:
-    return ModelResponse(
-        choices=[
-            Choices(
-                finish_reason="tool_calls",
-                index=0,
-                message=LiteLLMMessage(
-                    role="assistant",
-                    tool_calls=[
-                        ChatCompletionMessageToolCall(
-                            id="call-1",
-                            function={"name": name, "arguments": arguments},
-                            type="function",
-                        )
-                    ],
-                ),
-            )
-        ]
+def _tool_call(name: str, arguments: str) -> ChatCompletionMessageToolCall:
+    return ChatCompletionMessageToolCall(
+        id="call-1",
+        function={"name": name, "arguments": arguments},
+        type="function",
     )
 
 
@@ -98,18 +85,11 @@ def _structured_decision_format(
 
 async def test_routes_reasoning_and_content_separately(
     mocker: MockerFixture,
+    make_litellm_response: _ResponseFactory,
 ) -> None:
     mocker.patch(
         "litellm.stream_chunk_builder",
-        return_value=ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(role="assistant", content="done"),
-                )
-            ]
-        ),
+        return_value=make_litellm_response(content="done"),
     )
     content_tokens: list[str] = []
     reasoning_tokens: list[str] = []
@@ -166,6 +146,7 @@ async def test_invalid_built_response_is_a_decoding_error(
 
 async def test_decodes_enveloped_structured_decision_and_streams_logical_paths(
     mocker: MockerFixture,
+    make_litellm_response: _ResponseFactory,
 ) -> None:
     content = (
         '{"payload":{"decision":"tool_calls","tool_calls":['
@@ -173,15 +154,7 @@ async def test_decodes_enveloped_structured_decision_and_streams_logical_paths(
     )
     mocker.patch(
         "litellm.stream_chunk_builder",
-        return_value=ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(role="assistant", content=content),
-                )
-            ]
-        ),
+        return_value=make_litellm_response(content=content),
     )
     events: list[OutputStreamEvent] = []
 
@@ -209,19 +182,12 @@ async def test_decodes_enveloped_structured_decision_and_streams_logical_paths(
 
 async def test_result_only_stream_uses_logical_paths_without_payload(
     mocker: MockerFixture,
+    make_litellm_response: _ResponseFactory,
 ) -> None:
     content = '{"payload":{"decision":"result","result":"done"}}'
     mocker.patch(
         "litellm.stream_chunk_builder",
-        return_value=ModelResponse(
-            choices=[
-                Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=LiteLLMMessage(role="assistant", content=content),
-                )
-            ]
-        ),
+        return_value=make_litellm_response(content=content),
     )
     events: list[OutputStreamEvent] = []
 
@@ -246,10 +212,16 @@ async def test_result_only_stream_uses_logical_paths_without_payload(
     }
 
 
-async def test_decodes_native_tool_arguments(mocker: MockerFixture) -> None:
+async def test_decodes_native_tool_arguments(
+    mocker: MockerFixture,
+    make_litellm_response: _ResponseFactory,
+) -> None:
     mocker.patch(
         "litellm.stream_chunk_builder",
-        return_value=_tool_response("lookup", '{"key":"item"}'),
+        return_value=make_litellm_response(
+            finish_reason="tool_calls",
+            tool_calls=[_tool_call("lookup", '{"key":"item"}')],
+        ),
     )
     events: list[OutputStreamEvent] = []
 
@@ -287,11 +259,15 @@ async def test_decodes_native_tool_arguments(mocker: MockerFixture) -> None:
 
 async def test_restores_translated_native_tool_arguments(
     mocker: MockerFixture,
+    make_litellm_response: _ResponseFactory,
 ) -> None:
     wire_arguments = '{"labels":[{"key":"important","value":2}]}'
     mocker.patch(
         "litellm.stream_chunk_builder",
-        return_value=_tool_response("categorize", wire_arguments),
+        return_value=make_litellm_response(
+            finish_reason="tool_calls",
+            tool_calls=[_tool_call("categorize", wire_arguments)],
+        ),
     )
     data_format = StructuredDataFormat.from_generated_schema(
         JsonSchemaDocument.from_mapping(

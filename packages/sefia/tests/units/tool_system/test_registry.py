@@ -1,3 +1,5 @@
+from typing import Any
+
 from sefia import ToolRegistry
 
 
@@ -29,3 +31,22 @@ def test_get_by_function_matches_bound_method_against_unbound_function():
 
     assert method is not None
     assert registry.get_by_function(ExampleTool.method) == [method]
+
+
+def test_tools_default_to_serial() -> None:
+    async def handler(**kwargs: Any) -> str:
+        return "ok"
+
+    registry = ToolRegistry()
+    registry.add(handler, name="plain")
+    registry.add_json_tool(
+        handler, name="json_plain", description="", parameters={"type": "object"}
+    )
+    registry.add(handler, name="marked", concurrent=True)
+
+    plain = registry.get("plain")
+    json_plain = registry.get("json_plain")
+    marked = registry.get("marked")
+    assert plain is not None and plain.concurrent is False
+    assert json_plain is not None and json_plain.concurrent is False
+    assert marked is not None and marked.concurrent is True

@@ -2,10 +2,12 @@ from dataclasses import dataclass
 from unittest.mock import MagicMock
 
 import pytest
-from glyff import ArgumentsDigest, DomainId, ExecutionId, ExecutionName
+from glyff import DomainId, ExecutionId
+from glyff.testing import make_execution_id
 from pytest_mock import MockerFixture
 
 from sefios._session_state import _SessionState
+from sefios.storage import MemorySessionStorage
 
 
 @dataclass
@@ -21,64 +23,69 @@ class StateB:
 def _execution_id(
     name: str, digest: str, parent_id: ExecutionId | None = None
 ) -> ExecutionId:
-    return ExecutionId(
-        parent_id=parent_id,
+    return make_execution_id(
+        name,
+        parent=parent_id,
         domain_id=DomainId("sefios.tests"),
-        name=ExecutionName(name),
-        sequence=0,
-        arguments_digest=ArgumentsDigest(digest),
+        arguments={"digest": digest},
     )
 
 
 @pytest.fixture
-def session_state() -> _SessionState:
-    return _SessionState(storage=MagicMock())
+def session_state(memory_session_storage: MemorySessionStorage) -> _SessionState:
+    return _SessionState(storage=memory_session_storage)
+
+
+@pytest.fixture
+def glyff_ctx(mocker: MockerFixture) -> MagicMock:
+    context = MagicMock()
+    mocker.patch("sefios._session_state.get_glyff_context", return_value=context)
+    return context
 
 
 class TestSessionState:
-    def test_get_call_state_store_creates_scoped_key(
-        self, session_state: _SessionState, mocker: MockerFixture
-    ):
-        # Arrange
-        execution_id = _execution_id("Input.get_input", "prompt-a")
-        mock_glyff_ctx = MagicMock()
-        mock_glyff_ctx.current_execution_id = execution_id
-        mocker.patch(
-            "sefios._session_state.get_glyff_context", return_value=mock_glyff_ctx
-        )
+    async def test_get_call_state_store_reopens_state_for_same_call_and_suffix(
+        self,
+        session_state: _SessionState,
+        memory_session_storage: MemorySessionStorage,
+        glyff_ctx: MagicMock,
+    ) -> None:
+        glyff_ctx.current_execution_id = _execution_id("Input.get_input", "prompt-a")
+        state = StateA("stored")
 
-        # Act
-        store = session_state.get_call_state_store("my_state", StateA)
+        await session_state.get_call_state_store("my_state", StateA).save(state)
 
-        # Assert
-        assert store._key.startswith("call_state/")
-        assert store._key.endswith("/my_state")
-        assert str(execution_id) not in store._key
+        reopened = _SessionState(memory_session_storage)
+        assert await reopened.get_call_state_store("my_state", StateA).get() == state
+        assert await reopened.get_call_state_store("other_state", StateA).get() is None
 
-    def test_get_call_state_store_includes_args_hash_in_scope(
-        self, session_state: _SessionState, mocker: MockerFixture
-    ):
-        # Arrange
+    async def test_get_call_state_store_separates_argument_scopes(
+        self,
+        session_state: _SessionState,
+        memory_session_storage: MemorySessionStorage,
+        glyff_ctx: MagicMock,
+    ) -> None:
         first_execution_id = _execution_id("Input.get_input", "prompt-a")
         second_execution_id = _execution_id("Input.get_input", "prompt-b")
-        mock_glyff_ctx = MagicMock()
-        mocker.patch(
-            "sefios._session_state.get_glyff_context", return_value=mock_glyff_ctx
+        first_state = StateA("first")
+
+        glyff_ctx.current_execution_id = first_execution_id
+        await session_state.get_call_state_store("my_state", StateA).save(first_state)
+
+        reopened = _SessionState(memory_session_storage)
+        glyff_ctx.current_execution_id = second_execution_id
+        assert await reopened.get_call_state_store("my_state", StateA).get() is None
+        glyff_ctx.current_execution_id = first_execution_id
+        assert (
+            await reopened.get_call_state_store("my_state", StateA).get() == first_state
         )
 
-        # Act
-        mock_glyff_ctx.current_execution_id = first_execution_id
-        first_store = session_state.get_call_state_store("my_state", StateA)
-        mock_glyff_ctx.current_execution_id = second_execution_id
-        second_store = session_state.get_call_state_store("my_state", StateA)
-
-        # Assert
-        assert first_store._key != second_store._key
-
-    def test_get_call_state_store_includes_parent_scope(
-        self, session_state: _SessionState, mocker: MockerFixture
-    ):
-        # Arrange
+    async def test_get_call_state_store_separates_parent_scopes(
+        self,
+        session_state: _SessionState,
+        memory_session_storage: MemorySessionStorage,
+        glyff_ctx: MagicMock,
+    ) -> None:
         first_parent = _execution_id(
             "RequirementsClarifier.clarify_request", "clarifier"
         )
@@ -89,37 +96,30 @@ class TestSessionState:
         second_execution_id = _execution_id(
             "Input.get_input", "same-prompt", second_parent
         )
-        mock_glyff_ctx = MagicMock()
-        mocker.patch(
-            "sefios._session_state.get_glyff_context", return_value=mock_glyff_ctx
+        first_state = StateA("first")
+
+        glyff_ctx.current_execution_id = first_execution_id
+        await session_state.get_call_state_store("my_state", StateA).save(first_state)
+
+        reopened = _SessionState(memory_session_storage)
+        glyff_ctx.current_execution_id = second_execution_id
+        assert await reopened.get_call_state_store("my_state", StateA).get() is None
+        glyff_ctx.current_execution_id = first_execution_id
+        assert (
+            await reopened.get_call_state_store("my_state", StateA).get() == first_state
         )
-
-        # Act
-        mock_glyff_ctx.current_execution_id = first_execution_id
-        first_store = session_state.get_call_state_store("my_state", StateA)
-        mock_glyff_ctx.current_execution_id = second_execution_id
-        second_store = session_state.get_call_state_store("my_state", StateA)
-
-        # Assert
-        assert first_store._key != second_store._key
 
     def test_get_call_state_store_raises_error_outside_engrave(
-        self, session_state: _SessionState, mocker: MockerFixture
-    ):
-        # Arrange: simulate being outside an engraved call (no current execution).
-        mock_glyff_ctx = MagicMock()
-        mock_glyff_ctx.current_execution_id = None
-        mocker.patch(
-            "sefios._session_state.get_glyff_context", return_value=mock_glyff_ctx
-        )
+        self, session_state: _SessionState, glyff_ctx: MagicMock
+    ) -> None:
+        glyff_ctx.current_execution_id = None
 
-        # Act & Assert
         with pytest.raises(RuntimeError, match="can only be used inside"):
             session_state.get_call_state_store("my_state", StateA)
 
     def test_get_state_store_returns_same_instance_for_same_key(
         self, session_state: _SessionState
-    ):
+    ) -> None:
         store1 = session_state.get_state_store("shared_key", StateA)
         store2 = session_state.get_state_store("shared_key", StateA)
 
@@ -127,7 +127,7 @@ class TestSessionState:
 
     def test_get_state_store_raises_type_error_on_mismatch(
         self, session_state: _SessionState
-    ):
+    ) -> None:
         session_state.get_state_store("shared_key", StateA)
 
         with pytest.raises(

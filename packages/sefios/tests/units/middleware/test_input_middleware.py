@@ -1,19 +1,15 @@
-from sefia import StepContext, ToolRegistry
-from sefia._history import StepHistory
+from sefia import ToolRegistry
 from sefia.inference import (
     StepDecision,
     ResultDecision,
     ToolCallsDecision,
     ToolCallRequest,
 )
+from sefia.testing import make_step_context, make_tool_call_request
 from sefios.middleware import InputCallComposer
 from sefios.tools import Input
 
 HUMAN_INPUT_TOOL_NAME = "ask_human"
-
-
-def _empty_history() -> StepHistory:
-    return StepHistory()
 
 
 def _human_registry() -> ToolRegistry:
@@ -26,7 +22,7 @@ def _human_registry() -> ToolRegistry:
 
 
 def _human_call(id_: str, prompt: str) -> ToolCallRequest:
-    return ToolCallRequest(
+    return make_tool_call_request(
         id=id_,
         name=HUMAN_INPUT_TOOL_NAME,
         arguments={"prompt": prompt},
@@ -34,7 +30,7 @@ def _human_call(id_: str, prompt: str) -> ToolCallRequest:
 
 
 def _tool_call(id_: str, name: str = "search") -> ToolCallRequest:
-    return ToolCallRequest(id=id_, name=name, arguments={"query": "sefia"})
+    return make_tool_call_request(id=id_, name=name, arguments={"query": "sefia"})
 
 
 async def _run(
@@ -44,9 +40,8 @@ async def _run(
         return decision
 
     return await middleware.wrap(
-        StepContext(
+        make_step_context(
             step=step,
-            history=_empty_history(),
             tool_registry=_human_registry(),
         ),
         nxt,
@@ -85,7 +80,7 @@ class TestInputCallComposer:
         assert isinstance(composed, ToolCallsDecision)
         assert composed is not decision
         assert composed.calls == [
-            ToolCallRequest(
+            make_tool_call_request(
                 id="h1",
                 name=HUMAN_INPUT_TOOL_NAME,
                 arguments={
@@ -116,7 +111,7 @@ class TestInputCallComposer:
         assert composed.calls[0] is before
         assert composed.calls[2] is between
         assert composed.calls[3] is after
-        assert composed.calls[1] == ToolCallRequest(
+        assert composed.calls[1] == make_tool_call_request(
             id="h1",
             name=HUMAN_INPUT_TOOL_NAME,
             arguments={
@@ -158,12 +153,12 @@ class TestInputCallComposer:
     async def test_invalid_input_arguments_are_left_unchanged(self):
         decision = ToolCallsDecision(
             calls=[
-                ToolCallRequest(
+                make_tool_call_request(
                     id="h1",
                     name=HUMAN_INPUT_TOOL_NAME,
                     arguments={"prompt": "First?"},
                 ),
-                ToolCallRequest(
+                make_tool_call_request(
                     id="h2",
                     name=HUMAN_INPUT_TOOL_NAME,
                     arguments={"other": "Second?"},
@@ -176,12 +171,12 @@ class TestInputCallComposer:
     async def test_unregistered_input_name_is_left_unchanged(self):
         decision = ToolCallsDecision(
             calls=[
-                ToolCallRequest(
+                make_tool_call_request(
                     id="h1",
                     name="Input_get_input",
                     arguments={"prompt": "First?"},
                 ),
-                ToolCallRequest(
+                make_tool_call_request(
                     id="h2",
                     name="Input_get_input",
                     arguments={"prompt": "Second?"},
@@ -194,7 +189,7 @@ class TestInputCallComposer:
 
         assert (
             await InputCallComposer().wrap(
-                StepContext(step=0, history=_empty_history()),
+                make_step_context(),
                 nxt,
             )
             is decision

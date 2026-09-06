@@ -2373,6 +2373,12 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 
+[package.optional-dependencies]
+testing = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
@@ -2388,8 +2394,11 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4.18" },
     { name = "jsonweir", specifier = ">=0.1.0" },
     { name = "pydantic", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'testing'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'testing'", specifier = ">=0.23" },
     { name = "typing-extensions", specifier = ">=4.6" },
 ]
+provides-extras = ["testing"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2555,6 +2564,10 @@ litellm = [
 sqlite = [
     { name = "glyff-sqlite" },
 ]
+testing = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
 web = [
     { name = "ddgs" },
 ]
@@ -2569,6 +2582,8 @@ requires-dist = [
     { name = "glyff-pydantic", specifier = ">=0.16.0" },
     { name = "glyff-sqlite", marker = "extra == 'all'", specifier = ">=0.16.0" },
     { name = "glyff-sqlite", marker = "extra == 'sqlite'", specifier = ">=0.16.0" },
+    { name = "pytest", marker = "extra == 'testing'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'testing'", specifier = ">=0.23" },
     { name = "sefia", editable = "packages/sefia" },
     { name = "sefia-fastapi", marker = "extra == 'all'", editable = "packages/sefia_fastapi" },
     { name = "sefia-fastapi", marker = "extra == 'fastapi'", editable = "packages/sefia_fastapi" },
@@ -2578,7 +2593,7 @@ requires-dist = [
     { name = "sefia-typer", marker = "extra == 'cli'", editable = "packages/sefia_typer" },
     { name = "typing-extensions", specifier = ">=4.6" },
 ]
-provides-extras = ["all", "cli", "fastapi", "file-store", "litellm", "sqlite", "web"]
+provides-extras = ["all", "cli", "fastapi", "file-store", "litellm", "sqlite", "testing", "web"]
 
 [[package]]
 name = "shellingham"
