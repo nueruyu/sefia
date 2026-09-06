@@ -10,11 +10,15 @@ from ..llm._client import LLMClient
 from ..llm._messages import LLMCompletion, Message
 from ..llm._prompt_renderer import DecisionPrompt, PromptRenderer
 from ..llm.step_decision import DecisionSpec, StepTool
-from ..llm.streaming import OutputStreamCallback, OutputStreamEvent
+from ..llm.streaming import OutputStreamCallback, OutputStreamEvent, Scalar
 from ..llm.structured_data import StructuredData
 from ..llm.transports import DecisionObserver, DecisionRequest, DecisionTransport
 from ..pydantic import PydanticModelBackend
 from ._factories import make_decision_request
+
+
+_STREAM_TEXT = '{"contract":1}'
+_OUTPUT_EVENT = Scalar(("contract",), 1)
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,7 @@ class _Observer(DecisionObserver):
         self.prompts: list[str] = []
         self.response_texts: list[str] = []
         self.reasoning_texts: list[str] = []
+        self.output_events: list[OutputStreamEvent] = []
 
     @override
     async def before_request(self, prompt: str) -> None:
@@ -56,7 +61,7 @@ class _Observer(DecisionObserver):
 
     @override
     async def output(self, event: OutputStreamEvent) -> None:
-        pass
+        self.output_events.append(event)
 
 
 class _CompletionClient(LLMClient):
@@ -76,7 +81,9 @@ class _CompletionClient(LLMClient):
     ) -> LLMCompletion:
         self.calls += 1
         if stream_callback is not None:
-            await stream_callback("token")
+            await stream_callback(_STREAM_TEXT)
+        if output_callback is not None:
+            await output_callback(_OUTPUT_EVENT)
         if reasoning_callback is not None:
             await reasoning_callback("reasoning")
         return self.completion
@@ -108,6 +115,9 @@ class DecisionTransportContract:
         assert decoded.decision_data == decision_transport_case.expected_data
         assert decoded.completion is decision_transport_case.completion
         assert observer.prompts == ["contract prompt"]
+        assert observer.response_texts == []
+        assert observer.reasoning_texts == []
+        assert observer.output_events == []
         assert client.calls == 1
 
     async def test_connects_stream_observation_callbacks(
@@ -120,8 +130,9 @@ class DecisionTransportContract:
             client, _Renderer(), _request(), observer, stream=True
         )
 
-        assert observer.response_texts == ["token"]
+        assert observer.response_texts == [_STREAM_TEXT]
         assert observer.reasoning_texts == ["reasoning"]
+        assert observer.output_events == [_OUTPUT_EVENT]
 
 
 __all__ = ["DecisionTransportCase", "DecisionTransportContract"]
