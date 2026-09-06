@@ -246,8 +246,15 @@ the call's pause and resume (its decision replays from history), so a
 transport-backed tool needs no glyff-derived per-call key.
 `sefia.current_tool_call_id_for(function)` returns that id only when `function`
 is itself the dispatched tool. The built-in Input/Output methods use this stricter
-query as their `interaction_id` and fail fast when called directly, including from
-inside another dispatched tool; they do not mint or inherit a second identity.
+query to reject direct calls, including calls from inside another tool. Output
+still uses the tool call ID; Input derives its interaction ID from its own engraved
+execution. Use `sefios.require_input()` for application-controlled input.
+
+`Domain.engrave` observes entry into the dispatched function's engraved body and
+publishes `ToolExecutionBound` with the tool call ID and execution ID. Matching
+checks both callable identity and execution parent, so nested or recursive calls
+are not associated with the outer tool. Cached bodies do not emit this event.
+This observation does not control input routing or execution.
 
 An `@preview` handler receives that same id before its `ArgStream`:
 `handler(tool_call_id, events)`. A step-scoped registry in the inference strategy
@@ -335,12 +342,30 @@ composes multiple input tool calls emitted in the same model decision into one
 prompt. It does not carry state across steps, so a follow-up question produced
 after resume remains a normal separate interaction.
 
-The idempotency hinge is the `ToolCallRequest.id`. The input tool uses it as its
-`interaction_id`; because a resumed invocation restores the same decision from
-history, it routes the reply to the same pending prompt instead of creating a
-duplicate. The input/output preview callbacks receive this id alongside each text
-delta, so HTTP SSE clients can merge a live preview directly into its authoritative
-`input_required` or `output` event.
+Both `Input.get_input()` and `sefios.require_input()` own an engraved boundary
+and delegate to a shared, non-engraved input lifecycle. Their `interaction_id` is
+a SHA-256 digest of the canonical execution identity (including parents and the
+same-content call sequence). Re-invoking the same call restores the same ID;
+separate repeated calls have separate IDs. Replay must preserve the order of
+otherwise identical concurrent calls, as required by glyff's execution identity.
+
+Input preview callbacks receive a `preview_id`, the SHA-256 digest of the tool
+call ID. HTTP input `delta` events carry `preview_id`; `input_bound` associates it
+with `interaction_id` when the engraved body starts. `input_required` contains the
+complete prompt and interaction ID, so clients can reply even without receiving
+preview or binding events. Output's existing delta/interaction contract is unchanged.
+
+`require_input(prompt, allow_queued=False)` uses the channel bound by an active
+HTTP or CLI facade. It ignores messages queued before the request unless explicitly
+opted in; replies still go through `accept_input(..., reply_to=...)`. The result is
+text, not a boolean approval. Input tools retain their conversational queue behavior.
+Sibling tasks share a channel lock; concurrent writers in separate session bindings
+or processes are not coordinated by this lock.
+
+Input IDs and input SSE fields differ from the earlier tool-call-ID contract.
+Previously persisted pending inputs require migration or fresh sessions when upgrading;
+there is no automatic conversion of old pending IDs. Execution-ID-changing glyff
+migrations likewise need to account for IDs stored in session input state.
 
 ## Sessions and context
 

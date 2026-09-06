@@ -203,6 +203,11 @@ behavior as the other transports.
 
 ## Pause for a human, resume after a restart
 
+Application code can enforce an input step with `await require_input("Approve?")`
+(imported from `sefios`) inside an HTTP or CLI session. It uses the same reply
+routing as the Input tool without exposing the step to the model. See the
+[application-controlled input example](docs/tutorial.md#application-controlled-input).
+
 An input tool pauses the run by raising `InputRequired`. A later HTTP request
 supplies the reply and re-invokes the same call; with durable persistence,
 completed steps replay even after a server restart.

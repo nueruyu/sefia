@@ -1,7 +1,6 @@
 from collections.abc import AsyncIterator
 
 import pytest
-
 from sefia import ToolRegistry, Tools
 from sefia._tool_execution import call_tools
 from sefia.event_system import EventPublisher
@@ -9,6 +8,7 @@ from sefia.inference import Capability
 from sefia.streaming import ArgEvent, StringDelta
 from sefia.testing import MockLLMClient, make_tool_call_request, memory_session
 from sefia.tool_collectors import DefaultToolCollector
+from sefios._input import preview_id_for
 from sefios.tools import Input
 
 
@@ -44,7 +44,10 @@ async def test_input_tool_streams_prompt_deltas():
         ),
     )
 
-    assert seen == [("call-1", "What "), ("call-1", "topic?")]
+    assert seen == [
+        (preview_id_for("call-1"), "What "),
+        (preview_id_for("call-1"), "topic?"),
+    ]
 
 
 async def test_input_fails_fast_outside_tool_dispatch():

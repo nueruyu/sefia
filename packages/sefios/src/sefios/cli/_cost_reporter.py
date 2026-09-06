@@ -25,10 +25,8 @@ class CostReportingCLIReporter(CLIReporter):
         return self._inner.on_input_request(request)
 
     @override
-    def on_input_prompt_delta(
-        self, interaction_id: str, text: str
-    ) -> MaybeAwaitable[None]:
-        return self._inner.on_input_prompt_delta(interaction_id, text)
+    def on_input_prompt_delta(self, preview_id: str, text: str) -> MaybeAwaitable[None]:
+        return self._inner.on_input_prompt_delta(preview_id, text)
 
     @override
     def on_output(self, message: OutputMessage) -> MaybeAwaitable[None]:
