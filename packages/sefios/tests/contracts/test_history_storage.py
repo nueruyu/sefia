@@ -7,13 +7,12 @@ import pytest
 from glyff import DomainId, ExecutionId, Serializer
 from glyff.testing import make_execution_id
 from pytest_mock import MockerFixture
-
 from sefia import HistoryStorage
 from sefia.testing import HistoryStorageContract
-
 from sefios import MemorySessionStorage
 from sefios._session_state import bind_session_storage
 from sefios.history_storages import SessionHistoryStorage
+from typing_extensions import override
 
 
 def _execution_id() -> ExecutionId:
@@ -25,16 +24,20 @@ def _execution_id() -> ExecutionId:
 
 
 class TestSessionHistoryStorageContract(HistoryStorageContract):
-    @pytest.fixture
-    def history_storage(
+    @pytest.fixture(autouse=True)
+    def _prepare_case(
         self,
         mocker: MockerFixture,
         serializer: Serializer,
-    ) -> Iterator[HistoryStorage]:
+    ) -> Iterator[None]:
         context = MagicMock()
         context.current_execution_id = _execution_id()
         mocker.patch(
             "sefios.history_storages._session.get_glyff_context", return_value=context
         )
         with bind_session_storage(MemorySessionStorage(serializer)):
-            yield SessionHistoryStorage()
+            yield
+
+    @override
+    def make_history_storage(self) -> HistoryStorage:
+        return SessionHistoryStorage()

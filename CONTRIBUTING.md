@@ -31,7 +31,8 @@ Shared test doubles and helpers live in the public `sefia.testing` module
 (`MockLLMClient`, `memory_session`, scripted-response builders) rather than
 in conftest imports. Extension interfaces with shared observable behavior expose
 reusable conformance classes from `sefia.testing` or `sefios.testing`; built-in
-implementations apply those same public contracts in `tests/contracts/`.
+implementations apply those same public contracts in `tests/contracts/`, overriding
+their abstract factory methods to supply isolated test resources.
 
 ### End-to-end tests against real providers
 

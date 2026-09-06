@@ -7,21 +7,21 @@ from unittest.mock import MagicMock
 
 import pytest
 from pytest_mock import MockerFixture
-
 from sefia import HistorySnapshot, HistoryStorage
 from sefia.history_storages import GlyffHistoryStorage
 from sefia.testing import HistoryStorageContract, MemoryHistoryStorage
+from typing_extensions import override
 
 
 class TestMemoryHistoryStorageContract(HistoryStorageContract):
-    @pytest.fixture
-    def history_storage(self) -> HistoryStorage:
+    @override
+    def make_history_storage(self) -> HistoryStorage:
         return MemoryHistoryStorage()
 
 
 class TestGlyffHistoryStorageContract(HistoryStorageContract):
-    @pytest.fixture
-    def history_storage(self, mocker: MockerFixture) -> HistoryStorage:
+    @pytest.fixture(autouse=True)
+    def _prepare_case(self, mocker: MockerFixture) -> None:
         stored: HistorySnapshot | None = None
         context = MagicMock()
 
@@ -44,4 +44,7 @@ class TestGlyffHistoryStorageContract(HistoryStorageContract):
         mocker.patch(
             "sefia.history_storages._glyff.glyff.get_context", return_value=context
         )
+
+    @override
+    def make_history_storage(self) -> HistoryStorage:
         return GlyffHistoryStorage()

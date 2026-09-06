@@ -1,12 +1,16 @@
 """Apply the public decision-transport contract to every built-in transport."""
 
-import inspect
-from typing import TypeAlias
+import json
+from collections.abc import Callable
+from typing import Literal, cast
 
 import pytest
-
 import sefia.llm.transports as transports
+from sefia import ToolRegistry
 from sefia.llm import LLMCompletion, ToolCall
+from sefia.llm.json_schema import JsonObject
+from sefia.llm.step_decision import DecisionSpec
+from sefia.llm.streaming import OutputStreamEvent, StringDelta, StringEnd
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
     DecisionTransport,
@@ -14,67 +18,144 @@ from sefia.llm.transports import (
     PromptedDecisionTransport,
     StructuredDecisionTransport,
 )
-from sefia.testing import DecisionTransportCase, DecisionTransportContract
-
-TransportType: TypeAlias = (
-    type[NativeDecisionTransport]
-    | type[PromptedDecisionTransport]
-    | type[StructuredDecisionTransport]
+from sefia.pydantic import PydanticModelBackend
+from sefia.testing import (
+    DecisionTransportCase,
+    DecisionTransportContract,
+    make_decision_request,
 )
-TRANSPORT_TYPES: tuple[TransportType, ...] = (
-    NativeDecisionTransport,
-    PromptedDecisionTransport,
-    StructuredDecisionTransport,
-)
+from typing_extensions import override
 
-_EXPECTED = StructuredData.from_json({"decision": "result", "result": "done"})
-_CONTENT = '{"decision":"result","result":"done"}'
+DecisionKind = Literal["result", "tool_calls"]
 
 
-def _case(transport_type: TransportType) -> DecisionTransportCase:
-    if transport_type is NativeDecisionTransport:
-        completion = LLMCompletion(
-            content=_CONTENT,
-            tool_calls=[
-                ToolCall(
-                    id="call-1",
-                    name="return_result",
-                    arguments=StructuredData.from_json({"result": "done"}),
-                )
-            ],
+def _case(
+    transport: DecisionTransport,
+    kind: DecisionKind,
+    *,
+    native: bool = False,
+    structured: bool = False,
+) -> DecisionTransportCase:
+    def lookup(key: str) -> str:
+        return key
+
+    tools = ToolRegistry()
+    tools.add(lookup, name="lookup")
+    request = make_decision_request(
+        DecisionSpec.for_inference(
+            output_type=str,
+            tools=tools.get_all(),
+            result_format_factory=PydanticModelBackend(),
         )
-    elif transport_type is PromptedDecisionTransport:
-        completion = LLMCompletion(content=_CONTENT)
+    )
+    data: JsonObject
+    if kind == "result":
+        data = {"decision": "result", "result": "done"}
+        call = ToolCall(
+            id="call-1",
+            name="return_result",
+            arguments=StructuredData.from_json({"result": "done"}),
+        )
+        logical_events: tuple[OutputStreamEvent, ...] = (
+            StringDelta(("decision",), "result"),
+            StringEnd(("decision",), "result"),
+            StringDelta(("result",), "done"),
+            StringEnd(("result",), "done"),
+        )
+        native_events: tuple[OutputStreamEvent, ...] = (
+            StringDelta(("tool_calls", 0, "name"), "return_result"),
+            StringEnd(("tool_calls", 0, "name"), "return_result"),
+            StringDelta(("tool_calls", 0, "arguments", "result"), "done"),
+            StringEnd(("tool_calls", 0, "arguments", "result"), "done"),
+        )
     else:
-        completion = LLMCompletion(content=_CONTENT, structured_output=_EXPECTED)
-    return DecisionTransportCase(transport_type(), completion, _EXPECTED)
+        data = {
+            "decision": "tool_calls",
+            "tool_calls": [
+                {"name": "lookup", "arguments": {"key": "item"}},
+            ],
+        }
+        call = ToolCall(
+            id="call-1",
+            name="lookup",
+            arguments=StructuredData.from_json({"key": "item"}),
+        )
+        native_events = (
+            StringDelta(("tool_calls", 0, "name"), "lookup"),
+            StringEnd(("tool_calls", 0, "name"), "lookup"),
+            StringDelta(("tool_calls", 0, "arguments", "key"), "item"),
+            StringEnd(("tool_calls", 0, "arguments", "key"), "item"),
+        )
+        logical_events = (
+            StringDelta(("decision",), "tool_calls"),
+            StringEnd(("decision",), "tool_calls"),
+            *native_events,
+        )
+    expected = StructuredData.from_json(data)
+    content = json.dumps(data)
+    events = native_events if native else logical_events
+    return DecisionTransportCase(
+        transport=transport,
+        completion=(
+            LLMCompletion(tool_calls=[call])
+            if native
+            else LLMCompletion(
+                content=content,
+                structured_output=expected if structured else None,
+            )
+        ),
+        expected_data=expected,
+        request=request,
+        content_chunks=("calling a tool",) if native else (content,),
+        reasoning_chunks=("reasoning",),
+        client_output_events=events if native or structured else (),
+        expected_output_events=events,
+    )
 
 
-class TestNativeDecisionTransportContract(DecisionTransportContract):
-    @pytest.fixture
-    def decision_transport_case(self) -> DecisionTransportCase:
-        return _case(NativeDecisionTransport)
+CASE_FACTORIES: dict[
+    type[DecisionTransport], Callable[[DecisionKind], DecisionTransportCase]
+] = {
+    NativeDecisionTransport: lambda kind: _case(
+        NativeDecisionTransport(), kind, native=True
+    ),
+    PromptedDecisionTransport: lambda kind: _case(PromptedDecisionTransport(), kind),
+    StructuredDecisionTransport: lambda kind: _case(
+        StructuredDecisionTransport(), kind, structured=True
+    ),
+}
 
 
-class TestPromptedDecisionTransportContract(DecisionTransportContract):
-    @pytest.fixture
-    def decision_transport_case(self) -> DecisionTransportCase:
-        return _case(PromptedDecisionTransport)
+class TestDecisionTransportContract(DecisionTransportContract):
+    _case: DecisionTransportCase
 
+    @pytest.fixture(
+        autouse=True,
+        params=tuple(CASE_FACTORIES),
+        ids=[cls.__name__ for cls in CASE_FACTORIES],
+    )
+    def _prepare_case(
+        self, request: pytest.FixtureRequest, decision_kind: DecisionKind
+    ) -> None:
+        implementation = cast(type[DecisionTransport], request.param)
+        self._case = CASE_FACTORIES[implementation](decision_kind)
 
-class TestStructuredDecisionTransportContract(DecisionTransportContract):
-    @pytest.fixture
-    def decision_transport_case(self) -> DecisionTransportCase:
-        return _case(StructuredDecisionTransport)
+    @pytest.fixture(params=("result", "tool_calls"))
+    def decision_kind(self, request: pytest.FixtureRequest) -> DecisionKind:
+        return cast(DecisionKind, request.param)
+
+    @override
+    def make_decision_transport_case(self) -> DecisionTransportCase:
+        return self._case
 
 
 def test_contract_covers_all_exported_implementations() -> None:
     exported = {
         value
         for name in transports.__all__
-        if inspect.isclass(value := getattr(transports, name))
+        if isinstance(value := getattr(transports, name), type)
         and value is not DecisionTransport
         and issubclass(value, DecisionTransport)
     }
 
-    assert set(TRANSPORT_TYPES) == exported
+    assert set(CASE_FACTORIES) == exported

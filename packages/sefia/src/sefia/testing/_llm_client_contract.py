@@ -1,5 +1,6 @@
 """Reusable pytest contracts for ``LLMClient`` implementations."""
 
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -30,12 +31,16 @@ class StreamingLLMClientCase(LLMClientCase):
     output_events: Sequence[OutputStreamEvent] = ()
 
 
-class LLMClientContract:
+class LLMClientContract(ABC):
     """Shared normalized-completion behavior required by every LLM client."""
 
-    async def test_returns_the_normalized_completion(
-        self, llm_client_case: LLMClientCase
-    ) -> None:
+    @abstractmethod
+    def make_llm_client_case(self) -> LLMClientCase:
+        """Return a client configured for one completion request."""
+        ...
+
+    async def test_returns_the_normalized_completion(self) -> None:
+        llm_client_case = self.make_llm_client_case()
         completion = await llm_client_case.client.complete(
             list(llm_client_case.messages),
             tools=(
@@ -49,12 +54,18 @@ class LLMClientContract:
         assert completion == llm_client_case.expected_completion
 
 
-class StreamingLLMClientContract:
+class StreamingLLMClientContract(ABC):
     """Callback and reconstruction behavior for clients supporting streaming."""
 
+    @abstractmethod
+    def make_streaming_llm_client_case(self) -> StreamingLLMClientCase:
+        """Return a client configured for one streaming request."""
+        ...
+
     async def test_streams_callbacks_and_returns_the_reconstructed_completion(
-        self, streaming_llm_client_case: StreamingLLMClientCase
+        self,
     ) -> None:
+        streaming_llm_client_case = self.make_streaming_llm_client_case()
         content_chunks: list[str] = []
         reasoning_chunks: list[str] = []
         output_events: list[OutputStreamEvent] = []

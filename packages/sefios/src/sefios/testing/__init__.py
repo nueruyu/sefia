@@ -1,6 +1,6 @@
 """Public conformance contracts for sefios persistence extensions.
 
-Subclass the applicable contract and provide its factory fixture. Install the
+Subclass the applicable contract and override its abstract factory method. Install the
 ``testing`` extra to use these pytest-based contracts.
 """
 

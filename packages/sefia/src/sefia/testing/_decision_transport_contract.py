@@ -1,6 +1,7 @@
 """Reusable pytest contract for ``DecisionTransport`` implementations."""
 
-from collections.abc import Callable, Coroutine
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
 
 from typing_extensions import override
@@ -13,22 +14,9 @@ from ..llm.step_decision import DecisionSpec, StepTool
 from ..llm.streaming import (
     OutputStreamCallback,
     OutputStreamEvent,
-    StringDelta,
-    StringEnd,
 )
 from ..llm.structured_data import StructuredData
 from ..llm.transports import DecisionObserver, DecisionRequest, DecisionTransport
-from ..pydantic import PydanticModelBackend
-from ._factories import make_decision_request
-
-
-_STREAM_TEXT = '{"decision":"result","result":"done"}'
-_OUTPUT_EVENTS: tuple[OutputStreamEvent, ...] = (
-    StringDelta(("decision",), "result"),
-    StringEnd(("decision",), "result"),
-    StringDelta(("result",), "done"),
-    StringEnd(("result",), "done"),
-)
 
 
 @dataclass(frozen=True)
@@ -38,6 +26,11 @@ class DecisionTransportCase:
     transport: DecisionTransport
     completion: LLMCompletion
     expected_data: StructuredData
+    request: DecisionRequest
+    content_chunks: Sequence[str] = ()
+    reasoning_chunks: Sequence[str] = ()
+    client_output_events: Sequence[OutputStreamEvent] = ()
+    expected_output_events: Sequence[OutputStreamEvent] = ()
 
 
 class _Renderer(PromptRenderer):
@@ -75,8 +68,8 @@ class _Observer(DecisionObserver):
 
 
 class _CompletionClient(LLMClient):
-    def __init__(self, completion: LLMCompletion) -> None:
-        self.completion = completion
+    def __init__(self, case: DecisionTransportCase) -> None:
+        self.case = case
         self.calls = 0
 
     @override
@@ -90,37 +83,33 @@ class _CompletionClient(LLMClient):
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMCompletion:
         self.calls += 1
-        if stream_callback is not None:
-            await stream_callback(_STREAM_TEXT)
-        if output_callback is not None:
-            for event in _OUTPUT_EVENTS:
-                await output_callback(event)
         if reasoning_callback is not None:
-            await reasoning_callback("reasoning")
-        return self.completion
+            for chunk in self.case.reasoning_chunks:
+                await reasoning_callback(chunk)
+        if stream_callback is not None:
+            for chunk in self.case.content_chunks:
+                await stream_callback(chunk)
+        if output_callback is not None:
+            for event in self.case.client_output_events:
+                await output_callback(event)
+        return self.case.completion
 
 
-def _request() -> DecisionRequest:
-    return make_decision_request(
-        DecisionSpec.for_inference(
-            output_type=str,
-            tools=[],
-            result_format_factory=PydanticModelBackend(),
-        ),
-    )
-
-
-class DecisionTransportContract:
+class DecisionTransportContract(ABC):
     """Shared request, decoding, and observation behavior for transports."""
 
-    async def test_returns_decoded_data_with_the_source_completion(
-        self, decision_transport_case: DecisionTransportCase
-    ) -> None:
-        client = _CompletionClient(decision_transport_case.completion)
+    @abstractmethod
+    def make_decision_transport_case(self) -> DecisionTransportCase:
+        """Return a matching request, completion, and stream script."""
+        ...
+
+    async def test_returns_decoded_data_with_the_source_completion(self) -> None:
+        decision_transport_case = self.make_decision_transport_case()
+        client = _CompletionClient(decision_transport_case)
         observer = _Observer()
 
         decoded = await decision_transport_case.transport.request_decision(
-            client, _Renderer(), _request(), observer, stream=False
+            client, _Renderer(), decision_transport_case.request, observer, stream=False
         )
 
         assert decoded.decision_data == decision_transport_case.expected_data
@@ -131,19 +120,26 @@ class DecisionTransportContract:
         assert observer.output_events == []
         assert client.calls == 1
 
-    async def test_connects_stream_observation_callbacks(
-        self, decision_transport_case: DecisionTransportCase
-    ) -> None:
-        client = _CompletionClient(decision_transport_case.completion)
+    async def test_connects_stream_observation_callbacks(self) -> None:
+        decision_transport_case = self.make_decision_transport_case()
+        client = _CompletionClient(decision_transport_case)
         observer = _Observer()
 
-        await decision_transport_case.transport.request_decision(
-            client, _Renderer(), _request(), observer, stream=True
+        decoded = await decision_transport_case.transport.request_decision(
+            client, _Renderer(), decision_transport_case.request, observer, stream=True
         )
 
-        assert observer.response_texts == [_STREAM_TEXT]
-        assert observer.reasoning_texts == ["reasoning"]
-        assert observer.output_events == list(_OUTPUT_EVENTS)
+        assert decoded.decision_data == decision_transport_case.expected_data
+        assert decoded.completion is decision_transport_case.completion
+        assert observer.prompts == ["contract prompt"]
+        assert observer.response_texts == list(decision_transport_case.content_chunks)
+        assert observer.reasoning_texts == list(
+            decision_transport_case.reasoning_chunks
+        )
+        assert observer.output_events == list(
+            decision_transport_case.expected_output_events
+        )
+        assert client.calls == 1
 
 
 __all__ = ["DecisionTransportCase", "DecisionTransportContract"]

@@ -11,12 +11,11 @@ from litellm import (
     ModelResponse,
 )
 from pytest_mock import MockerFixture
-
 from sefia.llm import LLMCompletion, ToolCall
 from sefia.llm.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.streaming import StringDelta, StringEnd
+from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticModelBackend
 from sefia.testing import (
     LLMClientCase,
@@ -25,31 +24,36 @@ from sefia.testing import (
     StreamingLLMClientContract,
 )
 from sefia_litellm import LiteLLMClient
+from typing_extensions import override
 
 _ResponseFactory = Callable[..., ModelResponse]
 
 
 class TestLiteLLMPlainCompletionContract(LLMClientContract):
-    @pytest.fixture
-    def llm_client_case(
+    @pytest.fixture(autouse=True)
+    def _prepare_case(
         self,
         mock_acompletion: AsyncMock,
         make_litellm_response: _ResponseFactory,
-    ) -> LLMClientCase:
+    ) -> None:
         mock_acompletion.return_value = make_litellm_response(
             content="Hello", model="gpt-4o"
         )
         expected = LLMCompletion(model="gpt-4o", content="Hello", stop_reason="stop")
-        return LLMClientCase(LiteLLMClient(model="gpt-4o"), expected)
+        self._case = LLMClientCase(LiteLLMClient(model="gpt-4o"), expected)
+
+    @override
+    def make_llm_client_case(self) -> LLMClientCase:
+        return self._case
 
 
 class TestLiteLLMStructuredCompletionContract(LLMClientContract):
-    @pytest.fixture
-    def llm_client_case(
+    @pytest.fixture(autouse=True)
+    def _prepare_case(
         self,
         mock_acompletion: AsyncMock,
         make_litellm_response: _ResponseFactory,
-    ) -> LLMClientCase:
+    ) -> None:
         content = '{"payload":{"decision":"result","result":"done"}}'
         mock_acompletion.return_value = make_litellm_response(
             content=content, model="gpt-4o"
@@ -67,20 +71,24 @@ class TestLiteLLMStructuredCompletionContract(LLMClientContract):
                 {"decision": "result", "result": "done"}
             ),
         )
-        return LLMClientCase(
+        self._case = LLMClientCase(
             LiteLLMClient(model="gpt-4o"),
             expected,
             decision_spec=decision_spec,
         )
 
+    @override
+    def make_llm_client_case(self) -> LLMClientCase:
+        return self._case
+
 
 class TestLiteLLMNativeToolContract(LLMClientContract):
-    @pytest.fixture
-    def llm_client_case(
+    @pytest.fixture(autouse=True)
+    def _prepare_case(
         self,
         mock_acompletion: AsyncMock,
         make_litellm_response: _ResponseFactory,
-    ) -> LLMClientCase:
+    ) -> None:
         upstream_call = ChatCompletionMessageToolCall(
             id="call-1",
             function={"name": "lookup", "arguments": '{"key":"item"}'},
@@ -115,7 +123,13 @@ class TestLiteLLMNativeToolContract(LLMClientContract):
             ],
             stop_reason="tool_calls",
         )
-        return LLMClientCase(LiteLLMClient(model="gpt-4o"), expected, tools=(tool,))
+        self._case = LLMClientCase(
+            LiteLLMClient(model="gpt-4o"), expected, tools=(tool,)
+        )
+
+    @override
+    def make_llm_client_case(self) -> LLMClientCase:
+        return self._case
 
 
 @dataclass
@@ -131,13 +145,13 @@ async def _stream(*deltas: _Delta) -> AsyncIterator[SimpleNamespace]:
 
 
 class TestLiteLLMStreamingContract(StreamingLLMClientContract):
-    @pytest.fixture
-    def streaming_llm_client_case(
+    @pytest.fixture(autouse=True)
+    def _prepare_case(
         self,
         mocker: MockerFixture,
         mock_acompletion: AsyncMock,
         make_litellm_response: _ResponseFactory,
-    ) -> StreamingLLMClientCase:
+    ) -> None:
         content_chunks = (
             '{"payload":{"decision":"result",',
             '"result":"done"}}',
@@ -166,7 +180,7 @@ class TestLiteLLMStreamingContract(StreamingLLMClientContract):
                 {"decision": "result", "result": "done"}
             ),
         )
-        return StreamingLLMClientCase(
+        self._case = StreamingLLMClientCase(
             LiteLLMClient(model="gpt-4o"),
             expected,
             decision_spec=decision_spec,
@@ -179,3 +193,7 @@ class TestLiteLLMStreamingContract(StreamingLLMClientContract):
                 StringEnd(("result",), "done"),
             ),
         )
+
+    @override
+    def make_streaming_llm_client_case(self) -> StreamingLLMClientCase:
+        return self._case

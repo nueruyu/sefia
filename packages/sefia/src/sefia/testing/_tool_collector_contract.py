@@ -1,5 +1,6 @@
 """Reusable pytest contract for ``ToolCollector`` implementations."""
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,12 +23,16 @@ class ToolCollectorCase:
     expected_result: Any = None
 
 
-class ToolCollectorContract:
+class ToolCollectorContract(ABC):
     """Shared discovery and dispatch behavior required by a tool collector."""
 
-    async def test_collects_the_expected_executable_tool(
-        self, tool_collector_case: ToolCollectorCase
-    ) -> None:
+    @abstractmethod
+    def make_tool_collector_case(self) -> ToolCollectorCase:
+        """Return an isolated collector case."""
+        ...
+
+    async def test_collects_the_expected_executable_tool(self) -> None:
+        tool_collector_case = self.make_tool_collector_case()
         registry = tool_collector_case.collector.collect(
             tool_collector_case.capabilities
         )
