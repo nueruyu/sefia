@@ -112,8 +112,9 @@ def test_typed_tool_schema_hoists_nested_definitions() -> None:
     assert audience_schema["required"] == ["role"]
 
 
-def test_raw_tool_schema_hoists_local_definitions() -> None:
-    raw_schema = {
+@pytest.mark.parametrize("explicitly_closed", [True, False])
+def test_raw_tool_schema_hoists_local_definitions(explicitly_closed: bool) -> None:
+    raw_schema: dict[str, Any] = {
         "type": "object",
         "properties": {"item": {"$ref": "#/$defs/Item"}},
         "required": ["item"],
@@ -127,6 +128,9 @@ def test_raw_tool_schema_hoists_local_definitions() -> None:
             }
         },
     }
+    if not explicitly_closed:
+        del raw_schema["additionalProperties"]
+        del raw_schema["$defs"]["Item"]["additionalProperties"]
     definition = _decision_model(Never, [_raw_tool(raw_schema)])
 
     schema = _prepare(definition).schema.to_dict()
@@ -137,6 +141,8 @@ def test_raw_tool_schema_hoists_local_definitions() -> None:
     item = SchemaNode(schema).definitions()["tool_0__Item"]
     assert item.properties()["name"].type == "string"
     assert item.strings("required") == ("name",)
+    assert arguments["additionalProperties"] is False
+    assert item.additional_properties() is False
 
 
 def test_raw_definition_is_not_normalized_with_typed_decision_model() -> None:
