@@ -12,6 +12,21 @@ from sefia import (
 
 from ._domain import domain
 from ._scope import SessionScope
+from ._execution import (
+    ExecutionCancelled,
+    ExecutionCompleted,
+    ExecutionConflictError,
+    ExecutionManager,
+    ExecutionRef,
+    UnknownExecutionError,
+)
+from ._external_action import (
+    ExternalActionChannel,
+    ExternalActionConflictError,
+    ExternalActionDelivery,
+    ExternalActionRequest,
+    UnknownExternalActionError,
+)
 from ._session_state import get_call_state_store, get_session_storage
 from ._state_store import StateStore
 from .persistence import (
@@ -46,6 +61,17 @@ __all__ = [
     "domain",
     # sefios' own front door and batteries.
     "SessionScope",
+    "ExecutionRef",
+    "ExecutionManager",
+    "ExecutionCompleted",
+    "ExecutionCancelled",
+    "ExecutionConflictError",
+    "UnknownExecutionError",
+    "ExternalActionChannel",
+    "ExternalActionRequest",
+    "ExternalActionDelivery",
+    "ExternalActionConflictError",
+    "UnknownExternalActionError",
     "PersistenceProvider",
     "SQLitePersistence",
     "MemoryPersistence",
