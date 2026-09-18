@@ -28,7 +28,9 @@ def channel() -> ExternalActionChannel[Request, Result]:
     )
 
 
-async def test_pending_is_derived_from_persisted_requests(channel):
+async def test_pending_is_derived_from_persisted_requests(
+    channel: ExternalActionChannel[Request, Result],
+):
     await channel.record_request("b", Request("second"))
     await channel.record_request("a", Request("first"))
 
@@ -39,7 +41,9 @@ async def test_pending_is_derived_from_persisted_requests(channel):
     assert [item.id for item in await channel.pending()] == ["b"]
 
 
-async def test_same_result_is_idempotent_and_conflicting_result_is_rejected(channel):
+async def test_same_result_is_idempotent_and_conflicting_result_is_rejected(
+    channel: ExternalActionChannel[Request, Result],
+):
     await channel.record_request("action", Request("tool"))
 
     first = await channel.accept_result("action", Result("same"))
@@ -51,12 +55,16 @@ async def test_same_result_is_idempotent_and_conflicting_result_is_rejected(chan
         await channel.accept_result("action", Result("different"))
 
 
-async def test_result_requires_a_recorded_request(channel):
+async def test_result_requires_a_recorded_request(
+    channel: ExternalActionChannel[Request, Result],
+):
     with pytest.raises(UnknownExternalActionError):
         await channel.accept_result("missing", Result("value"))
 
 
-async def test_request_identity_is_immutable(channel):
+async def test_request_identity_is_immutable(
+    channel: ExternalActionChannel[Request, Result],
+):
     await channel.record_request("action", Request("first"))
     await channel.record_request("action", Request("first"))
 
