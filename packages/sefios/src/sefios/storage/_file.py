@@ -33,7 +33,9 @@ class FileSessionStorage(SessionStorage):
         for part in parts:
             if not part or part in (".", ".."):
                 raise ValueError(f"Invalid key part: {part!r}")
-            safe_parts.append(_UNSAFE.sub(lambda match: f"%{ord(match.group()):02X}", part))
+            safe_parts.append(
+                _UNSAFE.sub(lambda match: f"%{ord(match.group()):02X}", part)
+            )
         safe_parts[-1] += ".json"
         return self._base_dir.joinpath(*safe_parts)
 
