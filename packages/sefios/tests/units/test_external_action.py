@@ -34,7 +34,10 @@ async def test_same_result_is_retry_safe_but_conflicting_result_is_rejected():
     channel = await _channel()
     await channel.request("a1", "lookup", {})
 
-    assert await channel.accept_result("a1", {"value": 1}) == ExternalActionDelivery.ACCEPTED
+    assert (
+        await channel.accept_result("a1", {"value": 1})
+        == ExternalActionDelivery.ACCEPTED
+    )
     assert (
         await channel.accept_result("a1", {"value": 1})
         == ExternalActionDelivery.ALREADY_ACCEPTED

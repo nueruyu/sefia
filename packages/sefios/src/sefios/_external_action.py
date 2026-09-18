@@ -93,7 +93,13 @@ class ExternalActionChannel:
             )
             if request is None:
                 continue
-            if await self._storage.get(self._result_key(action_id), _StoredResult) is None:
+            if (
+                await self._storage.get(
+                    self._result_key(action_id),
+                    _StoredResult,
+                )
+                is None
+            ):
                 pending.append(self._to_request(request))
         return pending
 
