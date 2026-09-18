@@ -14,6 +14,8 @@ from ._domain import domain
 from ._scope import SessionScope
 from ._session_state import get_call_state_store, get_session_storage
 from ._state_store import StateStore
+from .execution import DurableExecutionStore, ExecutionRef, ExecutionSnapshot
+from .external_actions import ExternalActionChannel, ExternalActionRequest
 from .persistence import (
     FilePersistence,
     MemoryPersistence,
@@ -65,4 +67,9 @@ __all__ = [
     "StateRegistry",
     "get_state",
     "state",
+    "ExecutionRef",
+    "ExecutionSnapshot",
+    "DurableExecutionStore",
+    "ExternalActionRequest",
+    "ExternalActionChannel",
 ]

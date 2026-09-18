@@ -45,6 +45,35 @@ class SessionStorageContract(ABC):
             "value": "second"
         }
 
+    async def test_set_if_absent_is_atomic_and_does_not_overwrite(self) -> None:
+        storage = self.make_session_storage()
+
+        assert await storage.set_if_absent("state", {"value": "first"}, dict)
+        assert not await self.make_session_storage().set_if_absent(
+            "state",
+            {"value": "second"},
+            dict,
+        )
+        assert await self.make_session_storage().get("state", dict) == {
+            "value": "first"
+        }
+
+    async def test_keys_are_sorted_and_filtered_by_prefix(self) -> None:
+        storage = self.make_session_storage()
+        await storage.set("actions/b", {"value": 2}, dict)
+        await storage.set("other", {"value": 0}, dict)
+        await storage.set("actions/a", {"value": 1}, dict)
+
+        assert await self.make_session_storage().keys("actions/") == (
+            "actions/a",
+            "actions/b",
+        )
+        assert await self.make_session_storage().keys() == (
+            "actions/a",
+            "actions/b",
+            "other",
+        )
+
     async def test_delete_removes_only_the_selected_key(self) -> None:
         storage = self.make_session_storage()
         await storage.set("first", {"value": 1}, dict)

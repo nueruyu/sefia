@@ -23,20 +23,49 @@ class AmbiguousInputError(Exception):
 class InputRequired(PauseException):
     """
     Raised by an input-awaiting tool to pause the run until input is available.
-
-    Carries the ``prompt`` shown to whoever provides the input, and the
-    ``interaction_id`` identifying the paused request so integration layers
-    can report exactly which request is waiting without re-reading state.
-    Catch it to surface the pause to your caller; once the input is recorded,
-    re-invoking the same session replays the completed steps and re-runs the
-    tool, which now returns the input.
-
-    It subclasses :class:`sefia.exceptions.PauseException`, so the sefia executor
-    propagates it as a pause (never reporting it as a failure) without the core
-    needing to know about external input specifically.
     """
 
     def __init__(self, prompt: str, *, interaction_id: str | None = None) -> None:
         super().__init__(prompt)
         self.prompt = prompt
         self.interaction_id = interaction_id
+
+
+class UnknownExecutionError(Exception):
+    """Raised when an opaque durable execution reference is unknown."""
+
+    def __init__(self, execution_id: str):
+        super().__init__(f"Unknown execution: {execution_id}")
+        self.execution_id = execution_id
+
+
+class ExecutionConflictError(Exception):
+    """Raised when immutable execution data conflicts with an existing value."""
+
+    def __init__(self, execution_id: str):
+        super().__init__(f"Execution data conflicts for {execution_id}")
+        self.execution_id = execution_id
+
+
+class ExecutionAlreadyTerminalError(Exception):
+    """Raised when a terminal operation conflicts with an existing terminal state."""
+
+    def __init__(self, execution_id: str):
+        super().__init__(f"Execution is already terminal: {execution_id}")
+        self.execution_id = execution_id
+
+
+class UnknownExternalActionError(Exception):
+    """Raised when a result targets an action not requested by the execution."""
+
+    def __init__(self, action_id: str):
+        super().__init__(f"Unknown external action: {action_id}")
+        self.action_id = action_id
+
+
+class ExternalActionConflictError(Exception):
+    """Raised when immutable request/result data conflicts for an action."""
+
+    def __init__(self, action_id: str):
+        super().__init__(f"External action data conflicts for {action_id}")
+        self.action_id = action_id

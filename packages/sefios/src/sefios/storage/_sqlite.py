@@ -24,7 +24,9 @@ class SQLiteSessionStorage(SessionStorage):
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self._database)
+        connection = sqlite3.connect(self._database, timeout=30)
+        connection.execute("PRAGMA busy_timeout=30000")
+        return connection
 
     @contextmanager
     def _connection(self) -> Generator[sqlite3.Connection]:
@@ -68,6 +70,29 @@ class SQLiteSessionStorage(SessionStorage):
                 (self._session_id, key, value),
             )
 
+    def _write_if_absent(self, key: str, value: bytes) -> bool:
+        with self._connection() as connection, connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO sefia_session_state (session_id, key, value)
+                VALUES (?, ?, ?)
+                """,
+                (self._session_id, key, value),
+            )
+            return cursor.rowcount == 1
+
+    def _keys(self, prefix: str) -> tuple[str, ...]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT key FROM sefia_session_state
+                WHERE session_id = ? AND substr(key, 1, length(?)) = ?
+                ORDER BY key
+                """,
+                (self._session_id, prefix, prefix),
+            ).fetchall()
+        return tuple(str(row[0]) for row in rows)
+
     def _delete(self, key: str) -> None:
         with self._connection() as connection, connection:
             connection.execute(
@@ -89,6 +114,15 @@ class SQLiteSessionStorage(SessionStorage):
     async def set(self, key: str, value: Any, type_hint: type) -> None:
         serialized = await self._serializer.serialize(value, type_hint)
         await asyncio.to_thread(self._write, key, serialized)
+
+    @override
+    async def set_if_absent(self, key: str, value: Any, type_hint: type) -> bool:
+        serialized = await self._serializer.serialize(value, type_hint)
+        return await asyncio.to_thread(self._write_if_absent, key, serialized)
+
+    @override
+    async def keys(self, prefix: str = "") -> tuple[str, ...]:
+        return await asyncio.to_thread(self._keys, prefix)
 
     @override
     async def delete(self, key: str) -> None:

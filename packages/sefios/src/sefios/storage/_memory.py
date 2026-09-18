@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from glyff import Serializer
@@ -18,6 +19,7 @@ class MemorySessionStorage(SessionStorage):
     def __init__(self, serializer: Serializer):
         self._serializer = serializer
         self._data: dict[str, bytes] = {}
+        self._lock = asyncio.Lock()
 
     @override
     async def get(self, key: str, type_hint: type) -> Any | None:
@@ -28,8 +30,25 @@ class MemorySessionStorage(SessionStorage):
 
     @override
     async def set(self, key: str, value: Any, type_hint: type) -> None:
-        self._data[key] = await self._serializer.serialize(value, type_hint)
+        serialized = await self._serializer.serialize(value, type_hint)
+        async with self._lock:
+            self._data[key] = serialized
+
+    @override
+    async def set_if_absent(self, key: str, value: Any, type_hint: type) -> bool:
+        serialized = await self._serializer.serialize(value, type_hint)
+        async with self._lock:
+            if key in self._data:
+                return False
+            self._data[key] = serialized
+            return True
+
+    @override
+    async def keys(self, prefix: str = "") -> tuple[str, ...]:
+        async with self._lock:
+            return tuple(sorted(key for key in self._data if key.startswith(prefix)))
 
     @override
     async def delete(self, key: str) -> None:
-        self._data.pop(key, None)
+        async with self._lock:
+            self._data.pop(key, None)
