@@ -2,6 +2,8 @@ from ._authoring import Domain, concurrent, policy, preview, profile
 from ._interfaces import (
     HistorySnapshot,
     HistoryStorage,
+    DecisionContext,
+    DecisionMiddleware,
     InferenceContext,
     InferenceMiddleware,
     InferenceStrategy,
@@ -38,6 +40,8 @@ __all__ = [
     "InferenceStrategy",
     "InferenceMiddleware",
     "StepMiddleware",
+    "DecisionContext",
+    "DecisionMiddleware",
     "InferenceContext",
     "StepContext",
     "ToolEntry",

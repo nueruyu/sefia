@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 
-from sefia._interfaces import InferenceMiddleware, Policy, StepMiddleware
+from sefia._interfaces import (
+    DecisionMiddleware,
+    InferenceMiddleware,
+    Policy,
+    StepMiddleware,
+)
 from sefios.middleware._input import InputCallComposer
 from sefios.middleware._max_steps import StepLimiter
 from sefios.middleware._stagnation import StagnationDetector
@@ -16,8 +21,10 @@ class DefaultPolicy(Policy):
     max_repeats: int = 3
 
     @override
-    def create_middleware(self) -> list[InferenceMiddleware | StepMiddleware]:
-        middleware: list[InferenceMiddleware | StepMiddleware] = []
+    def create_middleware(
+        self,
+    ) -> list[InferenceMiddleware | StepMiddleware | DecisionMiddleware]:
+        middleware: list[InferenceMiddleware | StepMiddleware | DecisionMiddleware] = []
         if self.max_steps is not None:
             middleware.append(StepLimiter(max_steps=self.max_steps))
         middleware.append(StagnationDetector(max_repeats=self.max_repeats))

@@ -1,6 +1,8 @@
 from .history_storage import HistorySnapshot, HistoryStorage
 from .inference_strategy import InferenceStrategy
 from .middleware import (
+    DecisionContext,
+    DecisionMiddleware,
     InferenceContext,
     InferenceMiddleware,
     StepContext,
@@ -14,6 +16,8 @@ __all__ = [
     "InferenceStrategy",
     "InferenceMiddleware",
     "StepMiddleware",
+    "DecisionContext",
+    "DecisionMiddleware",
     "InferenceContext",
     "StepContext",
     "Policy",

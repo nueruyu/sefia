@@ -270,7 +270,7 @@ async def turn(session_id: str, body: TurnBody):
 | **Pause & resume** | Every call is engraved (content-addressed) via glyff and replays on re-invocation; exceptions are non-terminal, so pausing = raising. |
 | **Interaction** | A durable JSON request/result exchange. Resolve an explicit ID with `session.resolve_interaction(id, result)`; discover unresolved requests with `session.pending_interactions()`. Input is an adapter over this primitive. |
 | **Session** | The scope for a run. `SessionScope` (in `sefios`) is the configured front door; `sefia.Session` is the core primitive. |
-| **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). The `sefios` defaults give a step cap and ready-made behaviors. |
+| **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). Three [middleware scopes](DESIGN.md#middleware-control-scopes) control attempts, steps, and durable decision generation. The `sefios` defaults give a step cap and ready-made behaviors. |
 | **Stores** | Where engraved progress and tool state live — memory, file, or your own backend. Your application database stays yours. |
 
 ## Documentation

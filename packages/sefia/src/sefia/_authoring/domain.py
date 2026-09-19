@@ -8,7 +8,12 @@ from typing_extensions import final
 
 from .._context import get_context
 from .._executor import InferenceExecutor
-from .._interfaces import InferenceMiddleware, Policy, StepMiddleware
+from .._interfaces import (
+    DecisionMiddleware,
+    InferenceMiddleware,
+    Policy,
+    StepMiddleware,
+)
 from ..event_system import EventPublisher
 from . import metadata
 
@@ -20,20 +25,23 @@ GLYFF_DOMAIN = glyff.Domain("sefia", version="1")
 
 def _partition_middleware(
     middleware: Sequence[object],
-) -> tuple[list[InferenceMiddleware], list[StepMiddleware]]:
+) -> tuple[list[InferenceMiddleware], list[StepMiddleware], list[DecisionMiddleware]]:
     inference_middlewares: list[InferenceMiddleware] = []
     step_middlewares: list[StepMiddleware] = []
+    decision_middlewares: list[DecisionMiddleware] = []
     for item in middleware:
         if isinstance(item, InferenceMiddleware):
             inference_middlewares.append(item)
         elif isinstance(item, StepMiddleware):
             step_middlewares.append(item)
+        elif isinstance(item, DecisionMiddleware):
+            decision_middlewares.append(item)
         else:
             raise TypeError(
-                "Policy middleware must be an instance of InferenceMiddleware "
-                f"or StepMiddleware, got {type(item).__name__}"
+                "Policy middleware must be an instance of InferenceMiddleware, "
+                f"StepMiddleware, or DecisionMiddleware, got {type(item).__name__}"
             )
-    return inference_middlewares, step_middlewares
+    return inference_middlewares, step_middlewares, decision_middlewares
 
 
 @final
@@ -116,7 +124,9 @@ class Domain:
             middleware = [
                 item for policy in policies for item in policy.create_middleware()
             ]
-            inference_middleware, step_middleware = _partition_middleware(middleware)
+            inference_middleware, step_middleware, decision_middleware = (
+                _partition_middleware(middleware)
+            )
             executor = InferenceExecutor(
                 func=unwrapped,
                 args=args,
@@ -127,6 +137,7 @@ class Domain:
                 publisher=EventPublisher(handlers),
                 inference_middlewares=inference_middleware,
                 step_middlewares=step_middleware,
+                decision_middlewares=decision_middleware,
                 history_storage=context.history_storage,
             )
 

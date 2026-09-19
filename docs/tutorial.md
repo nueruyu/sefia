@@ -361,7 +361,8 @@ between the two requests changes nothing.
 ## Next steps
 
 - Select another `PersistenceProvider`, or drop to `sefia.Session` for full
-  control over the LLM client, policies, and middleware.
+  control over the LLM client, policies, and middleware. Policies can wrap
+  [attempts, steps, or durable decision generation](../DESIGN.md#middleware-control-scopes).
 - Read [The `@infer` contract](./infer-contract.md) for the rules on arguments,
   service members, tool methods, and return types.
 - Read [use case 01](./usecases/01-human-in-the-loop.md) to see this same turn

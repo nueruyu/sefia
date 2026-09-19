@@ -4,7 +4,7 @@ from dataclasses import replace
 from typing import Any
 
 from .._history import StepHistory
-from .._interfaces.middleware import StepContext
+from .._interfaces.middleware import DecisionContext, StepContext
 from .._tool_system import ToolRegistry
 from ..inference import FunctionInfo, HistoryItem, ToolCallRequest
 from ..llm import RejectedDecision
@@ -85,7 +85,22 @@ def make_step_context(
     )
 
 
+def make_decision_context(
+    *,
+    step: int = 0,
+    function_info: FunctionInfo | None = None,
+    history: tuple[HistoryItem, ...] = (),
+) -> DecisionContext:
+    """Build a middleware context for durable decision generation."""
+    return DecisionContext(
+        step=step,
+        function_info=make_function_info() if function_info is None else function_info,
+        history=history,
+    )
+
+
 __all__ = [
+    "make_decision_context",
     "make_decision_request",
     "make_function_info",
     "make_step_context",

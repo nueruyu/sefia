@@ -49,6 +49,7 @@ from ._decision_transport_contract import (
     DecisionTransportContract,
 )
 from ._factories import (
+    make_decision_context,
     make_decision_request,
     make_function_info,
     make_step_context,
@@ -256,6 +257,7 @@ __all__ = [
     "StreamingLLMClientContract",
     "ToolCollectorCase",
     "ToolCollectorContract",
+    "make_decision_context",
     "make_decision_request",
     "make_function_info",
     "make_step_context",

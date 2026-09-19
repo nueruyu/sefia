@@ -4,7 +4,7 @@ from typing import Any, Awaitable, Callable
 
 from .._history import StepHistory
 from .._tool_system import ToolRegistry
-from ..inference import StepDecision
+from ..inference import FunctionInfo, HistoryItem, StepDecision
 
 
 @dataclass
@@ -23,7 +23,7 @@ class InferenceContext:
 class StepContext:
     """
     Context handed to a :class:`StepMiddleware` wrapping a single inference step
-    (one call to the inference strategy).
+    outside its durable decision execution.
 
     ``step`` is the 0-based index of the step about to run. ``history.items`` is
     immutable; middleware may reshape the history via ``history.rewrite``.
@@ -32,6 +32,15 @@ class StepContext:
     step: int
     history: StepHistory
     tool_registry: ToolRegistry = field(default_factory=ToolRegistry)
+
+
+@dataclass(frozen=True)
+class DecisionContext:
+    """Context for middleware wrapping decision generation inside a durable step."""
+
+    step: int
+    function_info: FunctionInfo
+    history: tuple[HistoryItem, ...]
 
 
 class InferenceMiddleware(ABC):
@@ -53,7 +62,7 @@ class InferenceMiddleware(ABC):
 
 class StepMiddleware(ABC):
     """
-    Wraps a single inference step (one inference-strategy decision).
+    Wraps a single inference step outside its durable decision execution.
 
     The executor owns the step loop and invokes the middleware once per step.
     A middleware may short-circuit the step (e.g. refuse to start it) or inspect
@@ -68,3 +77,14 @@ class StepMiddleware(ABC):
     ) -> StepDecision:
         """Run the wrapped step (via ``nxt``) and return its decision."""
         ...
+
+
+class DecisionMiddleware(ABC):
+    """Wraps decision generation inside one durable inference step."""
+
+    @abstractmethod
+    async def wrap(
+        self,
+        ctx: DecisionContext,
+        nxt: Callable[[], Awaitable[StepDecision]],
+    ) -> StepDecision: ...
