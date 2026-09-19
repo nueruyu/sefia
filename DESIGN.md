@@ -86,6 +86,41 @@ class ResearchService:                             # a plain class — no base, 
   ready-made policies, the `SessionScope` front door, the HTTP integration). Drop
   to the core anytime.
 
+## Middleware control scopes
+
+Policies attach middleware at three execution boundaries:
+
+```text
+InferenceMiddleware — whole inference attempt
+└─ StepMiddleware — one step outside the durable decision execution
+   └─ glyff: inference.step
+      └─ DecisionMiddleware — decision generation inside the durable step
+         └─ InferenceStrategy.decide_next_step(...)
+```
+
+`StepMiddleware` can prepare a step, including rewriting its `StepHistory`.
+`DecisionMiddleware` receives a frozen `DecisionContext` containing only the step
+index. It controls the decision returned by `nxt()`: it can inspect or replace it,
+raise to reject it, or return a decision without calling the strategy. History and
+function metadata stay outside this context because their nested mutable objects
+could alter strategy inputs without tracking or persisting those changes.
+
+Attach middleware through `Policy(middleware=lambda: [...])`; factories remain
+scoped to each inference run, with context → domain → profile → function ordering.
+The public `Middleware` type alias names the supported control scopes. Policy
+factories and `create_middleware()` return `Sequence[Middleware]`, allowing
+subclasses to return narrower types such as `list[StepMiddleware]` or tuples.
+
+Rejecting a decision must fail the engraved decision execution before it commits,
+so retry/resume can regenerate the decision instead of replaying a rejected
+committed value. The executor checks the final value is a `ResultDecision` or
+`ToolCallsDecision` inside that boundary. `AfterInferenceStep` observes this final
+decision; a middleware error or invalid return emits `InferenceStepFailed` instead.
+
+Semantic validation is one downstream use case. Core adds no validation API or
+coupling to the LLM strategy's internal response repair loop. Extension authors can
+build isolated middleware tests with `sefia.testing.make_decision_context()`.
+
 ## Durability & resumable HITL
 
 ```python

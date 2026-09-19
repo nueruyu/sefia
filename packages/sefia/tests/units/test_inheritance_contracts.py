@@ -1,10 +1,22 @@
-from sefia import Domain, HistoryStorage, InferenceStrategy, Session, ToolCollector
+from sefia import (
+    DecisionMiddleware,
+    Domain,
+    HistoryStorage,
+    InferenceMiddleware,
+    InferenceStrategy,
+    Session,
+    StepMiddleware,
+    ToolCollector,
+)
 from sefia.history_storages import GlyffHistoryStorage
 from sefia.llm import LLMInferenceStrategy
 from sefia.tool_collectors import DefaultToolCollector
 
 
 def test_extension_points_remain_open():
+    assert not getattr(DecisionMiddleware, "__final__", False)
+    assert not getattr(InferenceMiddleware, "__final__", False)
+    assert not getattr(StepMiddleware, "__final__", False)
     assert not getattr(InferenceStrategy, "__final__", False)
     assert not getattr(HistoryStorage, "__final__", False)
     assert not getattr(ToolCollector, "__final__", False)

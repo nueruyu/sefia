@@ -6,8 +6,11 @@ from ._history import StepHistory
 from ._interfaces import InferenceStrategy
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._interfaces.middleware import (
+    DecisionContext,
+    DecisionMiddleware,
     InferenceContext,
     InferenceMiddleware,
+    Middleware,
     StepContext,
     StepMiddleware,
 )
@@ -41,9 +44,17 @@ def _compose(
 ) -> Callable[[], Awaitable[StepDecision]]: ...
 
 
+@overload
 def _compose(
-    middlewares: Sequence[InferenceMiddleware | StepMiddleware],
-    ctx: InferenceContext | StepContext,
+    middlewares: Sequence[DecisionMiddleware],
+    ctx: DecisionContext,
+    core: Callable[[], Awaitable[StepDecision]],
+) -> Callable[[], Awaitable[StepDecision]]: ...
+
+
+def _compose(
+    middlewares: Sequence[Middleware],
+    ctx: InferenceContext | StepContext | DecisionContext,
     core: Callable[[], Awaitable[Any]],
 ) -> Callable[[], Awaitable[Any]]:
     """
@@ -51,7 +62,7 @@ def _compose(
 
     Middlewares are applied so the first in the list is the outermost layer.
     A middleware receives ``nxt`` as the next layer and may call it once, call it
-    again for retry behavior, or short-circuit by raising an exception.
+    again for retry behavior, or short-circuit by returning or raising.
     """
     nxt = core
     for middleware in reversed(middlewares):
@@ -60,8 +71,8 @@ def _compose(
 
 
 def _layer(
-    middleware: InferenceMiddleware | StepMiddleware,
-    ctx: InferenceContext | StepContext,
+    middleware: Middleware,
+    ctx: InferenceContext | StepContext | DecisionContext,
     nxt: Callable[[], Awaitable[Any]],
 ) -> Callable[[], Awaitable[Any]]:
     async def call() -> Any:
@@ -71,9 +82,19 @@ def _layer(
             return await middleware.wrap(ctx, nxt)
         if isinstance(middleware, StepMiddleware) and isinstance(ctx, StepContext):
             return await middleware.wrap(ctx, nxt)
+        if isinstance(middleware, DecisionMiddleware) and isinstance(
+            ctx, DecisionContext
+        ):
+            return await middleware.wrap(ctx, nxt)
         raise TypeError("Middleware and context types do not match.")
 
     return call
+
+
+def _require_step_decision(decision: object) -> StepDecision:
+    if isinstance(decision, (ResultDecision, ToolCallsDecision)):
+        return decision
+    raise TypeError(f"Unknown decision type: {type(decision)}")
 
 
 def _require_tool_calls_decision(decision: object) -> ToolCallsDecision:
@@ -103,6 +124,7 @@ class InferenceExecutor:
         history_storage: HistoryStorage,
         inference_middlewares: list[InferenceMiddleware] | None = None,
         step_middlewares: list[StepMiddleware] | None = None,
+        decision_middlewares: list[DecisionMiddleware] | None = None,
     ):
         self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy
@@ -112,6 +134,7 @@ class InferenceExecutor:
         self._completed_steps = 0
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
+        self._decision_middlewares = decision_middlewares or []
 
         self._tool_registry: ToolRegistry = tool_collector.collect(
             self.func_info.capabilities
@@ -127,7 +150,7 @@ class InferenceExecutor:
         )
 
     async def _next_step(self, step: int) -> StepDecision:
-        """One engraved inference-strategy call, keyed on the step index (not
+        """One engraved decision execution, keyed on the step index (not
         the history) so the durable key stays O(1) and survives compaction."""
         history = self._history.items
         await self.publisher.publish(
@@ -137,13 +160,20 @@ class InferenceExecutor:
             )
         )
 
-        try:
-            decision = await self.strategy.decide_next_step(
+        ctx = DecisionContext(step=step)
+
+        async def core() -> StepDecision:
+            return await self.strategy.decide_next_step(
                 function_info=self.func_info,
                 history=history,
                 tools=self._tool_registry,
                 publisher=self.publisher,
             )
+
+        chain = _compose(self._decision_middlewares, ctx, core)
+
+        try:
+            decision = _require_step_decision(await chain())
         except Exception as e:
             # Observation only, then re-raise: glyff leaves the step resumable,
             # and run() classifies it as a pause or a failure upstream.

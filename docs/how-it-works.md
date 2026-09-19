@@ -60,8 +60,12 @@ loop:
   if decision is ToolCalls:    history += decision; history += run(decision.calls)
 ```
 
-- **`decide_next_step` is engraved** (`_next_step_engraved`), so each model call is a
-  separately replayable step.
+- **Decision generation is engraved** (`_next_step_engraved`): `DecisionMiddleware`
+  wraps `decide_next_step` inside `_next_step`, before its final decision is checked
+  and committed. `StepMiddleware` wraps this engraved call from outside;
+  `InferenceMiddleware` wraps the whole attempt. See the
+  [middleware control scopes](../DESIGN.md#middleware-control-scopes) for rejection
+  and replay semantics.
 - **The tool batch is engraved** (`_call_tools_engraved`), so executed tools don't
   re-run on resume. Within a batch, calls run serially unless their tools are
   marked `@concurrent`; results always land in history in request order (see

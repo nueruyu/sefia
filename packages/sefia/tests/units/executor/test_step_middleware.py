@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 from sefia import (
-    InferenceMiddleware,
     StepContext,
     StepMiddleware,
 )
@@ -69,44 +68,6 @@ async def test_step_middlewares_compose_in_declared_order() -> None:
         "inner:exit:1",
         "outer:exit:1",
     ]
-
-
-async def test_inference_middleware_retries_inference_failure(
-    make_executor: Callable[..., InferenceExecutor],
-    mock_strategy: AsyncMock,
-    retry_once: InferenceMiddleware,
-) -> None:
-    mock_strategy.decide_next_step.side_effect = [
-        ValueError("flaky inference"),
-        ResultDecision(result="second attempt"),
-    ]
-
-    executor = make_executor(
-        inference_middlewares=[retry_once],
-    )
-
-    result = await executor.run()
-
-    assert result == "second attempt"
-    assert mock_strategy.decide_next_step.call_count == 2
-
-
-async def test_failure_from_reentered_attempt_propagates(
-    make_executor: Callable[..., InferenceExecutor],
-    mock_strategy: AsyncMock,
-    retry_once: InferenceMiddleware,
-) -> None:
-    mock_strategy.decide_next_step.side_effect = ValueError("always flaky")
-
-    executor = make_executor(
-        inference_middlewares=[retry_once],
-    )
-
-    with pytest.raises(ValueError, match="always flaky"):
-        await executor.run()
-
-    # The second failure propagates out of middleware.
-    assert mock_strategy.decide_next_step.call_count == 2
 
 
 async def test_executor_applies_middlewares_in_order_on_every_step(

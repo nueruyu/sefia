@@ -1,8 +1,8 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from ..event_system import EventHandler
-from .middleware import InferenceMiddleware, StepMiddleware
+from .middleware import Middleware
 
 
 class Policy:
@@ -14,8 +14,8 @@ class Policy:
     - Observation via ``create_handlers``, which returns event handlers that are
       notified of events but cannot steer the loop.
     - Control via ``create_middleware``, which returns middleware that wraps the
-      inference run or each step and can steer the executor's loops by retrying
-      or raising exceptions.
+      inference attempt, each step, or durable decision generation and can steer
+      execution by retrying, replacing results, or raising exceptions.
 
     For one-off composition, build a policy directly from factories::
 
@@ -31,17 +31,13 @@ class Policy:
     # Class-level fallbacks so subclasses whose __init__ does not call
     # super().__init__() (e.g. dataclasses) still get empty defaults.
     _handlers_factory: Callable[[], list[EventHandler[Any]]] | None = None
-    _middleware_factory: (
-        Callable[[], list[InferenceMiddleware | StepMiddleware]] | None
-    ) = None
+    _middleware_factory: Callable[[], Sequence[Middleware]] | None = None
 
     def __init__(
         self,
         *,
         handlers: Callable[[], list[EventHandler[Any]]] | None = None,
-        middleware: (
-            Callable[[], list[InferenceMiddleware | StepMiddleware]] | None
-        ) = None,
+        middleware: Callable[[], Sequence[Middleware]] | None = None,
     ):
         self._handlers_factory = handlers
         self._middleware_factory = middleware
@@ -50,6 +46,6 @@ class Policy:
         """Create observation handlers used by this policy (default: none)."""
         return self._handlers_factory() if self._handlers_factory else []
 
-    def create_middleware(self) -> list[InferenceMiddleware | StepMiddleware]:
+    def create_middleware(self) -> Sequence[Middleware]:
         """Create control middleware used by this policy (default: none)."""
         return self._middleware_factory() if self._middleware_factory else []

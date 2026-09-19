@@ -1,3 +1,7 @@
+from dataclasses import FrozenInstanceError, fields
+
+import pytest
+from sefia import DecisionContext
 from sefia.inference import ToolCallResult
 from sefia.llm import LLMCompletion, Message, ToolCall
 from sefia.llm.step_decision import DecisionSpec
@@ -6,6 +10,7 @@ from sefia.pydantic import PydanticModelBackend
 from sefia.testing import (
     LLMClientCase,
     MockLLMClient,
+    make_decision_context,
     make_decision_request,
     make_function_info,
     make_step_context,
@@ -102,3 +107,16 @@ async def test_mock_llm_client_snapshots_core_messages() -> None:
             ],
         }
     ]
+
+
+def test_decision_context_factory_defaults() -> None:
+    assert make_decision_context() == DecisionContext(step=0)
+
+
+def test_decision_context_only_exposes_the_step_and_is_frozen() -> None:
+    ctx = make_decision_context(step=3)
+
+    assert ctx.step == 3
+    assert {field.name for field in fields(ctx)} == {"step"}
+    with pytest.raises(FrozenInstanceError):
+        setattr(ctx, "step", 4)
