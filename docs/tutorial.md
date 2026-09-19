@@ -366,3 +366,37 @@ between the two requests changes nothing.
   the tradeoffs.
 - For long-horizon "resume in N days" flows, add an external scheduler that re-calls
   the endpoint — see the [timer note in the FAQ](./faq.md#what-about-long-running-waits--timers).
+
+
+## Application-controlled input
+
+Use `require_input` when Python control flow must always request an answer.
+`Input.get_input` remains a model-dispatched tool; neither API calls the other.
+
+```python
+from sefios import domain, require_input
+
+engrave = domain("approval_example").engrave
+
+@engrave
+async def approve_refund(order_id: str, amount: int) -> bool:
+    answer = await require_input(f"Approve refund of {amount} for {order_id}? (yes/no)")
+    return answer.strip().lower() == "yes"
+```
+
+Call this function inside `SefiaHTTP.session()` or `SefiaCLI.session()`. On an
+unanswered request it raises `InputRequired`; return its `interaction_id` and
+`prompt` to the client. In the next session invocation, first call
+`await session.accept_input(answer, reply_to=interaction_id)`, then invoke the
+same workflow with the same arguments. A negative answer is still non-empty text:
+validate it explicitly before executing the operation.
+
+By default, `require_input` does not consume a message queued before the request.
+Use `allow_queued=True` only when earlier conversational input is acceptable.
+Multiple pending requests require `reply_to` to select the intended request.
+The primitive does not create a background waiter or a new workflow abstraction.
+
+For HTTP streaming, application-controlled input emits only the existing
+`input_required` event with the complete prompt and `interaction_id`. The Input
+tool's streamed prompt deltas continue to use its tool call ID as
+`interaction_id`; `require_input` has no preview stream.

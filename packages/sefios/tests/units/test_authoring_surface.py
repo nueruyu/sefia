@@ -22,6 +22,7 @@ def test_authoring_surface_is_public():
         "policy",
         "profile",
         "domain",
+        "require_input",
         "Policy",
         "Profile",
         "Tools",

@@ -14,6 +14,7 @@ from ._domain import domain
 from ._scope import SessionScope
 from ._session_state import get_call_state_store, get_session_storage
 from ._state_store import StateStore
+from .input import require_input
 from .persistence import (
     FilePersistence,
     MemoryPersistence,
@@ -44,6 +45,7 @@ __all__ = [
     "Profile",
     "Tools",
     "domain",
+    "require_input",
     # sefios' own front door and batteries.
     "SessionScope",
     "PersistenceProvider",

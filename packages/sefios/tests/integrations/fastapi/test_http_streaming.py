@@ -296,3 +296,29 @@ async def test_input_and_output_deltas_use_independent_interaction_ids(
             if event["name"] == SSEEvent.DELTA
         }
         assert ids_by_type["input"] != ids_by_type["output"]
+
+
+async def test_application_input_publishes_complete_prompt_without_preview(
+    read_sse: Callable[
+        ..., AbstractAsyncContextManager[asyncio.Task[list[dict[str, Any]]]]
+    ],
+) -> None:
+    from sefia.testing import MockLLMClient
+    from sefios import require_input
+
+    http = SefiaHTTP(llm_client=MockLLMClient([]))
+    sid = http.create_session()
+    async with read_sse(http.events(sid), SSEEvent.INPUT_REQUIRED) as reader:
+        with pytest.raises(InputRequired) as pause:
+            async with http.session(session_id=sid):
+                await require_input("Approve?")
+        events = await reader
+    assert events == [
+        {
+            "name": SSEEvent.INPUT_REQUIRED,
+            "data": {
+                "prompt": "Approve?",
+                "interaction_id": pause.value.interaction_id,
+            },
+        }
+    ]

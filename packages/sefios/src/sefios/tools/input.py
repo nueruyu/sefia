@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Annotated
 
 from pydantic import Field
@@ -8,40 +7,33 @@ from sefia.streaming import ArgStream, StringDelta
 
 from .._async import MaybeAwaitable, maybe_await
 from .._glyff import GLYFF_DOMAIN
-from ..exceptions import InputRequired
+from .._input import (
+    InputCompleteCallback,
+    InputProvider,
+    InputRequest,
+    InputRequestCallback,
+    InputResult,
+    no_input,
+    request_input,
+)
 
-
-@dataclass(frozen=True)
-class InputRequest:
-    """A request for external input."""
-
-    interaction_id: str
-    prompt: str
-
-
-@dataclass(frozen=True)
-class InputResult:
-    """A completed external input interaction."""
-
-    interaction_id: str
-    prompt: str
-    value: str
-
-
-InputProvider = Callable[[InputRequest], MaybeAwaitable[str | None]]
-InputRequestCallback = Callable[[InputRequest], MaybeAwaitable[None]]
-InputCompleteCallback = Callable[[InputResult], MaybeAwaitable[None]]
 InputPromptDeltaCallback = Callable[[str, str], MaybeAwaitable[None]]
 
-
-async def _no_input(_: InputRequest) -> str | None:
-    return None
+__all__ = [
+    "Input",
+    "InputRequest",
+    "InputResult",
+    "InputProvider",
+    "InputRequestCallback",
+    "InputCompleteCallback",
+    "InputPromptDeltaCallback",
+]
 
 
 class Input:
     def __init__(
         self,
-        get_input: InputProvider = _no_input,
+        get_input: InputProvider = no_input,
         on_request: InputRequestCallback | None = None,
         on_complete: InputCompleteCallback | None = None,
         on_prompt_delta: InputPromptDeltaCallback | None = None,
@@ -50,14 +42,6 @@ class Input:
         self._on_request = on_request
         self._on_complete = on_complete
         self._on_prompt_delta = on_prompt_delta
-
-    async def _notify_request(self, request: InputRequest) -> None:
-        if self._on_request is not None:
-            await maybe_await(self._on_request(request))
-
-    async def _notify_complete(self, result: InputResult) -> None:
-        if self._on_complete is not None:
-            await maybe_await(self._on_complete(result))
 
     async def _notify_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self._on_prompt_delta is not None:
@@ -77,7 +61,6 @@ class Input:
         narration). If no input is immediately available, the current session
         is interrupted until it is provided.
         """
-        prompt_text = prompt or ""
         interaction_id = current_tool_call_id_for(self.get_input)
         if interaction_id is None:
             raise RuntimeError(
@@ -85,21 +68,11 @@ class Input:
             )
         request = InputRequest(
             interaction_id=interaction_id,
-            prompt=prompt_text,
+            prompt=prompt or "",
         )
-        value = await maybe_await(self._get_input(request))
-        if value is not None:
-            await self._notify_complete(
-                InputResult(
-                    interaction_id=request.interaction_id,
-                    prompt=prompt_text,
-                    value=value,
-                )
-            )
-            return value
-
-        await self._notify_request(request)
-        raise InputRequired(prompt_text, interaction_id=request.interaction_id)
+        return await request_input(
+            request, self._get_input, self._on_request, self._on_complete
+        )
 
     @preview(get_input)
     async def _stream_get_input(self, tool_call_id: str, events: ArgStream) -> None:

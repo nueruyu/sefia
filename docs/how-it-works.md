@@ -248,6 +248,7 @@ transport-backed tool needs no glyff-derived per-call key.
 is itself the dispatched tool. The built-in Input/Output methods use this stricter
 query as their `interaction_id` and fail fast when called directly, including from
 inside another dispatched tool; they do not mint or inherit a second identity.
+Use `sefios.require_input()` for application-controlled input.
 
 An `@preview` handler receives that same id before its `ArgStream`:
 `handler(tool_call_id, events)`. A step-scoped registry in the inference strategy
@@ -335,12 +336,25 @@ composes multiple input tool calls emitted in the same model decision into one
 prompt. It does not carry state across steps, so a follow-up question produced
 after resume remains a normal separate interaction.
 
-The idempotency hinge is the `ToolCallRequest.id`. The input tool uses it as its
-`interaction_id`; because a resumed invocation restores the same decision from
-history, it routes the reply to the same pending prompt instead of creating a
-duplicate. The input/output preview callbacks receive this id alongside each text
-delta, so HTTP SSE clients can merge a live preview directly into its authoritative
-`input_required` or `output` event.
+`Input.get_input()` and `sefios.require_input()` construct their own `InputRequest`
+and delegate to the same non-engraved input lifecycle. The model-dispatched tool
+keeps its `ToolCallRequest.id` as the interaction ID, so its prompt preview and
+authoritative request retain their existing correlation. Application-controlled
+input instead derives an opaque interaction ID from the durable execution identity
+of its engraved `require_input` call. Re-invoking the same call restores the same
+ID, while separate repeated calls have separate IDs.
+
+Both adapters route pending requests and replies through the active `InputChannel`.
+The HTTP integration publishes the existing `input_required` event for either
+adapter. Application-controlled input has no streaming preview; model-dispatched
+input deltas continue to carry the tool call ID as `interaction_id`.
+
+`require_input(prompt, allow_queued=False)` uses the channel bound by an active
+HTTP or CLI facade. It ignores messages queued before the request unless explicitly
+opted in; replies still go through `accept_input(..., reply_to=...)`. The result is
+text, not a boolean approval. Input tools retain their conversational queue behavior.
+Sibling tasks share a channel lock; concurrent writers in separate session bindings
+or processes are not coordinated by this lock.
 
 ## Sessions and context
 

@@ -123,7 +123,8 @@ implementation noted in parentheses.
 | `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `persistence.py` | Persistence providers for execution, session state, and the session registry; memory is the default, with optional SQLite and JSON-file alternatives. |
-| `_input_channel.py` | Internal persisted routing between the `Input` tool and host-provided CLI/HTTP input. |
+| `input.py` / `_input.py` | `require_input` authoring API; shared input lifecycle and application interaction IDs. |
+| `_input_channel.py` | Persisted routing shared by tool and application input; binds the active channel and serializes sibling-task updates. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |
 | `history_storages/` | `SessionHistoryStorage` — an alternative `HistoryStorage` that keeps run history in the session storage (keyed by the run's `ExecutionId`) instead of glyff metadata. |
