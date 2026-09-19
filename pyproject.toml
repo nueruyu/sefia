@@ -73,6 +73,8 @@ venvPath = "."
 venv = ".venv"
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
+# Pyright gates arbitrary TypeForm expressions behind this option.
+enableExperimentalFeatures = true
 reportUnnecessaryTypeIgnoreComment = true
 executionEnvironments = [
     { root = "packages/sefia/tests/typing" },

@@ -87,3 +87,23 @@ class TestSefiaCLISessionManagement:
 
         assert second.get_active_session() is None
         assert second.switch_session(session_id) == session_id
+
+
+async def test_non_interaction_pause_uses_generic_wording(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import typer
+    from sefia.exceptions import PauseException
+
+    class OtherPause(PauseException):
+        pass
+
+    cli = SefiaCLI(model="unused")
+    with pytest.raises(typer.Exit) as exit_info:
+        async with cli.session():
+            raise OtherPause("later")
+    assert exit_info.value.exit_code == 0
+    output = capsys.readouterr().out
+    assert "EXECUTION PAUSED" in output
+    assert "input" not in output.lower()
+    assert "INTERACTION_REQUIRED" not in output

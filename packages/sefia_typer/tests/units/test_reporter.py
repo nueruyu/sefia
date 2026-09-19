@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 
 import pytest
@@ -9,6 +10,12 @@ from sefia_typer import DefaultCLIReporter, InteractionRequest, OutputMessage
 class _StubResolvedSession:
     session_id: str
     source: str
+
+
+@dataclass(frozen=True)
+class _StubInteractionRequest:
+    interaction_id: str
+    payload: object
 
 
 class TestDefaultCLIReporter:
@@ -45,20 +52,23 @@ class TestDefaultCLIReporter:
 
         assert capsys.readouterr().out == ""
 
-    def test_interaction_request_includes_marker(
-        self, capsys: pytest.CaptureFixture[str]
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"type": "weather", "arguments": {"city": "Tokyo"}},
+            {"type": "input", "prompt": "Continue?"},
+            ["opaque", None],
+        ],
+    )
+    def test_interaction_request_renders_opaque_json(
+        self, capsys: pytest.CaptureFixture[str], payload: object
     ) -> None:
         reporter = DefaultCLIReporter()
-
-        reporter.on_interaction_request(
-            InteractionRequest(
-                interaction_id="xyz", payload={"type": "input", "prompt": "What topic?"}
-            )
-        )
-
-        output = capsys.readouterr().out
-        assert "INTERACTION_REQUIRED:xyz" in output
-        assert "What topic?" in output
+        request: InteractionRequest = _StubInteractionRequest("xyz", payload)
+        reporter.on_interaction_request(request)
+        marker, rendered = capsys.readouterr().out.strip().split(" ", 1)
+        assert marker == "[INTERACTION_REQUIRED:xyz]"
+        assert json.loads(rendered) == payload
 
     def test_input_prompt_delta_is_printed_without_newline(
         self, capsys: pytest.CaptureFixture[str]
@@ -91,14 +101,18 @@ class TestDefaultCLIReporter:
 
         assert capsys.readouterr().out == "Hello there!"
 
-    def test_interrupted_announces_waiting_state(
+    def test_interrupted_announces_generic_pause(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         reporter = DefaultCLIReporter()
 
         reporter.on_interrupted(_StubResolvedSession(session_id="abc", source="active"))
 
-        assert "WAITING FOR INPUT" in capsys.readouterr().out
+        output = capsys.readouterr().out
+        assert "EXECUTION PAUSED" in output
+        assert "resumed later" in output
+        assert "input" not in output.lower()
+        assert "interaction" not in output.lower()
 
     def test_inference_error_is_reported_as_error(
         self, capsys: pytest.CaptureFixture[str]
@@ -110,4 +124,4 @@ class TestDefaultCLIReporter:
         output = capsys.readouterr().out
         assert "INFERENCE ERROR" in output
         assert "bad model response" in output
-        assert "WAITING FOR INPUT" not in output
+        assert "EXECUTION PAUSED" not in output

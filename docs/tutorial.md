@@ -235,7 +235,7 @@ Run it once with no answer; it researches, drafts, then pauses:
 
 ```bash
 python hitl_cli.py
-# [INTERACTION_REQUIRED:<interaction_id>] Here's the draft: "...". Approve it?
+# [INTERACTION_REQUIRED:<interaction_id>] {"type": "input", "prompt": "Approve the draft?"}
 ```
 
 Now run it **again** (a fresh process) with the answer. The clarify/search/draft
@@ -437,9 +437,41 @@ async with api.session(session_id=session_id) as session:
 
 Use the stable tool call ID for model tools. Application-controlled interactions
 select their own stable identity; `require_input` derives it from its engraved
-execution. `InteractionChannel` never generates IDs. For a custom integration in
-an ordinary `SessionScope`, use `InteractionChannel(get_session_storage())` from
-`sefios.interactions` and `sefios` respectively.
+execution. `InteractionChannel` never generates IDs.
+
+For a custom integration, construct the public channel from the same persistence
+provider and session ID used by `SessionScope`. Resolution and discovery can run
+outside the execution scope, including in a new process using the same durable store:
+
+```python
+from sefios import SQLitePersistence, SessionScope
+from sefios.interactions import InteractionChannel
+
+persistence = SQLitePersistence("sessions.sqlite3")
+scope = SessionScope(model="gpt-4o", persistence=persistence)
+channel = InteractionChannel(persistence.create_session_storage(session_id))
+pending = await channel.pending()
+await channel.resolve(interaction_id, {"temperature": 21})
+async with scope.session(session_id=session_id):
+    result = await service.run(task)
+```
+
+The scope's internal binding stays private. Inside an existing scope,
+`InteractionChannel(get_session_storage())` is also supported, using the public
+`get_session_storage` function from `sefios`.
+
+`require_interaction` accepts `TypeForm[T]` result contracts: classes, `list[int]`,
+`dict[str, WeatherResult]`, `WeatherResult | None`, `Literal`, `Annotated`, and
+`TypedDict` forms retain their inferred result types. Validation happens when the
+requester resumes, not when the transport stores JSON. Pyright 1.1.410 requires
+`enableExperimentalFeatures = true` for these type expressions; the repository
+enables it in `pyproject.toml`.
+
+Input owns its request payload and `on_prompt_delta` preview callback. Request and
+completion observation uses generic interactions; Input-specific lifecycle DTOs
+and callbacks are no longer exposed. The generic CLI reporter renders each opaque
+request as JSON, and reports arbitrary execution pauses without assuming input
+is required.
 
 An interaction persists request/result facts only; Glyff handles execution replay
 and pause/resume. Repeated identical requests or results are idempotent; changed

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Protocol, TypeVar
 
 import typer
-from pydantic import JsonValue
 from sefia.exceptions import InferenceError
 from typing_extensions import final, override
 
@@ -12,12 +11,14 @@ T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 
 
-@dataclass(frozen=True)
-class InteractionRequest:
-    """An opaque interaction request rendered by a CLI reporter."""
+class InteractionRequest(Protocol):
+    """An opaque JSON-compatible request supplied by an integration."""
 
-    interaction_id: str
-    payload: JsonValue
+    @property
+    def interaction_id(self) -> str: ...
+
+    @property
+    def payload(self) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -98,13 +99,7 @@ class DefaultCLIReporter(CLIReporter):
             bold=True,
             nl=False,
         )
-        payload = request.payload
-        text = (
-            payload.get("prompt", "")
-            if isinstance(payload, dict) and payload.get("type") == "input"
-            else json.dumps(payload, ensure_ascii=False)
-        )
-        typer.echo(f" {text}")
+        typer.echo(f" {json.dumps(request.payload, ensure_ascii=False)}")
         typer.echo()
 
     @override
@@ -130,9 +125,8 @@ class DefaultCLIReporter(CLIReporter):
     @override
     def on_interrupted(self, session: ResolvedSession) -> None:
         typer.echo()
-        typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
-        typer.echo("Session interrupted to wait for your input.")
-        typer.echo("To resume, run the script again with your input.")
+        typer.secho("EXECUTION PAUSED", fg=typer.colors.YELLOW, bold=True)
+        typer.echo("The session was interrupted and can be resumed later.")
 
     @override
     def on_inference_error(self, error: InferenceError) -> None:

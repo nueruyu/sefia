@@ -97,24 +97,23 @@ class Weather(BaseModel):
 
 
 async def test_adapter_in_plain_scope_and_invalid_result():
-    from sefios._interaction_context import get_interaction_channel
-
     scope = SessionScope(llm_client=MockLLMClient([]))
+    channel = InteractionChannel(scope.persistence.create_session_storage("plain"))
     async with scope.session(session_id="plain"):
         with pytest.raises(InteractionRequired) as pause:
             await require_interaction("weather", {"city": "Tokyo"}, Weather)
         assert pause.value.request == {"city": "Tokyo"}
-        await get_interaction_channel().resolve("weather", {"temperature": 21})
+        await channel.resolve("weather", {"temperature": 21})
         assert await require_interaction(
             "weather", {"city": "Tokyo"}, Weather
         ) == Weather(temperature=21)
         with pytest.raises(InteractionRequired):
             await require_interaction("bad", None, Weather)
-        await get_interaction_channel().resolve("bad", "invalid")
+        await channel.resolve("bad", "invalid")
         with pytest.raises(ValidationError):
             await require_interaction("bad", None, Weather)
         with pytest.raises(InteractionConflictError):
-            await get_interaction_channel().resolve("bad", {"temperature": 22})
+            await channel.resolve("bad", {"temperature": 22})
 
 
 async def test_concurrent_requests(channels: Callable[[], InteractionChannel]) -> None:
@@ -173,3 +172,27 @@ async def test_scope_binding_isolation_and_null_result() -> None:
         assert await require_interaction("null", None, type(None)) is None
     with pytest.raises(RuntimeError, match="active sefios session"):
         get_interaction_channel()
+
+
+async def test_result_type_forms_validate_at_requester_boundary() -> None:
+    scope = SessionScope(llm_client=MockLLMClient([]))
+    channel = InteractionChannel(scope.persistence.create_session_storage("forms"))
+    await channel.request("list", None)
+    await channel.resolve("list", [1, 2])
+    await channel.request("optional", None)
+    await channel.resolve("optional", None)
+    await channel.request("weather", None)
+    await channel.resolve("weather", {"temperature": 21})
+    await channel.request("invalid", None)
+    await channel.resolve("invalid", {"not": "a list"})
+
+    async with scope.session(session_id="forms"):
+        assert await require_interaction("list", None, list[int]) == [1, 2]
+        assert await require_interaction("optional", None, Weather | None) is None
+        assert await require_interaction("weather", None, Weather | None) == Weather(
+            temperature=21
+        )
+        with pytest.raises(ValidationError):
+            await require_interaction("invalid", None, list[int])
+    with pytest.raises(InteractionConflictError):
+        await channel.resolve("invalid", [1, 2])

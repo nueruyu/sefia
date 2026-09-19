@@ -1,8 +1,8 @@
 import pytest
 from sefia.testing import MockLLMClient
 from sefios import SessionScope, require_input
-from sefios._interaction_context import get_interaction_channel
 from sefios.exceptions import InteractionRequired
+from sefios.interactions import InteractionChannel
 
 
 async def test_application_input_in_plain_session_scope() -> None:
@@ -12,5 +12,15 @@ async def test_application_input_in_plain_session_scope() -> None:
             await require_input("Continue?")
     assert pause.value.request == {"type": "input", "prompt": "Continue?"}
     async with scope.session(session_id="input"):
-        await get_interaction_channel().resolve(pause.value.interaction_id, "yes")
+        await InteractionChannel(
+            scope.persistence.create_session_storage("input")
+        ).resolve(pause.value.interaction_id, "yes")
         assert await require_input("Continue?") == "yes"
+
+
+def test_input_supports_only_prompt_preview_observation() -> None:
+    from inspect import signature
+
+    from sefios.tools import Input
+
+    assert set(signature(Input).parameters) == {"on_prompt_delta"}

@@ -1,34 +1,9 @@
-"""Input notification values and application interaction identity."""
+"""Application-controlled Input interaction identity."""
 
 import hashlib
 import json
-from collections.abc import Callable
-from dataclasses import dataclass
 
 from glyff import ExecutionId
-
-from ._async import MaybeAwaitable
-
-
-@dataclass(frozen=True)
-class InputRequest:
-    """A request for external input."""
-
-    interaction_id: str
-    prompt: str
-
-
-@dataclass(frozen=True)
-class InputResult:
-    """A completed external input interaction."""
-
-    interaction_id: str
-    prompt: str
-    value: str
-
-
-InputRequestCallback = Callable[[InputRequest], MaybeAwaitable[None]]
-InputCompleteCallback = Callable[[InputResult], MaybeAwaitable[None]]
 
 
 def _execution_id_to_data(execution_id: ExecutionId) -> dict[str, object]:

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TypeVar, final
 
 from pydantic import ConfigDict, JsonValue, TypeAdapter
+from typing_extensions import TypeForm
 
 from ._interaction_context import get_interaction_channel
 from .exceptions import (
@@ -105,7 +106,7 @@ class InteractionChannel:
 
 
 async def require_interaction(
-    interaction_id: str, request: JsonValue, result_type: type[T]
+    interaction_id: str, request: JsonValue, result_type: TypeForm[T]
 ) -> T:
     """Register a request, pause if unresolved, or validate its immutable result.
 
@@ -115,4 +116,5 @@ async def require_interaction(
     resolved = await get_interaction_channel().request(interaction_id, request)
     if resolved is None:
         raise InteractionRequired(interaction_id, request)
-    return TypeAdapter(result_type).validate_python(resolved.value)
+    adapter: TypeAdapter[T] = TypeAdapter(result_type)
+    return adapter.validate_python(resolved.value)

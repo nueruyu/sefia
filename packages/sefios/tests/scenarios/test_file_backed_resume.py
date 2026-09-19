@@ -16,9 +16,9 @@ from sefia import Tools
 from sefia.llm import LLMCompletion
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefios import SessionScope, SQLitePersistence, domain
-from sefios._interaction_context import get_interaction_channel
 from sefios.exceptions import InteractionRequired
-from sefios.tools import Input, InputRequest
+from sefios.interactions import InteractionChannel, InteractionRequest
+from sefios.tools import Input
 
 infer = domain(
     "packages.sefios.tests.scenarios.test_file_backed_resume", version="1"
@@ -48,8 +48,6 @@ async def test_pause_resume_survives_process_restart(
     tmp_path: Path,
     make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
 ) -> None:
-    seen: list[InputRequest] = []
-
     def make_scope(client: MockLLMClient) -> SessionScope:
         return SessionScope(
             llm_client=client,
@@ -59,23 +57,27 @@ async def test_pause_resume_survives_process_restart(
     mock_llm = make_mock_llm([_TOOL_CALL_RESPONSE])
     with pytest.raises(InteractionRequired) as pause_info:
         async with make_scope(mock_llm).session(session_id=_SESSION_ID):
-            await _Agent(Input(on_request=seen.append)).get_user_name()
+            await _Agent(Input()).get_user_name()
 
-    assert len(seen) == 1
-    # The pause identifies its own request, so integration layers need not
-    # re-read state to learn which prompt is waiting.
-    assert pause_info.value.interaction_id == seen[0].interaction_id
-    assert pause_info.value.request == {"type": "input", "prompt": seen[0].prompt}
+    channel = InteractionChannel(
+        SQLitePersistence(tmp_path / "sessions.sqlite3").create_session_storage(
+            _SESSION_ID
+        )
+    )
+    assert await channel.pending() == [
+        InteractionRequest(
+            pause_info.value.interaction_id,
+            {"type": "input", "prompt": "What is your name?"},
+        )
+    ]
 
     resumed_llm = make_mock_llm([_RESULT_RESPONSE])
     async with make_scope(resumed_llm).session(session_id=_SESSION_ID):
-        await get_interaction_channel().resolve(seen[0].interaction_id, "Alice")
-        answer = await _Agent(Input(on_request=seen.append)).get_user_name()
+        await channel.resolve(pause_info.value.interaction_id, "Alice")
+        answer = await _Agent(Input()).get_user_name()
 
     assert answer == "The user's name is Alice."
-    # The resumed call read the same interaction id back from the file store,
-    # so the pending prompt was keyed stably across the restart.
-    assert [r.interaction_id for r in seen] == [seen[0].interaction_id]
+    assert await channel.pending() == []
     # The completed first step was replayed from the engraved record: the
     # resumed run only asked the LLM for the final decision.
     assert len(resumed_llm.requests) == 1

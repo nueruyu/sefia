@@ -1,6 +1,5 @@
 from sefia.exceptions import InferenceError
 from sefia_typer import CLIReporter
-from sefia_typer import InteractionRequest as CLIInteractionRequest
 from sefia_typer import OutputMessage as CLIOutputMessage
 
 from .._async import maybe_await
@@ -21,14 +20,7 @@ class CLIReporting:
 
     async def interaction_request(self, request: InteractionRequest) -> None:
         if self.reporter is not None:
-            await maybe_await(
-                self.reporter.on_interaction_request(
-                    CLIInteractionRequest(
-                        interaction_id=request.interaction_id,
-                        payload=request.payload,
-                    )
-                )
-            )
+            await maybe_await(self.reporter.on_interaction_request(request))
 
     async def input_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self.reporter is not None:

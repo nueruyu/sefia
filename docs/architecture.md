@@ -123,7 +123,7 @@ implementation noted in parentheses.
 | `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `persistence.py` | Persistence providers for execution, session state, and the session registry; memory is the default, with optional SQLite and JSON-file alternatives. |
-| `input.py` / `_input.py` | `require_input` authoring API; Input notification values and application interaction IDs. |
+| `input.py` / `_input.py` | `require_input` authoring API; application interaction IDs. |
 | `interactions.py` | Durable JSON request/result exchange; atomic idempotency, pending discovery, bound channel, and typed pause adapter. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |
