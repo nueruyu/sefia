@@ -1,37 +1,24 @@
-from collections.abc import Iterator
-
 import pytest
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 from sefios import MemoryPersistence
-from sefios._input_channel import InputChannel
 from sefios.cli import SefiaCLI, SefiaCLISession
+from sefios.interactions import InteractionChannel, InteractionResult
 from sefios.storage import MemorySessionStorage
 from sefios.tools import Input, Output
 
 
-class TestSefiaCLISession:
-    @pytest.fixture
-    def channel(self) -> InputChannel:
-        return InputChannel()
-
-    @pytest.fixture
-    def session(
-        self,
-        channel: InputChannel,
-        memory_session_storage: MemorySessionStorage,
-    ) -> Iterator[SefiaCLISession]:
-        # A bound SessionStorage satisfies the input channel's store protocol.
-        with channel.use_store(memory_session_storage):
-            yield SefiaCLISession(channel=channel)
-
-    async def test_reply_to_resolves_pending_request(
-        self, session: SefiaCLISession, channel: InputChannel
-    ) -> None:
-        await channel.record_request("a", "q?")
-
-        await session.accept_input("answer", reply_to="a")
-
-        assert await channel.provide_input("a") == "answer"
+async def test_cli_generic_resolution(
+    memory_session_storage: MemorySessionStorage,
+) -> None:
+    channel = InteractionChannel(memory_session_storage)
+    session = SefiaCLISession(channel=channel)
+    await channel.request("a", {"type": "input", "prompt": "q?"})
+    assert len(await session.pending_interactions()) == 1
+    await session.resolve_interaction("a", "answer")
+    assert await session.pending_interactions() == []
+    assert await channel.request(
+        "a", {"type": "input", "prompt": "q?"}
+    ) == InteractionResult("answer")
 
 
 class TestSefiaCLISessionManagement:

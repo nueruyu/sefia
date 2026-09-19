@@ -1,9 +1,9 @@
 """Domain and API schemas for the FastAPI example."""
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, JsonValue, model_validator
 
 
 @dataclass
@@ -23,15 +23,18 @@ class Brief:
 
 
 class TurnRequest(BaseModel):
-    """A turn for a human-in-the-loop workflow.
+    """Start with an empty body, or resolve an explicitly identified request."""
 
-    ``input`` is the initial request on the first turn, or the answer to a
-    pending prompt on later turns. ``reply_to`` targets a specific pending
-    prompt when more than one is outstanding.
-    """
+    model_config = ConfigDict(extra="forbid")
 
-    input: str
-    reply_to: str | None = None
+    interaction_id: str | None = None
+    result: JsonValue = None
+
+    @model_validator(mode="after")
+    def require_resolution_pair(self) -> Self:
+        if (self.interaction_id is not None) != ("result" in self.model_fields_set):
+            raise ValueError("Provide both interaction_id and result, or neither.")
+        return self
 
 
 # --- Responses --------------------------------------------------------------
@@ -41,12 +44,12 @@ class SessionCreatedResponse(BaseModel):
     session_id: str
 
 
-class InputRequiredResponse(BaseModel):
+class InteractionRequiredResponse(BaseModel):
     """The workflow paused to wait for input."""
 
-    status: Literal["input_required"] = "input_required"
+    status: Literal["interaction_required"] = "interaction_required"
     interaction_id: str
-    prompt: str
+    request: JsonValue
 
 
 class BriefSchema(BaseModel):
@@ -65,4 +68,4 @@ class InterviewCompletedResponse(BaseModel):
 
 
 # Discriminated union used as the FastAPI ``response_model``.
-InterviewResponse = InterviewCompletedResponse | InputRequiredResponse
+InterviewResponse = InterviewCompletedResponse | InteractionRequiredResponse

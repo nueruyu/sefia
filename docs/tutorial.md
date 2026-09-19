@@ -210,10 +210,13 @@ service = ResearchService(web=WebSearch(), input_tool=cli.input_tool)
 
 
 @app.command()
-def run(answer: str | None = None) -> None:
+def run(answer: str | None = None, interaction_id: str | None = None) -> None:
     async def _run() -> None:
         async with cli.session() as session:
-            await session.accept_input(answer)
+            if answer is not None:
+                if interaction_id is None:
+                    raise typer.BadParameter("Provide --interaction-id from the pending request.")
+                await session.resolve_interaction(interaction_id, answer)
             report = await service.run("the state of durable LLM applications")
             print("DONE:", report.summary)
 
@@ -232,7 +235,7 @@ Run it once with no answer; it researches, drafts, then pauses:
 
 ```bash
 python hitl_cli.py
-# [INPUT_REQUIRED:<interaction_id>] Here's the draft: "...". Approve it?
+# [INTERACTION_REQUIRED:<interaction_id>] Here's the draft: "...". Approve it?
 ```
 
 Now run it **again** (a fresh process) with the answer. The clarify/search/draft
@@ -240,7 +243,7 @@ steps are not re-run; they **replay their exact stored outputs**, so the model i
 approving the *same* draft, and only the finalize step executes:
 
 ```bash
-python hitl_cli.py --answer "yes, approve"
+python hitl_cli.py --interaction-id "<interaction_id>" --answer "yes, approve"
 # DONE: ...
 ```
 
@@ -260,10 +263,10 @@ run resumes. Nothing runs in the background between the two requests.
 ```python
 # server.py
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 from sefios import SQLitePersistence
 from sefios.fastapi import SefiaHTTP
-from sefios.fastapi.exceptions import InputRequired
+from sefios.exceptions import InteractionRequired
 from sefios.tools import WebSearch
 
 from hitl_cli import ResearchService
@@ -278,7 +281,8 @@ research_service = ResearchService(web=WebSearch(), input_tool=api.input_tool)
 
 class TurnBody(BaseModel):
     task: str
-    input: str | None = None
+    interaction_id: str | None = None
+    result: JsonValue = None
 
 
 @app.post("/sessions")
@@ -290,12 +294,12 @@ def create_session():
 async def turn(session_id: str, body: TurnBody):
     try:
         async with api.session(session_id=session_id) as session:
-            if body.input is not None:
-                await session.accept_input(body.input)
+            if body.interaction_id is not None:
+                await session.resolve_interaction(body.interaction_id, body.result)
             report = await research_service.run(body.task)
             return {"status": "done", "report": report}
-    except InputRequired as e:
-        return {"status": "needs_input", "prompt": e.prompt}
+    except InteractionRequired as e:
+        return {"status": "interaction_required", "interaction_id": e.interaction_id, "request": e.request}
 ```
 
 Pass `llm_client=` instead of `model=` when the HTTP integration should use a
@@ -321,7 +325,7 @@ curl -fsS -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/turn" \
   -d '{"task": "the state of durable LLM applications"}'
 ```
 
-If the response is `{"status":"needs_input","prompt":"..."}`, send the reply
+If the response is `{"status":"interaction_required","interaction_id":"...","request":{...}}`, send the reply
 below with the same session ID and `task`. To try resuming after a restart, stop
 and restart the server from the same directory before sending the reply, keeping
 its `.sefios/` database.
@@ -329,7 +333,7 @@ its `.sefios/` database.
 ```bash
 curl -fsS -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/turn" \
   -H 'Content-Type: application/json' \
-  -d '{"task": "the state of durable LLM applications", "input": "yes, approve"}'
+  -d '{"task": "the state of durable LLM applications", "interaction_id": "<interaction_id>", "result": "yes, approve"}'
 ```
 
 A completed turn returns `{"status":"done","report":{...}}`; if it asks for
@@ -384,19 +388,62 @@ async def approve_refund(order_id: str, amount: int) -> bool:
     return answer.strip().lower() == "yes"
 ```
 
-Call this function inside `SefiaHTTP.session()` or `SefiaCLI.session()`. On an
-unanswered request it raises `InputRequired`; return its `interaction_id` and
-`prompt` to the client. In the next session invocation, first call
-`await session.accept_input(answer, reply_to=interaction_id)`, then invoke the
+Call this function inside `SessionScope.session()`, `SefiaHTTP.session()`, or
+`SefiaCLI.session()`. On an
+unanswered request it raises `InteractionRequired`; return its `interaction_id` and
+`request` payload to the client. In the next session invocation, first call
+`await session.resolve_interaction(interaction_id, answer)`, then invoke the
 same workflow with the same arguments. A negative answer is still non-empty text:
 validate it explicitly before executing the operation.
 
-By default, `require_input` does not consume a message queued before the request.
-Use `allow_queued=True` only when earlier conversational input is acceptable.
-Multiple pending requests require `reply_to` to select the intended request.
-The primitive does not create a background waiter or a new workflow abstraction.
+Pre-request queued input and implicit routing are no longer supported. Every
+resolution must target an existing interaction ID. Input uses the same durable
+Interaction channel as arbitrary tools; it is an adapter, not a routing subsystem.
 
-For HTTP streaming, application-controlled input emits only the existing
-`input_required` event with the complete prompt and `interaction_id`. The Input
-tool's streamed prompt deltas continue to use its tool call ID as
-`interaction_id`; `require_input` has no preview stream.
+## Externally resolved tools
+
+Declare the expected result type at the requesting tool. The transport never
+needs to import that type:
+
+```python
+from pydantic import BaseModel
+from sefia import current_tool_call_id
+from sefios import require_interaction
+
+
+class WeatherResult(BaseModel):
+    temperature: int
+
+
+async def get_weather(city: str) -> WeatherResult:
+    interaction_id = current_tool_call_id()
+    if interaction_id is None:
+        raise RuntimeError("This function requires model tool dispatch.")
+    return await require_interaction(
+        interaction_id,
+        {"type": "weather", "arguments": {"city": city}},
+        WeatherResult,
+    )
+```
+
+After a pause, another request or process can discover and resolve interactions:
+
+```python
+async with api.session(session_id=session_id) as session:
+    pending = await session.pending_interactions()
+    await session.resolve_interaction(interaction_id, {"temperature": 21})
+    result = await service.run(task)
+```
+
+Use the stable tool call ID for model tools. Application-controlled interactions
+select their own stable identity; `require_input` derives it from its engraved
+execution. `InteractionChannel` never generates IDs. For a custom integration in
+an ordinary `SessionScope`, use `InteractionChannel(get_session_storage())` from
+`sefios.interactions` and `sefios` respectively.
+
+An interaction persists request/result facts only; Glyff handles execution replay
+and pause/resume. Repeated identical requests or results are idempotent; changed
+values conflict. Results, including JSON null, are immutable. A result that fails
+the requester's type validation raises Pydantic `ValidationError` on replay and
+cannot be overwritten. See [how it works](how-it-works.md#human-in-the-loop-pause--raise-resume--re-invoke)
+for storage and concurrency guarantees.

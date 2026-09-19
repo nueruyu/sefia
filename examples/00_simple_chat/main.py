@@ -59,9 +59,10 @@ app = typer.Typer(help="Simple one-agent chat loop.")
 @async_command
 async def chat(
     message: Annotated[
-        list[str],
-        typer.Argument(help="Your message, or an answer to resume the session."),
-    ],
+        list[str] | None,
+        typer.Argument(help="Result for an existing interaction; omit to start."),
+    ] = None,
+    interaction_id: Annotated[str | None, typer.Option("--interaction-id")] = None,
     model: Annotated[
         str,
         typer.Option(
@@ -73,7 +74,12 @@ async def chat(
 ) -> None:
     """Send a message to the chat agent."""
     async with sefia_cli.session(model=model) as session:
-        await session.accept_input(message)
+        if message is not None:
+            if interaction_id is None:
+                raise typer.BadParameter(
+                    "Provide --interaction-id from the pending request."
+                )
+            await session.resolve_interaction(interaction_id, " ".join(message))
         await agent.chat()
 
 

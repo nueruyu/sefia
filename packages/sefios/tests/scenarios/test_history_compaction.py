@@ -14,13 +14,13 @@ from sefia import HistoryStorage, Policy, Tools
 from sefia.inference import ToolCallResult
 from sefia.llm import DecisionPrompt, LLMCompletion, PromptRenderer
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
-from typing_extensions import override
-
 from sefios import SessionScope, SQLitePersistence, domain
-from sefios.exceptions import InputRequired
+from sefios._interaction_context import get_interaction_channel
+from sefios.exceptions import InteractionRequired
 from sefios.history_storages import SessionHistoryStorage
 from sefios.middleware import HistoryCompactor
 from sefios.tools import Input, InputRequest
+from typing_extensions import override
 
 infer = domain(
     "packages.sefios.tests.scenarios.test_history_compaction", version="1"
@@ -87,11 +87,6 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
     make_history_storage: Callable[[], HistoryStorage] | None,
 ) -> None:
     seen: list[InputRequest] = []
-    answers: dict[str, str] = {}
-
-    def get_input(request: InputRequest) -> str | None:
-        seen.append(request)
-        return answers.get(request.interaction_id)
 
     def make_scope(client: MockLLMClient) -> SessionScope:
         return SessionScope(
@@ -117,17 +112,16 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
             _ASK_RESPONSE,
         ]
     )
-    with pytest.raises(InputRequired):
+    with pytest.raises(InteractionRequired):
         async with make_scope(mock_llm).session(session_id=_SESSION_ID):
-            await _Agent(Notes(), Input(get_input=get_input)).chat()
+            await _Agent(Notes(), Input(on_request=seen.append)).chat()
 
     assert [len(prompt.history) for prompt in renderer.prompts] == [0, 2, 4, 2]
 
-    answers[seen[0].interaction_id] = "No, that's all."
-
     resumed_llm = make_mock_llm([_RESULT_RESPONSE])
     async with make_scope(resumed_llm).session(session_id=_SESSION_ID):
-        result = await _Agent(Notes(), Input(get_input=get_input)).chat()
+        await get_interaction_channel().resolve(seen[0].interaction_id, "Alice")
+        result = await _Agent(Notes(), Input(on_request=seen.append)).chat()
 
     assert result == "All done."
     assert len(resumed_llm.requests) == 1

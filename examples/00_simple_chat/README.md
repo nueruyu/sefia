@@ -11,13 +11,13 @@ then pauses until you run the command again with the next message.
 Run from the repository root. See the [examples README](../README.md) for setup.
 
 ```bash
-uv run python -m examples.00_simple_chat.main chat "Hello"
+uv run python -m examples.00_simple_chat.main chat
 ```
 
 You can choose a model with either `--model` or `EXAMPLE_DEFAULT_MODEL`:
 
 ```bash
-EXAMPLE_DEFAULT_MODEL=gpt-4o-mini uv run python -m examples.00_simple_chat.main chat "Hello"
+EXAMPLE_DEFAULT_MODEL=gpt-4o-mini uv run python -m examples.00_simple_chat.main chat "Hello" --interaction-id "<interaction_id>"
 ```
 
 ## Sessions
@@ -36,3 +36,6 @@ uv run python -m examples.00_simple_chat.main session switch <session-id>
 - Running a persisted CLI session with `SefiaCLI`
 - Feeding terminal input through the `Input` tool and emitting replies through `Output`
 - A minimal single-agent loop without external domain tools or multi-agent orchestration
+
+Start without a message to create a durable request. Supply text only with the
+reported `--interaction-id`; pre-request input and implicit routing are unsupported.

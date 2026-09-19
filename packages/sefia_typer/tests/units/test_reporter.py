@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 
 import pytest
-
 from sefia.exceptions import InvalidInferenceResponseError
-from sefia_typer import DefaultCLIReporter, InputRequest, OutputMessage
+from sefia_typer import DefaultCLIReporter, InteractionRequest, OutputMessage
 
 
 @dataclass(frozen=True)
@@ -46,17 +45,19 @@ class TestDefaultCLIReporter:
 
         assert capsys.readouterr().out == ""
 
-    def test_input_request_includes_marker(
+    def test_interaction_request_includes_marker(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         reporter = DefaultCLIReporter()
 
-        reporter.on_input_request(
-            InputRequest(interaction_id="xyz", prompt="What topic?")
+        reporter.on_interaction_request(
+            InteractionRequest(
+                interaction_id="xyz", payload={"type": "input", "prompt": "What topic?"}
+            )
         )
 
         output = capsys.readouterr().out
-        assert "INPUT_REQUIRED:xyz" in output
+        assert "INTERACTION_REQUIRED:xyz" in output
         assert "What topic?" in output
 
     def test_input_prompt_delta_is_printed_without_newline(

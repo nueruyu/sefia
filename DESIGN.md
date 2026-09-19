@@ -91,17 +91,20 @@ class ResearchService:                             # a plain class — no base, 
 ```python
 class UserInput:
     async def get(self, prompt: str) -> str:
-        """Prompt the user; resume when input is available."""
-        if provided := await self._pending.input_for(prompt):
-            return provided
-        await self._pending.record(prompt)
-        raise InputRequired(prompt)                   # pause — durably
+        interaction_id = current_tool_call_id()
+        if interaction_id is None:
+            raise RuntimeError("Model tool dispatch required.")
+        return await require_interaction(
+            interaction_id, {"type": "input", "prompt": prompt}, str
+        )
 
 @app.post("/sessions/{id}/turn")
 async def turn(id, body):
     async with api.session(session_id=id) as s:
-        await s.accept_input(body.input)
-        return await service.run(body.task)        # resumes where it paused
+        if body.interaction_id is not None:
+            await s.resolve_interaction(body.interaction_id, body.result)
+        return await service.run(body.task)
+
 ```
 
 A paused run survives process death: re-invoke and the completed engraved work

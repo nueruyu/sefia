@@ -1,4 +1,4 @@
-"""Shared external-input values and request lifecycle."""
+"""Input notification values and application interaction identity."""
 
 import hashlib
 import json
@@ -7,8 +7,7 @@ from dataclasses import dataclass
 
 from glyff import ExecutionId
 
-from ._async import MaybeAwaitable, maybe_await
-from .exceptions import InputRequired
+from ._async import MaybeAwaitable
 
 
 @dataclass(frozen=True)
@@ -28,13 +27,8 @@ class InputResult:
     value: str
 
 
-InputProvider = Callable[[InputRequest], MaybeAwaitable[str | None]]
 InputRequestCallback = Callable[[InputRequest], MaybeAwaitable[None]]
 InputCompleteCallback = Callable[[InputResult], MaybeAwaitable[None]]
-
-
-async def no_input(_: InputRequest) -> str | None:
-    return None
 
 
 def _execution_id_to_data(execution_id: ExecutionId) -> dict[str, object]:
@@ -53,21 +47,3 @@ def interaction_id_for_execution(execution_id: ExecutionId) -> str:
     data = _execution_id_to_data(execution_id)
     stable_repr = json.dumps(data, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(stable_repr.encode("utf-8")).hexdigest()
-
-
-async def request_input(
-    request: InputRequest,
-    provider: InputProvider,
-    on_request: InputRequestCallback | None = None,
-    on_complete: InputCompleteCallback | None = None,
-) -> str:
-    value = await maybe_await(provider(request))
-    if value is not None:
-        if on_complete is not None:
-            await maybe_await(
-                on_complete(InputResult(request.interaction_id, request.prompt, value))
-            )
-        return value
-    if on_request is not None:
-        await maybe_await(on_request(request))
-    raise InputRequired(request.prompt, interaction_id=request.interaction_id)

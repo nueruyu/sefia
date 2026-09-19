@@ -15,6 +15,7 @@ from ._scope import SessionScope
 from ._session_state import get_call_state_store, get_session_storage
 from ._state_store import StateStore
 from .input import require_input
+from .interactions import require_interaction
 from .persistence import (
     FilePersistence,
     MemoryPersistence,
@@ -36,6 +37,7 @@ from .storage import (
 )
 
 __all__ = [
+    "require_interaction",
     # Authoring surface re-exported from the core, so app code only imports `sefios`.
     "concurrent",
     "preview",

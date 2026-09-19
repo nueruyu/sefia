@@ -8,7 +8,7 @@
 > without a workflow engine or graph DSL.
 
 ```python
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 from sefios import domain
 
 
@@ -126,7 +126,7 @@ The class holds a web dependency, runs an inferred step, and persists its run.
 ```python
 import asyncio
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 from sefios import SQLitePersistence, SessionScope, Tools, domain
 from sefios.tools import WebSearch
 
@@ -204,11 +204,11 @@ behavior as the other transports.
 ## Pause for a human, resume after a restart
 
 Application code can enforce an input step with `await require_input("Approve?")`
-(imported from `sefios`) inside an HTTP or CLI session. It uses the same reply
-routing as the Input tool without exposing the step to the model. See the
+(imported from `sefios`) inside a `SessionScope`, HTTP, or CLI session. It uses the same durable
+Interaction channel as the Input tool without exposing the step to the model. See the
 [application-controlled input example](docs/tutorial.md#application-controlled-input).
 
-An input tool pauses the run by raising `InputRequired`. A later HTTP request
+An input tool pauses the run by raising `InteractionRequired`. A later HTTP request
 supplies the reply and re-invokes the same call; with durable persistence,
 completed steps replay even after a server restart.
 
@@ -253,12 +253,12 @@ def create_session():
 async def turn(session_id: str, body: TurnBody):
     try:
         async with api.session(session_id=session_id) as session:
-            if body.input is not None:
-                await session.accept_input(body.input)
+            if body.interaction_id is not None:
+                await session.resolve_interaction(body.interaction_id, body.result)
             report = await research_service.run(body.task)
             return {"status": "done", "report": report}
-    except InputRequired as e:
-        return {"status": "needs_input", "prompt": e.prompt}
+    except InteractionRequired as e:
+        return {"status": "interaction_required", "interaction_id": e.interaction_id, "request": e.request}
 ```
 
 ## Core concepts
@@ -268,6 +268,7 @@ async def turn(session_id: str, body: TurnBody):
 | **`@infer`** | An abstract async method implemented by an LLM. Signature = contract, docstring = instruction, return type = validated output. |
 | **Tools** | Public methods of a field granted with the `Tools[...]` annotation (`_web: Tools[WebToolkit]`). The wrapped type stays a plain class; narrow by granting through a `Protocol`. No ambient authority; the grant is local to the holder. Batched calls run serially unless a method is marked `@concurrent`. |
 | **Pause & resume** | Every call is engraved (content-addressed) via glyff and replays on re-invocation; exceptions are non-terminal, so pausing = raising. |
+| **Interaction** | A durable JSON request/result exchange. Resolve an explicit ID with `session.resolve_interaction(id, result)`; discover unresolved requests with `session.pending_interactions()`. Input is an adapter over this primitive. |
 | **Session** | The scope for a run. `SessionScope` (in `sefios`) is the configured front door; `sefia.Session` is the core primitive. |
 | **Policies & middleware** | Observation (handlers, isolated) vs. control (middleware steers). The `sefios` defaults give a step cap and ready-made behaviors. |
 | **Stores** | Where engraved progress and tool state live — memory, file, or your own backend. Your application database stays yours. |

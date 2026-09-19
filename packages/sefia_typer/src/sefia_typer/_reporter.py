@@ -1,8 +1,10 @@
+import json
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Protocol, TypeVar
 
 import typer
+from pydantic import JsonValue
 from sefia.exceptions import InferenceError
 from typing_extensions import final, override
 
@@ -11,11 +13,11 @@ MaybeAwaitable = T | Awaitable[T]
 
 
 @dataclass(frozen=True)
-class InputRequest:
-    """An external-input request rendered by a CLI reporter."""
+class InteractionRequest:
+    """An opaque interaction request rendered by a CLI reporter."""
 
     interaction_id: str
-    prompt: str
+    payload: JsonValue
 
 
 @dataclass(frozen=True)
@@ -48,9 +50,9 @@ class CLIReporter(Protocol):
         session: ResolvedSession,
     ) -> MaybeAwaitable[None]: ...
 
-    def on_input_request(
+    def on_interaction_request(
         self,
-        request: InputRequest,
+        request: InteractionRequest,
     ) -> MaybeAwaitable[None]: ...
 
     def on_input_prompt_delta(
@@ -88,15 +90,21 @@ class DefaultCLIReporter(CLIReporter):
             typer.secho(f"> Resuming session {session.session_id}", bold=True)
 
     @override
-    def on_input_request(self, request: InputRequest) -> None:
+    def on_interaction_request(self, request: InteractionRequest) -> None:
         typer.echo()
         typer.secho(
-            f"[INPUT_REQUIRED:{request.interaction_id}]",
+            f"[INTERACTION_REQUIRED:{request.interaction_id}]",
             fg=typer.colors.YELLOW,
             bold=True,
             nl=False,
         )
-        typer.echo(f" {request.prompt}")
+        payload = request.payload
+        text = (
+            payload.get("prompt", "")
+            if isinstance(payload, dict) and payload.get("type") == "input"
+            else json.dumps(payload, ensure_ascii=False)
+        )
+        typer.echo(f" {text}")
         typer.echo()
 
     @override

@@ -1,32 +1,16 @@
 import pytest
-
-from sefios._input import InputRequest, InputResult, request_input
-from sefios.exceptions import InputRequired
-
-
-async def test_request_input_preserves_caller_identity_when_pending() -> None:
-    request = InputRequest(interaction_id="caller-id", prompt="Continue?")
-    pending: list[InputRequest] = []
-
-    with pytest.raises(InputRequired) as pause:
-        await request_input(request, lambda _: None, pending.append)
-
-    assert pending == [request]
-    assert pause.value.interaction_id == "caller-id"
-    assert pause.value.prompt == "Continue?"
+from sefia.testing import MockLLMClient
+from sefios import SessionScope, require_input
+from sefios._interaction_context import get_interaction_channel
+from sefios.exceptions import InteractionRequired
 
 
-async def test_request_input_reports_completion() -> None:
-    request = InputRequest(interaction_id="caller-id", prompt="Continue?")
-    completed: list[InputResult] = []
-
-    value = await request_input(
-        request,
-        lambda _: "yes",
-        on_complete=completed.append,
-    )
-
-    assert value == "yes"
-    assert completed == [
-        InputResult(interaction_id="caller-id", prompt="Continue?", value="yes")
-    ]
+async def test_application_input_in_plain_session_scope() -> None:
+    scope = SessionScope(llm_client=MockLLMClient([]))
+    with pytest.raises(InteractionRequired) as pause:
+        async with scope.session(session_id="input"):
+            await require_input("Continue?")
+    assert pause.value.request == {"type": "input", "prompt": "Continue?"}
+    async with scope.session(session_id="input"):
+        await get_interaction_channel().resolve(pause.value.interaction_id, "yes")
+        assert await require_input("Continue?") == "yes"

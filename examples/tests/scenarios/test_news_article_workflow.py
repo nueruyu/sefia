@@ -45,8 +45,8 @@ class TestNewsArticleWorkflow:
         monkeypatch.setattr(workflow.writer, "write_article", write)
 
         await workflow.chat.__wrapped__(
-            message=["Write about generative AI"],
-            reply_to=None,
+            message=None,
+            interaction_id=None,
             session_id=None,
             model="gpt-4o",
             verbose=False,
@@ -83,8 +83,8 @@ class TestNewsArticleWorkflow:
         monkeypatch.setattr(workflow.writer, "write_article", write)
 
         await workflow.chat.__wrapped__(
-            message=["topic"],
-            reply_to=None,
+            message=None,
+            interaction_id=None,
             session_id=None,
             model="gpt-4o",
             verbose=False,

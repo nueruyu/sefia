@@ -6,36 +6,39 @@ from contextvars import ContextVar
 
 from fastapi.responses import StreamingResponse
 from sefia import Policy
+from sefia.exceptions import PauseException
 from sefia.llm import LLMClient
 from sefia_fastapi.events import SessionEvents, SSEEvent
 from sefia_fastapi.exceptions import UnknownSessionError as HTTPUnknownSessionError
 from typing_extensions import final
 
-from .._input_channel import InputChannel
+from .._interaction_context import get_interaction_channel
 from .._scope import SessionScope
-from .._session_state import get_session_storage
-from ..exceptions import InputRequired
+from ..exceptions import InteractionRequired
 from ..handlers import CostCalculator
+from ..interactions import (
+    InteractionChannel,
+    InteractionRequest,
+    JsonValue,
+)
 from ..persistence import MemoryPersistence, PersistenceProvider
 from ..sessions import SessionRegistry
-from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
+from ..tools import Input, Output, OutputMessage
 
 
 @final
 class SefiaHTTPSession:
     """Operations available inside a Sefia HTTP session context."""
 
-    def __init__(self, *, channel: InputChannel):
-        self._input = channel
+    def __init__(self, *, channel: InteractionChannel):
+        self._channel = channel
 
-    async def accept_input(
-        self,
-        input_value: str | list[str] | None,
-        *,
-        reply_to: str | None = None,
-    ) -> None:
-        """Store request input for a pending or upcoming interaction."""
-        await self._input.receive_input(input_value, reply_to=reply_to)
+    async def resolve_interaction(self, interaction_id: str, result: JsonValue) -> None:
+        """Resolve an existing interaction with an immutable JSON result."""
+        await self._channel.resolve(interaction_id, result)
+
+    async def pending_interactions(self) -> list[InteractionRequest]:
+        return await self._channel.pending()
 
 
 @final
@@ -43,11 +46,11 @@ class SefiaHTTP:
     """Creates Sefia session contexts for HTTP endpoints, with event streams.
 
     The integration facade over the ``sefia_fastapi`` building blocks: it
-    wires the HTTP input core to :class:`Input` and the bound
-    session storage, runs sessions through a :class:`SessionScope` (with cost
-    accounting installed), forwards the parsed prompt/message deltas to
+    binds generic interactions and :class:`Input` previews to the session,
+    runs sessions through a :class:`SessionScope` with cost accounting,
+    forwards the parsed prompt/message deltas to
     per-session SSE streams, and surfaces pauses as
-    :class:`~sefios.fastapi.exceptions.InputRequired`.
+    :class:`~sefios.exceptions.InteractionRequired`.
 
     Pass ``llm_client`` to use a custom :class:`~sefia.llm.LLMClient` instead
     of constructing the default LiteLLM-backed client from ``model``.
@@ -65,14 +68,10 @@ class SefiaHTTP:
         persistence = persistence or MemoryPersistence()
         self._events = SessionEvents()
         self._session_registry: SessionRegistry = persistence.create_session_registry()
-        self._input = InputChannel(namespace="http/input_channel")
         self._active_session_id: ContextVar[str | None] = ContextVar(
             "http_active_session_id", default=None
         )
         self._input_tool = Input(
-            get_input=self._provide_input,
-            on_request=self._record_request,
-            on_complete=self._complete_request,
             on_prompt_delta=self._emit_input_delta,
         )
         self._output_tool = Output(
@@ -133,26 +132,18 @@ class SefiaHTTP:
                 stream=resolved_stream,
                 policies=policies,
             ):
-                with self._input.use_store(get_session_storage()):
-                    yield SefiaHTTPSession(channel=self._input)
-        except InputRequired as pause:
-            # The pause identifies its own request, so no state is re-read. The
-            # SSE event is published only after the session scope has exited, to
-            # keep glyff's pause/resume semantics; the pause itself then
-            # propagates unchanged for the application to map to a response. A
-            # pause from a tool that did not identify itself cannot be described
-            # to the HTTP client, so it skips the event and propagates all the
-            # same.
-            if pause.interaction_id is None:
-                raise
+                yield SefiaHTTPSession(channel=get_interaction_channel())
+        except InteractionRequired as pause:
             await self._events.publish(
                 session_id,
-                SSEEvent.INPUT_REQUIRED,
+                SSEEvent.INTERACTION_REQUIRED,
                 {
                     "interaction_id": pause.interaction_id,
-                    "prompt": pause.prompt,
+                    "request": pause.request,
                 },
             )
+            raise
+        except PauseException:
             raise
         except Exception as exc:
             await self._events.publish(
@@ -174,15 +165,6 @@ class SefiaHTTP:
     def events(self, session_id: str) -> StreamingResponse:
         self.ensure_session(session_id)
         return self._events.response(session_id)
-
-    async def _provide_input(self, request: InputRequest) -> str | None:
-        return await self._input.provide_input(request.interaction_id)
-
-    async def _record_request(self, request: InputRequest) -> None:
-        await self._input.record_request(request.interaction_id, request.prompt)
-
-    async def _complete_request(self, result: InputResult) -> None:
-        await self._input.complete_request(result.interaction_id)
 
     async def _emit_input_delta(self, interaction_id: str, text: str) -> None:
         await self._emit_delta("input", interaction_id, text)

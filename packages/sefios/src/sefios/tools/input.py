@@ -9,13 +9,12 @@ from .._async import MaybeAwaitable, maybe_await
 from .._glyff import GLYFF_DOMAIN
 from .._input import (
     InputCompleteCallback,
-    InputProvider,
     InputRequest,
     InputRequestCallback,
     InputResult,
-    no_input,
-    request_input,
 )
+from ..exceptions import InteractionRequired
+from ..interactions import require_interaction
 
 InputPromptDeltaCallback = Callable[[str, str], MaybeAwaitable[None]]
 
@@ -23,7 +22,6 @@ __all__ = [
     "Input",
     "InputRequest",
     "InputResult",
-    "InputProvider",
     "InputRequestCallback",
     "InputCompleteCallback",
     "InputPromptDeltaCallback",
@@ -33,12 +31,10 @@ __all__ = [
 class Input:
     def __init__(
         self,
-        get_input: InputProvider = no_input,
         on_request: InputRequestCallback | None = None,
         on_complete: InputCompleteCallback | None = None,
         on_prompt_delta: InputPromptDeltaCallback | None = None,
     ) -> None:
-        self._get_input = get_input
         self._on_request = on_request
         self._on_complete = on_complete
         self._on_prompt_delta = on_prompt_delta
@@ -70,9 +66,19 @@ class Input:
             interaction_id=interaction_id,
             prompt=prompt or "",
         )
-        return await request_input(
-            request, self._get_input, self._on_request, self._on_complete
-        )
+        try:
+            value = await require_interaction(
+                interaction_id, {"type": "input", "prompt": request.prompt}, str
+            )
+        except InteractionRequired:
+            if self._on_request is not None:
+                await maybe_await(self._on_request(request))
+            raise
+        if self._on_complete is not None:
+            await maybe_await(
+                self._on_complete(InputResult(interaction_id, request.prompt, value))
+            )
+        return value
 
     @preview(get_input)
     async def _stream_get_input(self, tool_call_id: str, events: ArgStream) -> None:

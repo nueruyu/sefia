@@ -9,10 +9,15 @@ from sefia_typer import CLIReporter
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 from typing_extensions import final
 
-from .._input_channel import InputChannel
+from .._interaction_context import get_interaction_channel
 from .._scope import SessionScope
-from .._session_state import get_session_storage
+from ..exceptions import InteractionRequired
 from ..handlers import CostCalculator
+from ..interactions import (
+    InteractionChannel,
+    InteractionRequest,
+    JsonValue,
+)
 from ..persistence import MemoryPersistence, PersistenceProvider
 from ..sessions import (
     ActiveSessionStore,
@@ -20,7 +25,7 @@ from ..sessions import (
     SessionManager,
     UnknownSessionError,
 )
-from ..tools import Input, InputRequest, InputResult, Output
+from ..tools import Input, Output
 from ._cost_reporter import CostReportingCLIReporter
 from ._reporting import CLIReporting
 
@@ -31,17 +36,15 @@ _USE_DEFAULT_REPORTER = object()
 class SefiaCLISession:
     """Operations available inside a Sefia CLI session context."""
 
-    def __init__(self, *, channel: InputChannel):
-        self._input = channel
+    def __init__(self, *, channel: InteractionChannel):
+        self._channel = channel
 
-    async def accept_input(
-        self,
-        input_value: str | list[str] | None,
-        *,
-        reply_to: str | None = None,
-    ) -> None:
-        """Store CLI input for a pending or upcoming interaction."""
-        await self._input.receive_input(input_value, reply_to=reply_to)
+    async def resolve_interaction(self, interaction_id: str, result: JsonValue) -> None:
+        """Resolve an existing interaction with an immutable JSON result."""
+        await self._channel.resolve(interaction_id, result)
+
+    async def pending_interactions(self) -> list[InteractionRequest]:
+        return await self._channel.pending()
 
 
 @final
@@ -49,7 +52,7 @@ class SefiaCLI:
     """Creates Sefia session contexts for Typer commands.
 
     The integration facade over the ``sefia_typer`` building blocks: it wires
-    the CLI input core to :class:`Input` and the bound session
+    generic interaction reporting and :class:`Input` previews to session
     storage, runs sessions through a :class:`SessionScope` (with cost
     accounting installed), and maps pauses and inference errors to CLI exit
     codes.
@@ -74,16 +77,8 @@ class SefiaCLI:
             persistence.create_session_registry(),
             active_session_store,
         )
-        self._input = InputChannel(
-            on_request=self._reporting.input_request,
-            on_prompt_delta=self._reporting.input_prompt_delta,
-            namespace="cli/input_channel",
-        )
         self._input_tool = Input(
-            get_input=self._provide_input,
-            on_request=self._record_request,
-            on_complete=self._complete_request,
-            on_prompt_delta=self._input.notify_prompt_delta,
+            on_prompt_delta=self._reporting.input_prompt_delta,
         )
         self._output_tool = Output(
             on_output=self._reporting.output,
@@ -147,34 +142,30 @@ class SefiaCLI:
                 stream=stream,
                 policies=policies,
             ):
-                with self._input.use_store(get_session_storage()):
-                    try:
-                        yield SefiaCLISession(channel=self._input)
-                    except InferenceError as e:
-                        await self._reporting.inference_error(e)
-                        raise
-                    except PauseException:
-                        # Any pause (InputRequired, or a future pause type) is a
-                        # graceful interrupt, not a failure. The session context
-                        # is still alive here, so reporters may read running
-                        # state (e.g. cost) via get_state().
-                        await self._reporting.interrupted(resolved_session)
-                        raise
-                    else:
-                        await self._reporting.session_finished()
+                try:
+                    yield SefiaCLISession(channel=get_interaction_channel())
+                except InferenceError as e:
+                    await self._reporting.inference_error(e)
+                    raise
+                except InteractionRequired as pause:
+                    await self._reporting.interaction_request(
+                        InteractionRequest(pause.interaction_id, pause.request)
+                    )
+                    await self._reporting.interrupted(resolved_session)
+                    raise
+                except PauseException:
+                    # Any pause (InteractionRequired, or a future pause type) is a
+                    # graceful interrupt, not a failure. The session context
+                    # is still alive here, so reporters may read running
+                    # state (e.g. cost) via get_state().
+                    await self._reporting.interrupted(resolved_session)
+                    raise
+                else:
+                    await self._reporting.session_finished()
         except InferenceError:
             raise typer.Exit(code=1) from None
         except PauseException:
             raise typer.Exit(code=0)
-
-    async def _provide_input(self, request: InputRequest) -> str | None:
-        return await self._input.provide_input(request.interaction_id)
-
-    async def _record_request(self, request: InputRequest) -> None:
-        await self._input.record_request(request.interaction_id, request.prompt)
-
-    async def _complete_request(self, result: InputResult) -> None:
-        await self._input.complete_request(result.interaction_id)
 
     @staticmethod
     def _resolve_reporter(reporter: CLIReporter | None | object) -> CLIReporter | None:

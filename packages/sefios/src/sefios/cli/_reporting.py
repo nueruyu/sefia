@@ -1,11 +1,12 @@
 from sefia.exceptions import InferenceError
 from sefia_typer import CLIReporter
-from sefia_typer import InputRequest as CLIInputRequest
+from sefia_typer import InteractionRequest as CLIInteractionRequest
 from sefia_typer import OutputMessage as CLIOutputMessage
 
 from .._async import maybe_await
+from ..interactions import InteractionRequest
 from ..sessions import ResolvedSession
-from ..tools import InputRequest, OutputMessage
+from ..tools import OutputMessage
 
 
 class CLIReporting:
@@ -18,13 +19,13 @@ class CLIReporting:
         if self.reporter is not None:
             await maybe_await(self.reporter.on_session_resolved(session))
 
-    async def input_request(self, request: InputRequest) -> None:
+    async def interaction_request(self, request: InteractionRequest) -> None:
         if self.reporter is not None:
             await maybe_await(
-                self.reporter.on_input_request(
-                    CLIInputRequest(
+                self.reporter.on_interaction_request(
+                    CLIInteractionRequest(
                         interaction_id=request.interaction_id,
-                        prompt=request.prompt,
+                        payload=request.payload,
                     )
                 )
             )
