@@ -1,14 +1,14 @@
+from collections.abc import Callable
 from typing import Annotated
 
 from pydantic import Field
 from sefia import current_tool_call_id_for, preview
 from sefia.streaming import ArgStream, StringDelta
 
-from .._async import maybe_await
+from .._async import MaybeAwaitable, maybe_await
 from .._glyff import GLYFF_DOMAIN
 from .._input import (
     InputCompleteCallback,
-    InputPromptDeltaCallback,
     InputProvider,
     InputRequest,
     InputRequestCallback,
@@ -16,6 +16,8 @@ from .._input import (
     no_input,
     request_input,
 )
+
+InputPromptDeltaCallback = Callable[[str, str], MaybeAwaitable[None]]
 
 __all__ = [
     "Input",
