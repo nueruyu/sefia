@@ -10,10 +10,9 @@ from sefia import (
     DecisionContext,
     DecisionMiddleware,
     Domain,
-    InferenceMiddleware,
+    JsonSchemaToolEntry,
     Policy,
     Profile,
-    StepMiddleware,
     policy,
 )
 from sefia.inference import ResultDecision, StepDecision, ToolCallsDecision
@@ -21,7 +20,10 @@ from sefia.testing import (
     MockLLMClient,
     memory_session,
     result_completion,
+    tool_calls_completion,
 )
+
+from sefia.tool_collectors import StaticToolCollector
 
 
 async def test_domain_inference_records_stable_application_and_runtime_boundaries():
@@ -133,13 +135,28 @@ async def test_domain_engrave_accepts_an_explicit_name():
     assert executions[0].id.name == glyff.ExecutionName("prepare_report")
 
 
+@pytest.mark.parametrize("completed_tool_step", [False, True])
 @pytest.mark.parametrize("invalid_return", [False, True])
 async def test_rejected_decision_is_uncommitted_and_regenerated_on_resume(
     invalid_return: bool,
+    completed_tool_step: bool,
 ) -> None:
     backend = MemoryBackend()
     instances: list[DecisionMiddleware] = []
-    observed: list[StepDecision] = []
+    observed: list[tuple[int, StepDecision]] = []
+    tool_calls: list[str] = []
+
+    async def lookup() -> str:
+        tool_calls.append("lookup")
+        return "persisted evidence"
+
+    collector = StaticToolCollector(
+        [
+            JsonSchemaToolEntry(
+                lookup, name="lookup", parameters={"type": "object", "properties": {}}
+            )
+        ]
+    )
 
     @final
     class RejectFirst(DecisionMiddleware):
@@ -148,14 +165,14 @@ async def test_rejected_decision_is_uncommitted_and_regenerated_on_resume(
             self, ctx: DecisionContext, nxt: Callable[[], Awaitable[StepDecision]]
         ) -> StepDecision:
             decision = await nxt()
-            observed.append(decision)
-            if len(observed) == 1:
+            observed.append((ctx.step, decision))
+            if decision == ResultDecision("rejected"):
                 if invalid_return:
                     return cast(StepDecision, "invalid")
                 raise ValueError("rejected decision")
             return decision
 
-    def middleware() -> list[InferenceMiddleware | StepMiddleware | DecisionMiddleware]:
+    def middleware() -> list[DecisionMiddleware]:
         instance = RejectFirst()
         instances.append(instance)
         return [instance]
@@ -168,51 +185,89 @@ async def test_rejected_decision_is_uncommitted_and_regenerated_on_resume(
     @reports.infer(name="summarize")
     async def summarize(document: str) -> str: ...
 
-    client = MockLLMClient(
-        [result_completion("rejected"), result_completion("accepted")]
-    )
+    completions = [result_completion("rejected"), result_completion("accepted")]
+    if completed_tool_step:
+        completions.insert(0, tool_calls_completion(("lookup", {})))
+    client = MockLLMClient(completions)
     session_id = "decision-resume"
-    async with memory_session(client, session_id=session_id, backend=backend):
+    async with memory_session(
+        client, session_id=session_id, backend=backend, tool_collector=collector
+    ):
         with pytest.raises(
             TypeError if invalid_return else ValueError,
             match="Unknown decision type" if invalid_return else "rejected decision",
         ):
             await summarize("document")
 
-    unfinished = [
+    executions = [
         execution
         async for execution in backend.repository.executions(
             glyff.SessionId(session_id)
         )
-        if execution.id.name.value == "inference.step"
     ]
+    unfinished = [
+        execution
+        for execution in executions
+        if execution.id.name.value == "inference.step"
+        and execution.status is glyff.ExecutionStatus.STARTED
+    ]
+    committed = {
+        execution.id: execution.result
+        for execution in executions
+        if execution.status is glyff.ExecutionStatus.COMPLETED
+    }
+    assert len(committed) == (2 if completed_tool_step else 0)
+    assert tool_calls == (["lookup"] if completed_tool_step else [])
     assert len(unfinished) == 1
     assert unfinished[0].status is glyff.ExecutionStatus.STARTED
     assert unfinished[0].result is None
 
-    async with memory_session(client, session_id=session_id, backend=backend):
+    async with memory_session(
+        client, session_id=session_id, backend=backend, tool_collector=collector
+    ):
         assert await summarize("document") == "accepted"
 
-    steps = [
+    resumed = [
         execution
         async for execution in backend.repository.executions(
             glyff.SessionId(session_id)
         )
-        if execution.id.name.value == "inference.step"
     ]
-    assert len(steps) == 1
-    assert steps[0].id == unfinished[0].id
-    assert steps[0].status is glyff.ExecutionStatus.COMPLETED
-    assert steps[0].result is not None
-    assert observed == [ResultDecision("rejected"), ResultDecision("accepted")]
-    assert len(client.requests) == 2
+    assert {execution.id for execution in resumed} == {
+        execution.id for execution in executions
+    }
+    assert all(
+        execution.status is glyff.ExecutionStatus.COMPLETED for execution in resumed
+    )
+    assert all(execution.result is not None for execution in resumed)
+    assert {
+        execution.id: execution.result
+        for execution in resumed
+        if execution.id in committed
+    } == committed
+    step = int(completed_tool_step)
+    assert observed[-2:] == [
+        (step, ResultDecision("rejected")),
+        (step, ResultDecision("accepted")),
+    ]
+    assert [index for index, _ in observed] == (
+        [0, 1, 1] if completed_tool_step else [0, 0]
+    )
+    if completed_tool_step:
+        assert isinstance(observed[0][1], ToolCallsDecision)
+        assert client.requests[-1]["messages"] == client.requests[-2]["messages"]
+        assert "persisted evidence" in str(client.requests[-1]["messages"])
+    assert len(client.requests) == 2 + step
     assert len(instances) == 2
     assert instances[0] is not instances[1]
 
-    async with memory_session(client, session_id=session_id, backend=backend):
+    async with memory_session(
+        client, session_id=session_id, backend=backend, tool_collector=collector
+    ):
         assert await summarize("document") == "accepted"
-    assert len(client.requests) == 2
-    assert len(observed) == 2
+    assert len(client.requests) == 2 + step
+    assert len(observed) == 2 + step
+    assert tool_calls == (["lookup"] if completed_tool_step else [])
 
 
 @pytest.mark.parametrize("policy_outside_infer", [False, True])
@@ -242,9 +297,7 @@ async def test_decision_middleware_inherits_policy_precedence_and_run_scope(
             return decision
 
     def record_policy(label: str) -> Policy:
-        def middleware() -> list[
-            InferenceMiddleware | StepMiddleware | DecisionMiddleware
-        ]:
+        def middleware() -> list[DecisionMiddleware]:
             instance = Record(label)
             built.append(instance)
             return [instance]

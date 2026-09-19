@@ -1,8 +1,8 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from ..event_system import EventHandler
-from .middleware import DecisionMiddleware, InferenceMiddleware, StepMiddleware
+from .middleware import Middleware
 
 
 class Policy:
@@ -31,21 +31,13 @@ class Policy:
     # Class-level fallbacks so subclasses whose __init__ does not call
     # super().__init__() (e.g. dataclasses) still get empty defaults.
     _handlers_factory: Callable[[], list[EventHandler[Any]]] | None = None
-    _middleware_factory: (
-        Callable[[], list[InferenceMiddleware | StepMiddleware | DecisionMiddleware]]
-        | None
-    ) = None
+    _middleware_factory: Callable[[], Sequence[Middleware]] | None = None
 
     def __init__(
         self,
         *,
         handlers: Callable[[], list[EventHandler[Any]]] | None = None,
-        middleware: (
-            Callable[
-                [], list[InferenceMiddleware | StepMiddleware | DecisionMiddleware]
-            ]
-            | None
-        ) = None,
+        middleware: Callable[[], Sequence[Middleware]] | None = None,
     ):
         self._handlers_factory = handlers
         self._middleware_factory = middleware
@@ -54,8 +46,6 @@ class Policy:
         """Create observation handlers used by this policy (default: none)."""
         return self._handlers_factory() if self._handlers_factory else []
 
-    def create_middleware(
-        self,
-    ) -> list[InferenceMiddleware | StepMiddleware | DecisionMiddleware]:
+    def create_middleware(self) -> Sequence[Middleware]:
         """Create control middleware used by this policy (default: none)."""
         return self._middleware_factory() if self._middleware_factory else []

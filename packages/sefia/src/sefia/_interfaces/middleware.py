@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, TypeAlias
 
 from .._history import StepHistory
 from .._tool_system import ToolRegistry
-from ..inference import FunctionInfo, HistoryItem, StepDecision
+from ..inference import StepDecision
 
 
 @dataclass
@@ -39,8 +39,6 @@ class DecisionContext:
     """Context for middleware wrapping decision generation inside a durable step."""
 
     step: int
-    function_info: FunctionInfo
-    history: tuple[HistoryItem, ...]
 
 
 class InferenceMiddleware(ABC):
@@ -88,3 +86,6 @@ class DecisionMiddleware(ABC):
         ctx: DecisionContext,
         nxt: Callable[[], Awaitable[StepDecision]],
     ) -> StepDecision: ...
+
+
+Middleware: TypeAlias = InferenceMiddleware | StepMiddleware | DecisionMiddleware

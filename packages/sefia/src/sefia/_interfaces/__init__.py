@@ -5,6 +5,7 @@ from .middleware import (
     DecisionMiddleware,
     InferenceContext,
     InferenceMiddleware,
+    Middleware,
     StepContext,
     StepMiddleware,
 )
@@ -15,6 +16,7 @@ __all__ = [
     "HistoryStorage",
     "InferenceStrategy",
     "InferenceMiddleware",
+    "Middleware",
     "StepMiddleware",
     "DecisionContext",
     "DecisionMiddleware",

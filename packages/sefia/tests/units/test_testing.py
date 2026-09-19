@@ -110,24 +110,13 @@ async def test_mock_llm_client_snapshots_core_messages() -> None:
 
 
 def test_decision_context_factory_defaults() -> None:
-    first = make_decision_context()
-    second = make_decision_context()
-
-    assert isinstance(first, DecisionContext)
-    assert first.step == 0
-    assert first.history == ()
-    assert first.function_info == make_function_info()
-    assert first.function_info is not second.function_info
+    assert make_decision_context() == DecisionContext(step=0)
 
 
-def test_decision_context_preserves_values_and_is_frozen() -> None:
-    function_info = make_function_info(qualname="Agent.answer")
-    history = (ToolCallResult(tool_call_id="call-1", result="done"),)
-    ctx = make_decision_context(step=3, function_info=function_info, history=history)
+def test_decision_context_only_exposes_the_step_and_is_frozen() -> None:
+    ctx = make_decision_context(step=3)
 
     assert ctx.step == 3
-    assert ctx.function_info is function_info
-    assert ctx.history is history
-    assert {field.name for field in fields(ctx)} == {"step", "function_info", "history"}
+    assert {field.name for field in fields(ctx)} == {"step"}
     with pytest.raises(FrozenInstanceError):
         setattr(ctx, "step", 4)

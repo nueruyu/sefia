@@ -85,18 +85,9 @@ def make_step_context(
     )
 
 
-def make_decision_context(
-    *,
-    step: int = 0,
-    function_info: FunctionInfo | None = None,
-    history: tuple[HistoryItem, ...] = (),
-) -> DecisionContext:
+def make_decision_context(*, step: int = 0) -> DecisionContext:
     """Build a middleware context for durable decision generation."""
-    return DecisionContext(
-        step=step,
-        function_info=make_function_info() if function_info is None else function_info,
-        history=history,
-    )
+    return DecisionContext(step=step)
 
 
 __all__ = [

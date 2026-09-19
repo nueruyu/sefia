@@ -59,9 +59,7 @@ def test_dataclass_subclass_need_not_call_init():
     class _MiddlewareOnly(Policy):
         label: str
 
-        def create_middleware(
-            self,
-        ) -> list[InferenceMiddleware | StepMiddleware | DecisionMiddleware]:
+        def create_middleware(self) -> list[StepMiddleware]:
             return []
 
     p = _MiddlewareOnly(label="x")
@@ -87,14 +85,17 @@ class _DecisionMiddleware(DecisionMiddleware):
 @final
 class _DecisionPolicy(Policy):
     @override
-    def create_middleware(
-        self,
-    ) -> list[InferenceMiddleware | StepMiddleware | DecisionMiddleware]:
+    def create_middleware(self) -> list[DecisionMiddleware]:
         return [_DecisionMiddleware()]
 
 
 @pytest.mark.parametrize(
-    "p", [Policy(middleware=lambda: [_DecisionMiddleware()]), _DecisionPolicy()]
+    "p",
+    [
+        Policy(middleware=lambda: [_DecisionMiddleware()]),
+        Policy(middleware=lambda: (_DecisionMiddleware(),)),
+        _DecisionPolicy(),
+    ],
 )
 def test_policy_supports_fresh_decision_middleware(p: Policy) -> None:
     first = p.create_middleware()

@@ -10,6 +10,7 @@ from ._interfaces.middleware import (
     DecisionMiddleware,
     InferenceContext,
     InferenceMiddleware,
+    Middleware,
     StepContext,
     StepMiddleware,
 )
@@ -52,7 +53,7 @@ def _compose(
 
 
 def _compose(
-    middlewares: Sequence[InferenceMiddleware | StepMiddleware | DecisionMiddleware],
+    middlewares: Sequence[Middleware],
     ctx: InferenceContext | StepContext | DecisionContext,
     core: Callable[[], Awaitable[Any]],
 ) -> Callable[[], Awaitable[Any]]:
@@ -70,7 +71,7 @@ def _compose(
 
 
 def _layer(
-    middleware: InferenceMiddleware | StepMiddleware | DecisionMiddleware,
+    middleware: Middleware,
     ctx: InferenceContext | StepContext | DecisionContext,
     nxt: Callable[[], Awaitable[Any]],
 ) -> Callable[[], Awaitable[Any]]:
@@ -159,11 +160,7 @@ class InferenceExecutor:
             )
         )
 
-        ctx = DecisionContext(
-            step=step,
-            function_info=self.func_info,
-            history=history,
-        )
+        ctx = DecisionContext(step=step)
 
         async def core() -> StepDecision:
             return await self.strategy.decide_next_step(
