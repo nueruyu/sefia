@@ -4,7 +4,11 @@ from pathlib import Path
 import pytest
 from sefia.testing import MockLLMClient
 from sefios import FilePersistence, SQLitePersistence, domain, require_input
-from sefios.exceptions import AmbiguousInputError, InputRequired, UnknownInputError
+from sefios.exceptions import (
+    InteractionConflictError,
+    InteractionRequired,
+    UnknownInteractionError,
+)
 from sefios.fastapi import SefiaHTTP
 
 engrave = domain(__name__).engrave
@@ -27,50 +31,39 @@ async def test_repeated_input_survives_restart(tmp_path: Path, backend: str) -> 
 
     first = app()
     sid = first.create_session()
-    with pytest.raises(InputRequired) as pause:
+    with pytest.raises(InteractionRequired) as pause:
         async with first.session(session_id=sid):
             await two_questions()
     first_id = pause.value.interaction_id
     assert first_id is not None
 
     second = app()
-    with pytest.raises(InputRequired) as repeated:
+    with pytest.raises(InteractionRequired) as repeated:
         async with second.session(session_id=sid):
             await two_questions()
     assert repeated.value.interaction_id == first_id
 
-    with pytest.raises(InputRequired) as next_pause:
+    with pytest.raises(InteractionRequired) as next_pause:
         async with second.session(session_id=sid) as session:
-            await session.accept_input("first", reply_to=first_id)
+            await session.resolve_interaction(first_id, "first")
             await two_questions()
     second_id = next_pause.value.interaction_id
     assert second_id is not None and second_id != first_id
 
     third = app()
     async with third.session(session_id=sid) as session:
-        await session.accept_input("second", reply_to=second_id)
+        await session.resolve_interaction(second_id, "second")
         assert await two_questions() == ("first", "second")
     async with app().session(session_id=sid):
         assert await two_questions() == ("first", "second")
 
 
-async def test_prior_message_does_not_answer_new_request() -> None:
-    http = SefiaHTTP(llm_client=MockLLMClient([]))
-    sid = http.create_session()
-    with pytest.raises(InputRequired) as pause:
-        async with http.session(session_id=sid) as session:
-            await session.accept_input("yes")
-            await require_input("Approve?")
-    async with http.session(session_id=sid) as session:
-        await session.accept_input("no", reply_to=pause.value.interaction_id)
-        assert await require_input("Approve?") == "no"
-
-
-async def test_explicit_queue_consumption() -> None:
+async def test_unknown_future_interaction_is_rejected() -> None:
     http = SefiaHTTP(llm_client=MockLLMClient([]))
     async with http.session(session_id=http.create_session()) as session:
-        await session.accept_input("hello")
-        assert await require_input("Name?", allow_queued=True) == "hello"
+        with pytest.raises(UnknownInteractionError):
+            await session.resolve_interaction("future", "yes")
+        assert await session.pending_interactions() == []
 
 
 async def test_parallel_pending_routes_each_reply(tmp_path: Path) -> None:
@@ -83,20 +76,18 @@ async def test_parallel_pending_routes_each_reply(tmp_path: Path) -> None:
         pauses = await asyncio.gather(
             require_input("A?"), require_input("B?"), return_exceptions=True
         )
-    assert all(isinstance(p, InputRequired) for p in pauses)
-    ids = [p.interaction_id for p in pauses if isinstance(p, InputRequired)]
+    assert all(isinstance(p, InteractionRequired) for p in pauses)
+    ids = [p.interaction_id for p in pauses if isinstance(p, InteractionRequired)]
     assert len(set(ids)) == 2
     async with http.session(session_id=sid) as session:
-        with pytest.raises(AmbiguousInputError):
-            await session.accept_input("ambiguous")
-        await session.accept_input("b", reply_to=ids[1])
-        await session.accept_input("a", reply_to=ids[0])
+        await session.resolve_interaction(ids[1], "b")
+        await session.resolve_interaction(ids[0], "a")
         assert await asyncio.gather(require_input("A?"), require_input("B?")) == [
             "a",
             "b",
         ]
-        with pytest.raises(UnknownInputError):
-            await session.accept_input("duplicate", reply_to=ids[0])
+        with pytest.raises(InteractionConflictError):
+            await session.resolve_interaction(ids[0], "duplicate")
 
 
 async def test_tool_and_application_requests_share_reply_routing() -> None:
@@ -123,21 +114,17 @@ async def test_tool_and_application_requests_share_reply_routing() -> None:
         return str(results[0].result)
 
     async with http.session(session_id=sid):
-        with pytest.raises(InputRequired) as app_pause:
+        with pytest.raises(InteractionRequired) as app_pause:
             await require_input("Application?")
-        with pytest.raises(InputRequired) as tool_pause:
+        with pytest.raises(InteractionRequired) as tool_pause:
             await tool_input()
     assert tool_pause.value.interaction_id == "tool-call"
     assert app_pause.value.interaction_id != tool_pause.value.interaction_id
     async with http.session(session_id=sid) as session:
-        with pytest.raises(AmbiguousInputError):
-            await session.accept_input("ambiguous")
-        await session.accept_input(
-            "tool answer", reply_to=tool_pause.value.interaction_id
+        await session.resolve_interaction(
+            tool_pause.value.interaction_id, "tool answer"
         )
-        await session.accept_input(
-            "app answer", reply_to=app_pause.value.interaction_id
-        )
+        await session.resolve_interaction(app_pause.value.interaction_id, "app answer")
         assert await require_input("Application?") == "app answer"
         assert await tool_input() == "tool answer"
 
@@ -158,6 +145,8 @@ async def test_cli_uses_same_application_input_lifecycle(
             await require_input("Continue?")
     assert exit_info.value.exit_code == 0
     async with cli.session(session_id=sid) as session:
-        await session.accept_input("yes")
+        pending = await session.pending_interactions()
+        assert len(pending) == 1
+        await session.resolve_interaction(pending[0].interaction_id, "yes")
         assert await require_input("Continue?") == "yes"
     assert client.requests == []

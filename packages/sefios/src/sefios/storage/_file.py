@@ -1,8 +1,10 @@
 import asyncio
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 from glyff import Serializer
 from typing_extensions import final, override
@@ -46,11 +48,34 @@ class FileSessionStorage(SessionStorage):
             return None
 
     @staticmethod
-    def _write_bytes(path: Path, data: bytes) -> None:
+    def _write_bytes(path: Path, data: bytes, *, exclusive: bool = False) -> bool:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(f"{path.name}.tmp")
-        tmp.write_bytes(data)
-        os.replace(tmp, path)
+        fd, name = tempfile.mkstemp(dir=path.parent)
+        tmp = Path(name)
+        try:
+            with os.fdopen(fd, "wb") as file:
+                file.write(data)
+                file.flush()
+                os.fsync(file.fileno())
+            if exclusive:
+                # Linking publishes the complete record atomically without overwrite.
+                try:
+                    os.link(tmp, path)
+                except FileExistsError:
+                    return False
+            else:
+                os.replace(tmp, path)
+            return True
+        finally:
+            tmp.unlink(missing_ok=True)
+
+    def _keys(self, prefix: str) -> list[str]:
+        keys = (
+            unquote(path.relative_to(self._base_dir).as_posix()[:-5])
+            for path in self._base_dir.rglob("*.json")
+            if path.is_file()
+        )
+        return sorted(key for key in keys if key.startswith(prefix))
 
     @override
     async def get(self, key: str, type_hint: type) -> Any | None:
@@ -70,3 +95,13 @@ class FileSessionStorage(SessionStorage):
     async def delete(self, key: str) -> None:
         path = self._key_to_path(key)
         await asyncio.to_thread(path.unlink, missing_ok=True)
+
+    @override
+    async def set_if_absent(self, key: str, value: Any, type_hint: type) -> bool:
+        path = self._key_to_path(key)
+        data = await self._serializer.serialize(value, type_hint)
+        return await asyncio.to_thread(self._write_bytes, path, data, exclusive=True)
+
+    @override
+    async def keys(self, prefix: str) -> list[str]:
+        return await asyncio.to_thread(self._keys, prefix)

@@ -23,6 +23,7 @@ def test_authoring_surface_is_public():
         "profile",
         "domain",
         "require_input",
+        "require_interaction",
         "Policy",
         "Profile",
         "Tools",
@@ -31,5 +32,5 @@ def test_authoring_surface_is_public():
 
 
 def test_exceptions_are_not_reexported_from_package_root():
-    assert "InputRequired" not in sefios.__all__
-    assert not hasattr(sefios, "InputRequired")
+    assert "InteractionRequired" not in sefios.__all__
+    assert not hasattr(sefios, "InteractionRequired")

@@ -2591,7 +2591,7 @@ requires-dist = [
     { name = "sefia-litellm", marker = "extra == 'litellm'", editable = "packages/sefia_litellm" },
     { name = "sefia-typer", marker = "extra == 'all'", editable = "packages/sefia_typer" },
     { name = "sefia-typer", marker = "extra == 'cli'", editable = "packages/sefia_typer" },
-    { name = "typing-extensions", specifier = ">=4.6" },
+    { name = "typing-extensions", specifier = ">=4.13.0" },
 ]
 provides-extras = ["all", "cli", "fastapi", "file-store", "litellm", "sqlite", "testing", "web"]
 

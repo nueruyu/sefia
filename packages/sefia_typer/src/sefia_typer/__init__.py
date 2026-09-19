@@ -8,13 +8,13 @@ tools are provided by an integration layer such as ``sefios.cli``.
 from ._reporter import (
     CLIReporter,
     DefaultCLIReporter,
-    InputRequest,
+    InteractionRequest,
     OutputMessage,
     ResolvedSession,
 )
 
 __all__ = [
-    "InputRequest",
+    "InteractionRequest",
     "CLIReporter",
     "DefaultCLIReporter",
     "OutputMessage",

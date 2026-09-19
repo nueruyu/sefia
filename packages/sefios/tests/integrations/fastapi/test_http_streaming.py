@@ -12,7 +12,7 @@ from sefia.llm.streaming import OutputStreamCallback, StringDelta, StringEnd
 from sefia.llm.structured_data import StructuredData
 from sefia_fastapi.events import SSEEvent
 from sefios import domain
-from sefios.exceptions import InputRequired
+from sefios.exceptions import InteractionRequired
 from sefios.fastapi import SefiaHTTP
 from sefios.tools import Input, Output
 from typing_extensions import override
@@ -247,8 +247,10 @@ async def test_input_tool_publishes_deltas_and_pause_over_public_sse(
         )
     )
     session_id = http.create_session()
-    async with read_sse(http.events(session_id), SSEEvent.INPUT_REQUIRED) as reader:
-        with pytest.raises(InputRequired) as pause:
+    async with read_sse(
+        http.events(session_id), SSEEvent.INTERACTION_REQUIRED
+    ) as reader:
+        with pytest.raises(InteractionRequired) as pause:
             async with http.session(session_id=session_id):
                 await _InputAgent(http.input_tool).run()
 
@@ -257,7 +259,7 @@ async def test_input_tool_publishes_deltas_and_pause_over_public_sse(
         required = [
             event["data"]
             for event in events
-            if event["name"] == SSEEvent.INPUT_REQUIRED
+            if event["name"] == SSEEvent.INTERACTION_REQUIRED
         ]
         assert "".join(delta["text"] for delta in deltas) == "Your name?"
         assert {delta["type"] for delta in deltas} == {"input"}
@@ -284,8 +286,10 @@ async def test_input_and_output_deltas_use_independent_interaction_ids(
         )
     )
     session_id = http.create_session()
-    async with read_sse(http.events(session_id), SSEEvent.INPUT_REQUIRED) as reader:
-        with pytest.raises(InputRequired):
+    async with read_sse(
+        http.events(session_id), SSEEvent.INTERACTION_REQUIRED
+    ) as reader:
+        with pytest.raises(InteractionRequired):
             async with http.session(session_id=session_id):
                 await _InputOutputAgent(http.input_tool, http.output_tool).run()
 
@@ -308,17 +312,62 @@ async def test_application_input_publishes_complete_prompt_without_preview(
 
     http = SefiaHTTP(llm_client=MockLLMClient([]))
     sid = http.create_session()
-    async with read_sse(http.events(sid), SSEEvent.INPUT_REQUIRED) as reader:
-        with pytest.raises(InputRequired) as pause:
+    async with read_sse(http.events(sid), SSEEvent.INTERACTION_REQUIRED) as reader:
+        with pytest.raises(InteractionRequired) as pause:
             async with http.session(session_id=sid):
                 await require_input("Approve?")
         events = await reader
     assert events == [
         {
-            "name": SSEEvent.INPUT_REQUIRED,
+            "name": SSEEvent.INTERACTION_REQUIRED,
             "data": {
-                "prompt": "Approve?",
+                "request": {"type": "input", "prompt": "Approve?"},
                 "interaction_id": pause.value.interaction_id,
             },
         }
     ]
+
+
+async def test_generic_interaction_publishes_complete_request(
+    read_sse: Callable[
+        ..., AbstractAsyncContextManager[asyncio.Task[list[dict[str, Any]]]]
+    ],
+) -> None:
+    from sefia.testing import MockLLMClient
+    from sefios import require_interaction
+
+    http = SefiaHTTP(llm_client=MockLLMClient([]))
+    sid = http.create_session()
+    async with read_sse(http.events(sid), SSEEvent.INTERACTION_REQUIRED) as reader:
+        with pytest.raises(InteractionRequired):
+            async with http.session(session_id=sid):
+                await require_interaction(
+                    "weather", {"type": "weather", "city": "Tokyo"}, int
+                )
+        assert await reader == [
+            {
+                "name": SSEEvent.INTERACTION_REQUIRED,
+                "data": {
+                    "interaction_id": "weather",
+                    "request": {"type": "weather", "city": "Tokyo"},
+                },
+            }
+        ]
+
+
+async def test_unrelated_pause_is_not_reported_as_failure() -> None:
+    from unittest.mock import AsyncMock
+
+    from sefia.exceptions import PauseException
+    from sefia.testing import MockLLMClient
+
+    class OtherPause(PauseException):
+        pass
+
+    http = SefiaHTTP(llm_client=MockLLMClient([]))
+    publish = AsyncMock()
+    http._events.publish = publish
+    with pytest.raises(OtherPause):
+        async with http.session(session_id=http.create_session()):
+            raise OtherPause("later")
+    publish.assert_not_awaited()

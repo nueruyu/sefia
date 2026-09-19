@@ -21,7 +21,7 @@ process may restart before the human approves.
 ## With sefia
 
 - model and tool calls replay from the store, so completed steps don't re-run;
-- the pause is a tool raising `InputRequired`;
+- the pause is a tool raising `InteractionRequired`;
 - resume is re-invoking the same session;
 - the orchestration stays ordinary Python.
 

@@ -14,19 +14,19 @@ for setup.
 ### Start or Resume Chat
 
 ```bash
-uv run python -m examples.01_news_article.main chat "The impact of generative AI on software development"
+uv run python -m examples.01_news_article.main chat
 ```
 
-If the workflow asks for human input, run the same command with your answer:
+If the workflow asks for human input, use the reported interaction ID with your result:
 
 ```bash
-uv run python -m examples.01_news_article.main chat "Software engineering managers"
+uv run python -m examples.01_news_article.main chat "Software engineering managers" --interaction-id "<interaction_id>"
 ```
 
 ### Verbose Mode
 
 ```bash
-uv run python -m examples.01_news_article.main chat "The impact of generative AI on software development" --verbose
+uv run python -m examples.01_news_article.main chat --verbose
 ```
 
 ### Sessions
@@ -35,3 +35,6 @@ uv run python -m examples.01_news_article.main chat "The impact of generative AI
 uv run python -m examples.01_news_article.main session new
 uv run python -m examples.01_news_article.main session switch <session-id>
 ```
+
+Start without a message to create a durable request. Supply text only with the
+reported `--interaction-id`; pre-request input and implicit routing are unsupported.

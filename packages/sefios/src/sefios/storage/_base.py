@@ -25,3 +25,16 @@ class SessionStorage(ABC):
     async def delete(self, key: str) -> None:
         """Deletes a key."""
         ...
+
+    @abstractmethod
+    async def set_if_absent(self, key: str, value: Any, type_hint: type) -> bool:
+        """Insert atomically across bindings to the same logical store.
+
+        Return True if inserted; False leaves an existing value unchanged.
+        """
+        ...
+
+    @abstractmethod
+    async def keys(self, prefix: str) -> list[str]:
+        """Return matching keys in lexicographic order (not a snapshot)."""
+        ...

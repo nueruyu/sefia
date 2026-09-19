@@ -33,3 +33,15 @@ class MemorySessionStorage(SessionStorage):
     @override
     async def delete(self, key: str) -> None:
         self._data.pop(key, None)
+
+    @override
+    async def set_if_absent(self, key: str, value: Any, type_hint: type) -> bool:
+        data = await self._serializer.serialize(value, type_hint)
+        if key in self._data:
+            return False
+        self._data[key] = data
+        return True
+
+    @override
+    async def keys(self, prefix: str) -> list[str]:
+        return sorted(key for key in self._data if key.startswith(prefix))

@@ -61,7 +61,7 @@ Rules that keep the layering clean — worth preserving in any change:
   integrations are optional extras, so installing `sefios` alone pulls in only the core.
 - **Framework adapters depend only on `sefia` and their framework.** `sefia_typer`
   owns CLI reporting and `sefia_fastapi` owns HTTP event streaming. Neither imports
-  `sefios` or the other adapter; shared session/input orchestration belongs to the
+  `sefios` or the other adapter; shared session/interaction orchestration belongs to the
   `sefios` composition layer.
 - **`sefios` is the composition layer for the adapters.** The extra-gated
   `sefios/cli` and `sefios/fastapi` facades are the only modules that import
@@ -123,8 +123,8 @@ implementation noted in parentheses.
 | `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `persistence.py` | Persistence providers for execution, session state, and the session registry; memory is the default, with optional SQLite and JSON-file alternatives. |
-| `input.py` / `_input.py` | `require_input` authoring API; shared input lifecycle and application interaction IDs. |
-| `_input_channel.py` | Persisted routing shared by tool and application input; binds the active channel and serializes sibling-task updates. |
+| `input.py` / `_input.py` | `require_input` authoring API; application interaction IDs. |
+| `interactions.py` | Durable JSON request/result exchange; atomic idempotency, pending discovery, bound channel, and typed pause adapter. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |
 | `history_storages/` | `SessionHistoryStorage` — an alternative `HistoryStorage` that keeps run history in the session storage (keyed by the run's `ExecutionId`) instead of glyff metadata. |
@@ -166,7 +166,7 @@ implementation noted in parentheses.
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
 | Add a persistence backend | implement `PersistenceProvider` so the glyff execution backend, `SessionStorage`, and `SessionRegistry` are selected together; reference `persistence.py` |
 | Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); to change where history lives, pass `history_storage=` to `SessionScope`/`Session` (seam: `HistoryStorage`) |
-| Change shared input routing / persistence rules | `sefios/_input_channel.py` |
+| Change durable interaction exchange / persistence rules | `sefios/interactions.py` |
 | Change CLI rendering / input callbacks | `packages/sefia_typer` |
 | Change HTTP events / SSE | `packages/sefia_fastapi` |
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |

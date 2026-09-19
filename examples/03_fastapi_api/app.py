@@ -4,18 +4,18 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from sefios import SQLitePersistence
-from sefios.fastapi import SefiaHTTP
-from sefios.fastapi.exceptions import (
-    AmbiguousInputError,
-    InputRequired,
-    UnknownInputError,
-    UnknownSessionError,
+from sefios.exceptions import (
+    InteractionConflictError,
+    InteractionRequired,
+    UnknownInteractionError,
 )
+from sefios.fastapi import SefiaHTTP
+from sefios.fastapi.exceptions import UnknownSessionError
 
 from .agents import Interviewer
 from .models import (
     BriefSchema,
-    InputRequiredResponse,
+    InteractionRequiredResponse,
     InterviewCompletedResponse,
     InterviewResponse,
     SessionCreatedResponse,
@@ -42,30 +42,30 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
     ) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
-    @app.exception_handler(UnknownInputError)
-    async def unknown_input(_request: Request, exc: UnknownInputError) -> JSONResponse:
+    @app.exception_handler(UnknownInteractionError)
+    async def unknown_interaction(
+        _request: Request, exc: UnknownInteractionError
+    ) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
-    @app.exception_handler(AmbiguousInputError)
-    async def ambiguous_input(
-        _request: Request, exc: AmbiguousInputError
+    @app.exception_handler(InteractionConflictError)
+    async def conflicting_interaction(
+        _request: Request, exc: InteractionConflictError
     ) -> JSONResponse:
         return JSONResponse(
             status_code=409,
-            content={"detail": str(exc), "interaction_ids": exc.interaction_ids},
+            content={"detail": str(exc), "interaction_id": exc.interaction_id},
         )
 
-    @app.exception_handler(InputRequired)
-    async def input_required(_request: Request, exc: InputRequired) -> JSONResponse:
-        # The Input tool always identifies its request, so a pause surfaced to
-        # the client carries an interaction_id (the core type allows None for
-        # tools that don't).
-        assert exc.interaction_id is not None
+    @app.exception_handler(InteractionRequired)
+    async def interaction_required(
+        _request: Request, exc: InteractionRequired
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=200,
-            content=InputRequiredResponse(
+            content=InteractionRequiredResponse(
                 interaction_id=exc.interaction_id,
-                prompt=exc.prompt,
+                request=exc.request,
             ).model_dump(),
         )
 
@@ -87,7 +87,8 @@ def create_app(sefia_http: SefiaHTTP | None = None) -> FastAPI:
         # can type the question out live; the raw structured @infer envelope is
         # never exposed -- only the decoded prompt/message text is streamed.
         async with api.session(session_id=session_id) as session:
-            await session.accept_input(body.input, reply_to=body.reply_to)
+            if body.interaction_id is not None:
+                await session.resolve_interaction(body.interaction_id, body.result)
             brief = await interviewer.run()
             return InterviewCompletedResponse(brief=BriefSchema.from_brief(brief))
 

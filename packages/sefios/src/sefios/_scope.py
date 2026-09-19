@@ -15,7 +15,9 @@ from sefia import HistoryStorage, Policy, Profile, ToolCollector
 from sefia.llm import LLMClient, PromptRenderer
 from sefia.llm.transports import DecisionTransport
 
+from ._interaction_context import bind_interaction_channel
 from ._session_state import bind_session_storage
+from .interactions import InteractionChannel
 from .persistence import MemoryPersistence, PersistenceProvider
 from .policies import DefaultPolicy
 
@@ -132,7 +134,10 @@ class SessionScope:
             final_profiles.extend(profiles)
 
         async with gs:
-            with bind_session_storage(session_storage):
+            with (
+                bind_session_storage(session_storage),
+                bind_interaction_channel(InteractionChannel(session_storage)),
+            ):
                 async with sefia.Session(
                     llm_client=llm_client,
                     glyff_session=gs,

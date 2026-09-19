@@ -68,9 +68,6 @@ class TestInterviewFlow:
         api.service._session_scope.llm_client = MockLLMClient(
             completions=[
                 tool_calls_completion(
-                    ("Input_get_input", {"prompt": "What should this be about?"}),
-                ),
-                tool_calls_completion(
                     ("Input_get_input", {"prompt": question}),
                 ),
                 result_completion(
@@ -86,17 +83,17 @@ class TestInterviewFlow:
 
         first = api.client.post(
             f"/sessions/{session_id}/interview",
-            json={"input": "Write about our product."},
+            json={},
         )
         assert first.status_code == 200
         first_body = first.json()
-        assert first_body["status"] == "input_required"
-        assert first_body["prompt"] == question
+        assert first_body["status"] == "interaction_required"
+        assert first_body["request"]["prompt"] == question
         interaction_id = first_body["interaction_id"]
 
         second = api.client.post(
             f"/sessions/{session_id}/interview",
-            json={"input": "Developers", "reply_to": interaction_id},
+            json={"result": "Developers", "interaction_id": interaction_id},
         )
         assert second.status_code == 200
         assert second.json() == {
@@ -115,11 +112,30 @@ class TestInterviewFlow:
             return Brief(topic="ignored", goal="ignored", audience="ignored")
 
         monkeypatch.setattr(agents_module.Interviewer, "run", fake_run)
-        response = api.client.post(
-            "/sessions/does-not-exist/interview", json={"input": "hi"}
-        )
+        response = api.client.post("/sessions/does-not-exist/interview", json={})
         assert response.status_code == 404
 
     def test_unknown_session_events_is_404(self, api: _API) -> None:
         response = api.client.get("/sessions/does-not-exist/events")
         assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"result": "untargeted"}, {"interaction_id": "future"}, {"input": "legacy"}],
+)
+def test_resolution_requires_explicit_target_and_result(
+    api: _API, body: dict[str, str]
+) -> None:
+    session_id = _new_session(api.client)
+    response = api.client.post(f"/sessions/{session_id}/interview", json=body)
+    assert response.status_code == 422
+
+
+def test_unknown_interaction_is_404(api: _API) -> None:
+    session_id = _new_session(api.client)
+    response = api.client.post(
+        f"/sessions/{session_id}/interview",
+        json={"interaction_id": "future", "result": "answer"},
+    )
+    assert response.status_code == 404

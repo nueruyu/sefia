@@ -1,3 +1,4 @@
+import json
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Protocol, TypeVar
@@ -10,12 +11,14 @@ T = TypeVar("T")
 MaybeAwaitable = T | Awaitable[T]
 
 
-@dataclass(frozen=True)
-class InputRequest:
-    """An external-input request rendered by a CLI reporter."""
+class InteractionRequest(Protocol):
+    """An opaque JSON-compatible request supplied by an integration."""
 
-    interaction_id: str
-    prompt: str
+    @property
+    def interaction_id(self) -> str: ...
+
+    @property
+    def payload(self) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -48,9 +51,9 @@ class CLIReporter(Protocol):
         session: ResolvedSession,
     ) -> MaybeAwaitable[None]: ...
 
-    def on_input_request(
+    def on_interaction_request(
         self,
-        request: InputRequest,
+        request: InteractionRequest,
     ) -> MaybeAwaitable[None]: ...
 
     def on_input_prompt_delta(
@@ -88,15 +91,15 @@ class DefaultCLIReporter(CLIReporter):
             typer.secho(f"> Resuming session {session.session_id}", bold=True)
 
     @override
-    def on_input_request(self, request: InputRequest) -> None:
+    def on_interaction_request(self, request: InteractionRequest) -> None:
         typer.echo()
         typer.secho(
-            f"[INPUT_REQUIRED:{request.interaction_id}]",
+            f"[INTERACTION_REQUIRED:{request.interaction_id}]",
             fg=typer.colors.YELLOW,
             bold=True,
             nl=False,
         )
-        typer.echo(f" {request.prompt}")
+        typer.echo(f" {json.dumps(request.payload, ensure_ascii=False)}")
         typer.echo()
 
     @override
@@ -122,9 +125,8 @@ class DefaultCLIReporter(CLIReporter):
     @override
     def on_interrupted(self, session: ResolvedSession) -> None:
         typer.echo()
-        typer.secho("WAITING FOR INPUT", fg=typer.colors.YELLOW, bold=True)
-        typer.echo("Session interrupted to wait for your input.")
-        typer.echo("To resume, run the script again with your input.")
+        typer.secho("EXECUTION PAUSED", fg=typer.colors.YELLOW, bold=True)
+        typer.echo("The session was interrupted and can be resumed later.")
 
     @override
     def on_inference_error(self, error: InferenceError) -> None:

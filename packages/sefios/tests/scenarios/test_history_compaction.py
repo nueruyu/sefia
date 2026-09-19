@@ -14,13 +14,13 @@ from sefia import HistoryStorage, Policy, Tools
 from sefia.inference import ToolCallResult
 from sefia.llm import DecisionPrompt, LLMCompletion, PromptRenderer
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
-from typing_extensions import override
-
 from sefios import SessionScope, SQLitePersistence, domain
-from sefios.exceptions import InputRequired
+from sefios.exceptions import InteractionRequired
 from sefios.history_storages import SessionHistoryStorage
+from sefios.interactions import InteractionChannel
 from sefios.middleware import HistoryCompactor
-from sefios.tools import Input, InputRequest
+from sefios.tools import Input
+from typing_extensions import override
 
 infer = domain(
     "packages.sefios.tests.scenarios.test_history_compaction", version="1"
@@ -86,13 +86,6 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
     make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
     make_history_storage: Callable[[], HistoryStorage] | None,
 ) -> None:
-    seen: list[InputRequest] = []
-    answers: dict[str, str] = {}
-
-    def get_input(request: InputRequest) -> str | None:
-        seen.append(request)
-        return answers.get(request.interaction_id)
-
     def make_scope(client: MockLLMClient) -> SessionScope:
         return SessionScope(
             llm_client=client,
@@ -117,17 +110,21 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
             _ASK_RESPONSE,
         ]
     )
-    with pytest.raises(InputRequired):
+    with pytest.raises(InteractionRequired) as pause_info:
         async with make_scope(mock_llm).session(session_id=_SESSION_ID):
-            await _Agent(Notes(), Input(get_input=get_input)).chat()
+            await _Agent(Notes(), Input()).chat()
 
     assert [len(prompt.history) for prompt in renderer.prompts] == [0, 2, 4, 2]
 
-    answers[seen[0].interaction_id] = "No, that's all."
-
+    channel = InteractionChannel(
+        SQLitePersistence(tmp_path / "sessions.sqlite3").create_session_storage(
+            _SESSION_ID
+        )
+    )
     resumed_llm = make_mock_llm([_RESULT_RESPONSE])
     async with make_scope(resumed_llm).session(session_id=_SESSION_ID):
-        result = await _Agent(Notes(), Input(get_input=get_input)).chat()
+        await channel.resolve(pause_info.value.interaction_id, "Alice")
+        result = await _Agent(Notes(), Input()).chat()
 
     assert result == "All done."
     assert len(resumed_llm.requests) == 1

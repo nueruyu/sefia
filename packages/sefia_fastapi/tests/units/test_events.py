@@ -16,7 +16,7 @@ def test_events_are_not_reexported_from_package_root():
 class TestSSEEvent:
     def test_names_are_the_wire_contract(self):
         assert SSEEvent.DELTA == "delta"
-        assert SSEEvent.INPUT_REQUIRED == "input_required"
+        assert SSEEvent.INTERACTION_REQUIRED == "interaction_required"
         assert SSEEvent.OUTPUT == "output"
         assert SSEEvent.COMPLETED == "completed"
         assert SSEEvent.EXECUTION_FAILED == "execution_failed"
@@ -87,7 +87,7 @@ class TestResponse:
         await asyncio.sleep(0)
 
         payload = Payload("x", datetime(2026, 7, 12, 6, 35, 48))
-        await events.publish("s1", "input_required", {"request": payload})
+        await events.publish("s1", "interaction_required", {"request": payload})
 
         chunk = await asyncio.wait_for(first_chunk, timeout=1)
         assert isinstance(chunk, str)  # narrow str | bytes for the `in` checks

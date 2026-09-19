@@ -142,7 +142,11 @@ def test_tutorial_cli_pause_resume(
 
     resumed = load_code(code, "hitl_cli", monkeypatch)
     assert resumed.cli.get_active_session() == session_id
-    done = CliRunner().invoke(resumed.app, ["--answer", "yes, approve"])
+    interaction_id = re.search(r"INTERACTION_REQUIRED:([^\]]+)", paused.output)
+    assert interaction_id is not None
+    done = CliRunner().invoke(
+        resumed.app, ["--interaction-id", interaction_id[1], "--answer", "yes, approve"]
+    )
     assert done.exit_code == 0, done.output
     assert "DONE: Approved report" in done.output
     assert len(llm.requests) == 2
@@ -177,14 +181,21 @@ def test_http_pause_resume(llm: MockLLMClient, monkeypatch: pytest.MonkeyPatch) 
         url = f"/sessions/{session_id}/turn"
         paused = client.post(url, json={"task": "durable execution"})
         assert paused.status_code == 200
-        assert paused.json() == {"status": "needs_input", "prompt": "Approve draft?"}
+        assert paused.json()["status"] == "interaction_required"
+        assert paused.json()["request"] == {"type": "input", "prompt": "Approve draft?"}
+        interaction_id = paused.json()["interaction_id"]
     assert len(llm.requests) == 1
 
     resumed = load_code(code, "doc_server", monkeypatch)
     with TestClient(resumed.app) as raw_client:
         client = cast(HTTPClient, raw_client)
         done = client.post(
-            url, json={"task": "durable execution", "input": "yes, approve"}
+            url,
+            json={
+                "task": "durable execution",
+                "interaction_id": interaction_id,
+                "result": "yes, approve",
+            },
         )
         assert done.status_code == 200
         assert done.json()["status"] == "done"

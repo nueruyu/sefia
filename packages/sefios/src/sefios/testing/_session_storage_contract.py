@@ -1,5 +1,6 @@
 """Reusable pytest contract for ``SessionStorage`` implementations."""
 
+import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TypeAlias
@@ -55,6 +56,31 @@ class SessionStorageContract(ABC):
         reopened = self.make_session_storage()
         assert await reopened.get("first", dict) is None
         assert await reopened.get("second", dict) == {"value": 2}
+
+    async def test_conditional_insert_survives_reopening(self) -> None:
+        assert await self.make_session_storage().set_if_absent("a/b", "first", str)
+        assert not await self.make_session_storage().set_if_absent("a/b", "second", str)
+        assert await self.make_session_storage().get("a/b", str) == "first"
+
+    async def test_concurrent_conditional_insert(self) -> None:
+        stores = [self.make_session_storage() for _ in range(12)]
+        inserted = await asyncio.gather(
+            *(store.set_if_absent("race", i, int) for i, store in enumerate(stores))
+        )
+        assert sum(inserted) == 1
+        assert await self.make_session_storage().get("race", int) == inserted.index(
+            True
+        )
+
+    async def test_prefix_keys_survive_reopening(self) -> None:
+        keys = ["a/z", "a/b/c", "a/b", "other", "a/%?:日本語", "a.v1"]
+        for key in keys:
+            await self.make_session_storage().set(key, key, str)
+        reopened = self.make_session_storage()
+        assert await reopened.keys("a/") == sorted(keys[:3] + [keys[4]])
+        assert await reopened.keys("") == sorted(keys)
+        assert await reopened.keys("a/%") == [keys[4]]
+        assert await reopened.keys("missing") == []
 
 
 __all__ = ["SessionStorageContract", "SessionStorageFactory"]

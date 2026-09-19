@@ -12,7 +12,7 @@ try:
     from sefia_typer import (
         CLIReporter,
         DefaultCLIReporter,
-        InputRequest,
+        InteractionRequest,
         ResolvedSession,
     )
 except ImportError as e:
@@ -32,6 +32,6 @@ __all__ = [
     "CLIReporter",
     "DefaultCLIReporter",
     "CostReportingCLIReporter",
-    "InputRequest",
+    "InteractionRequest",
     "ResolvedSession",
 ]

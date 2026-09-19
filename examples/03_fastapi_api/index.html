@@ -217,7 +217,7 @@
         <div class="empty-state" id="empty-state">
           <div>
             <strong>Start an interview</strong>
-            <div>Send a vague content request. The agent should ask follow-up questions when details are missing.</div>
+            <div>Create a session, then answer the agent’s question.</div>
           </div>
         </div>
         <div class="messages" id="messages"></div>
@@ -226,11 +226,12 @@
       <form class="composer" id="composer">
         <textarea
           id="message-input"
+          disabled
           placeholder="Describe the content you want..."
         >I want an article about our new product.</textarea>
         <div class="composer-actions">
           <span class="muted">Enter sends. Shift+Enter adds a newline.</span>
-          <button class="primary" type="submit" id="send">Send</button>
+          <button class="primary" type="submit" id="send" disabled>Send</button>
         </div>
       </form>
     </main>
@@ -240,7 +241,7 @@
       let eventSource = null;
       let activeAssistantBubble = null;
       let pendingInteractionId = null;
-      let lastInputRequiredId = null;
+      let lastInteractionRequiredId = null;
       let streamingBubbleId = null;
       let streamingText = "";
       let isSending = false;
@@ -259,8 +260,8 @@
 
       function setSending(value) {
         isSending = value;
-        sendButton.disabled = value;
-        inputElement.disabled = value;
+        sendButton.disabled = value || !pendingInteractionId;
+        inputElement.disabled = value || !pendingInteractionId;
       }
 
       function parseEventData(data) {
@@ -289,7 +290,7 @@
         emptyStateElement.hidden = false;
         activeAssistantBubble = null;
         pendingInteractionId = null;
-        lastInputRequiredId = null;
+        lastInteractionRequiredId = null;
         streamingBubbleId = null;
         streamingText = "";
       }
@@ -346,24 +347,26 @@
         chatLogElement.scrollTop = chatLogElement.scrollHeight;
       }
 
-      function handleInputRequired(data) {
+      function handleInteractionRequired(data) {
         pendingInteractionId = data.interaction_id;
+        setSending(isSending);
         streamingBubbleId = null;
-        if (lastInputRequiredId === data.interaction_id) {
+        if (lastInteractionRequiredId === data.interaction_id) {
           setStatus("Waiting for your reply");
           return;
         }
-        lastInputRequiredId = data.interaction_id;
-        setAssistantMessage(data.prompt);
+        lastInteractionRequiredId = data.interaction_id;
+        setAssistantMessage(data.request.prompt);
         setStatus("Waiting for your reply");
       }
 
       function handleCompleted(data) {
         pendingInteractionId = null;
-        lastInputRequiredId = null;
+        lastInteractionRequiredId = null;
         streamingBubbleId = null;
         setAssistantMessage(formatBrief(data.brief));
         setStatus("Completed");
+        setSending(false);
       }
 
       function connectEvents() {
@@ -380,8 +383,8 @@
         eventSource.addEventListener("delta", (event) => {
           handleDelta(parseEventData(event.data));
         });
-        eventSource.addEventListener("input_required", (event) => {
-          handleInputRequired(parseEventData(event.data));
+        eventSource.addEventListener("interaction_required", (event) => {
+          handleInteractionRequired(parseEventData(event.data));
         });
         eventSource.addEventListener("completed", () => {
           setStatus("Completed");
@@ -408,23 +411,24 @@
           clearChat();
         }
         connectEvents();
-        return data;
-      }
-
-      async function ensureSession() {
-        if (!sessionId) {
-          await createSession({ resetChat: false });
+        setSending(true);
+        try {
+          const turn = await postJSON(`/sessions/${sessionId}/interview`, {});
+          if (turn.status === "interaction_required") handleInteractionRequired(turn);
+          else handleCompleted(turn);
+        } finally {
+          setSending(false);
         }
+        return data;
       }
 
       async function sendMessage() {
         const input = inputElement.value.trim();
-        if (!input || isSending) {
+        if (!input || isSending || !pendingInteractionId || !sessionId) {
           return;
         }
 
-        await ensureSession();
-        const replyTo = pendingInteractionId;
+        const interactionId = pendingInteractionId;
         pendingInteractionId = null;
         appendMessage("user", input);
         activeAssistantBubble = appendMessage("assistant", "Thinking...");
@@ -433,15 +437,15 @@
         streamingText = "";
         inputElement.value = "";
         setSending(true);
-        setStatus(replyTo ? "Sending reply..." : "Starting interview...");
+        setStatus(interactionId ? "Sending reply..." : "Starting interview...");
 
         try {
           const result = await postJSON(`/sessions/${sessionId}/interview`, {
-            input,
-            reply_to: replyTo,
+            result: input,
+            interaction_id: interactionId,
           });
-          if (result.status === "input_required") {
-            handleInputRequired(result);
+          if (result.status === "interaction_required") {
+            handleInteractionRequired(result);
           } else {
             handleCompleted(result);
           }

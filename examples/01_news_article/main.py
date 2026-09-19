@@ -63,15 +63,15 @@ async def _write(article_request: ArticleRequest, sources: list[str]) -> NewsArt
 @async_command
 async def chat(
     message: Annotated[
-        list[str],
+        list[str] | None,
         typer.Argument(
-            help="The input for a new session, or an answer to resume an existing one.",
+            help="Result for an existing interaction; omit to start.",
         ),
-    ],
-    reply_to: Annotated[
+    ] = None,
+    interaction_id: Annotated[
         str | None,
         typer.Option(
-            "--reply-to",
+            "--interaction-id",
             help="The input interaction ID to answer.",
         ),
     ] = None,
@@ -104,7 +104,12 @@ async def chat(
         model=model,
         policies=[VerbosePolicy()] if verbose else None,
     ) as session:
-        await session.accept_input(message, reply_to=reply_to)
+        if message is not None:
+            if interaction_id is None:
+                raise typer.BadParameter(
+                    "Provide --interaction-id from the pending request."
+                )
+            await session.resolve_interaction(interaction_id, " ".join(message))
 
         article_request = await _clarify()
         sources = await _research(article_request)

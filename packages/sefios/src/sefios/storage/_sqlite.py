@@ -93,3 +93,30 @@ class SQLiteSessionStorage(SessionStorage):
     @override
     async def delete(self, key: str) -> None:
         await asyncio.to_thread(self._delete, key)
+
+    def _insert(self, key: str, value: bytes) -> bool:
+        with self._connection() as connection, connection:
+            cursor = connection.execute(
+                "INSERT INTO sefia_session_state (session_id, key, value) "
+                "VALUES (?, ?, ?) ON CONFLICT (session_id, key) DO NOTHING",
+                (self._session_id, key, value),
+            )
+            return cursor.rowcount == 1
+
+    def _keys(self, prefix: str) -> list[str]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT key FROM sefia_session_state "
+                "WHERE session_id = ? AND substr(key, 1, length(?)) = ? ORDER BY key",
+                (self._session_id, prefix, prefix),
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    @override
+    async def set_if_absent(self, key: str, value: Any, type_hint: type) -> bool:
+        data = await self._serializer.serialize(value, type_hint)
+        return await asyncio.to_thread(self._insert, key, data)
+
+    @override
+    async def keys(self, prefix: str) -> list[str]:
+        return await asyncio.to_thread(self._keys, prefix)

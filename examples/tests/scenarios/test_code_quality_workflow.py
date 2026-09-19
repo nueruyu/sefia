@@ -105,8 +105,8 @@ class TestCodeQualityWorkflow:
         )
 
         await workflow.chat.__wrapped__(
-            message=["Review my project"],
-            reply_to=None,
+            message=None,
+            interaction_id=None,
             session_id=None,
             model="gpt-4o",
             verbose=False,
@@ -143,8 +143,8 @@ class TestCodeQualityWorkflow:
         )
 
         await workflow.chat.__wrapped__(
-            message=["Review my project"],
-            reply_to=None,
+            message=None,
+            interaction_id=None,
             session_id=None,
             model="gpt-4o",
             verbose=False,
