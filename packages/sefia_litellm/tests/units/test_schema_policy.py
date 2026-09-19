@@ -42,14 +42,6 @@ def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
                 "type": "object",
                 "properties": {"query": {"type": "string"}},
                 "required": ["query"],
-            },
-            "additionalProperties to false",
-        ),
-        (
-            {
-                "type": "object",
-                "properties": {"query": {"type": "string"}},
-                "required": ["query"],
                 "additionalProperties": True,
             },
             "additionalProperties to false",
@@ -72,7 +64,7 @@ def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
         ),
     ],
 )
-def test_incompatible_raw_tool_schema_is_rejected_without_rewriting(
+def test_incompatible_raw_tool_schema_is_rejected(
     raw_schema: dict[str, Any], message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
@@ -153,3 +145,42 @@ def test_generated_schema_is_corrected_recursively() -> None:
         "required": ["value"],
         "additionalProperties": False,
     }
+
+
+@pytest.mark.parametrize("location", ["root", "property", "items", "$defs", "anyOf"])
+def test_raw_tool_schema_closes_objects(location: str) -> None:
+    object_schema: JsonObject = {
+        "title": "SearchArguments",
+        "type": "object",
+        "properties": {"query": {"title": "Query", "type": "string"}},
+        "required": ["query"],
+    }
+    closed_schema = {**object_schema, "additionalProperties": False}
+    wrappers: dict[str, JsonObject] = {
+        "root": object_schema,
+        "property": {
+            "type": "object",
+            "properties": {"search": object_schema},
+            "required": ["search"],
+            "additionalProperties": False,
+        },
+        "items": {"type": "array", "items": object_schema},
+        "$defs": {"$defs": {"Search": object_schema}, "$ref": "#/$defs/Search"},
+        "anyOf": {"anyOf": [object_schema, {"type": "null"}]},
+    }
+    expected: dict[str, JsonObject] = {
+        "root": closed_schema,
+        "property": {
+            "type": "object",
+            "properties": {"search": closed_schema},
+            "required": ["search"],
+            "additionalProperties": False,
+        },
+        "items": {"type": "array", "items": closed_schema},
+        "$defs": {"$defs": {"Search": closed_schema}, "$ref": "#/$defs/Search"},
+        "anyOf": {"anyOf": [closed_schema, {"type": "null"}]},
+    }
+
+    prepared = prepare_schema(deepcopy(wrappers[location]), USER_DEFINED_SCHEMA_POLICY)
+
+    assert prepared.wire_schema == expected[location]

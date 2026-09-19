@@ -71,7 +71,7 @@ GENERATED_SCHEMA_POLICY = SchemaPolicy(
 
 USER_DEFINED_SCHEMA_POLICY = SchemaPolicy(
     constraints=STRICT_OUTPUT_CONSTRAINTS,
-    missing_additional_properties=MissingFieldAction.REJECT,
+    missing_additional_properties=MissingFieldAction.ADD,
     missing_required_properties=MissingFieldAction.REJECT,
     one_of=OneOfAction.REJECT,
     mappings=MappingAction.REJECT,

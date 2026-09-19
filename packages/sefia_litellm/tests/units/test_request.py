@@ -136,3 +136,32 @@ def test_request_encodes_native_tool_call_history_for_wire_schema() -> None:
             "arguments": ('{"labels":[{"key":"important","value":2}]}'),
         },
     }
+
+
+def test_request_closes_user_tool_schema_without_mutating_original() -> None:
+    raw_schema = {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+    }
+    document = JsonSchemaDocument.from_mapping(raw_schema)
+    tool = StepTool(
+        name="search",
+        description="",
+        arguments=document,
+        schema_source=ToolSchemaSource.USER_DEFINED,
+    )
+
+    request = build_completion_request(
+        messages=[],
+        tools=[tool],
+        decision_spec=None,
+        client_kwargs={},
+        stream=False,
+    )
+
+    assert request.api_kwargs["tools"][0]["function"]["parameters"] == {
+        **raw_schema,
+        "additionalProperties": False,
+    }
+    assert document.to_dict() == raw_schema

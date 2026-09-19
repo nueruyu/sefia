@@ -218,16 +218,18 @@ keyword arguments, so a `Protocol` and the implementation it narrows must agree 
 parameter names, not just behavior — nothing checks this at runtime, so a mismatch
 surfaces as a tool-execution error on the first call rather than at discovery time.
 A `JsonSchemaToolEntry` instead carries its parameters as a raw JSON Schema (no
-signature to introspect) and passes that schema through verbatim. Provider encoding
-is applied only to schemas derived from Python types, where Sefia retains the
-original Pydantic validation model and can decode the representation safely. A raw
-schema has no equivalent typed contract, so Sefia does not rewrite it for provider
-compatibility. It must already use the strict structured-output subset
-supported by the verified providers: object properties are required, objects set
-`additionalProperties` to `false`, unions use `anyOf` rather than `oneOf`, and
-unsupported composition keywords such as `allOf` and conditional schemas are
-omitted. Incompatible schemas fail when the provider-facing step-decision schema is
-built, before an LLM request is made.
+signature to introspect) and passes that schema unchanged to the provider adapter.
+In `sefia-litellm`, representation-changing provider encoding is applied only to
+schemas derived from Python types, where Sefia retains the original Pydantic
+validation model and can decode the representation safely. For raw schemas, the
+adapter adds missing `additionalProperties: false` to object schemas recursively
+on a send-only copy, leaving the original schema unchanged. This restricts the
+model to declared keys; explicitly open objects (`additionalProperties: true` or
+a value schema) remain unsupported. Raw schemas must otherwise already use the
+strict structured-output subset: object properties are required, unions use
+`anyOf` rather than `oneOf`, and unsupported composition keywords such as `allOf`
+and conditional schemas are omitted. Incompatible schemas fail during request
+preparation, before an LLM request is made.
 
 **Execution** (`_tool_execution.py`, engraved through
 `InferenceExecutor._call_tools`): each requested call is matched
