@@ -31,7 +31,6 @@ class InputResult:
 InputProvider = Callable[[InputRequest], MaybeAwaitable[str | None]]
 InputRequestCallback = Callable[[InputRequest], MaybeAwaitable[None]]
 InputCompleteCallback = Callable[[InputResult], MaybeAwaitable[None]]
-InputPromptDeltaCallback = Callable[[str, str], MaybeAwaitable[None]]
 
 
 async def no_input(_: InputRequest) -> str | None:
