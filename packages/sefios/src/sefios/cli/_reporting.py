@@ -29,9 +29,9 @@ class CLIReporting:
                 )
             )
 
-    async def input_prompt_delta(self, preview_id: str, text: str) -> None:
+    async def input_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self.reporter is not None:
-            await maybe_await(self.reporter.on_input_prompt_delta(preview_id, text))
+            await maybe_await(self.reporter.on_input_prompt_delta(interaction_id, text))
 
     async def output(self, message: OutputMessage) -> None:
         if self.reporter is not None:

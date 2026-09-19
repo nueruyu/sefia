@@ -333,8 +333,8 @@
       }
 
       function handleDelta(data) {
-        if (streamingBubbleId !== (data.preview_id ?? data.interaction_id)) {
-          streamingBubbleId = data.preview_id ?? data.interaction_id;
+        if (streamingBubbleId !== data.interaction_id) {
+          streamingBubbleId = data.interaction_id;
           streamingText = "";
         }
         if (!activeAssistantBubble) {
@@ -380,13 +380,6 @@
         eventSource.addEventListener("delta", (event) => {
           handleDelta(parseEventData(event.data));
         });
-        eventSource.addEventListener("input_bound", (event) => {
-          const data = JSON.parse(event.data);
-          if (streamingBubbleId === data.preview_id) {
-            streamingBubbleId = data.interaction_id;
-          }
-        });
-
         eventSource.addEventListener("input_required", (event) => {
           handleInputRequired(parseEventData(event.data));
         });

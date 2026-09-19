@@ -33,10 +33,9 @@ separately for topic, goal, and audience.
 The UI streams the `delta` event — the *parsed* prompt and message text — rather
 than the raw `@infer` response, so the internal structured envelope never
 reaches the browser. Each delta carries `type` (`input` for a `get_input`
-prompt, `output` for a `send_output` message). Input deltas identify the bubble
-with `preview_id`; `input_bound` maps that preview to the `interaction_id` used
-for replies. Output deltas retain `interaction_id`. The discrete `input_required`
-/ `output` events close the bubble and carry its complete text.
+prompt, `output` for a `send_output` message) and the `interaction_id` of the
+bubble it belongs to; the discrete `input_required` / `output` events close that
+bubble.
 
 The UI is plain HTML served by the FastAPI example, so it remains easy to inspect
 and does not require a separate frontend toolchain.

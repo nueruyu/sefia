@@ -14,7 +14,6 @@ from .._input import (
     InputRequestCallback,
     InputResult,
     no_input,
-    preview_id_for,
     request_input,
 )
 
@@ -42,9 +41,9 @@ class Input:
         self._on_complete = on_complete
         self._on_prompt_delta = on_prompt_delta
 
-    async def _notify_prompt_delta(self, preview_id: str, text: str) -> None:
+    async def _notify_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self._on_prompt_delta is not None:
-            await maybe_await(self._on_prompt_delta(preview_id, text))
+            await maybe_await(self._on_prompt_delta(interaction_id, text))
 
     @GLYFF_DOMAIN.engrave(name="tools.input.get_input")
     async def get_input(
@@ -60,18 +59,21 @@ class Input:
         narration). If no input is immediately available, the current session
         is interrupted until it is provided.
         """
-        if current_tool_call_id_for(self.get_input) is None:
+        interaction_id = current_tool_call_id_for(self.get_input)
+        if interaction_id is None:
             raise RuntimeError(
                 "Input.get_input() must be invoked as a dispatched tool."
             )
+        request = InputRequest(
+            interaction_id=interaction_id,
+            prompt=prompt or "",
+        )
         return await request_input(
-            prompt or "", self._get_input, self._on_request, self._on_complete
+            request, self._get_input, self._on_request, self._on_complete
         )
 
     @preview(get_input)
     async def _stream_get_input(self, tool_call_id: str, events: ArgStream) -> None:
         async for event in events:
             if isinstance(event, StringDelta) and event.name == "prompt":
-                await self._notify_prompt_delta(
-                    preview_id_for(tool_call_id), event.text
-                )
+                await self._notify_prompt_delta(tool_call_id, event.text)

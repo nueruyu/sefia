@@ -21,7 +21,6 @@ class SSEEvent:
     """
 
     DELTA = "delta"
-    INPUT_BOUND = "input_bound"
     INPUT_REQUIRED = "input_required"
     OUTPUT = "output"
     COMPLETED = "completed"

@@ -262,21 +262,10 @@ async def test_input_tool_publishes_deltas_and_pause_over_public_sse(
         assert "".join(delta["text"] for delta in deltas) == "Your name?"
         assert {delta["type"] for delta in deltas} == {"input"}
         assert len(required) == 1
-        bindings = [
-            event["data"] for event in events if event["name"] == SSEEvent.INPUT_BOUND
-        ]
-        assert len(bindings) == 1
-        assert {delta["preview_id"] for delta in deltas} == {bindings[0]["preview_id"]}
-        assert (
-            bindings[0]["interaction_id"]
-            == pause.value.interaction_id
-            == required[0]["interaction_id"]
-        )
-        assert events.index(
-            next(e for e in events if e["name"] == SSEEvent.INPUT_BOUND)
-        ) < events.index(
-            next(e for e in events if e["name"] == SSEEvent.INPUT_REQUIRED)
-        )
+        assert {delta["interaction_id"] for delta in deltas} == {
+            pause.value.interaction_id,
+            required[0]["interaction_id"],
+        }
 
 
 async def test_input_and_output_deltas_use_independent_interaction_ids(
@@ -302,9 +291,7 @@ async def test_input_and_output_deltas_use_independent_interaction_ids(
 
         events = await reader
         ids_by_type = {
-            event["data"]["type"]: event["data"].get(
-                "preview_id", event["data"].get("interaction_id")
-            )
+            event["data"]["type"]: event["data"]["interaction_id"]
             for event in events
             if event["name"] == SSEEvent.DELTA
         }

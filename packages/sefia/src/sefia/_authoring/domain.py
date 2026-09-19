@@ -9,7 +9,6 @@ from typing_extensions import final
 from .._context import get_context
 from .._executor import InferenceExecutor
 from .._interfaces import InferenceMiddleware, Policy, StepMiddleware
-from .._tool_context import bind_tool_execution
 from ..event_system import EventPublisher
 from . import metadata
 
@@ -157,13 +156,13 @@ class Domain:
     ) -> Any:
         """Decorate a function using its qualified or explicit name."""
         if func is not None:
-            return self._glyff.engrave(bind_tool_execution(func))
+            return self._glyff.engrave(func)
         if not name:
             raise ValueError("An execution name cannot be empty.")
 
         def decorator(
             func: Callable[P, Awaitable[R]],
         ) -> Callable[P, Awaitable[R]]:
-            return self._glyff.engrave(bind_tool_execution(func), name=name)
+            return self._glyff.engrave(func, name=name)
 
         return decorator

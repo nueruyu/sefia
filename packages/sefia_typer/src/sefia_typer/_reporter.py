@@ -54,7 +54,7 @@ class CLIReporter(Protocol):
     ) -> MaybeAwaitable[None]: ...
 
     def on_input_prompt_delta(
-        self, preview_id: str, text: str
+        self, interaction_id: str, text: str
     ) -> MaybeAwaitable[None]: ...
 
     def on_output(self, message: OutputMessage) -> MaybeAwaitable[None]: ...
@@ -100,7 +100,7 @@ class DefaultCLIReporter(CLIReporter):
         typer.echo()
 
     @override
-    def on_input_prompt_delta(self, preview_id: str, text: str) -> None:
+    def on_input_prompt_delta(self, interaction_id: str, text: str) -> None:
         typer.echo(text, nl=False)
 
     @override

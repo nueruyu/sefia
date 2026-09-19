@@ -396,8 +396,7 @@ Use `allow_queued=True` only when earlier conversational input is acceptable.
 Multiple pending requests require `reply_to` to select the intended request.
 The primitive does not create a background waiter or a new workflow abstraction.
 
-For HTTP streaming, input deltas use `preview_id`. The `input_bound` event carries
-both `preview_id` and `interaction_id`; the subsequent `input_required` event
-contains the full prompt and `interaction_id`. A direct Python input request has
-no preview or binding event. Clients must be able to display `input_required`
-without first receiving a preview.
+For HTTP streaming, application-controlled input emits only the existing
+`input_required` event with the complete prompt and `interaction_id`. The Input
+tool's streamed prompt deltas continue to use its tool call ID as
+`interaction_id`; `require_input` has no preview stream.

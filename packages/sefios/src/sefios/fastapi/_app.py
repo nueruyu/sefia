@@ -19,7 +19,6 @@ from ..handlers import CostCalculator
 from ..persistence import MemoryPersistence, PersistenceProvider
 from ..sessions import SessionRegistry
 from ..tools import Input, InputRequest, InputResult, Output, OutputMessage
-from ._input_binding import InputBindingPublisher
 
 
 @final
@@ -81,14 +80,7 @@ class SefiaHTTP:
             on_message_delta=self._emit_output_delta,
         )
 
-        scope_policies: list[Policy] = [
-            Policy(
-                handlers=lambda: [
-                    CostCalculator(),
-                    InputBindingPublisher(self._emit_input_binding),
-                ]
-            )
-        ]
+        scope_policies: list[Policy] = [Policy(handlers=lambda: [CostCalculator()])]
         if policies is not None:
             scope_policies.extend(policies)
 
@@ -192,19 +184,8 @@ class SefiaHTTP:
     async def _complete_request(self, result: InputResult) -> None:
         await self._input.complete_request(result.interaction_id)
 
-    async def _emit_input_delta(self, preview_id: str, text: str) -> None:
-        await self._events.publish(
-            self._require_session_id(),
-            SSEEvent.DELTA,
-            {"type": "input", "preview_id": preview_id, "text": text},
-        )
-
-    async def _emit_input_binding(self, preview_id: str, interaction_id: str) -> None:
-        await self._events.publish(
-            self._require_session_id(),
-            SSEEvent.INPUT_BOUND,
-            {"preview_id": preview_id, "interaction_id": interaction_id},
-        )
+    async def _emit_input_delta(self, interaction_id: str, text: str) -> None:
+        await self._emit_delta("input", interaction_id, text)
 
     async def _emit_output_delta(self, interaction_id: str, text: str) -> None:
         await self._emit_delta("output", interaction_id, text)

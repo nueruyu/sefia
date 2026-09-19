@@ -88,7 +88,7 @@ submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 | `history_storages/` | `HistoryStorage` implementations (default: history in the run's glyff metadata). | `GlyffHistoryStorage` |
 | `_profiles.py` / `_authoring/metadata.py` | Per-call model selection and the decorator metadata store. | `Profile` |
 | `_tool_system/` | The tool system split by responsibility: `roles.py` owns `Tools[...]` and decorator metadata, `entries.py` owns definitions and executable entries, and `registry.py` owns registration and collection contracts. | `ToolEntry`, `SignatureToolEntry`, `JsonSchemaToolEntry`, `ToolDefinition`, `ToolRegistry`, `ToolCollector`, `Tools` |
-| `_tool_context.py` | The serving tool call context and the engrave bridge that observes its execution identity. | `current_tool_call_id`, `current_tool_call_id_for` |
+| `_tool_context.py` | The serving tool call's id and callable identity, bound around each `invoke` and read from a handler body. | `current_tool_call_id`, `current_tool_call_id_for` |
 | `_introspection.py` | Sefia-agnostic reflection: annotation unwrapping, method/field scanning for classes and `Protocol`s. | `unwrap_annotation`, `declared_methods`, `declared_fields`, `is_protocol` |
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
@@ -123,7 +123,7 @@ implementation noted in parentheses.
 | `_glyff.py` | Owns Sefios' runtime domain and stable names for its engraved tools. |
 | `_scope.py` | `SessionScope` — the configured front door that wires client + glyff + store + defaults. |
 | `persistence.py` | Persistence providers for execution, session state, and the session registry; memory is the default, with optional SQLite and JSON-file alternatives. |
-| `input.py` / `_input.py` | `require_input` authoring API; shared input lifecycle, values, and opaque ID generation. |
+| `input.py` / `_input.py` | `require_input` authoring API; shared input lifecycle and application interaction IDs. |
 | `_input_channel.py` | Persisted routing shared by tool and application input; binds the active channel and serializes sibling-task updates. |
 | `policies/` | `DefaultPolicy` (step cap, stagnation detection, HITL call composition). |
 | `middleware/` | `_max_steps`, `_retry`, `_stagnation`, `_input`, `_compaction` — control-seam behaviors. |

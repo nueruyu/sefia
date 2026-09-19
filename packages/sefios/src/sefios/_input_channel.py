@@ -41,8 +41,8 @@ class InputChannel:
     A channel binds persistence per context so one shared instance remains safe
     across concurrent sessions. Sibling tasks in one binding serialize channel
     updates; separate bindings must not concurrently write the same session.
-    Optional callbacks let an adapter observe new
-    requests and streamed prompt text without changing the routing state machine.
+    Optional callbacks let an adapter observe new requests and streamed prompt
+    text without changing the routing state machine.
     """
 
     def __init__(
@@ -152,9 +152,9 @@ class InputChannel:
             pending.pop(interaction_id, None)
             await self._save_pending(pending)
 
-    async def notify_prompt_delta(self, preview_id: str, text: str) -> None:
+    async def notify_prompt_delta(self, interaction_id: str, text: str) -> None:
         if self._on_prompt_delta is not None:
-            await maybe_await(self._on_prompt_delta(preview_id, text))
+            await maybe_await(self._on_prompt_delta(interaction_id, text))
 
     async def _pending_map(self) -> _PendingMap:
         store = self._store()
@@ -168,6 +168,7 @@ class InputChannel:
             if provided is None:
                 unresolved[interaction_id] = request
 
+        await self._save_pending(unresolved)
         return dict(unresolved)
 
     async def _save_pending(self, pending: _PendingMap) -> None:

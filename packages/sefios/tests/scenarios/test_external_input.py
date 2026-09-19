@@ -127,7 +127,7 @@ async def test_tool_and_application_requests_share_reply_routing() -> None:
             await require_input("Application?")
         with pytest.raises(InputRequired) as tool_pause:
             await tool_input()
-    assert tool_pause.value.interaction_id != "tool-call"
+    assert tool_pause.value.interaction_id == "tool-call"
     assert app_pause.value.interaction_id != tool_pause.value.interaction_id
     async with http.session(session_id=sid) as session:
         with pytest.raises(AmbiguousInputError):
