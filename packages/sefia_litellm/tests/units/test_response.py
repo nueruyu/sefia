@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -142,7 +143,9 @@ def test_preserves_reasoning_content() -> None:
     assert completion.reasoning_content == "The user wants the weather."
 
 
-def test_cost_is_none_if_calculation_fails(mocker: MockerFixture) -> None:
+def test_cost_is_none_if_calculation_fails(
+    mocker: MockerFixture, caplog: pytest.LogCaptureFixture
+) -> None:
     mocker.patch("litellm.cost_per_token", side_effect=Exception("API error"))
     response = ModelResponse(
         model="gpt-4o",
@@ -150,11 +153,23 @@ def test_cost_is_none_if_calculation_fails(mocker: MockerFixture) -> None:
         choices=[Choices(index=0, message=LiteLLMMessage(role="assistant"))],
     )
 
-    completion = decode_completion(
-        response, requested_model="gpt-4o", decision_format=None
-    )
+    with caplog.at_level(logging.WARNING, logger="sefia_litellm._response"):
+        completion = decode_completion(
+            response, requested_model="gpt-4o", decision_format=None
+        )
 
     assert completion.cost is None
+    cost_warnings = [
+        record
+        for record in caplog.records
+        if record.name == "sefia_litellm._response"
+        and record.getMessage().startswith("Failed to calculate cost for model")
+    ]
+    assert len(cost_warnings) == 1
+    assert cost_warnings[0].getMessage() == (
+        "Failed to calculate cost for model gpt-4o: API error"
+    )
+    assert cost_warnings[0].exc_info is None
 
 
 def test_empty_choices_are_a_completion_decoding_error() -> None:
