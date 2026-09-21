@@ -5,8 +5,8 @@ from typing import cast
 
 from typing_extensions import final, override
 
-from ..inference import ToolCallResult, ToolCallsDecision
-from ._prompt_renderer import DecisionPrompt, PromptRenderer
+from ..inference import HistoryItem, ToolCallResult, ToolCallsDecision
+from ._prompt_renderer import DecisionPrompt, PromptRenderer, RejectedDecision
 from .json_schema import JsonValue
 from .step_decision import StepTool
 
@@ -34,11 +34,7 @@ class MarkdownPromptRenderer(PromptRenderer):
         sections.append(self._render_arguments(prompt))
         if prompt.tools:
             sections.append(self._render_tools(prompt.tools))
-        if prompt.history:
-            sections.append(self._render_history(prompt))
         sections.append(f"## Response\n\n{prompt.response_instructions}")
-        if prompt.rejected is not None:
-            sections.append(self._render_rejection(prompt))
         return "\n\n".join(sections)
 
     @override
@@ -46,7 +42,7 @@ class MarkdownPromptRenderer(PromptRenderer):
         return self._compact_json(result.result)
 
     def _render_arguments(self, prompt: DecisionPrompt) -> str:
-        arguments = prompt.function.prompt_arguments
+        arguments = prompt.arguments
         if not arguments:
             return "## Task arguments\n\nNone."
         return "## Task arguments\n\n" + self._json_block(arguments)
@@ -62,9 +58,10 @@ class MarkdownPromptRenderer(PromptRenderer):
             f"- `{tool.name}`{description}\n  Arguments: {self._compact_json(schema)}"
         )
 
-    def _render_history(self, prompt: DecisionPrompt) -> str:
+    @override
+    def render_history(self, history: tuple[HistoryItem, ...]) -> str:
         records: list[JsonValue] = []
-        for item in prompt.history:
+        for item in history:
             if isinstance(item, ToolCallsDecision):
                 records.extend(
                     {
@@ -87,16 +84,16 @@ class MarkdownPromptRenderer(PromptRenderer):
                 )
         return "## Previous tool interactions\n\n" + self._json_block(records)
 
-    def _render_rejection(self, prompt: DecisionPrompt) -> str:
-        assert prompt.rejected is not None
+    @override
+    def render_rejection(self, rejected: RejectedDecision) -> str:
         previous = (
             "The previous response was empty."
-            if not prompt.rejected.content
-            else "Previous response:\n" + self._text_block(prompt.rejected.content)
+            if not rejected.content
+            else "Previous response:\n" + self._text_block(rejected.content)
         )
         return (
             "## Correct the previous response\n\n"
-            f"{previous}\n\nReason: {prompt.rejected.reason}\n\n"
+            f"{previous}\n\nReason: {rejected.reason}\n\n"
             "Return a corrected response matching the Response section."
         )
 

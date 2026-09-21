@@ -10,9 +10,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from sefia import HistoryStorage, Policy, Tools
-from sefia.inference import ToolCallResult
-from sefia.llm import DecisionPrompt, LLMCompletion, PromptRenderer
+from sefia import HistoryStorage, MiddlewareSet, Policy, Tools
+from sefia.inference import HistoryItem, ToolCallResult
+from sefia.llm import DecisionPrompt, LLMCompletion, PromptRenderer, RejectedDecision
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefios import SessionScope, SQLitePersistence, domain
 from sefios.exceptions import InteractionRequired
@@ -49,11 +49,21 @@ class Notes:
 class _RecordingRenderer(PromptRenderer):
     def __init__(self) -> None:
         self.prompts: list[DecisionPrompt] = []
+        self.histories: list[tuple[HistoryItem, ...]] = []
 
     @override
     def render(self, prompt: DecisionPrompt) -> str:
         self.prompts.append(prompt)
         return "prompt"
+
+    @override
+    def render_history(self, history: tuple[HistoryItem, ...]) -> str:
+        self.histories.append(history)
+        return "history"
+
+    @override
+    def render_rejection(self, rejected: RejectedDecision) -> str:
+        return "rejection"
 
     @override
     def render_tool_result(self, result: ToolCallResult) -> str:
@@ -98,7 +108,9 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
         )
 
     compaction_policy = Policy(
-        middleware=lambda: [HistoryCompactor(max_items=5, keep_items=2)]
+        middleware=lambda: MiddlewareSet(
+            step=(HistoryCompactor(max_items=5, keep_items=2),)
+        )
     )
     renderer = _RecordingRenderer()
 
@@ -114,7 +126,8 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
         async with make_scope(mock_llm).session(session_id=_SESSION_ID):
             await _Agent(Notes(), Input()).chat()
 
-    assert [len(prompt.history) for prompt in renderer.prompts] == [0, 2, 4, 2]
+    assert [len(request["messages"]) for request in mock_llm.requests] == [1, 2, 2, 2]
+    assert [len(history) for history in renderer.histories] == [2, 4, 2]
 
     channel = InteractionChannel(
         SQLitePersistence(tmp_path / "sessions.sqlite3").create_session_storage(
@@ -130,7 +143,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
     assert len(resumed_llm.requests) == 1
     resumed_results = [
         item.result
-        for item in renderer.prompts[-1].history
+        for item in renderer.histories[-1]
         if isinstance(item, ToolCallResult)
     ]
     assert "noted: two" in resumed_results

@@ -38,6 +38,18 @@ def test_request_skips_structured_output_without_decision_model() -> None:
     assert request.messages == [{"role": "user", "content": "Hello"}]
 
 
+def test_request_preserves_developer_role() -> None:
+    request = build_completion_request(
+        messages=[Message(role="developer", content="Reply briefly.")],
+        tools=None,
+        decision_spec=None,
+        client_kwargs={},
+        stream=False,
+    )
+
+    assert request.messages == [{"role": "developer", "content": "Reply briefly."}]
+
+
 def test_request_sends_correct_request_to_litellm():
     messages = [Message(role="user", content="Hello")]
     tools = [

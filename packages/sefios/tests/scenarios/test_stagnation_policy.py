@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sefia import Policy, Tools, policy
+from sefia import MiddlewareSet, Policy, Tools, policy
 from sefia.llm import LLMCompletion
 from sefia.testing import (
     MockLLMClient,
@@ -47,7 +47,11 @@ class Researcher:
     def __init__(self, web: WebToolkit):
         self._web = web
 
-    @policy(Policy(middleware=lambda: [StagnationDetector(max_repeats=3)]))
+    @policy(
+        Policy(
+            middleware=lambda: MiddlewareSet(step=(StagnationDetector(max_repeats=3),))
+        )
+    )
     @infer
     async def generate_report(self, topic: str) -> Report:
         """

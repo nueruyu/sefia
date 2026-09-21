@@ -95,7 +95,7 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
         "return_result",
     ]
     assert sent["decision_spec"] is None
-    assert observer.prompt == "prompt"
+    assert observer.messages == tuple(sent["messages"])
     rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
     assert "return_result" in rendered_prompt.response_instructions
     assert rendered_prompt.tools == ()

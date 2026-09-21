@@ -5,6 +5,7 @@ from sefia.event_system import EventPublisher
 from sefia.llm._arg_stream import ToolArgStreamer
 from sefia.llm._strategy import _StrategyDecisionObserver
 from sefia.llm.events import BeforeLLMCall, LLMReasoningTokenReceived, LLMTokenReceived
+from sefia.llm import Message
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import OutputStreamEvent, Scalar, StringDelta, StringEnd
 from sefia.streaming import (
@@ -26,12 +27,14 @@ async def test_observer_publishes_prompt_and_tokens() -> None:
     spec = Mock(spec=DecisionSpec)
     observer = _StrategyDecisionObserver(publisher, spec, None)
 
-    await observer.before_request("prompt")
+    await observer.before_request((Message(role="user", content="prompt"),))
     await observer.response_text("token")
     await observer.reasoning_text("thinking")
 
     assert [c.args[0] for c in publisher.publish.await_args_list] == [
-        BeforeLLMCall(prompt="prompt", decision_spec=spec),
+        BeforeLLMCall(
+            messages=(Message(role="user", content="prompt"),), decision_spec=spec
+        ),
         LLMTokenReceived(token="token"),
         LLMReasoningTokenReceived(token="thinking"),
     ]

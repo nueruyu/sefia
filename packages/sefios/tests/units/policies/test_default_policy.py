@@ -9,7 +9,7 @@ from sefios.policies import DefaultPolicy
 def test_default_policy_includes_input_composition():
     middleware = DefaultPolicy().create_middleware()
 
-    assert [type(m) for m in middleware] == [
+    assert [type(m) for m in middleware.step] == [
         StepLimiter,
         StagnationDetector,
         InputCallComposer,

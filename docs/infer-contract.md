@@ -46,6 +46,26 @@ Treat arguments as replay inputs. Prefer stable values — IDs, paths, URLs, tex
 or structured data — over mutable objects whose meaning can change between
 invocations.
 
+### Composing LLM messages
+
+By default, all non-receiver arguments remain ordinary task data in Sefia's
+standard task prompt. A policy may install `MessageMiddleware` through
+`MiddlewareSet(message=(...,))` to create provider-neutral `Message` objects from
+selected arguments. The middleware receives `MessageContext.function`, including
+the bound arguments, type hints, and prompt arguments. Sefia does not assign
+meaning to annotations, argument names, or application models.
+
+Application middleware returns a `MessagePlan` containing its messages and exactly
+one `TaskPrompt`. It may place that prompt among the messages and remove consumed
+arguments from `TaskPrompt.arguments`. Unconsumed arguments retain the usual JSON
+rendering. Keep `TaskPrompt(arguments={})` when every argument is consumed: Sefia
+still uses it to render the function instructions and decision protocol once.
+
+For example, an application can define its own `Annotated` metadata for a
+conversation argument and interpret it inside its own `MessageMiddleware`. This is
+an application convention, not a Sefia annotation scheme. Sefia appends its tool
+execution history after the application plan and repair feedback last.
+
 ## Return types
 
 Return types should be Pydantic-schema-compatible: primitives, Pydantic models,

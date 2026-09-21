@@ -11,7 +11,7 @@ implement each step.
 | --- | --- | --- |
 | `@infer` decorator | `packages/sefia/src/sefia/_authoring/domain.py` | Wraps a function so calling it runs an inference instead of the body. |
 | `InferenceExecutor` | `packages/sefia/src/sefia/_executor.py` | Owns the step loop, tool execution, middleware. |
-| `LLMInferenceStrategy` | `packages/sefia/src/sefia/llm/_strategy.py` | Turns the function + history into a prompt + schema, parses the reply. |
+| `LLMInferenceStrategy` | `packages/sefia/src/sefia/llm/_strategy.py` | Builds the decision specification, passes a composed message plan to the transport, and validates the reply. |
 | `DefaultToolCollector` | `packages/sefia/src/sefia/tool_collectors/_default.py` | Discovers tools from the bound object and its held dependencies. |
 | `Session` / `SessionContext` | `packages/sefia/src/sefia/_session.py`, `_context.py` | The durable, contextvar-scoped run; wraps a `glyff.Session`. |
 | glyff | [nueruyu/glyff](https://github.com/nueruyu/glyff) | Content-addressed engrave/replay underneath every engraved call. |
@@ -55,7 +55,8 @@ and return types, see [infer-contract.md](./infer-contract.md).
 
 ```
 loop:
-  decision = strategy.decide_next_step(function_info, history, tools)   # one model call
+  plan = compose_message_middleware(MessagePlan.default(function_info))
+  decision = strategy.decide_next_step(function_info, plan, history, tools)
   if decision is FinalAnswer:  return decision.answer
   if decision is ToolCalls:    history += decision; history += run(decision.calls)
 ```
@@ -84,8 +85,8 @@ loop:
 domain concepts:
 
 1. `DecisionSpec` describes which next decisions are valid.
-2. `DecisionRequest` gathers the task, available tools, prior interactions, and any
-   rejected response.
+2. `MessagePlan` carries application messages and one `TaskPrompt` placeholder;
+   `DecisionRequest` carries that plan, prior tool interactions, and any rejected response.
 3. `DecisionTransport` supplies the response instructions for its protocol and asks
    `PromptRenderer` to produce the required text.
 4. `LLMClient.complete()` returns a provider-neutral `LLMCompletion`.
@@ -127,11 +128,10 @@ result schema interfaces and decoded values live in `sefia.llm.result_format` an
 `sefia.llm.structured_data`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
-`MarkdownPromptRenderer` owns the textual representation of instructions, arguments,
-tool descriptions, prior tool interactions, tool results, response forms, and repair
-feedback. It returns text, not protocol messages. A
-transport chooses which concepts are textual, owns the response instructions, invokes
-the renderer, sends protocol messages, and decodes the reply.
+`MarkdownPromptRenderer` independently renders the task prompt, textual tool history,
+tool results, and repair feedback. A transport expands the plan into messages,
+appends Sefia execution history after application messages, and appends repair
+feedback last. It owns response instructions and the decision protocol.
 `StructuredDecisionTransport` requests structured output;
 `PromptedDecisionTransport` asks for the same JSON decision in ordinary response
 text; `sefia.llm.transports.NativeDecisionTransport` exposes application tools and a
@@ -147,7 +147,7 @@ first **repaired in place**: the strategy creates a new request containing the
 invalid output and validation error, and asks again, up to
 `max_repair_attempts` times (default 2; configurable on
 `LLMInferenceStrategy` / `Session` / `SessionScope`). The rejected response lives only
-inside that one (engraved) step's prompt — it never enters the step history, so an
+inside that one (engraved) step's final message sequence — it never enters the step history, so an
 invalid decision is never persisted. Only when the budget is spent does the
 `InvalidInferenceResponseError` propagate as described below.
 

@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, TypeAlias
+from typing import Any, Awaitable, Callable
 
 from .._history import StepHistory
+from .._message_plan import MessagePlan
 from .._tool_system import ToolRegistry
-from ..inference import StepDecision
+from ..inference import FunctionInfo, StepDecision
 
 
 @dataclass
@@ -39,6 +40,12 @@ class DecisionContext:
     """Context for middleware wrapping decision generation inside a durable step."""
 
     step: int
+
+
+@dataclass(frozen=True)
+class MessageContext:
+    step: int
+    function: FunctionInfo
 
 
 class InferenceMiddleware(ABC):
@@ -88,4 +95,20 @@ class DecisionMiddleware(ABC):
     ) -> StepDecision: ...
 
 
-Middleware: TypeAlias = InferenceMiddleware | StepMiddleware | DecisionMiddleware
+class MessageMiddleware(ABC):
+    """Wraps application message composition inside one durable decision."""
+
+    @abstractmethod
+    async def wrap(
+        self,
+        ctx: MessageContext,
+        nxt: Callable[[], Awaitable[MessagePlan]],
+    ) -> MessagePlan: ...
+
+
+@dataclass(frozen=True)
+class MiddlewareSet:
+    inference: tuple[InferenceMiddleware, ...] = ()
+    step: tuple[StepMiddleware, ...] = ()
+    decision: tuple[DecisionMiddleware, ...] = ()
+    message: tuple[MessageMiddleware, ...] = ()

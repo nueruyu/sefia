@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from ..inference import FunctionInfo, HistoryItem, ToolCallResult
 from .step_decision import StepTool
@@ -14,10 +16,9 @@ class RejectedDecision:
 @dataclass(frozen=True)
 class DecisionPrompt:
     function: FunctionInfo
+    arguments: Mapping[str, Any]
     tools: tuple[StepTool, ...]
-    history: tuple[HistoryItem, ...]
     response_instructions: str
-    rejected: RejectedDecision | None = None
 
 
 class PromptRenderer(ABC):
@@ -25,6 +26,12 @@ class PromptRenderer(ABC):
 
     @abstractmethod
     def render(self, prompt: DecisionPrompt) -> str: ...
+
+    @abstractmethod
+    def render_history(self, history: tuple[HistoryItem, ...]) -> str: ...
+
+    @abstractmethod
+    def render_rejection(self, rejected: RejectedDecision) -> str: ...
 
     @abstractmethod
     def render_tool_result(self, result: ToolCallResult) -> str: ...

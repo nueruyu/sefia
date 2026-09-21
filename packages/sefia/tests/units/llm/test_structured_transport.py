@@ -47,7 +47,7 @@ async def test_renders_and_delivers_one_complete_prompt() -> None:
     sent = client.complete.await_args.kwargs
     assert sent["messages"] == [Message(role="user", content="complete prompt")]
     assert sent["decision_spec"] is request.decision_spec
-    assert observer.prompt == "complete prompt"
+    assert observer.messages == tuple(sent["messages"])
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
     assert decoded.completion is completion
     renderer.render.assert_called_once()
@@ -74,8 +74,8 @@ async def test_observer_finishes_before_the_client_request() -> None:
 
     class Observer(RecordingDecisionObserver):
         @override
-        async def before_request(self, prompt: str) -> None:
-            await super().before_request(prompt)
+        async def before_request(self, messages: tuple[Message, ...]) -> None:
+            await super().before_request(messages)
             order.append("observed")
 
     await StructuredDecisionTransport().request_decision(

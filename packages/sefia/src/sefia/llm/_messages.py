@@ -10,7 +10,7 @@ from .structured_data import StructuredData
 class Message:
     """Represents a single message in a conversation with an LLM."""
 
-    role: Literal["system", "user", "assistant", "tool"]
+    role: Literal["system", "developer", "user", "assistant", "tool"]
     content: str | list[Any] | None = None
     tool_call_id: str | None = None  # Required for role="tool" messages
     tool_calls: list[ToolCall] | None = None

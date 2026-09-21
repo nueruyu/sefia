@@ -80,6 +80,7 @@ submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 | --- | --- | --- |
 | `_authoring/` | Authoring API split by responsibility: domain ownership and runtime engraving, inference assembly, profile/policy selection, tool markers, and decorator metadata. | `Domain`, `concurrent`, `preview`, `policy`, `profile` |
 | `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
+| `_message_plan.py` | Provider-neutral application message plan and the Sefia task placeholder. | `MessagePlan`, `TaskPrompt` |
 | `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
 | `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallsDecision`, `ResultDecision` |
 | `_session.py` | Wraps a `glyff.Session`, builds the strategy, installs the context. | `Session` |
@@ -111,7 +112,7 @@ implementation noted in parentheses.
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider; raise `sefia.llm.exceptions.LLMCompletionDecodingError` for received responses that cannot be represented safely | `sefia_litellm.LiteLLMClient` |
 | `ModelBackend` | replace callable inspection and result schema generation/restoration together | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
-| `Policy` + `InferenceMiddleware`/`StepMiddleware`/`DecisionMiddleware` | control: retries, caps, guards — build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
+| `Policy` + `MiddlewareSet` | group inference, step, decision, and message middleware by lifecycle location; build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
 | `HistoryStorage` | where a run's history is persisted (enables compaction) | `GlyffHistoryStorage` (glyff metadata) |
 
 ## Inside `sefios` (the batteries)
@@ -163,6 +164,7 @@ implementation noted in parentheses.
 | Change LiteLLM's structured decision format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
+| Compose application messages for an `@infer` call | implement `MessageMiddleware`, return a `MessagePlan`, and install it with `MiddlewareSet(message=(...,))` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
 | Add a persistence backend | implement `PersistenceProvider` so the glyff execution backend, `SessionStorage`, and `SessionRegistry` are selected together; reference `persistence.py` |
 | Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); to change where history lives, pass `history_storage=` to `SessionScope`/`Session` (seam: `HistoryStorage`) |

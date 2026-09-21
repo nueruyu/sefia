@@ -41,16 +41,14 @@ def _decision_spec() -> DecisionSpec:
 
 def _prompt(
     function: FunctionInfo,
-    rejected: RejectedDecision | None = None,
 ) -> DecisionPrompt:
     return DecisionPrompt(
         function=function,
+        arguments=function.prompt_arguments,
         tools=_decision_spec().tools,
-        history=(),
         response_instructions=(
             'Return one result as {"decision":"result","result":<value>}.'
         ),
-        rejected=rejected,
     )
 
 
@@ -154,11 +152,8 @@ def test_render_falls_back_to_string_when_json_default_rejects_value():
 
 
 def test_render_rejected_decision_describes_the_error():
-    feedback = _renderer().render(
-        _prompt(
-            _function_info(),
-            RejectedDecision(content="invalid", reason="invalid schema"),
-        )
+    feedback = _renderer().render_rejection(
+        RejectedDecision(content="invalid", reason="invalid schema")
     )
 
     assert "Reason: invalid schema" in feedback
@@ -166,11 +161,8 @@ def test_render_rejected_decision_describes_the_error():
 
 
 def test_render_rejected_decision_explains_an_empty_response():
-    feedback = _renderer().render(
-        _prompt(
-            _function_info(),
-            RejectedDecision(content=None, reason="empty response"),
-        )
+    feedback = _renderer().render_rejection(
+        RejectedDecision(content=None, reason="empty response")
     )
 
     assert "The previous response was empty." in feedback

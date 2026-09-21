@@ -88,14 +88,15 @@ class ResearchService:                             # a plain class — no base, 
 
 ## Middleware control scopes
 
-Policies attach middleware at three execution boundaries:
+Policies attach middleware at four execution boundaries:
 
 ```text
 InferenceMiddleware — whole inference attempt
 └─ StepMiddleware — one step outside the durable decision execution
    └─ glyff: inference.step
       └─ DecisionMiddleware — decision generation inside the durable step
-         └─ InferenceStrategy.decide_next_step(...)
+         └─ MessageMiddleware — application message-plan composition
+            └─ InferenceStrategy.decide_next_step(...)
 ```
 
 `StepMiddleware` can prepare a step, including rewriting its `StepHistory`.
@@ -105,11 +106,12 @@ raise to reject it, or return a decision without calling the strategy. History a
 function metadata stay outside this context because their nested mutable objects
 could alter strategy inputs without tracking or persisting those changes.
 
-Attach middleware through `Policy(middleware=lambda: [...])`; factories remain
-scoped to each inference run, with context → domain → profile → function ordering.
-The public `Middleware` type alias names the supported control scopes. Policy
-factories and `create_middleware()` return `Sequence[Middleware]`, allowing
-subclasses to return narrower types such as `list[StepMiddleware]` or tuples.
+Attach middleware through `Policy(middleware=lambda: MiddlewareSet(...))`; each
+factory runs once per inference run, with session → domain → profile → function
+ordering within each category. `MiddlewareSet` makes the four lifecycle locations
+explicit. `MessageMiddleware` can inspect complete function metadata and transform a
+provider-neutral `MessagePlan`. It must retain one `TaskPrompt` placeholder so Sefia
+renders task and decision instructions exactly once.
 
 Rejecting a decision must fail the engraved decision execution before it commits,
 so retry/resume can regenerate the decision instead of replaying a rejected

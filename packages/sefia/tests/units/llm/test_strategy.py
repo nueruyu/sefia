@@ -3,11 +3,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 from pytest_mock import MockerFixture
-from sefia import ToolRegistry
+from sefia import MessagePlan, TaskPrompt, ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
 from sefia.inference import ResultDecision, ToolCallsDecision
-from sefia.llm import LLMCompletion, LLMInferenceStrategy
+from sefia.llm import LLMCompletion, LLMInferenceStrategy, Message
 from sefia.llm.events import (
     AfterLLMCall,
     BeforeLLMCall,
@@ -17,6 +17,9 @@ from sefia.llm.events import (
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import DecisionObserver, DecodedDecision
 from sefia.testing import make_function_info
+
+
+TEST_PLAN = MessagePlan(parts=(TaskPrompt(arguments={}),))
 
 
 @pytest.mark.parametrize("stream", [False, True])
@@ -29,7 +32,9 @@ async def test_strategy_passes_request_to_transport_and_validates_result(
     function = make_function_info(instructions="do it", return_type=str)
     publisher = AsyncMock(spec=EventPublisher)
 
-    decision = await strategy.decide_next_step(function, [], ToolRegistry(), publisher)
+    decision = await strategy.decide_next_step(
+        function, TEST_PLAN, [], ToolRegistry(), publisher
+    )
 
     assert isinstance(decision, ResultDecision)
     assert decision.result == "done"
@@ -65,6 +70,7 @@ async def test_strategy_assigns_ids_to_validated_tool_calls(
 
     decision = await make_strategy().decide_next_step(
         make_function_info(return_type=str),
+        TEST_PLAN,
         [],
         registry,
         AsyncMock(spec=EventPublisher),
@@ -91,6 +97,7 @@ async def test_unknown_tool_preserves_specific_cause(
     with pytest.raises(InvalidInferenceResponseError) as exc_info:
         await make_strategy(max_repair_attempts=0).decide_next_step(
             make_function_info(return_type=str),
+            TEST_PLAN,
             [],
             registry,
             AsyncMock(spec=EventPublisher),
@@ -121,6 +128,7 @@ async def test_argument_streamer_is_closed_after_transport(
         with pytest.raises(RuntimeError, match="transport failed"):
             await strategy.decide_next_step(
                 make_function_info(return_type=str),
+                TEST_PLAN,
                 [],
                 registry,
                 AsyncMock(spec=EventPublisher),
@@ -128,6 +136,7 @@ async def test_argument_streamer_is_closed_after_transport(
     else:
         await strategy.decide_next_step(
             make_function_info(return_type=str),
+            TEST_PLAN,
             [],
             registry,
             AsyncMock(spec=EventPublisher),
@@ -145,19 +154,21 @@ async def test_transport_observer_notifies_the_supplied_publisher(
     async def respond(
         *, observer: DecisionObserver, **kwargs: object
     ) -> DecodedDecision:
-        await observer.before_request("prompt")
+        await observer.before_request((Message(role="user", content="prompt"),))
         await observer.response_text("answer")
         await observer.reasoning_text("thinking")
         return decoded
 
     transport.request_decision.side_effect = respond
     await make_strategy(stream=True).decide_next_step(
-        make_function_info(return_type=str), [], ToolRegistry(), publisher
+        make_function_info(return_type=str), TEST_PLAN, [], ToolRegistry(), publisher
     )
 
     spec = transport.request_decision.await_args.kwargs["request"].decision_spec
     assert [c.args[0] for c in publisher.publish.await_args_list] == [
-        BeforeLLMCall(prompt="prompt", decision_spec=spec),
+        BeforeLLMCall(
+            messages=(Message(role="user", content="prompt"),), decision_spec=spec
+        ),
         LLMTokenReceived(token="answer"),
         LLMReasoningTokenReceived(token="thinking"),
         AfterLLMCall(decoded.completion),

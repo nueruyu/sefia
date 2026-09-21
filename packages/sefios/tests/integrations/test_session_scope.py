@@ -4,7 +4,13 @@ from pathlib import Path
 import glyff
 from typing_extensions import final, override
 
-from sefia import DecisionContext, DecisionMiddleware, JsonSchemaToolEntry, Policy
+from sefia import (
+    DecisionContext,
+    DecisionMiddleware,
+    JsonSchemaToolEntry,
+    MiddlewareSet,
+    Policy,
+)
 from sefia.exceptions import InferenceError
 from sefia.inference import ResultDecision, StepDecision
 from sefia.llm import LLMCompletion
@@ -158,7 +164,11 @@ async def test_retrier_regenerates_final_decision_after_committed_tools() -> Non
         persistence=persistence,
         tool_collector=_static_collector("lookup", tool_calls),
         policies=[
-            Policy(middleware=lambda: (Retrier(max_retries=1), RejectFirstResult()))
+            Policy(
+                middleware=lambda: MiddlewareSet(
+                    inference=(Retrier(max_retries=1),), decision=(RejectFirstResult(),)
+                )
+            )
         ],
     )
     async with scope.session(session_id=session_id):

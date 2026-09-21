@@ -3,7 +3,7 @@ from collections.abc import Callable
 from unittest.mock import AsyncMock
 
 import pytest
-from sefia import ToolRegistry
+from sefia import MessagePlan, TaskPrompt, ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import ResultDecision, ToolCallResult, ToolCallsDecision
@@ -13,6 +13,9 @@ from sefia.llm.exceptions import DecisionDecodingError, LLMCompletionDecodingErr
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import DecodedDecision
 from sefia.testing import make_function_info, make_tool_call_request
+
+
+TEST_PLAN = MessagePlan(parts=(TaskPrompt(arguments={}),))
 
 
 @pytest.mark.parametrize("content", ["", None, "not json"])
@@ -33,7 +36,7 @@ async def test_repairs_decoding_error_with_rejected_completion(
     publisher = AsyncMock(spec=EventPublisher)
 
     result = await make_strategy().decide_next_step(
-        make_function_info(return_type=str), [], ToolRegistry(), publisher
+        make_function_info(return_type=str), TEST_PLAN, [], ToolRegistry(), publisher
     )
 
     assert isinstance(result, ResultDecision) and result.result == "done"
@@ -78,6 +81,7 @@ async def test_repairs_validation_failure_and_forwards_rejected_data(
 
     result = await make_strategy().decide_next_step(
         make_function_info(return_type=str),
+        TEST_PLAN,
         [],
         registry,
         AsyncMock(spec=EventPublisher),
@@ -109,6 +113,7 @@ async def test_native_repair_includes_rejected_tool_call(
 
     await make_strategy().decide_next_step(
         make_function_info(return_type=str),
+        TEST_PLAN,
         [],
         ToolRegistry(),
         AsyncMock(spec=EventPublisher),
@@ -139,6 +144,7 @@ async def test_repair_preserves_executor_history(
 
     await make_strategy().decide_next_step(
         make_function_info(return_type=str),
+        TEST_PLAN,
         history,
         ToolRegistry(),
         AsyncMock(spec=EventPublisher),
@@ -149,6 +155,7 @@ async def test_repair_preserves_executor_history(
     ]
     assert history == snapshot
     assert first.history == retry.history == tuple(snapshot)
+    assert first.message_plan is retry.message_plan is TEST_PLAN
     assert first.rejected is None
     assert retry.rejected is not None
 
@@ -165,7 +172,11 @@ async def test_exhausted_budget_preserves_error_and_limits_attempts(
 
     with pytest.raises(InvalidInferenceResponseError) as exc_info:
         await make_strategy(max_repair_attempts=budget).decide_next_step(
-            make_function_info(return_type=str), [], ToolRegistry(), publisher
+            make_function_info(return_type=str),
+            TEST_PLAN,
+            [],
+            ToolRegistry(),
+            publisher,
         )
 
     assert transport.request_decision.await_count == budget + 1

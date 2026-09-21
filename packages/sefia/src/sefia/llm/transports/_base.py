@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any, Mapping
 
+from ..._message_plan import MessagePlan
 from ...inference import FunctionInfo, HistoryItem
 from .._client import LLMClient
-from .._messages import LLMCompletion
+from .._messages import LLMCompletion, Message
 from .._prompt_renderer import DecisionPrompt, PromptRenderer, RejectedDecision
 from ..structured_data import StructuredData
 from ..step_decision import DecisionSpec, StepTool
@@ -14,7 +16,7 @@ from ..streaming import OutputStreamEvent
 
 class DecisionObserver(ABC):
     @abstractmethod
-    async def before_request(self, prompt: str) -> None: ...
+    async def before_request(self, messages: tuple[Message, ...]) -> None: ...
 
     @abstractmethod
     async def response_text(self, text: str) -> None: ...
@@ -29,6 +31,7 @@ class DecisionObserver(ABC):
 @dataclass(frozen=True)
 class DecisionRequest:
     function: FunctionInfo
+    message_plan: MessagePlan
     decision_spec: DecisionSpec
     history: tuple[HistoryItem, ...]
     rejected: RejectedDecision | None = None
@@ -37,15 +40,14 @@ class DecisionRequest:
         self,
         response_instructions: str,
         *,
+        arguments: Mapping[str, Any],
         tools: tuple[StepTool, ...],
-        history: tuple[HistoryItem, ...],
     ) -> DecisionPrompt:
         return DecisionPrompt(
             function=self.function,
+            arguments=arguments,
             tools=tools,
-            history=history,
             response_instructions=response_instructions,
-            rejected=self.rejected,
         )
 
 

@@ -11,7 +11,8 @@ from .._base import (
     DecisionTransport,
 )
 from ._decoding import decode_native_tool_calls
-from ._prompt import native_history_messages, render_native_prompt
+from .._messages import materialize_plan
+from ._prompt import native_response_instructions, native_history_messages
 from ._result_tool import create_result_tool
 
 
@@ -33,14 +34,24 @@ class NativeDecisionTransport(DecisionTransport):
         if result_tool is not None:
             tools.append(result_tool)
 
-        prompt = render_native_prompt(request, prompt_renderer, result_tool)
-        await observer.before_request(prompt)
+        messages = materialize_plan(
+            request,
+            prompt_renderer,
+            native_response_instructions(request.decision_spec, result_tool),
+            (),
+        )
+        messages.extend(native_history_messages(request.history, prompt_renderer))
+        if request.rejected is not None:
+            messages.append(
+                Message(
+                    role="user",
+                    content=prompt_renderer.render_rejection(request.rejected),
+                )
+            )
+        await observer.before_request(tuple(messages))
 
         completion = await client.complete(
-            messages=[
-                Message(role="user", content=prompt),
-                *native_history_messages(request.history, prompt_renderer),
-            ],
+            messages=messages,
             tools=tools,
             decision_spec=None,
             stream_callback=observer.response_text if stream else None,

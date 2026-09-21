@@ -41,7 +41,7 @@ async def test_uses_the_rendered_prompt_without_a_model() -> None:
     sent = client.complete.await_args.kwargs
     assert sent["messages"] == [Message(role="user", content="complete prompt")]
     assert sent["decision_spec"] is None
-    assert observer.prompt == "complete prompt"
+    assert observer.messages == tuple(sent["messages"])
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
     assert decoded.completion is completion
     rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])

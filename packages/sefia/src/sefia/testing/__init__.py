@@ -165,16 +165,16 @@ class RecordingDecisionObserver(DecisionObserver):
     """Records decision transport callbacks for assertions in tests."""
 
     def __init__(self) -> None:
-        self.prompt: str | None = None
-        self.prompts: list[str] = []
+        self.messages: tuple[Message, ...] | None = None
+        self.requests: list[tuple[Message, ...]] = []
         self.response_texts: list[str] = []
         self.reasoning_texts: list[str] = []
         self.output_events: list[OutputStreamEvent] = []
 
     @override
-    async def before_request(self, prompt: str) -> None:
-        self.prompt = prompt
-        self.prompts.append(prompt)
+    async def before_request(self, messages: tuple[Message, ...]) -> None:
+        self.messages = messages
+        self.requests.append(messages)
 
     @override
     async def response_text(self, text: str) -> None:

@@ -5,24 +5,9 @@ from ..._messages import Message, ToolCall
 from ..._prompt_renderer import PromptRenderer
 from ...structured_data import StructuredData, StructuredDataTree
 from ...step_decision import DecisionSpec, StepDecisionMode, StepTool
-from .._base import DecisionRequest
 
 
-def render_native_prompt(
-    request: DecisionRequest,
-    renderer: PromptRenderer,
-    result_tool: StepTool | None,
-) -> str:
-    return renderer.render(
-        request.to_prompt(
-            _response_instructions(request.decision_spec, result_tool),
-            tools=(),
-            history=(),
-        )
-    )
-
-
-def _response_instructions(
+def native_response_instructions(
     spec: DecisionSpec,
     result_tool: StepTool | None,
 ) -> str:

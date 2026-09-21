@@ -8,12 +8,7 @@ from typing_extensions import final
 
 from .._context import get_context
 from .._executor import InferenceExecutor
-from .._interfaces import (
-    DecisionMiddleware,
-    InferenceMiddleware,
-    Policy,
-    StepMiddleware,
-)
+from .._interfaces import MiddlewareSet, Policy
 from ..event_system import EventPublisher
 from . import metadata
 
@@ -21,27 +16,6 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 GLYFF_DOMAIN = glyff.Domain("sefia", version="1")
-
-
-def _partition_middleware(
-    middleware: Sequence[object],
-) -> tuple[list[InferenceMiddleware], list[StepMiddleware], list[DecisionMiddleware]]:
-    inference_middlewares: list[InferenceMiddleware] = []
-    step_middlewares: list[StepMiddleware] = []
-    decision_middlewares: list[DecisionMiddleware] = []
-    for item in middleware:
-        if isinstance(item, InferenceMiddleware):
-            inference_middlewares.append(item)
-        elif isinstance(item, StepMiddleware):
-            step_middlewares.append(item)
-        elif isinstance(item, DecisionMiddleware):
-            decision_middlewares.append(item)
-        else:
-            raise TypeError(
-                "Policy middleware must be an instance of InferenceMiddleware, "
-                f"StepMiddleware, or DecisionMiddleware, got {type(item).__name__}"
-            )
-    return inference_middlewares, step_middlewares, decision_middlewares
 
 
 @final
@@ -121,12 +95,12 @@ class Domain:
             handlers = [
                 handler for policy in policies for handler in policy.create_handlers()
             ]
-            middleware = [
-                item for policy in policies for item in policy.create_middleware()
-            ]
-            inference_middleware, step_middleware, decision_middleware = (
-                _partition_middleware(middleware)
-            )
+            middleware_sets = [policy.create_middleware() for policy in policies]
+            if any(
+                not isinstance(group, MiddlewareSet)
+                for group in cast(list[object], middleware_sets)
+            ):
+                raise TypeError("Policy.create_middleware() must return MiddlewareSet.")
             executor = InferenceExecutor(
                 func=unwrapped,
                 args=args,
@@ -135,9 +109,16 @@ class Domain:
                 tool_collector=context.tool_collector,
                 engrave=lambda name, func: GLYFF_DOMAIN.engrave(func, name=name),
                 publisher=EventPublisher(handlers),
-                inference_middlewares=inference_middleware,
-                step_middlewares=step_middleware,
-                decision_middlewares=decision_middleware,
+                inference_middlewares=[
+                    m for group in middleware_sets for m in group.inference
+                ],
+                step_middlewares=[m for group in middleware_sets for m in group.step],
+                decision_middlewares=[
+                    m for group in middleware_sets for m in group.decision
+                ],
+                message_middlewares=[
+                    m for group in middleware_sets for m in group.message
+                ],
                 history_storage=context.history_storage,
             )
 

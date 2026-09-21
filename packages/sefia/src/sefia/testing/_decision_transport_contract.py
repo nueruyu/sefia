@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from ..inference import ToolCallResult
+from ..inference import HistoryItem, ToolCallResult
 from ..llm._client import LLMClient
 from ..llm._messages import LLMCompletion, Message
-from ..llm._prompt_renderer import DecisionPrompt, PromptRenderer
+from ..llm._prompt_renderer import DecisionPrompt, PromptRenderer, RejectedDecision
 from ..llm.step_decision import DecisionSpec, StepTool
 from ..llm.streaming import (
     OutputStreamCallback,
@@ -39,20 +39,28 @@ class _Renderer(PromptRenderer):
         return "contract prompt"
 
     @override
+    def render_history(self, history: tuple[HistoryItem, ...]) -> str:
+        return "contract history"
+
+    @override
+    def render_rejection(self, rejected: RejectedDecision) -> str:
+        return "contract rejection"
+
+    @override
     def render_tool_result(self, result: ToolCallResult) -> str:
         return "contract tool result"
 
 
 class _Observer(DecisionObserver):
     def __init__(self) -> None:
-        self.prompts: list[str] = []
+        self.requests: list[tuple[Message, ...]] = []
         self.response_texts: list[str] = []
         self.reasoning_texts: list[str] = []
         self.output_events: list[OutputStreamEvent] = []
 
     @override
-    async def before_request(self, prompt: str) -> None:
-        self.prompts.append(prompt)
+    async def before_request(self, messages: tuple[Message, ...]) -> None:
+        self.requests.append(messages)
 
     @override
     async def response_text(self, text: str) -> None:
@@ -114,7 +122,7 @@ class DecisionTransportContract(ABC):
 
         assert decoded.decision_data == decision_transport_case.expected_data
         assert decoded.completion is decision_transport_case.completion
-        assert observer.prompts == ["contract prompt"]
+        assert observer.requests == [(Message(role="user", content="contract prompt"),)]
         assert observer.response_texts == []
         assert observer.reasoning_texts == []
         assert observer.output_events == []
@@ -131,7 +139,7 @@ class DecisionTransportContract(ABC):
 
         assert decoded.decision_data == decision_transport_case.expected_data
         assert decoded.completion is decision_transport_case.completion
-        assert observer.prompts == ["contract prompt"]
+        assert observer.requests == [(Message(role="user", content="contract prompt"),)]
         assert observer.response_texts == list(decision_transport_case.content_chunks)
         assert observer.reasoning_texts == list(
             decision_transport_case.reasoning_chunks

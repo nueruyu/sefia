@@ -76,6 +76,10 @@ client, the durability session, and a SQLite database under `.sefios/` for you. 
 full rules on arguments, service members, tools, and return types, see
 [The `@infer` contract](./infer-contract.md).
 
+Applications that need multiple LLM messages can install a `MessageMiddleware`
+through a policy's `MiddlewareSet`. It decides how selected arguments become
+provider-neutral messages; the other arguments remain in Sefia's task prompt.
+
 Memory is the process-local default. This tutorial opts into SQLite so glyff execution
 records, Sefia session state, and the session registry survive restarts in one database.
 JSON files remain available for debugging with `FilePersistence` from the

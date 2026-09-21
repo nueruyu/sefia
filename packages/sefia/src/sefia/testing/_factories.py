@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import Any
 
 from .._history import StepHistory
+from .._message_plan import MessagePlan
 from .._interfaces.middleware import DecisionContext, StepContext
 from .._tool_system import ToolRegistry
 from ..inference import FunctionInfo, HistoryItem, ToolCallRequest
@@ -47,10 +48,13 @@ def make_decision_request(
     function: FunctionInfo | None = None,
     history: tuple[HistoryItem, ...] = (),
     rejected: RejectedDecision | None = None,
+    message_plan: MessagePlan | None = None,
 ) -> DecisionRequest:
     """Build a decision request with ordinary function metadata."""
+    function = make_function_info() if function is None else function
     return DecisionRequest(
-        function=make_function_info() if function is None else function,
+        function=function,
+        message_plan=message_plan or MessagePlan.default(function),
         decision_spec=decision_spec,
         history=history,
         rejected=rejected,

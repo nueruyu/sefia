@@ -29,6 +29,7 @@ class _StubStrategy(InferenceStrategy):
     async def decide_next_step(
         self,
         function_info: FunctionInfo,
+        message_plan: sefia.MessagePlan,
         history: Sequence[HistoryItem],
         tools: sefia.ToolRegistry,
         publisher: EventPublisher,

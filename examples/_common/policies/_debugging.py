@@ -13,14 +13,15 @@ class PromptDumpHandler(EventHandler[BeforeLLMCall]):
     """An event handler that prints LLM prompts to the console for debugging."""
 
     async def handle(self, event: BeforeLLMCall):
-        _console.print(
-            Panel(
-                event.prompt,
-                title="LLM PROMPT",
-                border_style="yellow",
-                expand=False,
+        for message in event.messages:
+            _console.print(
+                Panel(
+                    str(message.content),
+                    title=f"LLM {message.role.upper()}",
+                    border_style="yellow",
+                    expand=False,
+                )
             )
-        )
 
 
 class VerbosePolicy(Policy):

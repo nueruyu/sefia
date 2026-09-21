@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing_extensions import final, override
 
 from .._interfaces import InferenceStrategy
+from .._message_plan import MessagePlan
 from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
@@ -14,7 +15,7 @@ from ..streaming import ArgEvent, Scalar, StreamHandler, StringDelta, StringEnd
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
-from ._messages import LLMCompletion
+from ._messages import LLMCompletion, Message
 from .exceptions import DecisionDecodingError, LLMCompletionDecodingError
 from ._prompt_renderer import PromptRenderer, RejectedDecision
 from ._tool_call_ids import ToolCallIdRegistry
@@ -52,9 +53,9 @@ class _StrategyDecisionObserver(DecisionObserver):
         self._tool_arg_streamer = tool_arg_streamer
 
     @override
-    async def before_request(self, prompt: str) -> None:
+    async def before_request(self, messages: tuple[Message, ...]) -> None:
         await self._publisher.publish(
-            events.BeforeLLMCall(prompt=prompt, decision_spec=self._decision_spec)
+            events.BeforeLLMCall(messages=messages, decision_spec=self._decision_spec)
         )
 
     @override
@@ -128,6 +129,7 @@ class LLMInferenceStrategy(InferenceStrategy):
     async def decide_next_step(
         self,
         function_info: FunctionInfo,
+        message_plan: MessagePlan,
         history: Sequence[HistoryItem],
         tools: ToolRegistry,
         publisher: EventPublisher,
@@ -142,6 +144,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         for attempt in range(self._max_repair_attempts + 1):
             request = DecisionRequest(
                 function=function_info,
+                message_plan=message_plan,
                 decision_spec=decision_spec,
                 history=tuple(history),
                 rejected=rejected,
