@@ -7,7 +7,7 @@ from .._history import StepHistory
 from .._interfaces.middleware import DecisionContext, StepContext
 from .._tool_system import ToolRegistry
 from ..inference import FunctionInfo, HistoryItem, ToolCallRequest
-from ..llm import MessagePlan, RejectedDecision
+from ..llm import MessageLayout, RejectedDecision
 from ..llm.step_decision import DecisionSpec
 from ..llm.transports import DecisionRequest
 
@@ -47,13 +47,13 @@ def make_decision_request(
     function: FunctionInfo | None = None,
     history: tuple[HistoryItem, ...] = (),
     rejected: RejectedDecision | None = None,
-    message_plan: MessagePlan | None = None,
+    message_layout: MessageLayout | None = None,
 ) -> DecisionRequest:
     """Build a decision request with ordinary function metadata."""
     function = make_function_info() if function is None else function
     return DecisionRequest(
         function=function,
-        message_plan=message_plan or MessagePlan.default(function),
+        message_layout=message_layout or MessageLayout.default(function),
         decision_spec=decision_spec,
         history=history,
         rejected=rejected,

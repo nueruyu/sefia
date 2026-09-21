@@ -48,32 +48,33 @@ invocations.
 
 ### Composing LLM messages
 
-By default, all non-receiver arguments remain ordinary task data in Sefia's
-standard task prompt. Applications may configure `MessageComposer` instances on
+By default, all non-receiver arguments remain ordinary data in Sefia's standard
+inference prompt. Applications may configure `MessageComposer` instances on
 `Session(..., message_composers=(...))` or
 `SessionScope(..., message_composers=(...))`. A composer receives `FunctionInfo` and
-the current `MessagePlan`; it may turn selected arguments into provider-neutral
+the current `MessageLayout`; it may turn selected arguments into provider-neutral
 `Message` objects. Sefia does not assign meaning to annotations, argument names,
 or application models.
 
-An application composer returns a `MessagePlan` containing its messages and exactly
-one `TaskPrompt`. It may place that prompt among the messages and remove consumed
-arguments from `TaskPrompt.arguments`. Unconsumed arguments retain the usual JSON
-rendering. Keep `TaskPrompt(arguments={})` when every argument is consumed: Sefia
-still uses it to render the function instructions once. The transport places Sefia's
-decision instructions after the application messages, tool history, and any repair
-feedback. A composer cannot move those control instructions.
+An application composer returns a `MessageLayout` with messages in `before` and
+`after`, and remaining prompt data in `arguments`. Sefia renders its standard
+inference prompt once between those messages. Unconsumed arguments retain the usual
+JSON rendering; `arguments={}` is valid when every argument is consumed.
+`PromptRenderer` renders only this inference prompt from function instructions,
+remaining arguments, and any textual tool definitions. The transport appends Sefia's
+execution history, repair feedback, and response instructions in that order. A
+composer cannot move those protocol messages.
 
 For example, an application can define its own `Annotated` metadata for a
 conversation argument and interpret it inside its own `MessageComposer`. This is
 an application convention, not a Sefia annotation scheme. Sefia appends its tool
-execution history after the application plan, then repair feedback when needed, then
-the decision instructions. With the default single task prompt and no history, task
-and decision instructions remain in one user message.
+execution history after the application layout, then repair feedback when needed,
+then response instructions. With the default layout and no history, inference and
+response instructions remain in one user message.
 
-Import `Message`, `MessageComposer`, `MessagePlan`, and `TaskPrompt` from `sefia.llm`.
+Import `Message`, `MessageComposer`, and `MessageLayout` from `sefia.llm`.
 Composers are applied in configured order on each strategy call. They should be
-reentrant and treat `FunctionInfo` as read-only; use `MessagePlan` for transformations.
+reentrant and treat `FunctionInfo` as read-only; use `MessageLayout` for transformations.
 For example, an application-defined `ConversationMessages` composer can be installed
 through Sefios:
 

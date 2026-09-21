@@ -78,7 +78,8 @@ full rules on arguments, service members, tools, and return types, see
 
 Applications that need multiple LLM messages can configure a `MessageComposer` on
 `SessionScope` or `Session`. It decides how selected arguments become provider-neutral
-messages; the other arguments remain in Sefia's task prompt.
+messages before and after Sefia's standard inference prompt; the other arguments
+remain in that prompt.
 
 Memory is the process-local default. This tutorial opts into SQLite so glyff execution
 records, Sefia session state, and the session registry survive restarts in one database.

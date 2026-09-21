@@ -93,7 +93,7 @@ submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `streaming.py` | The tool-arg streaming side channel (`preview`). | `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: `_message_plan.py` and `_message_composer.py` define LLM input composition; transports decode completions to decision data; `step_decision.py` validates that data; `_strategy.py` coordinates composition and repair. | `LLMInferenceStrategy`, `MessageComposer`, `MessagePlan`, `TaskPrompt`, `LLMClient`, `DecisionTransport`, `PromptRenderer` |
+| `llm/` | The **default** `InferenceStrategy`: `_message_layout.py` and `_message_composer.py` define application message placement; `_text.py` preserves JSON text formatting; transports own history, repair, and response protocol messages; `step_decision.py` validates decoded decisions. | `LLMInferenceStrategy`, `MessageComposer`, `MessageLayout`, `InferencePrompt`, `LLMClient`, `DecisionTransport`, `PromptRenderer` |
 | `llm/transports/` | Transport contract and structured, prompted, and native protocols. The private `_native/` package separates native orchestration, prompt/history conversion, result-tool construction, and decoding. | `DecisionTransport`, `StructuredDecisionTransport`, `PromptedDecisionTransport`, `NativeDecisionTransport` |
 | `pydantic/` | The default `ModelBackend`: callable inspection plus result JSON Schema generation and restoration. It does not know the logical step-decision shape. | `PydanticModelBackend` |
 | `testing/` | Public test doubles, stable test-data factories, and reusable conformance contracts for applications and extension implementations. | `MockLLMClient`, `MemoryHistoryStorage`, `make_decision_request`, `make_step_context`, `make_decision_context`, `LLMClientContract`, `HistoryStorageContract`, `DecisionTransportContract`, `ToolCollectorContract` |
@@ -106,13 +106,13 @@ implementation noted in parentheses.
 | Interface | Swap to… | Default |
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
-| `PromptRenderer` | change decision-prompt and tool-result text representation | `llm/MarkdownPromptRenderer` |
+| `PromptRenderer` | render the standard inference prompt from function instructions, remaining arguments, and textual tool definitions | `llm/MarkdownPromptRenderer` |
 | `DecisionTransport` | change how a decision request is prompted, sent, and decoded; raise `sefia.llm.exceptions.DecisionDecodingError` when a completion cannot be decoded as a decision | `llm/transports/` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider; raise `sefia.llm.exceptions.LLMCompletionDecodingError` for received responses that cannot be represented safely | `sefia_litellm.LiteLLMClient` |
 | `ModelBackend` | replace callable inspection and result schema generation/restoration together | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `MiddlewareSet` | group inference, step, and decision middleware by lifecycle location; build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
-| `MessageComposer` | transform an LLM `MessagePlan` using application-defined conventions; configure through `Session` or `SessionScope` | none |
+| `MessageComposer` | transform an LLM `MessageLayout` using application-defined conventions; configure through `Session` or `SessionScope` | none |
 | `HistoryStorage` | where a run's history is persisted (enables compaction) | `GlyffHistoryStorage` (glyff metadata) |
 
 ## Inside `sefios` (the batteries)
@@ -164,7 +164,7 @@ implementation noted in parentheses.
 | Change LiteLLM's structured decision format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
-| Compose application messages for an `@infer` call | implement `sefia.llm.MessageComposer`, return a `MessagePlan`, and configure it on `Session` or `SessionScope` |
+| Compose application messages for an `@infer` call | implement `sefia.llm.MessageComposer`, return a `MessageLayout`, and configure it on `Session` or `SessionScope` |
 | Observe runs (logging, tracing, cost) | a handler over `events.py`; see `sefios/handlers/_cost.py` |
 | Add a persistence backend | implement `PersistenceProvider` so the glyff execution backend, `SessionStorage`, and `SessionRegistry` are selected together; reference `persistence.py` |
 | Compact a run's conversation history | add `HistoryCompactor` (`sefios/middleware/_compaction.py`); to change where history lives, pass `history_storage=` to `SessionScope`/`Session` (seam: `HistoryStorage`) |

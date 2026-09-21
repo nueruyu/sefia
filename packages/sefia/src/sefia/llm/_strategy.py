@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import cast
 
 from typing_extensions import final, override
 
 from .._interfaces import InferenceStrategy
 from ._message_composer import MessageComposer
-from ._message_plan import MessagePlan
+from ._message_layout import MessageLayout
 from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
@@ -129,23 +128,14 @@ class LLMInferenceStrategy(InferenceStrategy):
         self._stream = stream
         self._max_repair_attempts = max_repair_attempts
         self._message_composers = tuple(message_composers)
-        for index, composer in enumerate(self._message_composers):
-            if not isinstance(cast(object, composer), MessageComposer):
-                raise TypeError(
-                    f"message_composers[{index}] must be MessageComposer; "
-                    f"got {type(composer).__name__}."
-                )
 
-    async def _compose_message_plan(self, function_info: FunctionInfo) -> MessagePlan:
-        plan = MessagePlan.default(function_info)
+    async def _compose_message_layout(
+        self, function_info: FunctionInfo
+    ) -> MessageLayout:
+        layout = MessageLayout.default(function_info)
         for composer in self._message_composers:
-            result = cast(object, await composer.compose(function_info, plan))
-            if not isinstance(result, MessagePlan):
-                raise TypeError(
-                    f"{type(composer).__name__}.compose() must return MessagePlan."
-                )
-            plan = result
-        return plan
+            layout = await composer.compose(function_info, layout)
+        return layout
 
     @override
     async def decide_next_step(
@@ -155,7 +145,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> StepDecision:
-        message_plan = await self._compose_message_plan(function_info)
+        message_layout = await self._compose_message_layout(function_info)
         decision_spec = DecisionSpec.for_inference(
             output_type=function_info.return_type,
             tools=tools.get_all(),
@@ -166,7 +156,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         for attempt in range(self._max_repair_attempts + 1):
             request = DecisionRequest(
                 function=function_info,
-                message_plan=message_plan,
+                message_layout=message_layout,
                 decision_spec=decision_spec,
                 history=tuple(history),
                 rejected=rejected,

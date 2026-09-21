@@ -13,7 +13,7 @@ from sefia import (
 )
 from sefia.exceptions import InferenceError
 from sefia.inference import FunctionInfo, ResultDecision, StepDecision
-from sefia.llm import LLMCompletion, Message, MessageComposer, MessagePlan
+from sefia.llm import LLMCompletion, Message, MessageComposer, MessageLayout
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefia.tool_collectors import StaticToolCollector
 from sefios.middleware import Retrier
@@ -35,9 +35,13 @@ class _Prefix(MessageComposer):
         self.text = text
 
     @override
-    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
-        return MessagePlan(
-            parts=(Message(role="developer", content=self.text), *plan.parts)
+    async def compose(
+        self, function: FunctionInfo, layout: MessageLayout
+    ) -> MessageLayout:
+        return MessageLayout(
+            before=(Message(role="developer", content=self.text), *layout.before),
+            arguments=layout.arguments,
+            after=layout.after,
         )
 
 

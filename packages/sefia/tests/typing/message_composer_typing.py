@@ -1,20 +1,24 @@
 from typing import Any, assert_type, cast
 
 from sefia.inference import FunctionInfo
-from sefia.llm import Message, MessageComposer, MessagePlan, TaskPrompt
+from sefia.llm import Message, MessageComposer, MessageLayout
 from typing_extensions import override
 
 
 class CustomMessages(MessageComposer):
     @override
-    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
+    async def compose(
+        self, function: FunctionInfo, layout: MessageLayout
+    ) -> MessageLayout:
         assert_type(function.prompt_arguments, dict[str, Any])
-        return MessagePlan(
-            parts=(Message(role="developer", content="instructions"), *plan.parts)
+        return MessageLayout(
+            before=(Message(role="developer", content="instructions"), *layout.before),
+            arguments=layout.arguments,
+            after=layout.after,
         )
 
 
 def check_message_composer() -> None:
     composers = cast(tuple[MessageComposer, ...], (CustomMessages(),))
     assert_type(composers, tuple[MessageComposer, ...])
-    assert_type(MessagePlan(parts=(TaskPrompt(arguments={}),)), MessagePlan)
+    assert_type(MessageLayout(before=(), arguments={}, after=()), MessageLayout)

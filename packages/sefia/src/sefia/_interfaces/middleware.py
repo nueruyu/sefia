@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, cast
+from typing import Any, Awaitable, Callable
 
 from .._history import StepHistory
 from .._tool_system import ToolRegistry
@@ -93,19 +93,3 @@ class MiddlewareSet:
     inference: tuple[InferenceMiddleware, ...] = ()
     step: tuple[StepMiddleware, ...] = ()
     decision: tuple[DecisionMiddleware, ...] = ()
-
-    def __post_init__(self) -> None:
-        categories: tuple[tuple[str, type[ABC], object], ...] = (
-            ("inference", InferenceMiddleware, cast(object, self.inference)),
-            ("step", StepMiddleware, cast(object, self.step)),
-            ("decision", DecisionMiddleware, cast(object, self.decision)),
-        )
-        for name, expected, items in categories:
-            if not isinstance(items, tuple):
-                raise TypeError(f"MiddlewareSet.{name} must be a tuple.")
-            for index, item in enumerate(cast(tuple[object, ...], items)):
-                if not isinstance(item, expected):
-                    raise TypeError(
-                        f"MiddlewareSet.{name}[{index}] must be "
-                        f"{expected.__name__}; got {type(item).__name__}."
-                    )

@@ -12,7 +12,7 @@ from sefia.llm import (
     LLMCompletion,
     Message,
     MessageComposer,
-    MessagePlan,
+    MessageLayout,
     PromptRenderer,
 )
 from sefia.llm.transports import PromptedDecisionTransport
@@ -40,15 +40,15 @@ async def test_session_connects_a_custom_prompt_renderer_to_the_transport() -> N
     client = MockLLMClient([result_completion(_Report("custom", "rendered"))])
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "custom prompt"
-    renderer.render_decision_instructions.return_value = "custom control"
 
     async with memory_session(client, prompt_renderer=renderer):
         report = await _Agent().generate_report(topic="custom")
 
     assert report == _Report("custom", "rendered")
-    assert client.requests[0]["messages"] == [
-        {"role": "user", "content": "custom prompt\n\ncustom control"}
-    ]
+    messages = client.requests[0]["messages"]
+    assert len(messages) == 1
+    assert messages[0]["role"] == "user"
+    assert messages[0]["content"].startswith("custom prompt\n\n## Response\n\n")
 
 
 async def test_session_connects_a_prompted_decision_transport() -> None:
@@ -74,9 +74,13 @@ async def test_session_connects_a_prompted_decision_transport() -> None:
 
 class _ProfileMessage(MessageComposer):
     @override
-    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
-        return MessagePlan(
-            parts=(Message(role="developer", content="shared"), *plan.parts)
+    async def compose(
+        self, function: FunctionInfo, layout: MessageLayout
+    ) -> MessageLayout:
+        return MessageLayout(
+            before=(Message(role="developer", content="shared"), *layout.before),
+            arguments=layout.arguments,
+            after=layout.after,
         )
 
 

@@ -2,7 +2,7 @@ from typing import cast
 
 from ....inference import HistoryItem, ToolCallsDecision
 from ..._messages import Message, ToolCall
-from ..._prompt_renderer import PromptRenderer
+from ..._text import TextFormatter
 from ...structured_data import StructuredData, StructuredDataTree
 from ...step_decision import DecisionSpec, StepDecisionMode, StepTool
 
@@ -27,7 +27,7 @@ def native_response_instructions(
 
 def native_history_messages(
     history: tuple[HistoryItem, ...],
-    renderer: PromptRenderer,
+    formatter: TextFormatter,
 ) -> list[Message]:
     messages: list[Message] = []
     for item in history:
@@ -51,7 +51,7 @@ def native_history_messages(
             messages.append(
                 Message(
                     role="tool",
-                    content=renderer.render_tool_result(item),
+                    content=formatter.compact_json(item.result),
                     tool_call_id=item.tool_call_id,
                 )
             )

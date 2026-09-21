@@ -97,8 +97,9 @@ extension seams (a custom policy, strategy, client, or tool collector) and tool-
 context helpers such as `current_tool_call_id_for`.
 
 For custom message composition, applications can configure `MessageComposer` through
-`SessionScope` or `Session` and return a `MessagePlan`. Sefia keeps unconsumed arguments
-in its ordinary task prompt and leaves argument semantics to the application. See
+`SessionScope` or `Session` and return a `MessageLayout`. A composer places application
+messages before and after Sefia's standard inference prompt and selects which
+arguments remain in that prompt. Argument semantics stay with the application. See
 [the `@infer` contract](./docs/infer-contract.md#composing-llm-messages).
 
 ## Quickstart

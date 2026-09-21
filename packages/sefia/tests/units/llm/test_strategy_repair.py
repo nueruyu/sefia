@@ -149,7 +149,7 @@ async def test_repair_preserves_executor_history(
     ]
     assert history == snapshot
     assert first.history == retry.history == tuple(snapshot)
-    assert first.message_plan is retry.message_plan
+    assert first.message_layout is retry.message_layout
     assert first.rejected is None
     assert retry.rejected is not None
 

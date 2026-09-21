@@ -122,17 +122,21 @@ build isolated middleware tests with `sefia.testing.make_decision_context()`.
 
 ## LLM message composition
 
-`LLMInferenceStrategy` creates a default `MessagePlan`, applies configured
+`LLMInferenceStrategy` creates a default `MessageLayout`, applies configured
 `MessageComposer` instances in sequence, builds a `DecisionSpec`, calls the transport,
 and validates the response. Applications configure composers through `Session` or
-`SessionScope`. Each composer can inspect `FunctionInfo` and transform the plan using
-application-defined conventions; Sefia assigns no meaning to annotations or models.
+`SessionScope`. Each composer can inspect `FunctionInfo`, place application messages
+before or after Sefia's standard inference prompt, and select its remaining arguments
+using application-defined conventions. Sefia assigns no meaning to annotations or models.
 Composers should treat `FunctionInfo` as read-only and remain reentrant across calls.
 
 Composers transform LLM input representation. They are not execution middleware and
-cannot wrap, retry, or short-circuit the inference loop. Every plan retains exactly
-one `TaskPrompt` so Sefia renders task content once. Transports append Sefia execution
-history, repair feedback, and decision instructions after the application plan.
+cannot wrap, retry, or short-circuit the inference loop. `PromptRenderer` renders
+Sefia's standard inference prompt from function instructions, remaining arguments,
+and any textual tool definitions. Transports place that prompt between the layout's
+application messages, then append Sefia execution history, repair feedback, and
+response instructions. A private text utility preserves JSON serialization across
+prompt and transport messages.
 Observation events receive a separate message snapshot so handlers cannot change the
 LLM request.
 

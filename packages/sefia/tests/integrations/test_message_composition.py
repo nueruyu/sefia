@@ -1,5 +1,6 @@
+import json
 from copy import deepcopy
-from typing import cast
+from dataclasses import dataclass
 from unittest.mock import AsyncMock
 
 import pytest
@@ -20,8 +21,7 @@ from sefia.llm import (
     MarkdownPromptRenderer,
     Message,
     MessageComposer,
-    MessagePlan,
-    TaskPrompt,
+    MessageLayout,
     ToolCall,
 )
 from sefia.llm._prompt_renderer import RejectedDecision
@@ -42,25 +42,29 @@ from sefia.testing import (
 )
 
 
+@dataclass(frozen=True)
+class _StructuredResult:
+    value: str
+
+
 class _Layer(MessageComposer):
     def __init__(self, name: str, log: list[str]) -> None:
         self.name = name
         self.log = log
 
     @override
-    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
+    async def compose(
+        self, function: FunctionInfo, layout: MessageLayout
+    ) -> MessageLayout:
         assert function.bound_arguments["question"] == "current"
         assert function.prompt_arguments["knowledge"] == {"a": 1}
         assert function.type_hints["question"] is str
         assert function.instructions == "Answer the question."
         self.log.append(self.name)
-        task = next(part for part in plan.parts if isinstance(part, TaskPrompt))
-        return MessagePlan(
-            parts=(
-                *(part for part in plan.parts if part is not task),
-                Message(role="developer", content=self.name),
-                TaskPrompt(arguments={"knowledge": task.arguments["knowledge"]}),
-            )
+        return MessageLayout(
+            before=(*layout.before, Message(role="developer", content=self.name)),
+            arguments={"knowledge": layout.arguments["knowledge"]},
+            after=layout.after,
         )
 
 
@@ -78,15 +82,16 @@ async def test_message_composers_transform_in_declared_order() -> None:
         StructuredDecisionTransport(),
         message_composers=(_Layer("A", log), _Layer("B", log), _Layer("C", log)),
     )
-    plan = await strategy._compose_message_plan(function)
+    layout = await strategy._compose_message_layout(function)
 
     assert log == ["A", "B", "C"]
-    assert [cast(Message, part).content for part in plan.parts[:-1]] == [
+    assert [message.content for message in layout.before] == [
         "A",
         "B",
         "C",
     ]
-    assert plan.parts[-1] == TaskPrompt(arguments={"knowledge": {"a": 1}})
+    assert layout.arguments == {"knowledge": {"a": 1}}
+    assert layout.after == ()
 
 
 def _spec() -> DecisionSpec:
@@ -141,22 +146,20 @@ async def test_transport_preserves_application_plan_then_appends_history_and_rep
         Message(role="assistant", content="old answer"),
         Message(role="user", content="current question"),
     )
-    plan = MessagePlan(
-        parts=(
-            application_messages[0],
-            TaskPrompt(arguments=function.prompt_arguments),
-            *application_messages[1:],
-        )
+    layout = MessageLayout(
+        before=(application_messages[0],),
+        arguments=function.prompt_arguments,
+        after=application_messages[1:],
     )
     history = (
         ToolCallsDecision([make_tool_call_request(id="call-1", name="lookup")]),
-        ToolCallResult(tool_call_id="call-1", result="found"),
+        ToolCallResult(tool_call_id="call-1", result=_StructuredResult("found")),
     )
     rejected = RejectedDecision(content="bad", reason="invalid")
     request = make_decision_request(
         _spec(),
         function=function,
-        message_plan=plan,
+        message_layout=layout,
         history=history,
         rejected=rejected,
     )
@@ -187,10 +190,12 @@ async def test_transport_preserves_application_plan_then_appends_history_and_rep
     if isinstance(transport, NativeDecisionTransport):
         assert [message.role for message in messages[5:7]] == ["assistant", "tool"]
         assert messages[5].tool_calls[0].id == messages[6].tool_call_id == "call-1"
+        assert json.loads(messages[6].content) == {"value": "found"}
         assert sent["tools"][0].name == "return_result"
     else:
         assert messages[5].role == "user"
         assert "Previous tool interactions" in messages[5].content
+        assert '"value": "found"' in messages[5].content
         assert (
             sent["decision_spec"] is request.decision_spec
             if isinstance(transport, StructuredDecisionTransport)
@@ -206,7 +211,7 @@ async def test_transport_preserves_application_plan_then_appends_history_and_rep
         NativeDecisionTransport(),
     ],
 )
-async def test_default_plan_sends_one_task_message_on_first_step(
+async def test_default_layout_sends_one_inference_message_on_first_step(
     transport: StructuredDecisionTransport
     | PromptedDecisionTransport
     | NativeDecisionTransport,
@@ -245,29 +250,17 @@ async def test_default_plan_sends_one_task_message_on_first_step(
     assert "## Response" in messages[0].content
 
 
-async def test_transport_rejects_unknown_plan_part() -> None:
-    plan = MessagePlan(
-        parts=cast(tuple[Message | TaskPrompt, ...], (TaskPrompt({}), object()))
-    )
-    request = make_decision_request(_spec(), message_plan=plan)
-
-    with pytest.raises(TypeError, match="Unknown MessagePlan part type: object"):
-        await StructuredDecisionTransport().request_decision(
-            AsyncMock(), _renderer(), request, RecordingDecisionObserver(), False
-        )
-
-
-async def test_client_mutation_does_not_change_plan_used_for_repair() -> None:
+async def test_client_mutation_does_not_change_layout_used_for_repair() -> None:
     source = Message(role="developer", content=[{"text": "original"}])
-    plans: list[MessagePlan] = []
+    layouts: list[MessageLayout] = []
 
     class _SourceComposer(MessageComposer):
         @override
         async def compose(
-            self, function: FunctionInfo, plan: MessagePlan
-        ) -> MessagePlan:
-            composed = MessagePlan(parts=(source, TaskPrompt(arguments={})))
-            plans.append(composed)
+            self, function: FunctionInfo, layout: MessageLayout
+        ) -> MessageLayout:
+            composed = MessageLayout(before=(source,), arguments={}, after=())
+            layouts.append(composed)
             return composed
 
     client = AsyncMock(spec=LLMClient)
@@ -306,5 +299,5 @@ async def test_client_mutation_does_not_change_plan_used_for_repair() -> None:
     assert observed == [source, source]
     assert all(message is not source for message in observed)
     assert source.content == [{"text": "original"}]
-    assert len(plans) == 1
-    assert plans[0].parts[0] is source
+    assert len(layouts) == 1
+    assert layouts[0].before[0] is source

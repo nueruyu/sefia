@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from typing_extensions import override
 
-from sefia.llm import DecisionPrompt, LLMCompletion, Message, PromptRenderer
+from sefia.llm import InferencePrompt, LLMCompletion, Message, PromptRenderer
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec
@@ -24,7 +24,6 @@ def _request() -> DecisionRequest:
 def _renderer(prompt: str = "complete prompt") -> Mock:
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = prompt
-    renderer.render_decision_instructions.return_value = "## Response\n\ncontrol"
     return renderer
 
 
@@ -45,18 +44,18 @@ async def test_renders_and_delivers_one_complete_prompt() -> None:
     )
 
     sent = client.complete.await_args.kwargs
-    assert sent["messages"] == [
-        Message(role="user", content="complete prompt\n\n## Response\n\ncontrol")
-    ]
+    assert len(sent["messages"]) == 1
+    assert sent["messages"][0].role == "user"
+    content = sent["messages"][0].content
+    assert content.startswith("complete prompt\n\n## Response\n\n")
     assert sent["decision_spec"] is request.decision_spec
     assert observer.messages == tuple(sent["messages"])
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
     assert decoded.completion is completion
     renderer.render.assert_called_once()
-    assert isinstance(renderer.render.call_args.args[0], DecisionPrompt)
-    instructions = renderer.render_decision_instructions.call_args.args[0]
-    assert "provided structured output schema" in instructions
-    assert '"decision"' not in instructions
+    assert isinstance(renderer.render.call_args.args[0], InferencePrompt)
+    assert "provided structured output schema" in content
+    assert '"decision"' not in content
 
 
 async def test_observer_finishes_before_the_client_request() -> None:

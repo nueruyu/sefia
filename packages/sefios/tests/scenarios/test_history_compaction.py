@@ -6,13 +6,14 @@ session storage). Every object is rebuilt for the second run, so the only bridge
 between runs is what was committed to disk before the pause.
 """
 
+import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sefia import HistoryStorage, MiddlewareSet, Policy, Tools
-from sefia.inference import HistoryItem, ToolCallResult
-from sefia.llm import DecisionPrompt, LLMCompletion, PromptRenderer, RejectedDecision
+from sefia.llm import InferencePrompt, LLMCompletion, PromptRenderer
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefios import SessionScope, SQLitePersistence, domain
 from sefios.exceptions import InteractionRequired
@@ -48,30 +49,21 @@ class Notes:
 
 class _RecordingRenderer(PromptRenderer):
     def __init__(self) -> None:
-        self.prompts: list[DecisionPrompt] = []
-        self.histories: list[tuple[HistoryItem, ...]] = []
+        self.prompts: list[InferencePrompt] = []
 
     @override
-    def render(self, prompt: DecisionPrompt) -> str:
+    def render(self, prompt: InferencePrompt) -> str:
         self.prompts.append(prompt)
         return "prompt"
 
-    @override
-    def render_decision_instructions(self, instructions: str) -> str:
-        return "response"
 
-    @override
-    def render_history(self, history: tuple[HistoryItem, ...]) -> str:
-        self.histories.append(history)
-        return "history"
-
-    @override
-    def render_rejection(self, rejected: RejectedDecision) -> str:
-        return "rejection"
-
-    @override
-    def render_tool_result(self, result: ToolCallResult) -> str:
-        return str(result.result)
+def _history_records(request: dict[str, Any]) -> list[dict[str, Any]]:
+    text = next(
+        message["content"]
+        for message in request["messages"]
+        if message["content"].startswith("## Previous tool interactions")
+    )
+    return json.loads(text.split("```json\n", 1)[1].split("\n```", 1)[0])
 
 
 class _Agent:
@@ -131,7 +123,11 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
             await _Agent(Notes(), Input()).chat()
 
     assert [len(request["messages"]) for request in mock_llm.requests] == [1, 3, 3, 3]
-    assert [len(history) for history in renderer.histories] == [2, 4, 2]
+    assert [len(_history_records(request)) for request in mock_llm.requests[1:]] == [
+        2,
+        4,
+        2,
+    ]
 
     channel = InteractionChannel(
         SQLitePersistence(tmp_path / "sessions.sqlite3").create_session_storage(
@@ -146,9 +142,9 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
     assert result == "All done."
     assert len(resumed_llm.requests) == 1
     resumed_results = [
-        item.result
-        for item in renderer.histories[-1]
-        if isinstance(item, ToolCallResult)
+        record["tool_result"]["result"]
+        for record in _history_records(resumed_llm.requests[-1])
+        if "tool_result" in record
     ]
     assert "noted: two" in resumed_results
     assert "noted: zero" not in resumed_results

@@ -11,7 +11,7 @@ implement each step.
 | --- | --- | --- |
 | `@infer` decorator | `packages/sefia/src/sefia/_authoring/domain.py` | Wraps a function so calling it runs an inference instead of the body. |
 | `InferenceExecutor` | `packages/sefia/src/sefia/_executor.py` | Owns the step loop, tool execution, middleware. |
-| `LLMInferenceStrategy` | `packages/sefia/src/sefia/llm/_strategy.py` | Builds the decision specification, passes a composed message plan to the transport, and validates the reply. |
+| `LLMInferenceStrategy` | `packages/sefia/src/sefia/llm/_strategy.py` | Composes a message layout, builds the decision specification, and validates the transport reply. |
 | `DefaultToolCollector` | `packages/sefia/src/sefia/tool_collectors/_default.py` | Discovers tools from the bound object and its held dependencies. |
 | `Session` / `SessionContext` | `packages/sefia/src/sefia/_session.py`, `_context.py` | The durable, contextvar-scoped run; wraps a `glyff.Session`. |
 | glyff | [nueruyu/glyff](https://github.com/nueruyu/glyff) | Content-addressed engrave/replay underneath every engraved call. |
@@ -80,31 +80,32 @@ loop:
 
 ## Turning a function into a prompt
 
-`LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) coordinates six
-domain concepts:
+`LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) coordinates message
+composition and decision validation:
 
 ```text
-plan = MessagePlan.default(function_info)
+layout = MessageLayout.default(function_info)
 for composer in message_composers:
-    plan = composer.compose(function_info, plan)
-request = DecisionRequest(function=function_info, message_plan=plan, ...)
+    layout = composer.compose(function_info, layout)
+request = DecisionRequest(function=function_info, message_layout=layout, ...)
 ```
 
-1. It creates `MessagePlan.default(function_info)` and passes the plan through each
-   configured `MessageComposer` in order. A composer can transform the plan based on
+1. It creates `MessageLayout.default(function_info)` and passes the layout through each
+   configured `MessageComposer` in order. A composer can transform the layout based on
    application conventions while treating `FunctionInfo` as read-only metadata.
 2. `DecisionSpec` describes which next decisions are valid. `DecisionRequest` carries
-   the composed plan, prior tool interactions, and any rejected response.
-3. `DecisionTransport` supplies the response instructions for its protocol and asks
-   `PromptRenderer` to produce the required text.
+   the composed layout, prior tool interactions, and any rejected response.
+3. `PromptRenderer` renders `InferencePrompt` from function instructions, remaining
+   arguments, and any textual tool definitions. `DecisionTransport` places that prompt
+   between application messages and owns history, repair, and response instructions.
 4. `LLMClient.complete()` returns a provider-neutral `LLMCompletion`.
 5. The transport decodes its protocol into `DecodedDecision`; its `decision_data` is
    structured but not yet semantically valid.
 6. `DecisionSpec` validates that data as a `StepDecision`.
 
-The plan is composed once per strategy invocation. A new inference step or a
+The layout is composed once per strategy invocation. A new inference step or a
 `DecisionMiddleware` retry invokes the strategy again; an internal response repair
-reuses the same plan. Composers are strategy collaborators, not execution middleware.
+reuses the same layout. Composers are strategy collaborators, not execution middleware.
 
 `DecisionSpec` selects one of three shapes:
 
@@ -140,10 +141,11 @@ result schema interfaces and decoded values live in `sefia.llm.result_format` an
 `sefia.llm.structured_data`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
-`MarkdownPromptRenderer` independently renders the task prompt, textual tool history,
-tool results, repair feedback, and decision instructions. A transport expands the
-plan into messages, appends Sefia execution history and repair feedback, and places
-its decision instructions last. It combines task and decision text into one message
+`MarkdownPromptRenderer` renders only the standard inference prompt. A private LLM
+text utility normalizes Python values for JSON content. Transports build the final
+message sequence: application messages before the prompt, the prompt, application
+messages after it, execution history, repair feedback, and response instructions.
+They combine inference and response text into one message
 for the default first step. The transport copies application messages into each
 request and sends event handlers a separate snapshot of the final messages.
 `StructuredDecisionTransport` requests structured output;

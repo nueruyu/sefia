@@ -6,13 +6,12 @@ from uuid import UUID
 
 import pytest
 
-from sefia.inference import FunctionInfo, ToolCallResult
+from sefia.inference import FunctionInfo
 from sefia.llm import (
-    DecisionPrompt,
+    InferencePrompt,
     MarkdownPromptRenderer,
-    RejectedDecision,
 )
-from sefia.llm._markdown_prompt_renderer import _markdown_fence
+from sefia.llm._text import markdown_fence
 from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import PydanticModelBackend
 from sefia.pydantic._json_utils import pydantic_json_default
@@ -42,8 +41,8 @@ def _decision_spec() -> DecisionSpec:
 
 def _prompt(
     function: FunctionInfo,
-) -> DecisionPrompt:
-    return DecisionPrompt(
+) -> InferencePrompt:
+    return InferencePrompt(
         function=function,
         arguments=function.prompt_arguments,
         tools=_decision_spec().tools,
@@ -72,18 +71,15 @@ def _json_content(prompt: str) -> object:
     ],
 )
 def test_markdown_fence_is_longer_than_any_run_in_content(content: str, expected: str):
-    assert _markdown_fence(content) == expected
+    assert markdown_fence(content) == expected
 
 
-def test_render_keeps_task_and_decision_instructions_separate():
+def test_render_only_contains_inference_prompt():
     renderer = _renderer()
     content = renderer.render(_prompt(_function_info()))
 
     assert content.startswith("# Task\n\ninstructions")
     assert "## Response" not in content
-    assert renderer.render_decision_instructions("Return JSON.") == (
-        "## Response\n\nReturn JSON."
-    )
 
 
 def test_render_invocation_explains_when_there_are_no_direct_arguments():
@@ -118,14 +114,6 @@ def test_render_uses_json_default():
     assert _json_content(prompt) == {"value": {"value": "serialized"}}
 
 
-def test_render_tool_result_uses_the_same_json_representation() -> None:
-    rendered = _renderer().render_tool_result(
-        ToolCallResult("call-1", _CustomValue("serialized"))
-    )
-
-    assert rendered == '{"value":"serialized"}'
-
-
 def test_render_normalizes_nested_mapping_keys():
     identifier = UUID("12345678-1234-5678-1234-567812345678")
 
@@ -138,7 +126,7 @@ def test_render_normalizes_generic_mappings_as_json_objects():
     arguments = MappingProxyType({"knowledge": MappingProxyType({"foo": "bar"})})
 
     prompt = _renderer().render(
-        DecisionPrompt(function=_function_info(), arguments=arguments, tools=())
+        InferencePrompt(function=_function_info(), arguments=arguments, tools=())
     )
 
     assert _json_content(prompt) == {"knowledge": {"foo": "bar"}}
@@ -161,20 +149,3 @@ def test_render_falls_back_to_string_when_json_default_rejects_value():
     )
 
     assert _json_content(prompt) == {"value": "_CustomValue(value='fallback')"}
-
-
-def test_render_rejected_decision_describes_the_error():
-    feedback = _renderer().render_rejection(
-        RejectedDecision(content="invalid", reason="invalid schema")
-    )
-
-    assert "Reason: invalid schema" in feedback
-    assert "previous response was empty" not in feedback
-
-
-def test_render_rejected_decision_explains_an_empty_response():
-    feedback = _renderer().render_rejection(
-        RejectedDecision(content=None, reason="empty response")
-    )
-
-    assert "The previous response was empty." in feedback

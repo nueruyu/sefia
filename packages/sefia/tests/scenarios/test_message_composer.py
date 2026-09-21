@@ -20,7 +20,7 @@ from sefia import (
 )
 from sefia.event_system import EventHandler
 from sefia.inference import FunctionInfo, StepDecision
-from sefia.llm import Message, MessageComposer, MessagePlan, TaskPrompt
+from sefia.llm import Message, MessageComposer, MessageLayout
 from sefia.llm.events import BeforeLLMCall
 from sefia.testing import (
     MockLLMClient,
@@ -48,9 +48,10 @@ class ChatMessage:
 
 class ConversationMessages(MessageComposer):
     @override
-    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
-        task = next(part for part in plan.parts if isinstance(part, TaskPrompt))
-        remaining = dict(task.arguments)
+    async def compose(
+        self, function: FunctionInfo, layout: MessageLayout
+    ) -> MessageLayout:
+        remaining = dict(layout.arguments)
         developer: list[Message] = []
         conversation: list[Message] = []
         current: list[Message] = []
@@ -68,8 +69,10 @@ class ConversationMessages(MessageComposer):
                     Message(role=item.role, content=item.content) for item in value
                 )
                 del remaining[name]
-        return MessagePlan(
-            parts=(*developer, TaskPrompt(remaining), *conversation, *current)
+        return MessageLayout(
+            before=(*layout.before, *developer),
+            arguments=remaining,
+            after=(*layout.after, *conversation, *current),
         )
 
 
@@ -212,10 +215,14 @@ class _CountMessages(MessageComposer):
         self.calls = 0
 
     @override
-    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
+    async def compose(
+        self, function: FunctionInfo, layout: MessageLayout
+    ) -> MessageLayout:
         self.calls += 1
-        return MessagePlan(
-            parts=(Message(role="developer", content=str(self.calls)), *plan.parts)
+        return MessageLayout(
+            before=(*layout.before, Message(role="developer", content=str(self.calls))),
+            arguments=layout.arguments,
+            after=layout.after,
         )
 
 
@@ -247,7 +254,7 @@ class _Lookup:
         return "found"
 
 
-async def test_new_step_recomposes_application_plan() -> None:
+async def test_new_step_recomposes_application_layout() -> None:
     composer = _CountMessages()
     infer = Domain(glyff.Domain("tests.message-steps", version="1")).infer
 
@@ -282,8 +289,14 @@ class _FixedApplicationMessage(MessageComposer):
         self.message = message
 
     @override
-    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
-        return MessagePlan(parts=(self.message, *plan.parts))
+    async def compose(
+        self, function: FunctionInfo, layout: MessageLayout
+    ) -> MessageLayout:
+        return MessageLayout(
+            before=(self.message, *layout.before),
+            arguments=layout.arguments,
+            after=layout.after,
+        )
 
 
 class _MutateObservedMessages(EventHandler[BeforeLLMCall]):
