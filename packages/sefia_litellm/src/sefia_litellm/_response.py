@@ -91,6 +91,7 @@ def _decode_structured_data(
 
 def _calculate_cost(response: ModelResponse) -> float | None:
     from litellm import cost_per_token
+    from litellm.exceptions import BadRequestError
 
     usage = cast("Usage | None", cast(dict[str, Any], response).get("usage"))
     model = response.model
@@ -103,6 +104,9 @@ def _calculate_cost(response: ModelResponse) -> float | None:
             completion_tokens=usage.completion_tokens or 0,
         )
         return prompt_cost + completion_cost
+    except BadRequestError as error:
+        logger.warning("Failed to calculate cost for model %s: %s", model, error)
+        return None
     except Exception:
         logger.warning("Failed to calculate cost for model %s", model, exc_info=True)
         return None
