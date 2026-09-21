@@ -6,26 +6,22 @@ import glyff
 from typing_extensions import override
 
 from sefia import (
-    Domain,
     DecisionContext,
     DecisionMiddleware,
+    Domain,
     InferenceContext,
     InferenceMiddleware,
-    MessageContext,
-    MessageMiddleware,
-    MessagePlan,
     MiddlewareSet,
     Policy,
     Profile,
-    TaskPrompt,
     Tools,
     policy,
     profile,
 )
-from sefia.llm import Message
-from sefia.llm.events import BeforeLLMCall
 from sefia.event_system import EventHandler
-from sefia.inference import StepDecision
+from sefia.inference import FunctionInfo, StepDecision
+from sefia.llm import Message, MessageComposer, MessagePlan, TaskPrompt
+from sefia.llm.events import BeforeLLMCall
 from sefia.testing import (
     MockLLMClient,
     memory_session,
@@ -50,19 +46,15 @@ class ChatMessage:
     content: str
 
 
-class ConversationMessages(MessageMiddleware):
+class ConversationMessages(MessageComposer):
     @override
-    async def wrap(
-        self, ctx: MessageContext, nxt: Callable[[], Awaitable[MessagePlan]]
-    ) -> MessagePlan:
-        assert ctx.step == 0
-        plan = await nxt()
+    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
         task = next(part for part in plan.parts if isinstance(part, TaskPrompt))
         remaining = dict(task.arguments)
         developer: list[Message] = []
         conversation: list[Message] = []
         current: list[Message] = []
-        for name, hint in ctx.function.type_hints.items():
+        for name, hint in function.type_hints.items():
             if name not in remaining:
                 continue
             metadata = get_args(hint)[1:]
@@ -85,7 +77,6 @@ async def test_application_defined_annotations_compose_messages() -> None:
     infer = Domain(glyff.Domain("tests.message-app", version="1")).infer
 
     @infer
-    @policy(Policy(middleware=lambda: MiddlewareSet(message=(ConversationMessages(),))))
     async def respond(
         instructions: Annotated[str, AsMessage("developer")],
         history: Annotated[list[ChatMessage], AsConversation()],
@@ -96,7 +87,11 @@ async def test_application_defined_annotations_compose_messages() -> None:
         ...
 
     client = MockLLMClient([result_completion("done")])
-    async with memory_session(client, session_id="message-app"):
+    async with memory_session(
+        client,
+        session_id="message-app",
+        message_composers=(ConversationMessages(),),
+    ):
         assert (
             await respond(
                 "Reply briefly in Japanese.",
@@ -141,21 +136,19 @@ class _RunLayer(InferenceMiddleware):
         return result
 
 
-class _MessageLayer(MessageMiddleware):
+class _DecisionLayer(DecisionMiddleware):
     def __init__(self, label: str, log: list[str]) -> None:
         self.label = label
         self.log = log
 
     @override
     async def wrap(
-        self, ctx: MessageContext, nxt: Callable[[], Awaitable[MessagePlan]]
-    ) -> MessagePlan:
-        self.log.append(f"message:{self.label}:enter")
-        plan = await nxt()
-        self.log.append(f"message:{self.label}:exit")
-        return MessagePlan(
-            parts=(Message(role="developer", content=self.label), *plan.parts)
-        )
+        self, ctx: DecisionContext, nxt: Callable[[], Awaitable[StepDecision]]
+    ) -> StepDecision:
+        self.log.append(f"decision:{self.label}:enter")
+        result = await nxt()
+        self.log.append(f"decision:{self.label}:exit")
+        return result
 
 
 async def test_policy_factories_run_once_and_preserve_category_precedence() -> None:
@@ -167,7 +160,7 @@ async def test_policy_factories_run_once_and_preserve_category_precedence() -> N
             calls[label] = calls.get(label, 0) + 1
             return MiddlewareSet(
                 inference=(_RunLayer(label, log),),
-                message=(_MessageLayer(label, log),),
+                decision=(_DecisionLayer(label, log),),
             )
 
         return Policy(middleware=make)
@@ -199,13 +192,10 @@ async def test_policy_factories_run_once_and_preserve_category_precedence() -> N
     assert calls == dict.fromkeys(labels, 1)
     assert log == [
         *(f"run:{label}:enter" for label in labels),
-        *(f"message:{label}:enter" for label in labels),
-        *(f"message:{label}:exit" for label in reversed(labels)),
+        *(f"decision:{label}:enter" for label in labels),
+        *(f"decision:{label}:exit" for label in reversed(labels)),
         *(f"run:{label}:exit" for label in reversed(labels)),
     ]
-    assert [
-        message["content"] for message in client.requests[0]["messages"][:4]
-    ] == labels
 
 
 class _RetryDecision(DecisionMiddleware):
@@ -217,58 +207,39 @@ class _RetryDecision(DecisionMiddleware):
         return await nxt()
 
 
-class _CountMessages(MessageMiddleware):
+class _CountMessages(MessageComposer):
     def __init__(self) -> None:
         self.calls = 0
 
     @override
-    async def wrap(
-        self, ctx: MessageContext, nxt: Callable[[], Awaitable[MessagePlan]]
-    ) -> MessagePlan:
+    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
         self.calls += 1
-        plan = await nxt()
         return MessagePlan(
             parts=(Message(role="developer", content=str(self.calls)), *plan.parts)
         )
 
 
 async def test_decision_middleware_retry_reruns_message_composition() -> None:
-    messages = _CountMessages()
+    composer = _CountMessages()
     infer = Domain(glyff.Domain("tests.message-retry", version="1")).infer
 
     @infer
-    @policy(
-        Policy(
-            middleware=lambda: MiddlewareSet(
-                decision=(_RetryDecision(),), message=(messages,)
-            )
-        )
-    )
+    @policy(Policy(middleware=lambda: MiddlewareSet(decision=(_RetryDecision(),))))
     async def answer(topic: str) -> str:
         """Answer the task."""
         ...
 
     client = MockLLMClient([result_completion("first"), result_completion("second")])
-    async with memory_session(client, session_id="message-retry"):
+    async with memory_session(
+        client, session_id="message-retry", message_composers=(composer,)
+    ):
         assert await answer("topic") == "second"
 
-    assert messages.calls == 2
+    assert composer.calls == 2
     assert [request["messages"][0]["content"] for request in client.requests] == [
         "1",
         "2",
     ]
-
-
-class _RecordSteps(MessageMiddleware):
-    def __init__(self, steps: list[int]) -> None:
-        self.steps = steps
-
-    @override
-    async def wrap(
-        self, ctx: MessageContext, nxt: Callable[[], Awaitable[MessagePlan]]
-    ) -> MessagePlan:
-        self.steps.append(ctx.step)
-        return await nxt()
 
 
 class _Lookup:
@@ -276,8 +247,8 @@ class _Lookup:
         return "found"
 
 
-async def test_message_context_tracks_each_decision_step() -> None:
-    steps: list[int] = []
+async def test_new_step_recomposes_application_plan() -> None:
+    composer = _CountMessages()
     infer = Domain(glyff.Domain("tests.message-steps", version="1")).infer
 
     class Agent:
@@ -287,9 +258,6 @@ async def test_message_context_tracks_each_decision_step() -> None:
             self.tool = _Lookup()
 
         @infer
-        @policy(
-            Policy(middleware=lambda: MiddlewareSet(message=(_RecordSteps(steps),)))
-        )
         async def answer(self) -> str:
             """Answer using the tool."""
             ...
@@ -297,21 +265,24 @@ async def test_message_context_tracks_each_decision_step() -> None:
     client = MockLLMClient(
         [tool_calls_completion(("_Lookup_lookup", {})), result_completion("done")]
     )
-    async with memory_session(client, session_id="message-steps"):
+    async with memory_session(
+        client, session_id="message-steps", message_composers=(composer,)
+    ):
         assert await Agent().answer() == "done"
 
-    assert steps == [0, 1]
+    assert composer.calls == 2
+    assert [request["messages"][0]["content"] for request in client.requests] == [
+        "1",
+        "2",
+    ]
 
 
-class _FixedApplicationMessage(MessageMiddleware):
+class _FixedApplicationMessage(MessageComposer):
     def __init__(self, message: Message) -> None:
         self.message = message
 
     @override
-    async def wrap(
-        self, ctx: MessageContext, nxt: Callable[[], Awaitable[MessagePlan]]
-    ) -> MessagePlan:
-        plan = await nxt()
+    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
         return MessagePlan(parts=(self.message, *plan.parts))
 
 
@@ -330,20 +301,17 @@ async def test_before_llm_call_handler_cannot_change_client_request() -> None:
     infer = Domain(glyff.Domain("tests.message-observation", version="1")).infer
 
     @infer
-    @policy(
-        Policy(
-            handlers=lambda: [_MutateObservedMessages()],
-            middleware=lambda: MiddlewareSet(
-                message=(_FixedApplicationMessage(application_message),)
-            ),
-        )
-    )
+    @policy(Policy(handlers=lambda: [_MutateObservedMessages()]))
     async def answer(topic: str) -> str:
         """Answer the task."""
         ...
 
     client = MockLLMClient([result_completion("done")])
-    async with memory_session(client, session_id="message-observation"):
+    async with memory_session(
+        client,
+        session_id="message-observation",
+        message_composers=(_FixedApplicationMessage(application_message),),
+    ):
         assert await answer("topic") == "done"
 
     sent = client.requests[0]["messages"]

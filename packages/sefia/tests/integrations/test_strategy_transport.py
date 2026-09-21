@@ -3,7 +3,7 @@ from typing import Never
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from sefia import MessagePlan, TaskPrompt, ToolRegistry
+from sefia import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import ResultDecision, ToolCallsDecision
@@ -23,9 +23,6 @@ from sefia.llm.transports import (
 )
 from sefia.pydantic import PydanticModelBackend
 from sefia.testing import make_function_info
-
-
-TEST_PLAN = MessagePlan(parts=(TaskPrompt(arguments={}),))
 
 
 @dataclass
@@ -73,7 +70,6 @@ async def test_transport_feedback_reaches_renderer_and_result_is_restored(
 
     decision = await strategy.decide_next_step(
         make_function_info(return_type=Result),
-        TEST_PLAN,
         [],
         ToolRegistry(),
         AsyncMock(spec=EventPublisher),
@@ -136,11 +132,9 @@ async def test_never_mode_is_preserved_through_strategy_and_transport(
 
     if returns_result:
         with pytest.raises(InvalidInferenceResponseError):
-            await strategy.decide_next_step(function, TEST_PLAN, [], tools, publisher)
+            await strategy.decide_next_step(function, [], tools, publisher)
     else:
-        decision = await strategy.decide_next_step(
-            function, TEST_PLAN, [], tools, publisher
-        )
+        decision = await strategy.decide_next_step(function, [], tools, publisher)
         assert isinstance(decision, ToolCallsDecision)
         assert [call.name for call in decision.calls] == ["lookup"]
 

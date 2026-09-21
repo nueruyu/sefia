@@ -116,9 +116,6 @@ class Domain:
                 decision_middlewares=[
                     m for group in middleware_sets for m in group.decision
                 ],
-                message_middlewares=[
-                    m for group in middleware_sets for m in group.message
-                ],
                 history_storage=context.history_storage,
             )
 

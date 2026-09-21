@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from typing import final
 
@@ -12,7 +12,7 @@ from glyff_pydantic import (
     PydanticSerializer,
 )
 from sefia import HistoryStorage, Policy, Profile, ToolCollector
-from sefia.llm import LLMClient, PromptRenderer
+from sefia.llm import LLMClient, MessageComposer, PromptRenderer
 from sefia.llm.transports import DecisionTransport
 
 from ._interaction_context import bind_interaction_channel
@@ -56,6 +56,7 @@ class SessionScope:
         tool_collector: ToolCollector | None = None,
         prompt_renderer: PromptRenderer | None = None,
         decision_transport: DecisionTransport | None = None,
+        message_composers: Sequence[MessageComposer] | None = None,
     ):
         self.model = model
         self.llm_client = llm_client
@@ -69,6 +70,7 @@ class SessionScope:
         self.tool_collector = tool_collector
         self.prompt_renderer = prompt_renderer
         self.decision_transport = decision_transport
+        self.message_composers = tuple(message_composers or ())
 
     @asynccontextmanager
     async def session(
@@ -82,6 +84,7 @@ class SessionScope:
         tool_collector: ToolCollector | None = None,
         prompt_renderer: PromptRenderer | None = None,
         decision_transport: DecisionTransport | None = None,
+        message_composers: Sequence[MessageComposer] | None = None,
     ) -> AsyncGenerator[sefia.Session]:
         """Run code within a configured Sefia session context."""
         llm_client = self.llm_client
@@ -97,6 +100,11 @@ class SessionScope:
             self.decision_transport
             if decision_transport is None
             else decision_transport
+        )
+        resolved_message_composers = (
+            self.message_composers
+            if message_composers is None
+            else tuple(message_composers)
         )
 
         if llm_client is None:
@@ -148,6 +156,7 @@ class SessionScope:
                     history_storage=self.history_storage,
                     prompt_renderer=resolved_prompt_renderer,
                     decision_transport=resolved_decision_transport,
+                    message_composers=resolved_message_composers,
                     max_repair_attempts=self.max_repair_attempts,
                 ) as session:
                     yield session

@@ -1,4 +1,4 @@
-from collections.abc import Hashable
+from collections.abc import Hashable, Sequence
 from typing import Self
 
 import glyff
@@ -12,6 +12,7 @@ from ._profiles import Profile
 from ._tool_system import ToolCollector
 from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
+from .llm._message_composer import MessageComposer
 from .llm._strategy import LLMInferenceStrategy
 from .llm._markdown_prompt_renderer import MarkdownPromptRenderer
 from .llm._prompt_renderer import PromptRenderer
@@ -41,6 +42,7 @@ class Session:
         max_repair_attempts: int = 2,
         prompt_renderer: PromptRenderer | None = None,
         decision_transport: DecisionTransport | None = None,
+        message_composers: Sequence[MessageComposer] = (),
     ):
         self.llm_client = llm_client
         self._glyff_session = glyff_session
@@ -57,6 +59,7 @@ class Session:
             json_default=pydantic_json_default
         )
         decision_transport = decision_transport or StructuredDecisionTransport()
+        message_composers = tuple(message_composers)
 
         # A profile only swaps the client; the rest of the strategy is shared.
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
@@ -65,6 +68,7 @@ class Session:
                 result_format_factory=model_backend,
                 prompt_renderer=prompt_renderer,
                 decision_transport=decision_transport,
+                message_composers=message_composers,
                 stream=stream,
                 max_repair_attempts=max_repair_attempts,
             )

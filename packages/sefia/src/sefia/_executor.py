@@ -3,7 +3,6 @@ from typing import Any, Awaitable, Callable, TypeAlias, cast, overload
 
 from . import events
 from ._history import StepHistory
-from ._message_plan import MessagePlan
 from ._interfaces import InferenceStrategy
 from ._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from ._interfaces.middleware import (
@@ -11,8 +10,6 @@ from ._interfaces.middleware import (
     DecisionMiddleware,
     InferenceContext,
     InferenceMiddleware,
-    MessageContext,
-    MessageMiddleware,
     StepContext,
     StepMiddleware,
 )
@@ -29,12 +26,8 @@ from .inference import (
     ToolCallResult,
 )
 
-_Middleware: TypeAlias = (
-    InferenceMiddleware | StepMiddleware | DecisionMiddleware | MessageMiddleware
-)
-_MiddlewareContext: TypeAlias = (
-    InferenceContext | StepContext | DecisionContext | MessageContext
-)
+_Middleware: TypeAlias = InferenceMiddleware | StepMiddleware | DecisionMiddleware
+_MiddlewareContext: TypeAlias = InferenceContext | StepContext | DecisionContext
 
 
 @overload
@@ -59,14 +52,6 @@ def _compose(
     ctx: DecisionContext,
     core: Callable[[], Awaitable[StepDecision]],
 ) -> Callable[[], Awaitable[StepDecision]]: ...
-
-
-@overload
-def _compose(
-    middlewares: Sequence[MessageMiddleware],
-    ctx: MessageContext,
-    core: Callable[[], Awaitable[MessagePlan]],
-) -> Callable[[], Awaitable[MessagePlan]]: ...
 
 
 def _compose(
@@ -101,10 +86,6 @@ def _layer(
             return await middleware.wrap(ctx, nxt)
         if isinstance(middleware, DecisionMiddleware) and isinstance(
             ctx, DecisionContext
-        ):
-            return await middleware.wrap(ctx, nxt)
-        if isinstance(middleware, MessageMiddleware) and isinstance(
-            ctx, MessageContext
         ):
             return await middleware.wrap(ctx, nxt)
         raise TypeError("Middleware and context types do not match.")
@@ -146,7 +127,6 @@ class InferenceExecutor:
         inference_middlewares: list[InferenceMiddleware] | None = None,
         step_middlewares: list[StepMiddleware] | None = None,
         decision_middlewares: list[DecisionMiddleware] | None = None,
-        message_middlewares: list[MessageMiddleware] | None = None,
     ):
         self.func_info = FunctionInfo.create(func, args, kwargs)
         self.strategy = inference_strategy
@@ -157,7 +137,6 @@ class InferenceExecutor:
         self._inference_middlewares = inference_middlewares or []
         self._step_middlewares = step_middlewares or []
         self._decision_middlewares = decision_middlewares or []
-        self._message_middlewares = message_middlewares or []
 
         self._tool_registry: ToolRegistry = tool_collector.collect(
             self.func_info.capabilities
@@ -186,17 +165,8 @@ class InferenceExecutor:
         ctx = DecisionContext(step=step)
 
         async def core() -> StepDecision:
-            async def message_core() -> MessagePlan:
-                return MessagePlan.default(self.func_info)
-
-            message_plan = await _compose(
-                self._message_middlewares,
-                MessageContext(step=step, function=self.func_info),
-                message_core,
-            )()
             return await self.strategy.decide_next_step(
                 function_info=self.func_info,
-                message_plan=message_plan,
                 history=history,
                 tools=self._tool_registry,
                 publisher=self.publisher,

@@ -10,7 +10,6 @@ from sefia import (
     DecisionContext,
     DecisionMiddleware,
     InferenceMiddleware,
-    MessageMiddleware,
     MiddlewareSet,
     Policy,
     StepMiddleware,
@@ -125,10 +124,6 @@ def test_middleware_set_rejects_wrong_category_immediately() -> None:
         TypeError, match=r"MiddlewareSet.inference\[0\] must be InferenceMiddleware"
     ):
         MiddlewareSet(inference=cast(tuple[InferenceMiddleware, ...], (wrong,)))
-    with pytest.raises(
-        TypeError, match=r"MiddlewareSet.message\[0\] must be MessageMiddleware"
-    ):
-        MiddlewareSet(message=cast(tuple[MessageMiddleware, ...], (wrong,)))
     with pytest.raises(
         TypeError, match=r"MiddlewareSet.decision\[0\] must be DecisionMiddleware"
     ):

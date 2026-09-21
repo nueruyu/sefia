@@ -12,8 +12,8 @@ from sefia import (
     Policy,
 )
 from sefia.exceptions import InferenceError
-from sefia.inference import ResultDecision, StepDecision
-from sefia.llm import LLMCompletion
+from sefia.inference import FunctionInfo, ResultDecision, StepDecision
+from sefia.llm import LLMCompletion, Message, MessageComposer, MessagePlan
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefia.tool_collectors import StaticToolCollector
 from sefios.middleware import Retrier
@@ -28,6 +28,17 @@ from sefios import (
 )
 
 infer = domain("packages.sefios.tests.integrations.test_session_scope").infer
+
+
+class _Prefix(MessageComposer):
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    @override
+    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
+        return MessagePlan(
+            parts=(Message(role="developer", content=self.text), *plan.parts)
+        )
 
 
 class _Probe:
@@ -98,6 +109,23 @@ async def test_session_tool_collector_overrides_init_default(
         assert await _Probe().answer() == "ok"
 
     assert calls == ["call_tool"]
+
+
+async def test_session_message_composers_override_scope_default() -> None:
+    client = MockLLMClient([result_completion("first"), result_completion("second")])
+    scope = SessionScope(llm_client=client, message_composers=(_Prefix("scope"),))
+
+    async with scope.session(session_id="composer-default"):
+        assert await _Probe().answer() == "first"
+    async with scope.session(
+        session_id="composer-override", message_composers=(_Prefix("session"),)
+    ):
+        assert await _Probe().answer() == "second"
+
+    assert [request["messages"][0]["content"] for request in client.requests] == [
+        "scope",
+        "session",
+    ]
 
 
 async def test_memory_persistence_is_default(

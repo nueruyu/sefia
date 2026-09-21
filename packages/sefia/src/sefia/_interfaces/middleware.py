@@ -3,9 +3,8 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, cast
 
 from .._history import StepHistory
-from .._message_plan import MessagePlan
 from .._tool_system import ToolRegistry
-from ..inference import FunctionInfo, StepDecision
+from ..inference import StepDecision
 
 
 @dataclass
@@ -40,12 +39,6 @@ class DecisionContext:
     """Context for middleware wrapping decision generation inside a durable step."""
 
     step: int
-
-
-@dataclass(frozen=True)
-class MessageContext:
-    step: int
-    function: FunctionInfo
 
 
 class InferenceMiddleware(ABC):
@@ -95,30 +88,17 @@ class DecisionMiddleware(ABC):
     ) -> StepDecision: ...
 
 
-class MessageMiddleware(ABC):
-    """Wraps application message composition inside one durable decision."""
-
-    @abstractmethod
-    async def wrap(
-        self,
-        ctx: MessageContext,
-        nxt: Callable[[], Awaitable[MessagePlan]],
-    ) -> MessagePlan: ...
-
-
 @dataclass(frozen=True)
 class MiddlewareSet:
     inference: tuple[InferenceMiddleware, ...] = ()
     step: tuple[StepMiddleware, ...] = ()
     decision: tuple[DecisionMiddleware, ...] = ()
-    message: tuple[MessageMiddleware, ...] = ()
 
     def __post_init__(self) -> None:
         categories: tuple[tuple[str, type[ABC], object], ...] = (
             ("inference", InferenceMiddleware, cast(object, self.inference)),
             ("step", StepMiddleware, cast(object, self.step)),
             ("decision", DecisionMiddleware, cast(object, self.decision)),
-            ("message", MessageMiddleware, cast(object, self.message)),
         )
         for name, expected, items in categories:
             if not isinstance(items, tuple):

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from ..._message_plan import MessagePlan
+from .._message_plan import MessagePlan
 from ...inference import FunctionInfo, HistoryItem
 from .._client import LLMClient
 from .._messages import LLMCompletion, Message

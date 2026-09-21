@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 from typing_extensions import override
 
-from sefia import MessagePlan, TaskPrompt, ToolRegistry
+from sefia import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.inference import FunctionInfo, ToolCallsDecision
 from sefia.llm import LLMCompletion, LLMInferenceStrategy, Message
@@ -27,9 +27,6 @@ from sefia.llm.transports import (
 from sefia.pydantic import PydanticModelBackend
 from sefia.streaming import ArgStream, StringDelta, StringEnd
 from sefia.testing import make_function_info
-
-
-TEST_PLAN = MessagePlan(parts=(TaskPrompt(arguments={}),))
 
 
 class _Collector:
@@ -130,7 +127,6 @@ async def test_arguments_stream_from_transport_through_strategy_to_tool_handler(
 
     decision = await strategy.decide_next_step(
         function_info=_function_info(),
-        message_plan=TEST_PLAN,
         history=[],
         tools=tools,
         publisher=EventPublisher([]),

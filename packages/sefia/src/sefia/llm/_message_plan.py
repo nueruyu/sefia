@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import Any, Mapping
 
-from .inference import FunctionInfo
-
-if TYPE_CHECKING:
-    from .llm._messages import Message
+from ..inference import FunctionInfo
+from ._messages import Message
 
 
 @dataclass(frozen=True)

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from typing import cast
 
 from typing_extensions import final, override
 
 from .._interfaces import InferenceStrategy
-from .._message_plan import MessagePlan
+from ._message_composer import MessageComposer
+from ._message_plan import MessagePlan
 from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
@@ -115,6 +117,8 @@ class LLMInferenceStrategy(InferenceStrategy):
         decision_transport: DecisionTransport,
         stream: bool = False,
         max_repair_attempts: int = 2,
+        *,
+        message_composers: Sequence[MessageComposer] = (),
     ) -> None:
         if max_repair_attempts < 0:
             raise ValueError("max_repair_attempts must be non-negative")
@@ -124,16 +128,34 @@ class LLMInferenceStrategy(InferenceStrategy):
         self._decision_transport = decision_transport
         self._stream = stream
         self._max_repair_attempts = max_repair_attempts
+        self._message_composers = tuple(message_composers)
+        for index, composer in enumerate(self._message_composers):
+            if not isinstance(cast(object, composer), MessageComposer):
+                raise TypeError(
+                    f"message_composers[{index}] must be MessageComposer; "
+                    f"got {type(composer).__name__}."
+                )
+
+    async def _compose_message_plan(self, function_info: FunctionInfo) -> MessagePlan:
+        plan = MessagePlan.default(function_info)
+        for composer in self._message_composers:
+            result = cast(object, await composer.compose(function_info, plan))
+            if not isinstance(result, MessagePlan):
+                raise TypeError(
+                    f"{type(composer).__name__}.compose() must return MessagePlan."
+                )
+            plan = result
+        return plan
 
     @override
     async def decide_next_step(
         self,
         function_info: FunctionInfo,
-        message_plan: MessagePlan,
         history: Sequence[HistoryItem],
         tools: ToolRegistry,
         publisher: EventPublisher,
     ) -> StepDecision:
+        message_plan = await self._compose_message_plan(function_info)
         decision_spec = DecisionSpec.for_inference(
             output_type=function_info.return_type,
             tools=tools.get_all(),

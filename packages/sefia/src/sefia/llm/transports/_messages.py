@@ -1,7 +1,7 @@
 from copy import deepcopy
 from typing import cast
 
-from ..._message_plan import TaskPrompt
+from .._message_plan import TaskPrompt
 from .._messages import Message
 from .._prompt_renderer import PromptRenderer
 from ..step_decision import StepTool

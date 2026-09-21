@@ -6,8 +6,6 @@ from ._interfaces import (
     DecisionMiddleware,
     InferenceContext,
     InferenceMiddleware,
-    MessageContext,
-    MessageMiddleware,
     MiddlewareSet,
     InferenceStrategy,
     Policy,
@@ -15,7 +13,6 @@ from ._interfaces import (
     StepMiddleware,
 )
 from ._profiles import Profile
-from ._message_plan import MessagePlan, TaskPrompt
 from ._session import Session
 from ._tool_context import current_tool_call_id, current_tool_call_id_for
 from ._tool_system import (
@@ -43,10 +40,6 @@ __all__ = [
     "HistoryStorage",
     "InferenceStrategy",
     "InferenceMiddleware",
-    "MessageContext",
-    "MessageMiddleware",
-    "MessagePlan",
-    "TaskPrompt",
     "MiddlewareSet",
     "StepMiddleware",
     "DecisionContext",

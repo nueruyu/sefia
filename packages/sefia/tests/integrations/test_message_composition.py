@@ -1,4 +1,3 @@
-from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from typing import cast
 from unittest.mock import AsyncMock
@@ -6,17 +5,23 @@ from unittest.mock import AsyncMock
 import pytest
 from typing_extensions import override
 
-from sefia import MessageContext, MessageMiddleware, MessagePlan, TaskPrompt
 from sefia import ToolRegistry
-from sefia._executor import _compose
 from sefia.event_system import EventPublisher
-from sefia.inference import ResultDecision, ToolCallResult, ToolCallsDecision
+from sefia.inference import (
+    FunctionInfo,
+    ResultDecision,
+    ToolCallResult,
+    ToolCallsDecision,
+)
 from sefia.llm import (
     LLMClient,
     LLMCompletion,
     LLMInferenceStrategy,
     MarkdownPromptRenderer,
     Message,
+    MessageComposer,
+    MessagePlan,
+    TaskPrompt,
     ToolCall,
 )
 from sefia.llm._prompt_renderer import RejectedDecision
@@ -37,50 +42,49 @@ from sefia.testing import (
 )
 
 
-class _Layer(MessageMiddleware):
+class _Layer(MessageComposer):
     def __init__(self, name: str, log: list[str]) -> None:
         self.name = name
         self.log = log
 
     @override
-    async def wrap(
-        self, ctx: MessageContext, nxt: Callable[[], Awaitable[MessagePlan]]
-    ) -> MessagePlan:
-        assert ctx.step == 3
-        assert ctx.function.bound_arguments["question"] == "current"
-        self.log.append(f"{self.name}:enter")
-        plan = await nxt()
-        self.log.append(f"{self.name}:exit")
+    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
+        assert function.bound_arguments["question"] == "current"
+        assert function.prompt_arguments["knowledge"] == {"a": 1}
+        assert function.type_hints["question"] is str
+        assert function.instructions == "Answer the question."
+        self.log.append(self.name)
         task = next(part for part in plan.parts if isinstance(part, TaskPrompt))
         return MessagePlan(
             parts=(
-                Message(role="developer", content=self.name),
                 *(part for part in plan.parts if part is not task),
+                Message(role="developer", content=self.name),
                 TaskPrompt(arguments={"knowledge": task.arguments["knowledge"]}),
             )
         )
 
 
-async def test_message_middleware_uses_onion_order_and_function_context() -> None:
+async def test_message_composers_transform_in_declared_order() -> None:
     function = make_function_info(
-        bound_arguments={"question": "current", "knowledge": {"a": 1}}
+        instructions="Answer the question.",
+        bound_arguments={"question": "current", "knowledge": {"a": 1}},
+        type_hints={"question": str},
     )
     log: list[str] = []
+    strategy = LLMInferenceStrategy(
+        AsyncMock(spec=LLMClient),
+        PydanticModelBackend(),
+        _renderer(),
+        StructuredDecisionTransport(),
+        message_composers=(_Layer("A", log), _Layer("B", log), _Layer("C", log)),
+    )
+    plan = await strategy._compose_message_plan(function)
 
-    async def core() -> MessagePlan:
-        log.append("core")
-        return MessagePlan.default(function)
-
-    plan = await _compose(
-        [_Layer("outer", log), _Layer("inner", log)],
-        MessageContext(step=3, function=function),
-        core,
-    )()
-
-    assert log == ["outer:enter", "inner:enter", "core", "inner:exit", "outer:exit"]
+    assert log == ["A", "B", "C"]
     assert [cast(Message, part).content for part in plan.parts[:-1]] == [
-        "outer",
-        "inner",
+        "A",
+        "B",
+        "C",
     ]
     assert plan.parts[-1] == TaskPrompt(arguments={"knowledge": {"a": 1}})
 
@@ -255,7 +259,17 @@ async def test_transport_rejects_unknown_plan_part() -> None:
 
 async def test_client_mutation_does_not_change_plan_used_for_repair() -> None:
     source = Message(role="developer", content=[{"text": "original"}])
-    plan = MessagePlan(parts=(source, TaskPrompt(arguments={})))
+    plans: list[MessagePlan] = []
+
+    class _SourceComposer(MessageComposer):
+        @override
+        async def compose(
+            self, function: FunctionInfo, plan: MessagePlan
+        ) -> MessagePlan:
+            composed = MessagePlan(parts=(source, TaskPrompt(arguments={})))
+            plans.append(composed)
+            return composed
+
     client = AsyncMock(spec=LLMClient)
     observed: list[Message] = []
     completions = [
@@ -276,11 +290,15 @@ async def test_client_mutation_does_not_change_plan_used_for_repair() -> None:
 
     client.complete.side_effect = complete
     strategy = LLMInferenceStrategy(
-        client, PydanticModelBackend(), _renderer(), StructuredDecisionTransport()
+        client,
+        PydanticModelBackend(),
+        _renderer(),
+        StructuredDecisionTransport(),
+        message_composers=(_SourceComposer(),),
     )
 
     decision = await strategy.decide_next_step(
-        make_function_info(), plan, [], ToolRegistry(), EventPublisher([])
+        make_function_info(), [], ToolRegistry(), EventPublisher([])
     )
 
     assert isinstance(decision, ResultDecision)
@@ -288,3 +306,5 @@ async def test_client_mutation_does_not_change_plan_used_for_repair() -> None:
     assert observed == [source, source]
     assert all(message is not source for message in observed)
     assert source.content == [{"text": "original"}]
+    assert len(plans) == 1
+    assert plans[0].parts[0] is source

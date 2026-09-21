@@ -49,26 +49,40 @@ invocations.
 ### Composing LLM messages
 
 By default, all non-receiver arguments remain ordinary task data in Sefia's
-standard task prompt. A policy may install `MessageMiddleware` through
-`MiddlewareSet(message=(...,))` to create provider-neutral `Message` objects from
-selected arguments. The middleware receives `MessageContext.function`, including
-the bound arguments, type hints, and prompt arguments. Sefia does not assign
-meaning to annotations, argument names, or application models.
+standard task prompt. Applications may configure `MessageComposer` instances on
+`Session(..., message_composers=(...))` or
+`SessionScope(..., message_composers=(...))`. A composer receives `FunctionInfo` and
+the current `MessagePlan`; it may turn selected arguments into provider-neutral
+`Message` objects. Sefia does not assign meaning to annotations, argument names,
+or application models.
 
-Application middleware returns a `MessagePlan` containing its messages and exactly
+An application composer returns a `MessagePlan` containing its messages and exactly
 one `TaskPrompt`. It may place that prompt among the messages and remove consumed
 arguments from `TaskPrompt.arguments`. Unconsumed arguments retain the usual JSON
 rendering. Keep `TaskPrompt(arguments={})` when every argument is consumed: Sefia
 still uses it to render the function instructions once. The transport places Sefia's
 decision instructions after the application messages, tool history, and any repair
-feedback. Middleware cannot move those control instructions.
+feedback. A composer cannot move those control instructions.
 
 For example, an application can define its own `Annotated` metadata for a
-conversation argument and interpret it inside its own `MessageMiddleware`. This is
+conversation argument and interpret it inside its own `MessageComposer`. This is
 an application convention, not a Sefia annotation scheme. Sefia appends its tool
 execution history after the application plan, then repair feedback when needed, then
 the decision instructions. With the default single task prompt and no history, task
 and decision instructions remain in one user message.
+
+Import `Message`, `MessageComposer`, `MessagePlan`, and `TaskPrompt` from `sefia.llm`.
+Composers are applied in configured order on each strategy call. They should be
+reentrant and treat `FunctionInfo` as read-only; use `MessagePlan` for transformations.
+For example, an application-defined `ConversationMessages` composer can be installed
+through Sefios:
+
+```python
+scope = SessionScope(
+    model="your-model",
+    message_composers=(ConversationMessages(),),
+)
+```
 
 ## Return types
 

@@ -1,6 +1,8 @@
 from ._client import LLMClient
 from ._markdown_prompt_renderer import MarkdownPromptRenderer
 from ._messages import LLMCompletion, Message, ToolCall
+from ._message_composer import MessageComposer
+from ._message_plan import MessagePlan, TaskPrompt
 from ._prompt_renderer import (
     DecisionPrompt,
     PromptRenderer,
@@ -11,6 +13,9 @@ from ._strategy import LLMInferenceStrategy
 __all__ = [
     "LLMClient",
     "Message",
+    "MessageComposer",
+    "MessagePlan",
+    "TaskPrompt",
     "ToolCall",
     "LLMCompletion",
     "LLMInferenceStrategy",

@@ -5,7 +5,16 @@ from unittest.mock import Mock
 import glyff
 import sefia
 
-from sefia.llm import LLMCompletion, PromptRenderer
+from typing_extensions import override
+
+from sefia.inference import FunctionInfo
+from sefia.llm import (
+    LLMCompletion,
+    Message,
+    MessageComposer,
+    MessagePlan,
+    PromptRenderer,
+)
 from sefia.llm.transports import PromptedDecisionTransport
 from sefia.testing import MockLLMClient, memory_session, result_completion
 
@@ -61,3 +70,34 @@ async def test_session_connects_a_prompted_decision_transport() -> None:
 
     assert report == _Report("prompted", "decoded")
     assert client.requests[0]["decision_spec"] is None
+
+
+class _ProfileMessage(MessageComposer):
+    @override
+    async def compose(self, function: FunctionInfo, plan: MessagePlan) -> MessagePlan:
+        return MessagePlan(
+            parts=(Message(role="developer", content="shared"), *plan.parts)
+        )
+
+
+async def test_profiles_share_session_message_composers() -> None:
+    @infer
+    @sefia.profile("alternate")
+    async def answer(topic: str) -> str:
+        """Answer the task."""
+        ...
+
+    default_client = MockLLMClient([])
+    profile_client = MockLLMClient([result_completion("done")])
+    async with memory_session(
+        default_client,
+        profiles=[sefia.Profile(key="alternate", client=profile_client)],
+        message_composers=(_ProfileMessage(),),
+    ):
+        assert await answer("topic") == "done"
+
+    assert not default_client.requests
+    assert profile_client.requests[0]["messages"][0] == {
+        "role": "developer",
+        "content": "shared",
+    }

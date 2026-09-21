@@ -55,8 +55,7 @@ and return types, see [infer-contract.md](./infer-contract.md).
 
 ```
 loop:
-  plan = compose_message_middleware(MessagePlan.default(function_info))
-  decision = strategy.decide_next_step(function_info, plan, history, tools)
+  decision = strategy.decide_next_step(function_info, history, tools)
   if decision is FinalAnswer:  return decision.answer
   if decision is ToolCalls:    history += decision; history += run(decision.calls)
 ```
@@ -84,15 +83,28 @@ loop:
 `LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) coordinates six
 domain concepts:
 
-1. `DecisionSpec` describes which next decisions are valid.
-2. `MessagePlan` carries application messages and one `TaskPrompt` placeholder;
-   `DecisionRequest` carries that plan, prior tool interactions, and any rejected response.
+```text
+plan = MessagePlan.default(function_info)
+for composer in message_composers:
+    plan = composer.compose(function_info, plan)
+request = DecisionRequest(function=function_info, message_plan=plan, ...)
+```
+
+1. It creates `MessagePlan.default(function_info)` and passes the plan through each
+   configured `MessageComposer` in order. A composer can transform the plan based on
+   application conventions while treating `FunctionInfo` as read-only metadata.
+2. `DecisionSpec` describes which next decisions are valid. `DecisionRequest` carries
+   the composed plan, prior tool interactions, and any rejected response.
 3. `DecisionTransport` supplies the response instructions for its protocol and asks
    `PromptRenderer` to produce the required text.
 4. `LLMClient.complete()` returns a provider-neutral `LLMCompletion`.
 5. The transport decodes its protocol into `DecodedDecision`; its `decision_data` is
    structured but not yet semantically valid.
 6. `DecisionSpec` validates that data as a `StepDecision`.
+
+The plan is composed once per strategy invocation. A new inference step or a
+`DecisionMiddleware` retry invokes the strategy again; an internal response repair
+reuses the same plan. Composers are strategy collaborators, not execution middleware.
 
 `DecisionSpec` selects one of three shapes:
 

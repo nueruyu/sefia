@@ -96,9 +96,9 @@ batteries, so application code needs only `sefios`. Reach into `sefia` directly 
 extension seams (a custom policy, strategy, client, or tool collector) and tool-call
 context helpers such as `current_tool_call_id_for`.
 
-For custom message composition, applications can install `MessageMiddleware` through
-`MiddlewareSet` and return a `MessagePlan`. Sefia keeps unconsumed arguments in its
-ordinary task prompt and leaves argument semantics to the application. See
+For custom message composition, applications can configure `MessageComposer` through
+`SessionScope` or `Session` and return a `MessagePlan`. Sefia keeps unconsumed arguments
+in its ordinary task prompt and leaves argument semantics to the application. See
 [the `@infer` contract](./docs/infer-contract.md#composing-llm-messages).
 
 ## Quickstart

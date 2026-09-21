@@ -88,15 +88,14 @@ class ResearchService:                             # a plain class — no base, 
 
 ## Middleware control scopes
 
-Policies attach middleware at four execution boundaries:
+Policies attach middleware at three execution boundaries:
 
 ```text
 InferenceMiddleware — whole inference attempt
 └─ StepMiddleware — one step outside the durable decision execution
    └─ glyff: inference.step
       └─ DecisionMiddleware — decision generation inside the durable step
-         └─ MessageMiddleware — application message-plan composition
-            └─ InferenceStrategy.decide_next_step(...)
+         └─ InferenceStrategy.decide_next_step(...)
 ```
 
 `StepMiddleware` can prepare a step, including rewriting its `StepHistory`.
@@ -108,12 +107,8 @@ could alter strategy inputs without tracking or persisting those changes.
 
 Attach middleware through `Policy(middleware=lambda: MiddlewareSet(...))`; each
 factory runs once per inference run, with session → domain → profile → function
-ordering within each category. `MiddlewareSet` makes the four lifecycle locations
-explicit. `MessageMiddleware` can inspect complete function metadata and transform a
-provider-neutral `MessagePlan`. It must retain one `TaskPrompt` placeholder so Sefia
-renders the task content exactly once. Transports append Sefia's decision instructions
-after application messages, tool history, and repair feedback. Observation events
-receive a separate message snapshot so handlers cannot change the LLM request.
+ordering within each category. `MiddlewareSet` makes the three lifecycle locations
+explicit.
 
 Rejecting a decision must fail the engraved decision execution before it commits,
 so retry/resume can regenerate the decision instead of replaying a rejected
@@ -124,6 +119,22 @@ decision; a middleware error or invalid return emits `InferenceStepFailed` inste
 Semantic validation is one downstream use case. Core adds no validation API or
 coupling to the LLM strategy's internal response repair loop. Extension authors can
 build isolated middleware tests with `sefia.testing.make_decision_context()`.
+
+## LLM message composition
+
+`LLMInferenceStrategy` creates a default `MessagePlan`, applies configured
+`MessageComposer` instances in sequence, builds a `DecisionSpec`, calls the transport,
+and validates the response. Applications configure composers through `Session` or
+`SessionScope`. Each composer can inspect `FunctionInfo` and transform the plan using
+application-defined conventions; Sefia assigns no meaning to annotations or models.
+Composers should treat `FunctionInfo` as read-only and remain reentrant across calls.
+
+Composers transform LLM input representation. They are not execution middleware and
+cannot wrap, retry, or short-circuit the inference loop. Every plan retains exactly
+one `TaskPrompt` so Sefia renders task content once. Transports append Sefia execution
+history, repair feedback, and decision instructions after the application plan.
+Observation events receive a separate message snapshot so handlers cannot change the
+LLM request.
 
 ## Durability & resumable HITL
 
