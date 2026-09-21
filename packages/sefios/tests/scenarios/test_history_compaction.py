@@ -57,6 +57,10 @@ class _RecordingRenderer(PromptRenderer):
         return "prompt"
 
     @override
+    def render_decision_instructions(self, instructions: str) -> str:
+        return "response"
+
+    @override
     def render_history(self, history: tuple[HistoryItem, ...]) -> str:
         self.histories.append(history)
         return "history"
@@ -126,7 +130,7 @@ async def test_compacted_history_survives_restart_without_replaying_old_steps(
         async with make_scope(mock_llm).session(session_id=_SESSION_ID):
             await _Agent(Notes(), Input()).chat()
 
-    assert [len(request["messages"]) for request in mock_llm.requests] == [1, 2, 2, 2]
+    assert [len(request["messages"]) for request in mock_llm.requests] == [1, 3, 3, 3]
     assert [len(history) for history in renderer.histories] == [2, 4, 2]
 
     channel = InteractionChannel(

@@ -68,6 +68,7 @@ async def test_transport_feedback_reaches_renderer_and_result_is_restored(
     client.complete.side_effect = [LLMCompletion(content="invalid"), valid]
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "prompt"
+    renderer.render_decision_instructions.return_value = "response"
     strategy = LLMInferenceStrategy(client, PydanticModelBackend(), renderer, transport)
 
     decision = await strategy.decide_next_step(
@@ -126,6 +127,7 @@ async def test_never_mode_is_preserved_through_strategy_and_transport(
     client.complete.return_value = completion
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "prompt"
+    renderer.render_decision_instructions.return_value = "response"
     strategy = LLMInferenceStrategy(
         client, PydanticModelBackend(), renderer, transport, max_repair_attempts=0
     )
@@ -142,7 +144,9 @@ async def test_never_mode_is_preserved_through_strategy_and_transport(
         assert isinstance(decision, ToolCallsDecision)
         assert [call.name for call in decision.calls] == ["lookup"]
 
-    prompt = renderer.render.call_args.args[0]
     before = publisher.publish.await_args_list[0].args[0]
     assert before.decision_spec.mode is StepDecisionMode.TOOLS_REQUIRED
-    assert "Call one or more available tools." in prompt.response_instructions
+    assert (
+        "Call one or more available tools."
+        in (renderer.render_decision_instructions.call_args.args[0])
+    )

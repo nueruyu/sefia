@@ -56,6 +56,7 @@ def _request(decision: DecisionSpec) -> DecisionRequest:
 def _renderer() -> Mock:
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "prompt"
+    renderer.render_decision_instructions.return_value = "## Response\n\ncontrol"
 
     def render_tool_result(result: ToolCallResult) -> str:
         return json.dumps(result.result)
@@ -97,7 +98,7 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
     assert sent["decision_spec"] is None
     assert observer.messages == tuple(sent["messages"])
     rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
-    assert "return_result" in rendered_prompt.response_instructions
+    assert "return_result" in renderer.render_decision_instructions.call_args.args[0]
     assert rendered_prompt.tools == ()
 
 
@@ -166,7 +167,9 @@ async def test_native_transport_forwards_history_in_tool_only_mode() -> None:
         "user",
         "assistant",
         "tool",
+        "user",
     ]
+    assert sent["messages"][-1].content == "## Response\n\ncontrol"
     assert sent["messages"][1].tool_calls[0].id == "call-1"
     assert sent["messages"][2].tool_call_id == "call-1"
     assert decoded.decision_data.tree == {
@@ -203,5 +206,5 @@ async def test_native_transport_uses_collision_free_name_for_prompt_and_decoding
 
     sent = client.complete.await_args.kwargs
     assert [tool.name for tool in sent["tools"]] == ["return_result", "return_result_2"]
-    assert "return_result_2" in renderer.render.call_args.args[0].response_instructions
+    assert "return_result_2" in renderer.render_decision_instructions.call_args.args[0]
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}

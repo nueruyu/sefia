@@ -38,7 +38,6 @@ class DecisionRequest:
 
     def to_prompt(
         self,
-        response_instructions: str,
         *,
         arguments: Mapping[str, Any],
         tools: tuple[StepTool, ...],
@@ -47,7 +46,6 @@ class DecisionRequest:
             function=self.function,
             arguments=arguments,
             tools=tools,
-            response_instructions=response_instructions,
         )
 
 

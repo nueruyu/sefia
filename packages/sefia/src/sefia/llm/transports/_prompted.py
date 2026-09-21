@@ -13,7 +13,12 @@ from ._base import (
     DecisionTransport,
 )
 from ._decision_instructions import json_response_instructions
-from ._messages import append_text_feedback, materialize_plan
+from ._messages import (
+    append_decision_instructions,
+    append_text_feedback,
+    materialize_plan,
+    snapshot_messages,
+)
 
 
 @final
@@ -28,12 +33,15 @@ class PromptedDecisionTransport(DecisionTransport):
         stream: bool,
     ) -> DecodedDecision:
         messages = materialize_plan(
+            request, prompt_renderer, request.decision_spec.tools
+        )
+        append_text_feedback(messages, request, prompt_renderer)
+        append_decision_instructions(
+            messages,
             request,
             prompt_renderer,
             json_response_instructions(request.decision_spec),
-            request.decision_spec.tools,
         )
-        append_text_feedback(messages, request, prompt_renderer)
         stream_decoder = JsonOutputStreamDecoder() if stream else None
         extractor = PromptedJsonStreamExtractor() if stream else None
 
@@ -45,7 +53,7 @@ class PromptedDecisionTransport(DecisionTransport):
                 for event in stream_decoder.feed(json_text):
                     await observer.output(event)
 
-        await observer.before_request(tuple(messages))
+        await observer.before_request(snapshot_messages(messages))
         completion = await client.complete(
             messages=messages,
             tools=None,

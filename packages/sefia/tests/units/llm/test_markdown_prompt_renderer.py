@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 from uuid import UUID
 
@@ -46,9 +47,6 @@ def _prompt(
         function=function,
         arguments=function.prompt_arguments,
         tools=_decision_spec().tools,
-        response_instructions=(
-            'Return one result as {"decision":"result","result":<value>}.'
-        ),
     )
 
 
@@ -77,11 +75,15 @@ def test_markdown_fence_is_longer_than_any_run_in_content(content: str, expected
     assert _markdown_fence(content) == expected
 
 
-def test_render_instructions_combines_function_and_decision_instructions():
-    content = _renderer().render(_prompt(_function_info()))
+def test_render_keeps_task_and_decision_instructions_separate():
+    renderer = _renderer()
+    content = renderer.render(_prompt(_function_info()))
 
     assert content.startswith("# Task\n\ninstructions")
-    assert '"decision":"result"' in content
+    assert "## Response" not in content
+    assert renderer.render_decision_instructions("Return JSON.") == (
+        "## Response\n\nReturn JSON."
+    )
 
 
 def test_render_invocation_explains_when_there_are_no_direct_arguments():
@@ -130,6 +132,16 @@ def test_render_normalizes_nested_mapping_keys():
     prompt = _task_content({"values_by_id": {identifier: "serialized"}})
 
     assert _json_content(prompt) == {"values_by_id": {str(identifier): "serialized"}}
+
+
+def test_render_normalizes_generic_mappings_as_json_objects():
+    arguments = MappingProxyType({"knowledge": MappingProxyType({"foo": "bar"})})
+
+    prompt = _renderer().render(
+        DecisionPrompt(function=_function_info(), arguments=arguments, tools=())
+    )
+
+    assert _json_content(prompt) == {"knowledge": {"foo": "bar"}}
 
 
 def test_render_rejects_keys_that_normalize_to_the_same_json_key():

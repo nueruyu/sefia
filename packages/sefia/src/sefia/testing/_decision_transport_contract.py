@@ -39,6 +39,10 @@ class _Renderer(PromptRenderer):
         return "contract prompt"
 
     @override
+    def render_decision_instructions(self, instructions: str) -> str:
+        return "contract response"
+
+    @override
     def render_history(self, history: tuple[HistoryItem, ...]) -> str:
         return "contract history"
 
@@ -122,7 +126,9 @@ class DecisionTransportContract(ABC):
 
         assert decoded.decision_data == decision_transport_case.expected_data
         assert decoded.completion is decision_transport_case.completion
-        assert observer.requests == [(Message(role="user", content="contract prompt"),)]
+        assert observer.requests == [
+            (Message(role="user", content="contract prompt\n\ncontract response"),)
+        ]
         assert observer.response_texts == []
         assert observer.reasoning_texts == []
         assert observer.output_events == []
@@ -139,7 +145,9 @@ class DecisionTransportContract(ABC):
 
         assert decoded.decision_data == decision_transport_case.expected_data
         assert decoded.completion is decision_transport_case.completion
-        assert observer.requests == [(Message(role="user", content="contract prompt"),)]
+        assert observer.requests == [
+            (Message(role="user", content="contract prompt\n\ncontract response"),)
+        ]
         assert observer.response_texts == list(decision_transport_case.content_chunks)
         assert observer.reasoning_texts == list(
             decision_transport_case.reasoning_chunks

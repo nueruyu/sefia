@@ -59,12 +59,16 @@ Application middleware returns a `MessagePlan` containing its messages and exact
 one `TaskPrompt`. It may place that prompt among the messages and remove consumed
 arguments from `TaskPrompt.arguments`. Unconsumed arguments retain the usual JSON
 rendering. Keep `TaskPrompt(arguments={})` when every argument is consumed: Sefia
-still uses it to render the function instructions and decision protocol once.
+still uses it to render the function instructions once. The transport places Sefia's
+decision instructions after the application messages, tool history, and any repair
+feedback. Middleware cannot move those control instructions.
 
 For example, an application can define its own `Annotated` metadata for a
 conversation argument and interpret it inside its own `MessageMiddleware`. This is
 an application convention, not a Sefia annotation scheme. Sefia appends its tool
-execution history after the application plan and repair feedback last.
+execution history after the application plan, then repair feedback when needed, then
+the decision instructions. With the default single task prompt and no history, task
+and decision instructions remain in one user message.
 
 ## Return types
 

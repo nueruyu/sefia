@@ -111,7 +111,9 @@ factory runs once per inference run, with session → domain → profile → fun
 ordering within each category. `MiddlewareSet` makes the four lifecycle locations
 explicit. `MessageMiddleware` can inspect complete function metadata and transform a
 provider-neutral `MessagePlan`. It must retain one `TaskPrompt` placeholder so Sefia
-renders task and decision instructions exactly once.
+renders the task content exactly once. Transports append Sefia's decision instructions
+after application messages, tool history, and repair feedback. Observation events
+receive a separate message snapshot so handlers cannot change the LLM request.
 
 Rejecting a decision must fail the engraved decision execution before it commits,
 so retry/resume can regenerate the decision instead of replaying a rejected

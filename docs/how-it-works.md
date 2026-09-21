@@ -129,9 +129,11 @@ result schema interfaces and decoded values live in `sefia.llm.result_format` an
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 `MarkdownPromptRenderer` independently renders the task prompt, textual tool history,
-tool results, and repair feedback. A transport expands the plan into messages,
-appends Sefia execution history after application messages, and appends repair
-feedback last. It owns response instructions and the decision protocol.
+tool results, repair feedback, and decision instructions. A transport expands the
+plan into messages, appends Sefia execution history and repair feedback, and places
+its decision instructions last. It combines task and decision text into one message
+for the default first step. The transport copies application messages into each
+request and sends event handlers a separate snapshot of the final messages.
 `StructuredDecisionTransport` requests structured output;
 `PromptedDecisionTransport` asks for the same JSON decision in ordinary response
 text; `sefia.llm.transports.NativeDecisionTransport` exposes application tools and a

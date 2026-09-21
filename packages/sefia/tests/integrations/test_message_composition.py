@@ -1,4 +1,5 @@
 from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from typing import cast
 from unittest.mock import AsyncMock
 
@@ -6,9 +7,18 @@ import pytest
 from typing_extensions import override
 
 from sefia import MessageContext, MessageMiddleware, MessagePlan, TaskPrompt
+from sefia import ToolRegistry
 from sefia._executor import _compose
-from sefia.inference import ToolCallResult, ToolCallsDecision
-from sefia.llm import LLMCompletion, MarkdownPromptRenderer, Message, ToolCall
+from sefia.event_system import EventPublisher
+from sefia.inference import ResultDecision, ToolCallResult, ToolCallsDecision
+from sefia.llm import (
+    LLMClient,
+    LLMCompletion,
+    LLMInferenceStrategy,
+    MarkdownPromptRenderer,
+    Message,
+    ToolCall,
+)
 from sefia.llm._prompt_renderer import RejectedDecision
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
@@ -158,14 +168,18 @@ async def test_transport_preserves_application_plan_then_appends_history_and_rep
     sent = client.complete.await_args.kwargs
     messages = sent["messages"]
     assert observer.messages == tuple(messages)
-    assert messages[0] is application_messages[0]
+    assert messages[0] == application_messages[0]
+    assert messages[0] is not application_messages[0]
     assert messages[1].role == "user"
     assert "## Task arguments" in messages[1].content
     assert '"foo": "bar"' in messages[1].content
+    assert "## Response" not in messages[1].content
     assert all(
-        messages[i + 2] is item for i, item in enumerate(application_messages[1:])
+        messages[i + 2] == item and messages[i + 2] is not item
+        for i, item in enumerate(application_messages[1:])
     )
-    assert "Correct the previous response" in messages[-1].content
+    assert "Correct the previous response" in messages[-2].content
+    assert "## Response" in messages[-1].content
     if isinstance(transport, NativeDecisionTransport):
         assert [message.role for message in messages[5:7]] == ["assistant", "tool"]
         assert messages[5].tool_calls[0].id == messages[6].tool_call_id == "call-1"
@@ -224,6 +238,7 @@ async def test_default_plan_sends_one_task_message_on_first_step(
     assert len(messages) == 1
     assert messages[0].role == "user"
     assert '"topic": "sefia"' in messages[0].content
+    assert "## Response" in messages[0].content
 
 
 async def test_transport_rejects_unknown_plan_part() -> None:
@@ -236,3 +251,40 @@ async def test_transport_rejects_unknown_plan_part() -> None:
         await StructuredDecisionTransport().request_decision(
             AsyncMock(), _renderer(), request, RecordingDecisionObserver(), False
         )
+
+
+async def test_client_mutation_does_not_change_plan_used_for_repair() -> None:
+    source = Message(role="developer", content=[{"text": "original"}])
+    plan = MessagePlan(parts=(source, TaskPrompt(arguments={})))
+    client = AsyncMock(spec=LLMClient)
+    observed: list[Message] = []
+    completions = [
+        LLMCompletion(content="invalid"),
+        LLMCompletion(
+            structured_output=StructuredData.from_json(
+                {"decision": "result", "result": "done"}
+            )
+        ),
+    ]
+
+    async def complete(*, messages: list[Message], **_kwargs: object) -> LLMCompletion:
+        observed.append(deepcopy(messages[0]))
+        messages[0].role = "user"
+        assert isinstance(messages[0].content, list)
+        messages[0].content[0]["text"] = "changed by client"
+        return completions.pop(0)
+
+    client.complete.side_effect = complete
+    strategy = LLMInferenceStrategy(
+        client, PydanticModelBackend(), _renderer(), StructuredDecisionTransport()
+    )
+
+    decision = await strategy.decide_next_step(
+        make_function_info(), plan, [], ToolRegistry(), EventPublisher([])
+    )
+
+    assert isinstance(decision, ResultDecision)
+    assert decision.result == "done"
+    assert observed == [source, source]
+    assert all(message is not source for message in observed)
+    assert source.content == [{"text": "original"}]

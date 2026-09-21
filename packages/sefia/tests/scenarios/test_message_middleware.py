@@ -23,6 +23,8 @@ from sefia import (
     profile,
 )
 from sefia.llm import Message
+from sefia.llm.events import BeforeLLMCall
+from sefia.event_system import EventHandler
 from sefia.inference import StepDecision
 from sefia.testing import (
     MockLLMClient,
@@ -109,7 +111,7 @@ async def test_application_defined_annotations_compose_messages() -> None:
         )
 
     messages = client.requests[0]["messages"]
-    assert [message["role"] for message in messages] == [
+    assert [message["role"] for message in messages[:5]] == [
         "developer",
         "user",
         "user",
@@ -120,7 +122,8 @@ async def test_application_defined_annotations_compose_messages() -> None:
     assert '"knowledge"' in messages[1]["content"]
     assert '"instructions"' not in messages[1]["content"]
     assert '"history"' not in messages[1]["content"]
-    assert messages[-1]["content"] == "私の名前は？"
+    assert messages[4]["content"] == "私の名前は？"
+    assert messages[-1]["content"].startswith("## Response")
 
 
 class _RunLayer(InferenceMiddleware):
@@ -298,3 +301,52 @@ async def test_message_context_tracks_each_decision_step() -> None:
         assert await Agent().answer() == "done"
 
     assert steps == [0, 1]
+
+
+class _FixedApplicationMessage(MessageMiddleware):
+    def __init__(self, message: Message) -> None:
+        self.message = message
+
+    @override
+    async def wrap(
+        self, ctx: MessageContext, nxt: Callable[[], Awaitable[MessagePlan]]
+    ) -> MessagePlan:
+        plan = await nxt()
+        return MessagePlan(parts=(self.message, *plan.parts))
+
+
+class _MutateObservedMessages(EventHandler[BeforeLLMCall]):
+    @override
+    async def handle(self, event: BeforeLLMCall) -> None:
+        message = event.messages[0]
+        message.role = "user"
+        assert isinstance(message.content, list)
+        message.content[0]["text"] = "changed by handler"
+        event.messages[-1].content = "changed control"
+
+
+async def test_before_llm_call_handler_cannot_change_client_request() -> None:
+    application_message = Message(role="developer", content=[{"text": "original"}])
+    infer = Domain(glyff.Domain("tests.message-observation", version="1")).infer
+
+    @infer
+    @policy(
+        Policy(
+            handlers=lambda: [_MutateObservedMessages()],
+            middleware=lambda: MiddlewareSet(
+                message=(_FixedApplicationMessage(application_message),)
+            ),
+        )
+    )
+    async def answer(topic: str) -> str:
+        """Answer the task."""
+        ...
+
+    client = MockLLMClient([result_completion("done")])
+    async with memory_session(client, session_id="message-observation"):
+        assert await answer("topic") == "done"
+
+    sent = client.requests[0]["messages"]
+    assert sent[0] == {"role": "developer", "content": [{"text": "original"}]}
+    assert sent[-1]["content"].startswith("## Response")
+    assert application_message.content == [{"text": "original"}]

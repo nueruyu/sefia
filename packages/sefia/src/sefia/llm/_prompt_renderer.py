@@ -18,7 +18,6 @@ class DecisionPrompt:
     function: FunctionInfo
     arguments: Mapping[str, Any]
     tools: tuple[StepTool, ...]
-    response_instructions: str
 
 
 class PromptRenderer(ABC):
@@ -26,6 +25,9 @@ class PromptRenderer(ABC):
 
     @abstractmethod
     def render(self, prompt: DecisionPrompt) -> str: ...
+
+    @abstractmethod
+    def render_decision_instructions(self, instructions: str) -> str: ...
 
     @abstractmethod
     def render_history(self, history: tuple[HistoryItem, ...]) -> str: ...

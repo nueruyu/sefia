@@ -31,13 +31,14 @@ async def test_session_connects_a_custom_prompt_renderer_to_the_transport() -> N
     client = MockLLMClient([result_completion(_Report("custom", "rendered"))])
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "custom prompt"
+    renderer.render_decision_instructions.return_value = "custom control"
 
     async with memory_session(client, prompt_renderer=renderer):
         report = await _Agent().generate_report(topic="custom")
 
     assert report == _Report("custom", "rendered")
     assert client.requests[0]["messages"] == [
-        {"role": "user", "content": "custom prompt"}
+        {"role": "user", "content": "custom prompt\n\ncustom control"}
     ]
 
 

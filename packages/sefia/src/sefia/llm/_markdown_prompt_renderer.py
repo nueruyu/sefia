@@ -1,6 +1,6 @@
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import cast
 
 from typing_extensions import final, override
@@ -34,8 +34,11 @@ class MarkdownPromptRenderer(PromptRenderer):
         sections.append(self._render_arguments(prompt))
         if prompt.tools:
             sections.append(self._render_tools(prompt.tools))
-        sections.append(f"## Response\n\n{prompt.response_instructions}")
         return "\n\n".join(sections)
+
+    @override
+    def render_decision_instructions(self, instructions: str) -> str:
+        return f"## Response\n\n{instructions}"
 
     @override
     def render_tool_result(self, result: ToolCallResult) -> str:
@@ -119,9 +122,9 @@ class MarkdownPromptRenderer(PromptRenderer):
     def _normalize(self, value: object) -> JsonValue:
         if value is None or isinstance(value, (bool, int, float, str)):
             return value
-        if isinstance(value, dict):
+        if isinstance(value, Mapping):
             normalized: dict[str, JsonValue] = {}
-            for key, item in cast(dict[object, object], value).items():
+            for key, item in cast(Mapping[object, object], value).items():
                 normalized_key = self._normalize_key(key)
                 if normalized_key in normalized:
                     raise ValueError(

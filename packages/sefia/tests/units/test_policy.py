@@ -1,5 +1,6 @@
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import cast
 
 from typing_extensions import final, override
 
@@ -8,8 +9,11 @@ import pytest
 from sefia import (
     DecisionContext,
     DecisionMiddleware,
+    InferenceMiddleware,
+    MessageMiddleware,
     MiddlewareSet,
     Policy,
+    StepMiddleware,
     policy,
 )
 from sefia.inference import StepDecision
@@ -108,3 +112,29 @@ def test_middleware_set_preserves_category_order() -> None:
     middleware = MiddlewareSet(decision=(first, second))
 
     assert middleware.decision == (first, second)
+
+
+def test_middleware_set_rejects_wrong_category_immediately() -> None:
+    wrong = _DecisionMiddleware()
+
+    with pytest.raises(
+        TypeError, match=r"MiddlewareSet.step\[0\] must be StepMiddleware"
+    ):
+        MiddlewareSet(step=cast(tuple[StepMiddleware, ...], (wrong,)))
+    with pytest.raises(
+        TypeError, match=r"MiddlewareSet.inference\[0\] must be InferenceMiddleware"
+    ):
+        MiddlewareSet(inference=cast(tuple[InferenceMiddleware, ...], (wrong,)))
+    with pytest.raises(
+        TypeError, match=r"MiddlewareSet.message\[0\] must be MessageMiddleware"
+    ):
+        MiddlewareSet(message=cast(tuple[MessageMiddleware, ...], (wrong,)))
+    with pytest.raises(
+        TypeError, match=r"MiddlewareSet.decision\[0\] must be DecisionMiddleware"
+    ):
+        MiddlewareSet(decision=cast(tuple[DecisionMiddleware, ...], (object(),)))
+
+
+def test_middleware_set_requires_tuples() -> None:
+    with pytest.raises(TypeError, match="MiddlewareSet.step must be a tuple"):
+        MiddlewareSet(step=cast(tuple[StepMiddleware, ...], []))
