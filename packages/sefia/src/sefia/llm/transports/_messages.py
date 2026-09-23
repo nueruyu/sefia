@@ -2,12 +2,18 @@ import json
 from copy import deepcopy
 from dataclasses import replace
 
-from .._markdown import text_block
+from .._markdown import json_block, text_block
 from .._messages import LLMCompletion, Message
 from .._prompt_renderer import PromptRenderer
 from ..json_schema import JsonValue
 from ..step_decision import StepTool
-from ._base import DecisionRequest, RejectedDecision
+from ..structured_data import StructuredData
+from ._base import (
+    DecisionHistoryItem,
+    DecisionRequest,
+    DecisionToolCalls,
+    RejectedDecision,
+)
 
 
 def _build_application_messages(
@@ -48,6 +54,54 @@ def _rejection_message(rejected: RejectedDecision) -> Message:
     )
 
 
+def _text_history_messages(
+    history: tuple[DecisionHistoryItem, ...],
+) -> list[Message]:
+    if not history:
+        return []
+
+    records: list[StructuredData] = []
+    for item in history:
+        if isinstance(item, DecisionToolCalls):
+            records.extend(
+                StructuredData.from_object(
+                    {
+                        "tool_call": StructuredData.from_object(
+                            {
+                                "id": StructuredData.from_scalar(call.id),
+                                "name": StructuredData.from_scalar(call.name),
+                                "arguments": call.arguments,
+                            }
+                        )
+                    }
+                )
+                for call in item.calls
+            )
+        else:
+            records.append(
+                StructuredData.from_object(
+                    {
+                        "tool_result": StructuredData.from_object(
+                            {
+                                "id": StructuredData.from_scalar(item.tool_call_id),
+                                "result": item.result,
+                            }
+                        )
+                    }
+                )
+            )
+
+    data = StructuredData.from_array(records)
+    return [
+        Message(
+            role="user",
+            content=(
+                "## Previous tool interactions\n\n" + json_block(data.to_json_value())
+            ),
+        )
+    ]
+
+
 def build_decision_messages(
     *,
     request: DecisionRequest,
@@ -73,6 +127,21 @@ def build_decision_messages(
     else:
         messages.append(response)
     return messages
+
+
+def build_text_decision_messages(
+    *,
+    request: DecisionRequest,
+    renderer: PromptRenderer,
+    response_instructions: str,
+) -> list[Message]:
+    return build_decision_messages(
+        request=request,
+        renderer=renderer,
+        prompt_tools=request.decision_spec.tools,
+        history_messages=_text_history_messages(request.history),
+        response_instructions=response_instructions,
+    )
 
 
 def _rejected_completion_content(completion: LLMCompletion) -> str | None:

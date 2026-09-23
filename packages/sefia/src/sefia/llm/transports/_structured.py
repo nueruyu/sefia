@@ -12,8 +12,7 @@ from ._base import (
     DecisionTransport,
 )
 from ._decision_instructions import structured_response_instructions
-from ._messages import build_decision_messages
-from ._text_protocol import text_history_messages
+from ._messages import build_text_decision_messages
 
 
 @final
@@ -27,12 +26,9 @@ class StructuredDecisionTransport(DecisionTransport):
         observer: DecisionObserver,
         stream: bool,
     ) -> DecodedDecision:
-        history_messages = text_history_messages(request.history)
-        messages = build_decision_messages(
+        messages = build_text_decision_messages(
             request=request,
             renderer=prompt_renderer,
-            prompt_tools=request.decision_spec.tools,
-            history_messages=history_messages,
             response_instructions=structured_response_instructions(
                 request.decision_spec
             ),

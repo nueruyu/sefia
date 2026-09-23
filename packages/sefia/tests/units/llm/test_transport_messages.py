@@ -9,8 +9,10 @@ from sefia.llm.transports import (
     DecisionToolResult,
     RejectedDecision,
 )
-from sefia.llm.transports._messages import build_decision_messages
-from sefia.llm.transports._text_protocol import text_history_messages
+from sefia.llm.transports._messages import (
+    build_decision_messages,
+    build_text_decision_messages,
+)
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import make_decision_request
 
@@ -125,9 +127,17 @@ def test_build_decision_messages_owns_final_framing_order() -> None:
     assert messages[2] is not after
 
 
-def test_text_history_messages_preserve_json_representation() -> None:
-    messages = text_history_messages(
-        (
+def test_build_text_decision_messages_owns_text_history_representation() -> None:
+    decision_spec = DecisionSpec.for_inference(
+        output_type=str,
+        tools=[],
+        result_format_factory=PydanticResultFormatFactory(),
+    )
+    renderer = Mock(spec=PromptRenderer)
+    renderer.render.return_value = "prompt"
+    request = make_decision_request(
+        decision_spec,
+        history=(
             DecisionToolCalls(
                 calls=(
                     ToolCall(
@@ -141,13 +151,19 @@ def test_text_history_messages_preserve_json_representation() -> None:
                 tool_call_id="call-1",
                 result=StructuredData.from_json({"value": "found"}),
             ),
-        )
+        ),
     )
 
-    assert len(messages) == 1
-    assert messages[0].role == "user"
-    content = messages[0].content
+    messages = build_text_decision_messages(
+        request=request,
+        renderer=renderer,
+        response_instructions="respond",
+    )
+
+    assert [message.role for message in messages] == ["user", "user", "user"]
+    content = messages[1].content
     assert isinstance(content, str)
+    assert "Previous tool interactions" in content
     assert '"arguments": {' in content
     assert '"query": "sefia"' in content
     assert '"result": {' in content
