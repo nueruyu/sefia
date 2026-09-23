@@ -2,18 +2,12 @@ import json
 from copy import deepcopy
 from dataclasses import replace
 
-from .._markdown import json_block, text_block
+from .._markdown import text_block
 from .._messages import LLMCompletion, Message
 from .._prompt_renderer import PromptRenderer
 from ..json_schema import JsonValue
 from ..step_decision import StepTool
-from ..structured_data import StructuredData
-from ._base import (
-    DecisionHistoryItem,
-    DecisionRequest,
-    DecisionToolCalls,
-    RejectedDecision,
-)
+from ._base import DecisionRequest, RejectedDecision
 
 
 def _build_application_messages(
@@ -54,16 +48,23 @@ def _rejection_message(rejected: RejectedDecision) -> Message:
     )
 
 
-def _append_response(
-    messages: list[Message],
+def build_decision_messages(
+    *,
     request: DecisionRequest,
+    renderer: PromptRenderer,
+    prompt_tools: tuple[StepTool, ...],
+    history_messages: list[Message],
     response_instructions: str,
-) -> None:
+) -> list[Message]:
+    messages = _build_application_messages(request, renderer, prompt_tools)
+    messages.extend(history_messages)
+    if request.rejected is not None:
+        messages.append(_rejection_message(request.rejected))
     response = _response_message(response_instructions)
     if (
         not request.messages_before
         and not request.messages_after
-        and not request.history
+        and not history_messages
         and request.rejected is None
     ):
         prompt_content = messages[0].content
@@ -71,61 +72,6 @@ def _append_response(
         messages[0].content = f"{prompt_content}\n\n{response.content}"
     else:
         messages.append(response)
-
-
-def _text_history_message(
-    history: tuple[DecisionHistoryItem, ...],
-) -> Message:
-    records: list[StructuredData] = []
-    for item in history:
-        if isinstance(item, DecisionToolCalls):
-            records.extend(
-                StructuredData.from_object(
-                    {
-                        "tool_call": StructuredData.from_object(
-                            {
-                                "id": StructuredData.from_scalar(call.id),
-                                "name": StructuredData.from_scalar(call.name),
-                                "arguments": call.arguments,
-                            }
-                        )
-                    }
-                )
-                for call in item.calls
-            )
-        else:
-            records.append(
-                StructuredData.from_object(
-                    {
-                        "tool_result": StructuredData.from_object(
-                            {
-                                "id": StructuredData.from_scalar(item.tool_call_id),
-                                "result": item.result,
-                            }
-                        )
-                    }
-                )
-            )
-    data = StructuredData.from_array(records)
-    return Message(
-        role="user",
-        content="## Previous tool interactions\n\n" + json_block(data.to_json_value()),
-    )
-
-
-def build_text_messages(
-    *,
-    request: DecisionRequest,
-    renderer: PromptRenderer,
-    tools: tuple[StepTool, ...],
-    response_instructions: str,
-) -> list[Message]:
-    messages = _build_application_messages(request, renderer, tools)
-    if request.history:
-        messages.append(_text_history_message(request.history))
-    if request.rejected is not None:
-        messages.append(_rejection_message(request.rejected))
-    _append_response(messages, request, response_instructions)
     return messages
 
 

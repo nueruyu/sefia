@@ -281,6 +281,54 @@ async def test_default_layout_sends_one_inference_message_on_first_step(
     assert "## Response" in messages[0].content
 
 
+async def test_text_and_native_transports_share_repair_framing() -> None:
+    request = make_decision_request(
+        _spec(),
+        rejected=RejectedDecision(
+            completion=LLMCompletion(content="invalid response"),
+            reason="invalid decision",
+        ),
+    )
+    text_client = AsyncMock()
+    text_client.complete.return_value = LLMCompletion(
+        structured_output=StructuredData.from_json(
+            {"decision": "result", "result": "done"}
+        )
+    )
+    native_client = AsyncMock()
+    native_client.complete.return_value = LLMCompletion(
+        tool_calls=[
+            ToolCall(
+                id="result-1",
+                name="return_result",
+                arguments=StructuredData.from_json({"result": "done"}),
+            )
+        ]
+    )
+
+    await StructuredDecisionTransport().request_decision(
+        text_client,
+        _renderer(),
+        request,
+        RecordingDecisionObserver(),
+        False,
+    )
+    await NativeDecisionTransport().request_decision(
+        native_client,
+        _renderer(),
+        request,
+        RecordingDecisionObserver(),
+        False,
+    )
+
+    text_messages = text_client.complete.await_args.kwargs["messages"]
+    native_messages = native_client.complete.await_args.kwargs["messages"]
+    assert text_messages[-2] == native_messages[-2]
+    repair = text_messages[-2].content
+    assert isinstance(repair, str)
+    assert "Correct the previous response" in repair
+
+
 async def test_custom_prompt_renderer_receives_materialized_request() -> None:
     request = make_decision_request(
         _spec(),
