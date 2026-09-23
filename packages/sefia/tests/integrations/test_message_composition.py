@@ -18,22 +18,23 @@ from sefia.llm import (
     LLMClient,
     LLMCompletion,
     LLMInferenceStrategy,
+    InferencePrompt,
     MarkdownPromptRenderer,
     Message,
     MessageComposer,
     MessageLayout,
+    PromptRenderer,
     ToolCall,
 )
-from sefia.llm._prompt_renderer import RejectedDecision
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
     NativeDecisionTransport,
     PromptedDecisionTransport,
+    RejectedDecision,
     StructuredDecisionTransport,
 )
 from sefia.pydantic import PydanticModelBackend
-from sefia.pydantic._json_utils import pydantic_json_default
 from sefia.testing import (
     RecordingDecisionObserver,
     make_decision_request,
@@ -45,6 +46,16 @@ from sefia.testing import (
 @dataclass(frozen=True)
 class _StructuredResult:
     value: str
+
+
+class _CapturingRenderer(PromptRenderer):
+    def __init__(self) -> None:
+        self.prompts: list[InferencePrompt] = []
+
+    @override
+    def render(self, prompt: InferencePrompt) -> str:
+        self.prompts.append(prompt)
+        return "custom inference prompt"
 
 
 class _Layer(MessageComposer):
@@ -101,7 +112,7 @@ def _spec() -> DecisionSpec:
 
 
 def _renderer() -> MarkdownPromptRenderer:
-    return MarkdownPromptRenderer(json_default=pydantic_json_default)
+    return MarkdownPromptRenderer()
 
 
 @pytest.mark.parametrize(
@@ -168,7 +179,12 @@ async def test_transport_preserves_application_plan_then_appends_history_and_rep
     observer = RecordingDecisionObserver()
 
     decoded = await transport.request_decision(
-        client, _renderer(), request, observer, False
+        client,
+        _renderer(),
+        request,
+        observer,
+        False,
+        dump=PydanticModelBackend().dump,
     )
 
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
@@ -240,7 +256,12 @@ async def test_default_layout_sends_one_inference_message_on_first_step(
     )
 
     await transport.request_decision(
-        client, _renderer(), request, RecordingDecisionObserver(), False
+        client,
+        _renderer(),
+        request,
+        RecordingDecisionObserver(),
+        False,
+        dump=PydanticModelBackend().dump,
     )
 
     messages = client.complete.await_args.kwargs["messages"]
@@ -248,6 +269,42 @@ async def test_default_layout_sends_one_inference_message_on_first_step(
     assert messages[0].role == "user"
     assert '"topic": "sefia"' in messages[0].content
     assert "## Response" in messages[0].content
+
+
+async def test_transport_dumps_raw_values_independently_of_prompt_renderer() -> None:
+    argument = _StructuredResult("argument")
+    result = _StructuredResult("history")
+    function = make_function_info(bound_arguments={"payload": argument})
+    request = make_decision_request(
+        _spec(),
+        function=function,
+        history=(ToolCallResult(tool_call_id="call-1", result=result),),
+    )
+    client = AsyncMock()
+    client.complete.return_value = LLMCompletion(
+        structured_output=StructuredData.from_json(
+            {"decision": "result", "result": "done"}
+        )
+    )
+    renderer = _CapturingRenderer()
+
+    await StructuredDecisionTransport().request_decision(
+        client,
+        renderer,
+        request,
+        RecordingDecisionObserver(),
+        False,
+        dump=PydanticModelBackend().dump,
+    )
+
+    assert renderer.prompts[0].arguments.tree == {"payload": {"value": "argument"}}
+    messages = client.complete.await_args.kwargs["messages"]
+    assert messages[0].content == "custom inference prompt"
+    assert '"value": "history"' in messages[1].content
+    assert request.message_layout.arguments["payload"] is argument
+    history_item = request.history[0]
+    assert isinstance(history_item, ToolCallResult)
+    assert history_item.result is result
 
 
 async def test_client_mutation_does_not_change_layout_used_for_repair() -> None:

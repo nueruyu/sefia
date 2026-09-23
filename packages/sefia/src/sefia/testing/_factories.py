@@ -7,9 +7,9 @@ from .._history import StepHistory
 from .._interfaces.middleware import DecisionContext, StepContext
 from .._tool_system import ToolRegistry
 from ..inference import FunctionInfo, HistoryItem, ToolCallRequest
-from ..llm import MessageLayout, RejectedDecision
+from ..llm import MessageLayout
 from ..llm.step_decision import DecisionSpec
-from ..llm.transports import DecisionRequest
+from ..llm.transports import DecisionRequest, RejectedDecision
 
 
 def _test_function() -> str:

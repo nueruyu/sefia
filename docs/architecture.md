@@ -93,9 +93,9 @@ submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `streaming.py` | The tool-arg streaming side channel (`preview`). | `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: `_message_layout.py` and `_message_composer.py` define application message placement; `_text.py` preserves JSON text formatting; transports own history, repair, and response protocol messages; `step_decision.py` validates decoded decisions. | `LLMInferenceStrategy`, `MessageComposer`, `MessageLayout`, `InferencePrompt`, `LLMClient`, `DecisionTransport`, `PromptRenderer` |
+| `llm/` | The **default** `InferenceStrategy`: message composition retains raw application values, `StructuredData` is the provider-neutral LLM boundary representation, presentation helpers format normalized values, and transports own final history, repair, and response protocol assembly. | `LLMInferenceStrategy`, `MessageComposer`, `MessageLayout`, `StructuredData`, `InferencePrompt`, `LLMClient`, `DecisionTransport`, `PromptRenderer` |
 | `llm/transports/` | Transport contract and structured, prompted, and native protocols. The private `_native/` package separates native orchestration, prompt/history conversion, result-tool construction, and decoding. | `DecisionTransport`, `StructuredDecisionTransport`, `PromptedDecisionTransport`, `NativeDecisionTransport` |
-| `pydantic/` | The default `ModelBackend`: callable inspection plus result JSON Schema generation and restoration. It does not know the logical step-decision shape. | `PydanticModelBackend` |
+| `pydantic/` | The default `ModelBackend`: callable inspection, result JSON Schema generation/restoration, and Python-value normalization to `StructuredData`. It does not know prompt formatting or the logical step-decision shape. | `PydanticModelBackend` |
 | `testing/` | Public test doubles, stable test-data factories, and reusable conformance contracts for applications and extension implementations. | `MockLLMClient`, `MemoryHistoryStorage`, `make_decision_request`, `make_step_context`, `make_decision_context`, `LLMClientContract`, `HistoryStorageContract`, `DecisionTransportContract`, `ToolCollectorContract` |
 
 ### The seams (`_interfaces/`) — the extension ports
@@ -106,10 +106,10 @@ implementation noted in parentheses.
 | Interface | Swap to… | Default |
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
-| `PromptRenderer` | render the standard inference prompt from function instructions, remaining arguments, and textual tool definitions | `llm/MarkdownPromptRenderer` |
+| `PromptRenderer` | render the standard inference prompt from function instructions, normalized structured arguments, and textual tool definitions | `llm/MarkdownPromptRenderer` |
 | `DecisionTransport` | change how a decision request is prompted, sent, and decoded; raise `sefia.llm.exceptions.DecisionDecodingError` when a completion cannot be decoded as a decision | `llm/transports/` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider; raise `sefia.llm.exceptions.LLMCompletionDecodingError` for received responses that cannot be represented safely | `sefia_litellm.LiteLLMClient` |
-| `ModelBackend` | replace callable inspection and result schema generation/restoration together | `pydantic/PydanticModelBackend` |
+| `ModelBackend` | replace callable inspection, Python-value normalization, and result schema generation/restoration together | `pydantic/PydanticModelBackend` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `MiddlewareSet` | group inference, step, and decision middleware by lifecycle location; build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
 | `MessageComposer` | transform an LLM `MessageLayout` using application-defined conventions; configure through `Session` or `SessionScope` | none |
@@ -159,6 +159,7 @@ implementation noted in parentheses.
 | --- | --- |
 | Add an LLM provider | implement `LLMClient`; mirror `packages/sefia_litellm/src/sefia_litellm/_client.py` |
 | Change the logical step-decision shape or validation | `llm/step_decision.py` |
+| Change Pydantic value normalization | `pydantic/_structured_data.py` |
 | Change Pydantic result schema generation or restoration | `pydantic/_result_format.py` |
 | Change generic `$defs` import or `$ref` rewriting | `llm/json_schema/_composition.py` |
 | Change LiteLLM's structured decision format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
@@ -174,7 +175,7 @@ implementation noted in parentheses.
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |
 | Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role alias in `_tool_system/roles.py`, scanners in `_introspection.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
-| Support a new authoring type system | implement `ModelBackend`; reference `pydantic/_model_backend.py` and `_result_format.py` |
+| Support a new authoring type system | implement `ModelBackend`; reference `pydantic/_model_backend.py`, `_structured_data.py`, and `_result_format.py` |
 | Register a tool from a raw JSON Schema (no signature) | `JsonSchemaToolEntry` / `ToolRegistry.add_json_tool` in `_tool_system/` |
 | Read the serving call's id inside a tool body | `current_tool_call_id` / `current_tool_call_id_for` in `_tool_context.py` |
 | Install a whole tool-discovery rule for a run (e.g. client-defined tools) | pass `tool_collector=` to `SessionScope`/`SessionScope.session()`/`Session` (seam: `ToolCollector`) |

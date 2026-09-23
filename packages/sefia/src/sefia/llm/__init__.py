@@ -6,9 +6,9 @@ from ._message_layout import MessageLayout
 from ._prompt_renderer import (
     InferencePrompt,
     PromptRenderer,
-    RejectedDecision,
 )
 from ._strategy import LLMInferenceStrategy
+from .structured_data import StructuredData
 
 __all__ = [
     "LLMClient",
@@ -20,6 +20,6 @@ __all__ = [
     "LLMInferenceStrategy",
     "InferencePrompt",
     "PromptRenderer",
-    "RejectedDecision",
     "MarkdownPromptRenderer",
+    "StructuredData",
 ]

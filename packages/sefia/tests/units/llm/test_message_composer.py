@@ -13,7 +13,6 @@ from sefia.llm import (
 )
 from sefia.llm.transports import StructuredDecisionTransport
 from sefia.pydantic import PydanticModelBackend
-from sefia.pydantic._json_utils import pydantic_json_default
 from sefia.testing import make_function_info
 
 
@@ -21,7 +20,7 @@ def _strategy(*composers: MessageComposer) -> LLMInferenceStrategy:
     return LLMInferenceStrategy(
         AsyncMock(spec=LLMClient),
         PydanticModelBackend(),
-        MarkdownPromptRenderer(json_default=pydantic_json_default),
+        MarkdownPromptRenderer(),
         StructuredDecisionTransport(),
         message_composers=composers,
     )

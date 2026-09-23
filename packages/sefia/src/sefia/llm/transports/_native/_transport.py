@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from copy import deepcopy
 
 from typing_extensions import final, override
@@ -5,6 +6,7 @@ from typing_extensions import final, override
 from ..._client import LLMClient
 from ..._prompt_renderer import PromptRenderer
 from ...exceptions import DecisionDecodingError
+from ...structured_data import StructuredData
 from .._base import (
     DecisionObserver,
     DecisionRequest,
@@ -12,13 +14,7 @@ from .._base import (
     DecisionTransport,
 )
 from ._decoding import decode_native_tool_calls
-from .._messages import (
-    application_messages,
-    rejection_message,
-    response_message,
-    text_formatter_for,
-)
-from ._prompt import native_response_instructions, native_history_messages
+from ._messages import build_native_messages
 from ._result_tool import create_result_tool
 
 
@@ -34,34 +30,20 @@ class NativeDecisionTransport(DecisionTransport):
         request: DecisionRequest,
         observer: DecisionObserver,
         stream: bool,
+        *,
+        dump: Callable[[object], StructuredData],
     ) -> DecodedDecision:
         result_tool = create_result_tool(request.decision_spec)
         tools = [*request.decision_spec.tools]
         if result_tool is not None:
             tools.append(result_tool)
 
-        messages = application_messages(request, prompt_renderer, ())
-        messages.extend(
-            native_history_messages(
-                request.history, text_formatter_for(prompt_renderer)
-            )
+        messages = build_native_messages(
+            request=request,
+            renderer=prompt_renderer,
+            result_tool=result_tool,
+            dump=dump,
         )
-        if request.rejected is not None:
-            messages.append(rejection_message(request.rejected))
-        response = response_message(
-            native_response_instructions(request.decision_spec, result_tool)
-        )
-        if (
-            not request.message_layout.before
-            and not request.message_layout.after
-            and not request.history
-            and request.rejected is None
-        ):
-            prompt_content = messages[0].content
-            assert isinstance(prompt_content, str)
-            messages[0].content = f"{prompt_content}\n\n{response.content}"
-        else:
-            messages.append(response)
         await observer.before_request(tuple(deepcopy(messages)))
 
         completion = await client.complete(

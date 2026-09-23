@@ -6,8 +6,6 @@ from collections.abc import Sequence
 from typing_extensions import final, override
 
 from .._interfaces import InferenceStrategy
-from ._message_composer import MessageComposer
-from ._message_layout import MessageLayout
 from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
@@ -16,11 +14,13 @@ from ..streaming import ArgEvent, Scalar, StreamHandler, StringDelta, StringEnd
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
+from ._message_composer import MessageComposer
+from ._message_layout import MessageLayout
 from ._messages import LLMCompletion, Message
-from .exceptions import DecisionDecodingError, LLMCompletionDecodingError
-from ._prompt_renderer import PromptRenderer, RejectedDecision
+from ._prompt_renderer import PromptRenderer
 from ._tool_call_ids import ToolCallIdRegistry
-from .result_format import ResultFormatFactory
+from .exceptions import DecisionDecodingError, LLMCompletionDecodingError
+from .model_backend import ModelBackend
 from .step_decision import DecisionSpec
 from .streaming import (
     OutputStreamEvent,
@@ -31,6 +31,7 @@ from .transports import (
     DecisionObserver,
     DecisionRequest,
     DecisionTransport,
+    RejectedDecision,
 )
 
 
@@ -111,7 +112,7 @@ class LLMInferenceStrategy(InferenceStrategy):
     def __init__(
         self,
         llm_client: LLMClient,
-        result_format_factory: ResultFormatFactory,
+        model_backend: ModelBackend,
         prompt_renderer: PromptRenderer,
         decision_transport: DecisionTransport,
         stream: bool = False,
@@ -122,7 +123,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         if max_repair_attempts < 0:
             raise ValueError("max_repair_attempts must be non-negative")
         self.llm_client = llm_client
-        self._result_format_factory = result_format_factory
+        self._model_backend = model_backend
         self._prompt_renderer = prompt_renderer
         self._decision_transport = decision_transport
         self._stream = stream
@@ -149,7 +150,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         decision_spec = DecisionSpec.for_inference(
             output_type=function_info.return_type,
             tools=tools.get_all(),
-            result_format_factory=self._result_format_factory,
+            result_format_factory=self._model_backend,
         )
         rejected: RejectedDecision | None = None
 
@@ -205,6 +206,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                 request=request,
                 observer=observer,
                 stream=self._stream,
+                dump=self._model_backend.dump,
             )
         except (DecisionDecodingError, LLMCompletionDecodingError) as error:
             raise _InvalidDecisionCompletionError(

@@ -1,4 +1,4 @@
-from sefia.llm import RejectedDecision
+from sefia.llm.transports import RejectedDecision
 from sefia.llm.transports._messages import rejection_message
 
 

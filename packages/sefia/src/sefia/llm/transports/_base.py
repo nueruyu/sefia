@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
-from .._message_layout import MessageLayout
+
 from ...inference import FunctionInfo, HistoryItem
 from .._client import LLMClient
+from .._message_layout import MessageLayout
 from .._messages import LLMCompletion, Message
-from .._prompt_renderer import PromptRenderer, RejectedDecision
+from .._prompt_renderer import PromptRenderer
 from ..structured_data import StructuredData
 from ..step_decision import DecisionSpec
 from ..streaming import OutputStreamEvent
@@ -24,6 +26,12 @@ class DecisionObserver(ABC):
 
     @abstractmethod
     async def output(self, event: OutputStreamEvent) -> None: ...
+
+
+@dataclass(frozen=True)
+class RejectedDecision:
+    content: str | None
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -54,4 +62,6 @@ class DecisionTransport(ABC):
         request: DecisionRequest,
         observer: DecisionObserver,
         stream: bool,
+        *,
+        dump: Callable[[object], StructuredData],
     ) -> DecodedDecision: ...

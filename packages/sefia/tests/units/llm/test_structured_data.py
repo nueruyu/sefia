@@ -1,6 +1,7 @@
 import pytest
 
 from sefia.llm.structured_data import StructuredData
+from sefia.llm.json_schema import JsonScalar
 
 
 def test_from_json_builds_nested_structured_data() -> None:
@@ -59,3 +60,64 @@ def test_to_object_rejects_mapping_keys() -> None:
 def test_to_scalar_rejects_container() -> None:
     with pytest.raises(ValueError, match="must be a scalar"):
         StructuredData.from_array([]).to_scalar()
+
+
+def test_to_json_value_projects_nested_scalar_keys() -> None:
+    value = StructuredData.from_mapping(
+        {
+            None: StructuredData.from_scalar("none"),
+            True: StructuredData.from_array([StructuredData.from_scalar(1)]),
+            2.5: StructuredData.from_mapping(
+                {False: StructuredData.from_scalar("false")}
+            ),
+        }
+    )
+
+    assert value.to_json_value() == {
+        "null": "none",
+        "true": [1],
+        "2.5": {"false": "false"},
+    }
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (StructuredData.from_scalar("value"), "value"),
+        (StructuredData.from_array([StructuredData.from_scalar(1)]), [1]),
+        (
+            StructuredData.from_object({"field": StructuredData.from_scalar(True)}),
+            {"field": True},
+        ),
+    ],
+)
+def test_to_json_value_projects_each_tree_shape(
+    value: StructuredData, expected: object
+) -> None:
+    assert value.to_json_value() == expected
+
+
+@pytest.mark.parametrize(
+    "entries",
+    [
+        {
+            1: StructuredData.from_scalar("number"),
+            "1": StructuredData.from_scalar("text"),
+        },
+        {
+            None: StructuredData.from_scalar("none"),
+            "null": StructuredData.from_scalar("text"),
+        },
+        {
+            True: StructuredData.from_scalar("bool"),
+            "true": StructuredData.from_scalar("text"),
+        },
+    ],
+)
+def test_to_json_value_rejects_key_collisions(
+    entries: dict[JsonScalar, StructuredData],
+) -> None:
+    value = StructuredData.from_mapping(entries)
+
+    with pytest.raises(ValueError, match="same JSON key"):
+        value.to_json_value()

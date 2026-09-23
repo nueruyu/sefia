@@ -1,4 +1,8 @@
 from dataclasses import dataclass
+from datetime import date, datetime
+from enum import Enum
+from types import MappingProxyType
+from uuid import UUID
 
 import pytest
 from pydantic import BaseModel
@@ -20,6 +24,25 @@ class _UnhashableCallable:
 
     def __eq__(self, other: object) -> bool:
         return self is other
+
+
+class _Status(Enum):
+    READY = "ready"
+
+
+@dataclass(frozen=True)
+class _Record:
+    status: _Status
+    created: date
+
+
+class _Model(BaseModel):
+    value: int
+
+
+class _Unknown:
+    def __str__(self) -> str:
+        return "fallback"
 
 
 def test_definition():
@@ -106,3 +129,51 @@ def test_bind_preserves_coerced_model_and_dataclass_instances():
     assert bound["point"] == Point(x=1, y=2)
     assert isinstance(bound["box"], Box)
     assert bound["box"].width == 3
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, None),
+        ("text", "text"),
+        (1, 1),
+        (1.5, 1.5),
+        (True, True),
+        ([1, "two"], [1, "two"]),
+        ((1, "two"), [1, "two"]),
+    ],
+)
+def test_dump_normalizes_primitive_values(value: object, expected: object) -> None:
+    assert PydanticModelBackend().dump(value).tree == expected
+
+
+def test_dump_normalizes_nested_application_values() -> None:
+    identifier = UUID("12345678-1234-5678-1234-567812345678")
+    value = MappingProxyType(
+        {
+            identifier: {
+                "record": _Record(_Status.READY, date(2026, 9, 23)),
+                "model": _Model(value=3),
+                "timestamp": datetime(2026, 9, 23, 10, 30),
+            }
+        }
+    )
+
+    assert PydanticModelBackend().dump(value).tree == {
+        str(identifier): {
+            "record": {"status": "ready", "created": "2026-09-23"},
+            "model": {"value": 3},
+            "timestamp": "2026-09-23T10:30:00",
+        }
+    }
+
+
+def test_dump_rejects_mapping_key_collisions() -> None:
+    identifier = UUID("12345678-1234-5678-1234-567812345678")
+
+    with pytest.raises(ValueError, match="same structured key"):
+        PydanticModelBackend().dump({identifier: "first", str(identifier): "second"})
+
+
+def test_dump_falls_back_to_string_for_unknown_values() -> None:
+    assert PydanticModelBackend().dump(_Unknown()).tree == "fallback"

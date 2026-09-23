@@ -16,6 +16,10 @@ from ..llm.streaming import (
 )
 from ..llm.structured_data import StructuredData
 from ..llm.transports import DecisionObserver, DecisionRequest, DecisionTransport
+from ..pydantic import PydanticModelBackend
+
+
+_MODEL_BACKEND = PydanticModelBackend()
 
 
 @dataclass(frozen=True)
@@ -104,7 +108,12 @@ class DecisionTransportContract(ABC):
         observer = _Observer()
 
         decoded = await decision_transport_case.transport.request_decision(
-            client, _Renderer(), decision_transport_case.request, observer, stream=False
+            client,
+            _Renderer(),
+            decision_transport_case.request,
+            observer,
+            stream=False,
+            dump=_MODEL_BACKEND.dump,
         )
 
         assert decoded.decision_data == decision_transport_case.expected_data
@@ -126,7 +135,12 @@ class DecisionTransportContract(ABC):
         observer = _Observer()
 
         decoded = await decision_transport_case.transport.request_decision(
-            client, _Renderer(), decision_transport_case.request, observer, stream=True
+            client,
+            _Renderer(),
+            decision_transport_case.request,
+            observer,
+            stream=True,
+            dump=_MODEL_BACKEND.dump,
         )
 
         assert decoded.decision_data == decision_transport_case.expected_data

@@ -3,6 +3,7 @@ from ._base import (
     DecisionRequest,
     DecodedDecision,
     DecisionTransport,
+    RejectedDecision,
 )
 from ._native import NativeDecisionTransport
 from ._prompted import PromptedDecisionTransport
@@ -13,6 +14,7 @@ __all__ = [
     "DecisionRequest",
     "DecodedDecision",
     "DecisionTransport",
+    "RejectedDecision",
     "NativeDecisionTransport",
     "PromptedDecisionTransport",
     "StructuredDecisionTransport",

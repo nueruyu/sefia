@@ -2,7 +2,6 @@ from unittest.mock import Mock
 
 from sefia.inference import ToolCallResult, ToolCallsDecision
 from sefia.llm import ToolCall
-from sefia.llm._text import TextFormatter
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode, StepTool
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports._native._prompt import (
@@ -10,6 +9,7 @@ from sefia.llm.transports._native._prompt import (
     native_response_instructions,
 )
 from sefia.testing import make_tool_call_request
+from sefia.pydantic import PydanticModelBackend
 
 
 def test_native_history_messages() -> None:
@@ -18,7 +18,7 @@ def test_native_history_messages() -> None:
     )
     result = ToolCallResult(tool_call_id=call.id, result={"value": "found"})
     messages = native_history_messages(
-        (ToolCallsDecision([call]), result), TextFormatter()
+        (ToolCallsDecision([call]), result), PydanticModelBackend().dump
     )
 
     assert [message.role for message in messages] == ["assistant", "tool"]

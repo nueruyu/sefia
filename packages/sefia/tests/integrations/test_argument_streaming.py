@@ -112,7 +112,7 @@ async def test_arguments_stream_from_transport_through_strategy_to_tool_handler(
     renderer.render.return_value = "prompt"
     strategy = LLMInferenceStrategy(
         llm_client=_StreamingClient(content),
-        result_format_factory=PydanticModelBackend(),
+        model_backend=PydanticModelBackend(),
         prompt_renderer=renderer,
         decision_transport=transport,
         stream=True,

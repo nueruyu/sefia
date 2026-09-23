@@ -25,7 +25,7 @@ def make_strategy(transport: AsyncMock) -> Callable[..., LLMInferenceStrategy]:
     ) -> LLMInferenceStrategy:
         return LLMInferenceStrategy(
             llm_client=Mock(spec=LLMClient),
-            result_format_factory=PydanticModelBackend(),
+            model_backend=PydanticModelBackend(),
             prompt_renderer=Mock(spec=PromptRenderer),
             decision_transport=transport,
             stream=stream,

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from copy import deepcopy
 
 from typing_extensions import final, override
@@ -5,6 +6,7 @@ from typing_extensions import final, override
 from .._client import LLMClient
 from .._prompt_renderer import PromptRenderer
 from ..exceptions import DecisionDecodingError
+from ..structured_data import StructuredData
 from ._base import (
     DecisionObserver,
     DecisionRequest,
@@ -12,7 +14,7 @@ from ._base import (
     DecisionTransport,
 )
 from ._decision_instructions import structured_response_instructions
-from ._messages import text_protocol_messages
+from ._messages import build_text_messages
 
 
 @final
@@ -25,12 +27,17 @@ class StructuredDecisionTransport(DecisionTransport):
         request: DecisionRequest,
         observer: DecisionObserver,
         stream: bool,
+        *,
+        dump: Callable[[object], StructuredData],
     ) -> DecodedDecision:
-        messages = text_protocol_messages(
-            request,
-            prompt_renderer,
-            request.decision_spec.tools,
-            structured_response_instructions(request.decision_spec),
+        messages = build_text_messages(
+            request=request,
+            renderer=prompt_renderer,
+            tools=request.decision_spec.tools,
+            response_instructions=structured_response_instructions(
+                request.decision_spec
+            ),
+            dump=dump,
         )
         await observer.before_request(tuple(deepcopy(messages)))
 

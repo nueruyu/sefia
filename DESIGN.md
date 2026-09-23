@@ -135,8 +135,10 @@ cannot wrap, retry, or short-circuit the inference loop. `PromptRenderer` render
 Sefia's standard inference prompt from function instructions, remaining arguments,
 and any textual tool definitions. Transports place that prompt between the layout's
 application messages, then append Sefia execution history, repair feedback, and
-response instructions. A private text utility preserves JSON serialization across
-prompt and transport messages.
+response instructions. `MessageLayout` retains raw application values until a
+transport consumes it. The configured `ModelBackend` normalizes those values and tool
+results into `StructuredData`; renderers and transports then project that tree to JSON
+text where their presentation requires it.
 Observation events receive a separate message snapshot so handlers cannot change the
 LLM request.
 

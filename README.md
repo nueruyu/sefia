@@ -99,7 +99,9 @@ context helpers such as `current_tool_call_id_for`.
 For custom message composition, applications can configure `MessageComposer` through
 `SessionScope` or `Session` and return a `MessageLayout`. A composer places application
 messages before and after Sefia's standard inference prompt and selects which
-arguments remain in that prompt. Argument semantics stay with the application. See
+arguments remain in that prompt. The layout keeps application values raw until the
+transport uses the configured `ModelBackend` to normalize them to `StructuredData`.
+Argument semantics stay with the application. See
 [the `@infer` contract](./docs/infer-contract.md#composing-llm-messages).
 
 ## Quickstart

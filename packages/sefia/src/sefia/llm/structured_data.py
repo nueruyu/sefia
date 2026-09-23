@@ -15,10 +15,11 @@ StructuredDataTree: TypeAlias = (
 @final
 @dataclass(frozen=True)
 class StructuredData:
-    """A provider-neutral data tree used by LLM clients and transports.
+    """Sefia's provider-neutral structured representation at LLM boundaries.
 
-    Unlike JSON, logical mappings may retain scalar keys after an adapter restores
-    a provider-specific wire representation.
+    It represents normalized application values supplied to an LLM and structured
+    values decoded from an LLM or provider representation. Unlike JSON, logical
+    mappings may retain scalar keys.
     """
 
     _tree: StructuredDataTree
@@ -89,6 +90,10 @@ class StructuredData:
     def tree(self) -> StructuredDataTree:
         return self._tree
 
+    def to_json_value(self) -> JsonValue:
+        """Project this structured tree into JSON-compatible data."""
+        return _to_json_value(self._tree)
+
     def to_object(
         self, description: str = "structured data"
     ) -> dict[str, "StructuredData"]:
@@ -117,6 +122,33 @@ class StructuredData:
         if self._tree is None or isinstance(self._tree, str | int | float | bool):
             return self._tree
         raise ValueError(f"{description} must be a scalar")
+
+
+def _to_json_value(tree: StructuredDataTree) -> JsonValue:
+    if isinstance(tree, list):
+        return [_to_json_value(item) for item in tree]
+    if isinstance(tree, dict):
+        result: dict[str, JsonValue] = {}
+        for key, value in tree.items():
+            json_key = _to_json_key(key)
+            if json_key in result:
+                raise ValueError(
+                    "Structured mapping contains keys that normalize to the same "
+                    f"JSON key: {json_key!r}"
+                )
+            result[json_key] = _to_json_value(value)
+        return result
+    return tree
+
+
+def _to_json_key(key: JsonScalar) -> str:
+    if key is None:
+        return "null"
+    if key is True:
+        return "true"
+    if key is False:
+        return "false"
+    return key if isinstance(key, str) else str(key)
 
 
 __all__ = ["StructuredData", "StructuredDataTree"]

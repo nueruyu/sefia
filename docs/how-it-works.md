@@ -95,13 +95,16 @@ request = DecisionRequest(function=function_info, message_layout=layout, ...)
    application conventions while treating `FunctionInfo` as read-only metadata.
 2. `DecisionSpec` describes which next decisions are valid. `DecisionRequest` carries
    the composed layout, prior tool interactions, and any rejected response.
-3. `PromptRenderer` renders `InferencePrompt` from function instructions, remaining
+3. `DecisionTransport` consumes the raw layout. It calls `ModelBackend.dump()` for
+   remaining arguments and tool results, producing `StructuredData` only when those
+   values cross into LLM input representation.
+4. `PromptRenderer` renders `InferencePrompt` from function instructions, normalized
    arguments, and any textual tool definitions. `DecisionTransport` places that prompt
    between application messages and owns history, repair, and response instructions.
-4. `LLMClient.complete()` returns a provider-neutral `LLMCompletion`.
-5. The transport decodes its protocol into `DecodedDecision`; its `decision_data` is
+5. `LLMClient.complete()` returns a provider-neutral `LLMCompletion`.
+6. The transport decodes its protocol into `DecodedDecision`; its `decision_data` is
    structured but not yet semantically valid.
-6. `DecisionSpec` validates that data as a `StepDecision`.
+7. `DecisionSpec` validates that data as a `StepDecision`.
 
 The layout is composed once per strategy invocation. A new inference step or a
 `DecisionMiddleware` retry invokes the strategy again; an internal response repair
@@ -127,12 +130,14 @@ adapter nests every structured decision under a required `payload` property, giv
 all decision modes the same object-root wire shape. It removes that envelope from
 completed output and stream paths.
 
-The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
-reflects callable parameters, while `_result_format.py` produces a JSON Schema and
-restores a decoded result to its declared Python type. Provider-neutral tree
-operations live on `StructuredData`; the backend does not know the step-decision
-shape. Provider-side response decoding and stream-path normalization stay inside the
-client implementation.
+The Pydantic backend owns Python-aware boundaries: `_function_models.py` reflects
+callable parameters, `_structured_data.py` normalizes arbitrary Python values into
+`StructuredData`, and `_result_format.py` produces a JSON Schema and restores a
+decoded result to its declared Python type. `StructuredData` is Sefia's single
+provider-neutral structured tree for both values supplied to an LLM and values decoded
+from one. Its explicit JSON projection converts scalar mapping keys and detects
+collisions. The backend does not know JSON text, Markdown, provider wire payloads, or
+the step-decision shape.
 
 `DecisionSpec.for_inference()` composes these leaves. It exposes the decision mode,
 result format, and tools, and validates a returned value as the corresponding
@@ -141,10 +146,12 @@ result schema interfaces and decoded values live in `sefia.llm.result_format` an
 `sefia.llm.structured_data`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
-`MarkdownPromptRenderer` renders only the standard inference prompt. A private LLM
-text utility normalizes Python values for JSON content. Transports build the final
-message sequence: application messages before the prompt, the prompt, application
-messages after it, execution history, repair feedback, and response instructions.
+`MarkdownPromptRenderer` renders only the standard inference prompt from an
+`InferencePrompt` whose arguments are already `StructuredData`. Private text helpers
+format JSON-compatible projections without interpreting Python objects. Textual and
+native transport builders each build their complete final message sequence:
+application messages before the prompt, the prompt, application messages after it,
+execution history, repair feedback, and response instructions.
 They combine inference and response text into one message
 for the default first step. The transport copies application messages into each
 request and sends event handlers a separate snapshot of the final messages.

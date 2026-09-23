@@ -40,7 +40,12 @@ async def test_renders_and_delivers_one_complete_prompt() -> None:
     observer = RecordingDecisionObserver()
 
     decoded = await StructuredDecisionTransport().request_decision(
-        client, renderer, request, observer, stream=False
+        client,
+        renderer,
+        request,
+        observer,
+        stream=False,
+        dump=PydanticModelBackend().dump,
     )
 
     sent = client.complete.await_args.kwargs
@@ -79,7 +84,12 @@ async def test_observer_finishes_before_the_client_request() -> None:
             order.append("observed")
 
     await StructuredDecisionTransport().request_decision(
-        client, _renderer(), _request(), Observer(), stream=False
+        client,
+        _renderer(),
+        _request(),
+        Observer(),
+        stream=False,
+        dump=PydanticModelBackend().dump,
     )
 
     assert order == ["observed", "request"]
@@ -97,6 +107,7 @@ async def test_reports_undecodable_response() -> None:
             _request(),
             RecordingDecisionObserver(),
             stream=False,
+            dump=PydanticModelBackend().dump,
         )
 
     assert exc_info.value.completion is completion
@@ -115,4 +126,5 @@ async def test_rejects_raw_json_content() -> None:
             _request(),
             RecordingDecisionObserver(),
             stream=False,
+            dump=PydanticModelBackend().dump,
         )

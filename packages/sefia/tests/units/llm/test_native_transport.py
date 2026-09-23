@@ -76,7 +76,12 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
     observer = RecordingDecisionObserver()
 
     decoded = await NativeDecisionTransport().request_decision(
-        client, renderer, _request(decision), observer, stream=False
+        client,
+        renderer,
+        _request(decision),
+        observer,
+        stream=False,
+        dump=PydanticModelBackend().dump,
     )
 
     assert decoded.decision_data.tree == {
@@ -108,6 +113,7 @@ async def test_native_transport_decodes_typed_result() -> None:
         _request(decision),
         RecordingDecisionObserver(),
         stream=False,
+        dump=PydanticModelBackend().dump,
     )
 
     assert decoded.decision_data.tree == {
@@ -128,6 +134,7 @@ async def test_native_transport_requires_a_tool_call() -> None:
             _request(decision),
             RecordingDecisionObserver(),
             stream=False,
+            dump=PydanticModelBackend().dump,
         )
 
 
@@ -151,7 +158,12 @@ async def test_native_transport_forwards_history_in_tool_only_mode() -> None:
     )
 
     decoded = await NativeDecisionTransport().request_decision(
-        client, _renderer(), request, RecordingDecisionObserver(), stream=False
+        client,
+        _renderer(),
+        request,
+        RecordingDecisionObserver(),
+        stream=False,
+        dump=PydanticModelBackend().dump,
     )
 
     sent = client.complete.await_args.kwargs
@@ -196,6 +208,7 @@ async def test_native_transport_uses_collision_free_name_for_prompt_and_decoding
         _request(decision),
         RecordingDecisionObserver(),
         stream=False,
+        dump=PydanticModelBackend().dump,
     )
 
     sent = client.complete.await_args.kwargs

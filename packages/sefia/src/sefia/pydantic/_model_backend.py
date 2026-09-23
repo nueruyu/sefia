@@ -2,9 +2,10 @@ from typing import Any, Callable
 
 from typing_extensions import final, override
 
+from .._tool_system import ToolDefinition
 from ..llm.model_backend import ModelBackend
 from ..llm.result_format import ResultFormat
-from .._tool_system import ToolDefinition
+from ..llm.structured_data import StructuredData
 from ._function_models import (
     PydanticFunctionModelFactory,
     cache_key,
@@ -13,12 +14,14 @@ from ._function_models import (
     sanitize_function_name,
 )
 from ._result_format import PydanticResultFormatFactory
+from ._structured_data import dump_structured_data
 
 
 @final
 class PydanticModelBackend(ModelBackend):
     """
-    Pydantic-backed tool-function inspector and structured-value schema factory.
+    Pydantic-backed Python model boundary for tools and LLM structured data.
+
     Supports dataclasses, Pydantic models, primitives, and typing constructs.
     """
 
@@ -84,3 +87,7 @@ class PydanticModelBackend(ModelBackend):
     @override
     def create(self, python_type: Any) -> ResultFormat:
         return self._result_format_factory.create(python_type)
+
+    @override
+    def dump(self, value: object) -> StructuredData:
+        return dump_structured_data(value)

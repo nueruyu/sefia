@@ -17,7 +17,6 @@ from .llm._strategy import LLMInferenceStrategy
 from .llm._markdown_prompt_renderer import MarkdownPromptRenderer
 from .llm._prompt_renderer import PromptRenderer
 from .llm.transports import DecisionTransport, StructuredDecisionTransport
-from .pydantic._json_utils import pydantic_json_default
 from .pydantic._model_backend import PydanticModelBackend
 from .tool_collectors import DefaultToolCollector
 
@@ -55,9 +54,7 @@ class Session:
         self._tool_collector = tool_collector or DefaultToolCollector(
             inspector=model_backend
         )
-        prompt_renderer = prompt_renderer or MarkdownPromptRenderer(
-            json_default=pydantic_json_default
-        )
+        prompt_renderer = prompt_renderer or MarkdownPromptRenderer()
         decision_transport = decision_transport or StructuredDecisionTransport()
         message_composers = tuple(message_composers)
 
@@ -65,7 +62,7 @@ class Session:
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
-                result_format_factory=model_backend,
+                model_backend=model_backend,
                 prompt_renderer=prompt_renderer,
                 decision_transport=decision_transport,
                 message_composers=message_composers,

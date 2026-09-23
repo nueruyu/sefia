@@ -43,7 +43,7 @@ from ..llm.step_decision import DecisionSpec, StepTool
 from ..llm.structured_data import StructuredData
 from ..llm.streaming import OutputStreamCallback, OutputStreamEvent
 from ..llm.transports import DecisionObserver
-from ..pydantic._json_utils import pydantic_json_default
+from ..pydantic import PydanticModelBackend
 from ._decision_transport_contract import (
     DecisionTransportCase,
     DecisionTransportContract,
@@ -196,27 +196,21 @@ def result_completion(result: Any) -> LLMCompletion:
     including dataclasses and Pydantic models, which serialize to the object
     shape the step-decision schema validates.
     """
-    return LLMCompletion(
-        content=json.dumps(
-            {"decision": "result", "result": result},
-            default=pydantic_json_default,
-        )
-    )
+    data = PydanticModelBackend().dump({"decision": "result", "result": result})
+    return LLMCompletion(content=json.dumps(data.to_json_value()))
 
 
 def tool_calls_completion(*calls: tuple[str, dict[str, Any]]) -> LLMCompletion:
     """A scripted "tool_calls" decision from ``(tool_name, arguments)`` pairs."""
-    return LLMCompletion(
-        content=json.dumps(
-            {
-                "decision": "tool_calls",
-                "tool_calls": [
-                    {"name": name, "arguments": arguments} for name, arguments in calls
-                ],
-            },
-            default=pydantic_json_default,
-        )
+    data = PydanticModelBackend().dump(
+        {
+            "decision": "tool_calls",
+            "tool_calls": [
+                {"name": name, "arguments": arguments} for name, arguments in calls
+            ],
+        }
     )
+    return LLMCompletion(content=json.dumps(data.to_json_value()))
 
 
 @asynccontextmanager

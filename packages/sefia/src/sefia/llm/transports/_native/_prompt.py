@@ -1,9 +1,9 @@
-from typing import cast
+from collections.abc import Callable
 
 from ....inference import HistoryItem, ToolCallsDecision
 from ..._messages import Message, ToolCall
-from ..._text import TextFormatter
-from ...structured_data import StructuredData, StructuredDataTree
+from ..._text import compact_json
+from ...structured_data import StructuredData
 from ...step_decision import DecisionSpec, StepDecisionMode, StepTool
 
 
@@ -27,7 +27,7 @@ def native_response_instructions(
 
 def native_history_messages(
     history: tuple[HistoryItem, ...],
-    formatter: TextFormatter,
+    dump: Callable[[object], StructuredData],
 ) -> list[Message]:
     messages: list[Message] = []
     for item in history:
@@ -39,9 +39,7 @@ def native_history_messages(
                         ToolCall(
                             id=call.id,
                             name=call.name,
-                            arguments=StructuredData.from_tree(
-                                cast(StructuredDataTree, call.arguments)
-                            ),
+                            arguments=dump(call.arguments),
                         )
                         for call in item.calls
                     ],
@@ -51,7 +49,7 @@ def native_history_messages(
             messages.append(
                 Message(
                     role="tool",
-                    content=formatter.compact_json(item.result),
+                    content=compact_json(dump(item.result).to_json_value()),
                     tool_call_id=item.tool_call_id,
                 )
             )
