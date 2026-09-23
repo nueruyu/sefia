@@ -196,13 +196,15 @@ def result_completion(result: Any) -> LLMCompletion:
     including dataclasses and Pydantic models, which serialize to the object
     shape the step-decision schema validates.
     """
-    data = PydanticModelBackend().dump({"decision": "result", "result": result})
+    data = PydanticModelBackend().to_structured_data(
+        {"decision": "result", "result": result}
+    )
     return LLMCompletion(content=json.dumps(data.to_json_value()))
 
 
 def tool_calls_completion(*calls: tuple[str, dict[str, Any]]) -> LLMCompletion:
     """A scripted "tool_calls" decision from ``(tool_name, arguments)`` pairs."""
-    data = PydanticModelBackend().dump(
+    data = PydanticModelBackend().to_structured_data(
         {
             "decision": "tool_calls",
             "tool_calls": [

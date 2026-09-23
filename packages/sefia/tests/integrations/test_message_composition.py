@@ -1,6 +1,5 @@
 import json
 from copy import deepcopy
-from dataclasses import dataclass
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,8 +10,6 @@ from sefia.event_system import EventPublisher
 from sefia.inference import (
     FunctionInfo,
     ResultDecision,
-    ToolCallResult,
-    ToolCallsDecision,
 )
 from sefia.llm import (
     LLMClient,
@@ -31,6 +28,8 @@ from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
     NativeDecisionTransport,
     PromptedDecisionTransport,
+    DecisionToolCalls,
+    DecisionToolResult,
     RejectedDecision,
     StructuredDecisionTransport,
 )
@@ -39,13 +38,7 @@ from sefia.testing import (
     RecordingDecisionObserver,
     make_decision_request,
     make_function_info,
-    make_tool_call_request,
 )
-
-
-@dataclass(frozen=True)
-class _StructuredResult:
-    value: str
 
 
 class _CapturingRenderer(PromptRenderer):
@@ -157,20 +150,31 @@ async def test_transport_preserves_application_plan_then_appends_history_and_rep
         Message(role="assistant", content="old answer"),
         Message(role="user", content="current question"),
     )
-    layout = MessageLayout(
-        before=(application_messages[0],),
-        arguments=function.prompt_arguments,
-        after=application_messages[1:],
-    )
     history = (
-        ToolCallsDecision([make_tool_call_request(id="call-1", name="lookup")]),
-        ToolCallResult(tool_call_id="call-1", result=_StructuredResult("found")),
+        DecisionToolCalls(
+            (
+                ToolCall(
+                    id="call-1",
+                    name="lookup",
+                    arguments=StructuredData.from_object({}),
+                ),
+            )
+        ),
+        DecisionToolResult(
+            tool_call_id="call-1",
+            result=StructuredData.from_json({"value": "found"}),
+        ),
     )
-    rejected = RejectedDecision(content="bad", reason="invalid")
+    rejected = RejectedDecision(
+        completion=LLMCompletion(content="bad"),
+        reason="invalid",
+    )
     request = make_decision_request(
         _spec(),
         function=function,
-        message_layout=layout,
+        arguments=StructuredData.from_json({"knowledge": {"foo": "bar"}}),
+        messages_before=(application_messages[0],),
+        messages_after=application_messages[1:],
         history=history,
         rejected=rejected,
     )
@@ -184,7 +188,6 @@ async def test_transport_preserves_application_plan_then_appends_history_and_rep
         request,
         observer,
         False,
-        dump=PydanticModelBackend().dump,
     )
 
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
@@ -233,7 +236,11 @@ async def test_default_layout_sends_one_inference_message_on_first_step(
     | NativeDecisionTransport,
 ) -> None:
     function = make_function_info(bound_arguments={"topic": "sefia"})
-    request = make_decision_request(_spec(), function=function)
+    request = make_decision_request(
+        _spec(),
+        function=function,
+        arguments=StructuredData.from_json({"topic": "sefia"}),
+    )
     client = AsyncMock()
     client.complete.return_value = (
         LLMCompletion(
@@ -261,7 +268,6 @@ async def test_default_layout_sends_one_inference_message_on_first_step(
         request,
         RecordingDecisionObserver(),
         False,
-        dump=PydanticModelBackend().dump,
     )
 
     messages = client.complete.await_args.kwargs["messages"]
@@ -271,14 +277,16 @@ async def test_default_layout_sends_one_inference_message_on_first_step(
     assert "## Response" in messages[0].content
 
 
-async def test_transport_dumps_raw_values_independently_of_prompt_renderer() -> None:
-    argument = _StructuredResult("argument")
-    result = _StructuredResult("history")
-    function = make_function_info(bound_arguments={"payload": argument})
+async def test_custom_prompt_renderer_receives_materialized_request() -> None:
     request = make_decision_request(
         _spec(),
-        function=function,
-        history=(ToolCallResult(tool_call_id="call-1", result=result),),
+        arguments=StructuredData.from_json({"payload": {"value": "argument"}}),
+        history=(
+            DecisionToolResult(
+                tool_call_id="call-1",
+                result=StructuredData.from_json({"value": "history"}),
+            ),
+        ),
     )
     client = AsyncMock()
     client.complete.return_value = LLMCompletion(
@@ -294,17 +302,12 @@ async def test_transport_dumps_raw_values_independently_of_prompt_renderer() -> 
         request,
         RecordingDecisionObserver(),
         False,
-        dump=PydanticModelBackend().dump,
     )
 
     assert renderer.prompts[0].arguments.tree == {"payload": {"value": "argument"}}
     messages = client.complete.await_args.kwargs["messages"]
     assert messages[0].content == "custom inference prompt"
     assert '"value": "history"' in messages[1].content
-    assert request.message_layout.arguments["payload"] is argument
-    history_item = request.history[0]
-    assert isinstance(history_item, ToolCallResult)
-    assert history_item.result is result
 
 
 async def test_client_mutation_does_not_change_layout_used_for_repair() -> None:

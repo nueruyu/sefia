@@ -143,11 +143,13 @@ def test_bind_preserves_coerced_model_and_dataclass_instances():
         ((1, "two"), [1, "two"]),
     ],
 )
-def test_dump_normalizes_primitive_values(value: object, expected: object) -> None:
-    assert PydanticModelBackend().dump(value).tree == expected
+def test_to_structured_data_normalizes_primitives(
+    value: object, expected: object
+) -> None:
+    assert PydanticModelBackend().to_structured_data(value).tree == expected
 
 
-def test_dump_normalizes_nested_application_values() -> None:
+def test_to_structured_data_normalizes_nested_application_values() -> None:
     identifier = UUID("12345678-1234-5678-1234-567812345678")
     value = MappingProxyType(
         {
@@ -159,7 +161,7 @@ def test_dump_normalizes_nested_application_values() -> None:
         }
     )
 
-    assert PydanticModelBackend().dump(value).tree == {
+    assert PydanticModelBackend().to_structured_data(value).tree == {
         str(identifier): {
             "record": {"status": "ready", "created": "2026-09-23"},
             "model": {"value": 3},
@@ -168,12 +170,14 @@ def test_dump_normalizes_nested_application_values() -> None:
     }
 
 
-def test_dump_rejects_mapping_key_collisions() -> None:
+def test_to_structured_data_rejects_mapping_key_collisions() -> None:
     identifier = UUID("12345678-1234-5678-1234-567812345678")
 
     with pytest.raises(ValueError, match="same structured key"):
-        PydanticModelBackend().dump({identifier: "first", str(identifier): "second"})
+        PydanticModelBackend().to_structured_data(
+            {identifier: "first", str(identifier): "second"}
+        )
 
 
-def test_dump_falls_back_to_string_for_unknown_values() -> None:
-    assert PydanticModelBackend().dump(_Unknown()).tree == "fallback"
+def test_to_structured_data_falls_back_to_string_for_unknown_values() -> None:
+    assert PydanticModelBackend().to_structured_data(_Unknown()).tree == "fallback"

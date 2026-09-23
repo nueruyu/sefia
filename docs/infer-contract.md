@@ -60,9 +60,10 @@ An application composer returns a `MessageLayout` with messages in `before` and
 `after`, and remaining prompt data in `arguments`. Sefia renders its standard
 inference prompt once between those messages. Unconsumed arguments retain the usual
 JSON rendering; `arguments={}` is valid when every argument is consumed. The layout
-keeps ordinary Python values. When a transport consumes it, `ModelBackend.dump()`
-normalizes the remaining values into provider-neutral `StructuredData`, and JSON is
-only a later text projection where the selected transport needs one.
+keeps ordinary Python values. After composition, `LLMInferenceStrategy` calls
+`ModelBackend.to_structured_data()` to materialize the remaining values before it
+constructs the transport-facing `DecisionRequest`. JSON is only a later projection
+where the selected transport needs textual representation.
 `PromptRenderer` renders only this inference prompt from function instructions,
 remaining arguments, and any textual tool definitions. The transport appends Sefia's
 execution history, repair feedback, and response instructions in that order. A

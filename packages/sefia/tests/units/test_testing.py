@@ -6,6 +6,7 @@ from sefia.inference import ToolCallResult
 from sefia.llm import LLMCompletion, Message, ToolCall
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
+from sefia.llm.transports import DecisionToolResult
 from sefia.pydantic import PydanticModelBackend
 from sefia.testing import (
     LLMClientCase,
@@ -56,7 +57,12 @@ def test_test_data_factories_preserve_explicit_values() -> None:
         name="lookup",
         arguments={"key": "answer"},
     )
-    history = (ToolCallResult(tool_call_id=call.id, result="found"),)
+    history = (
+        DecisionToolResult(
+            tool_call_id=call.id,
+            result=StructuredData.from_scalar("found"),
+        ),
+    )
     decision_spec = DecisionSpec.for_inference(
         output_type=str,
         tools=[],
@@ -69,9 +75,9 @@ def test_test_data_factories_preserve_explicit_values() -> None:
         history=history,
     )
 
-    assert request.function is function
+    assert request.inference_prompt.function is function
     assert request.history == history
-    assert request.function.bound_arguments == {"question": "Why?"}
+    assert request.inference_prompt.function.bound_arguments == {"question": "Why?"}
     assert call.name == "lookup"
 
 

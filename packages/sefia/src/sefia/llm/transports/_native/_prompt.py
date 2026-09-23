@@ -1,10 +1,9 @@
-from collections.abc import Callable
+from copy import deepcopy
 
-from ....inference import HistoryItem, ToolCallsDecision
 from ..._messages import Message, ToolCall
 from ..._text import compact_json
-from ...structured_data import StructuredData
 from ...step_decision import DecisionSpec, StepDecisionMode, StepTool
+from .._base import DecisionHistoryItem, DecisionToolCalls
 
 
 def native_response_instructions(
@@ -26,12 +25,11 @@ def native_response_instructions(
 
 
 def native_history_messages(
-    history: tuple[HistoryItem, ...],
-    dump: Callable[[object], StructuredData],
+    history: tuple[DecisionHistoryItem, ...],
 ) -> list[Message]:
     messages: list[Message] = []
     for item in history:
-        if isinstance(item, ToolCallsDecision):
+        if isinstance(item, DecisionToolCalls):
             messages.append(
                 Message(
                     role="assistant",
@@ -39,7 +37,7 @@ def native_history_messages(
                         ToolCall(
                             id=call.id,
                             name=call.name,
-                            arguments=dump(call.arguments),
+                            arguments=deepcopy(call.arguments),
                         )
                         for call in item.calls
                     ],
@@ -49,7 +47,7 @@ def native_history_messages(
             messages.append(
                 Message(
                     role="tool",
-                    content=compact_json(dump(item.result).to_json_value()),
+                    content=compact_json(item.result.to_json_value()),
                     tool_call_id=item.tool_call_id,
                 )
             )

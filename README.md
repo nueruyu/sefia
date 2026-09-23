@@ -100,7 +100,8 @@ For custom message composition, applications can configure `MessageComposer` thr
 `SessionScope` or `Session` and return a `MessageLayout`. A composer places application
 messages before and after Sefia's standard inference prompt and selects which
 arguments remain in that prompt. The layout keeps application values raw until the
-transport uses the configured `ModelBackend` to normalize them to `StructuredData`.
+LLM strategy uses the configured `ModelBackend` to normalize them to `StructuredData`
+before constructing a transport-facing request.
 Argument semantics stay with the application. See
 [the `@infer` contract](./docs/infer-contract.md#composing-llm-messages).
 

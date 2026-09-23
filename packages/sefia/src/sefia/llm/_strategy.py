@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
+from copy import deepcopy
+from dataclasses import replace
 
 from typing_extensions import final, override
 
@@ -9,19 +10,20 @@ from .._interfaces import InferenceStrategy
 from .._tool_system import ToolRegistry
 from ..event_system import EventPublisher
 from ..exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
-from ..inference import FunctionInfo, HistoryItem, StepDecision
+from ..inference import FunctionInfo, HistoryItem, StepDecision, ToolCallsDecision
 from ..streaming import ArgEvent, Scalar, StreamHandler, StringDelta, StringEnd
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
 from ._message_composer import MessageComposer
 from ._message_layout import MessageLayout
-from ._messages import LLMCompletion, Message
-from ._prompt_renderer import PromptRenderer
+from ._messages import LLMCompletion, Message, ToolCall
+from ._prompt_renderer import InferencePrompt, PromptRenderer
 from ._tool_call_ids import ToolCallIdRegistry
 from .exceptions import DecisionDecodingError, LLMCompletionDecodingError
 from .model_backend import ModelBackend
 from .step_decision import DecisionSpec
+from .structured_data import StructuredData
 from .streaming import (
     OutputStreamEvent,
     StringDelta as OutputStringDelta,
@@ -29,7 +31,10 @@ from .streaming import (
 )
 from .transports import (
     DecisionObserver,
+    DecisionHistoryItem,
     DecisionRequest,
+    DecisionToolCalls,
+    DecisionToolResult,
     DecisionTransport,
     RejectedDecision,
 )
@@ -152,19 +157,18 @@ class LLMInferenceStrategy(InferenceStrategy):
             tools=tools.get_all(),
             result_format_factory=self._model_backend,
         )
+        request = self._materialize_request(
+            function_info,
+            message_layout,
+            decision_spec,
+            history,
+        )
         rejected: RejectedDecision | None = None
 
         for attempt in range(self._max_repair_attempts + 1):
-            request = DecisionRequest(
-                function=function_info,
-                message_layout=message_layout,
-                decision_spec=decision_spec,
-                history=tuple(history),
-                rejected=rejected,
-            )
             try:
                 return await self._complete_once(
-                    request,
+                    replace(request, rejected=rejected),
                     tools,
                     publisher,
                 )
@@ -175,15 +179,59 @@ class LLMInferenceStrategy(InferenceStrategy):
                     events.DecisionRepairAttempt(error=error, attempt=attempt + 1)
                 )
                 rejected = RejectedDecision(
-                    content=(
-                        _rejected_completion_content(error.completion)
+                    completion=(
+                        error.completion
                         if isinstance(error, _InvalidDecisionCompletionError)
-                        else error.raw_content
+                        else LLMCompletion(content=error.raw_content)
                     ),
                     reason=error.detail,
                 )
 
         raise AssertionError("unreachable")
+
+    def _materialize_request(
+        self,
+        function_info: FunctionInfo,
+        layout: MessageLayout,
+        decision_spec: DecisionSpec,
+        history: Sequence[HistoryItem],
+    ) -> DecisionRequest:
+        arguments = StructuredData.from_object(
+            {
+                name: self._model_backend.to_structured_data(value)
+                for name, value in layout.arguments.items()
+            }
+        )
+        return DecisionRequest(
+            messages_before=tuple(deepcopy(layout.before)),
+            inference_prompt=InferencePrompt(
+                function=function_info,
+                arguments=arguments,
+                tools=decision_spec.tools,
+            ),
+            messages_after=tuple(deepcopy(layout.after)),
+            decision_spec=decision_spec,
+            history=tuple(self._materialize_history_item(item) for item in history),
+        )
+
+    def _materialize_history_item(self, item: HistoryItem) -> DecisionHistoryItem:
+        if isinstance(item, ToolCallsDecision):
+            return DecisionToolCalls(
+                calls=tuple(
+                    ToolCall(
+                        id=call.id,
+                        name=call.name,
+                        arguments=self._model_backend.to_structured_data(
+                            call.arguments
+                        ),
+                    )
+                    for call in item.calls
+                )
+            )
+        return DecisionToolResult(
+            tool_call_id=item.tool_call_id,
+            result=self._model_backend.to_structured_data(item.result),
+        )
 
     async def _complete_once(
         self,
@@ -206,7 +254,6 @@ class LLMInferenceStrategy(InferenceStrategy):
                 request=request,
                 observer=observer,
                 stream=self._stream,
-                dump=self._model_backend.dump,
             )
         except (DecisionDecodingError, LLMCompletionDecodingError) as error:
             raise _InvalidDecisionCompletionError(
@@ -248,27 +295,3 @@ def _tool_stream_handlers(tools: ToolRegistry) -> dict[str, StreamHandler]:
         for tool in tools.get_all()
         if tool.stream_handler is not None
     }
-
-
-def _rejected_completion_content(completion: LLMCompletion) -> str | None:
-    if not completion.tool_calls and completion.content is not None:
-        return completion.content
-
-    if not completion.tool_calls and completion.structured_output is None:
-        return None
-
-    response: dict[str, object] = {}
-    if completion.content is not None:
-        response["content"] = completion.content
-    if completion.tool_calls:
-        response["tool_calls"] = [
-            {
-                "id": call.id,
-                "name": call.name,
-                "arguments": call.arguments.tree,
-            }
-            for call in completion.tool_calls
-        ]
-    if completion.structured_output is not None:
-        response["structured_output"] = completion.structured_output.tree
-    return json.dumps(response, ensure_ascii=False, separators=(",", ":"))

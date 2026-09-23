@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from inspect import signature
 from typing import Literal, cast
 
 import pytest
@@ -159,3 +160,14 @@ def test_contract_covers_all_exported_implementations() -> None:
     }
 
     assert set(CASE_FACTORIES) == exported
+
+
+def test_transport_contract_has_no_value_conversion_capability() -> None:
+    assert tuple(signature(DecisionTransport.request_decision).parameters) == (
+        "self",
+        "client",
+        "prompt_renderer",
+        "request",
+        "observer",
+        "stream",
+    )

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TypeAlias
 
-from ...inference import FunctionInfo, HistoryItem
 from .._client import LLMClient
-from .._message_layout import MessageLayout
-from .._messages import LLMCompletion, Message
-from .._prompt_renderer import PromptRenderer
+from .._messages import LLMCompletion, Message, ToolCall
+from .._prompt_renderer import InferencePrompt, PromptRenderer
 from ..structured_data import StructuredData
 from ..step_decision import DecisionSpec
 from ..streaming import OutputStreamEvent
@@ -30,16 +28,31 @@ class DecisionObserver(ABC):
 
 @dataclass(frozen=True)
 class RejectedDecision:
-    content: str | None
+    completion: LLMCompletion
     reason: str
 
 
 @dataclass(frozen=True)
+class DecisionToolCalls:
+    calls: tuple[ToolCall, ...]
+
+
+@dataclass(frozen=True)
+class DecisionToolResult:
+    tool_call_id: str
+    result: StructuredData
+
+
+DecisionHistoryItem: TypeAlias = DecisionToolCalls | DecisionToolResult
+
+
+@dataclass(frozen=True)
 class DecisionRequest:
-    function: FunctionInfo
-    message_layout: MessageLayout
+    messages_before: tuple[Message, ...]
+    inference_prompt: InferencePrompt
+    messages_after: tuple[Message, ...]
     decision_spec: DecisionSpec
-    history: tuple[HistoryItem, ...]
+    history: tuple[DecisionHistoryItem, ...]
     rejected: RejectedDecision | None = None
 
 
@@ -62,6 +75,4 @@ class DecisionTransport(ABC):
         request: DecisionRequest,
         observer: DecisionObserver,
         stream: bool,
-        *,
-        dump: Callable[[object], StructuredData],
     ) -> DecodedDecision: ...

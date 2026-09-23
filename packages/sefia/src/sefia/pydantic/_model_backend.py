@@ -14,7 +14,7 @@ from ._function_models import (
     sanitize_function_name,
 )
 from ._result_format import PydanticResultFormatFactory
-from ._structured_data import dump_structured_data
+from ._structured_data import to_structured_data
 
 
 @final
@@ -89,5 +89,5 @@ class PydanticModelBackend(ModelBackend):
         return self._result_format_factory.create(python_type)
 
     @override
-    def dump(self, value: object) -> StructuredData:
-        return dump_structured_data(value)
+    def to_structured_data(self, value: object) -> StructuredData:
+        return to_structured_data(value)

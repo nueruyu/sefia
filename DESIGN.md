@@ -133,12 +133,13 @@ Composers should treat `FunctionInfo` as read-only and remain reentrant across c
 Composers transform LLM input representation. They are not execution middleware and
 cannot wrap, retry, or short-circuit the inference loop. `PromptRenderer` renders
 Sefia's standard inference prompt from function instructions, remaining arguments,
-and any textual tool definitions. Transports place that prompt between the layout's
-application messages, then append Sefia execution history, repair feedback, and
-response instructions. `MessageLayout` retains raw application values until a
-transport consumes it. The configured `ModelBackend` normalizes those values and tool
-results into `StructuredData`; renderers and transports then project that tree to JSON
-text where their presentation requires it.
+and any textual tool definitions. `MessageLayout` retains raw application values until
+`LLMInferenceStrategy` consumes it. The strategy uses the configured `ModelBackend` to
+materialize retained arguments and execution history as `StructuredData`, then creates
+a provider-neutral `DecisionRequest`. Transports place its inference prompt between
+the application messages, then append Sefia execution history, repair feedback, and
+response instructions. Renderers and transports project structured trees to JSON text
+only where their presentation requires it.
 Observation events receive a separate message snapshot so handlers cannot change the
 LLM request.
 

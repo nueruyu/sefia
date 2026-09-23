@@ -1,9 +1,13 @@
+from sefia.llm import LLMCompletion, ToolCall
+from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import RejectedDecision
 from sefia.llm.transports._messages import rejection_message
 
 
 def test_rejection_message_describes_empty_previous_response() -> None:
-    message = rejection_message(RejectedDecision(content=None, reason="empty response"))
+    message = rejection_message(
+        RejectedDecision(completion=LLMCompletion(), reason="empty response")
+    )
 
     assert message.role == "user"
     assert isinstance(message.content, str)
@@ -14,9 +18,37 @@ def test_rejection_message_describes_empty_previous_response() -> None:
 
 def test_rejection_message_safely_fences_previous_content() -> None:
     message = rejection_message(
-        RejectedDecision(content="invalid ```json", reason="invalid schema")
+        RejectedDecision(
+            completion=LLMCompletion(content="invalid ```json"),
+            reason="invalid schema",
+        )
     )
 
     assert isinstance(message.content, str)
     assert "````text\ninvalid ```json\n````" in message.content
     assert "Reason: invalid schema" in message.content
+
+
+def test_rejection_message_represents_structured_completion_output() -> None:
+    completion = LLMCompletion(
+        tool_calls=[
+            ToolCall(
+                id="call-1",
+                name="lookup",
+                arguments=StructuredData.from_json({"query": "lost"}),
+            )
+        ],
+        structured_output=StructuredData.from_json({"decision": "invalid"}),
+    )
+
+    message = rejection_message(
+        RejectedDecision(completion=completion, reason="invalid decision")
+    )
+
+    assert isinstance(message.content, str)
+    assert (
+        '{"tool_calls":[{"id":"call-1","name":"lookup",'
+        '"arguments":{"query":"lost"}}],'
+        '"structured_output":{"decision":"invalid"}}' in message.content
+    )
+    assert "Reason: invalid decision" in message.content

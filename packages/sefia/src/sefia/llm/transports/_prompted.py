@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from copy import deepcopy
 
 from typing_extensions import final, override
@@ -29,15 +28,12 @@ class PromptedDecisionTransport(DecisionTransport):
         request: DecisionRequest,
         observer: DecisionObserver,
         stream: bool,
-        *,
-        dump: Callable[[object], StructuredData],
     ) -> DecodedDecision:
         messages = build_text_messages(
             request=request,
             renderer=prompt_renderer,
             tools=request.decision_spec.tools,
             response_instructions=json_response_instructions(request.decision_spec),
-            dump=dump,
         )
         stream_decoder = JsonOutputStreamDecoder() if stream else None
         extractor = PromptedJsonStreamExtractor() if stream else None

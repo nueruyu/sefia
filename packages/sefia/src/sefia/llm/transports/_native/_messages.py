@@ -1,9 +1,6 @@
-from collections.abc import Callable
-
 from ..._messages import Message
 from ..._prompt_renderer import PromptRenderer
 from ...step_decision import StepTool
-from ...structured_data import StructuredData
 from .._base import DecisionRequest
 from .._messages import (
     append_response,
@@ -18,10 +15,9 @@ def build_native_messages(
     request: DecisionRequest,
     renderer: PromptRenderer,
     result_tool: StepTool | None,
-    dump: Callable[[object], StructuredData],
 ) -> list[Message]:
-    messages = materialize_application_messages(request, renderer, (), dump)
-    messages.extend(native_history_messages(request.history, dump))
+    messages = materialize_application_messages(request, renderer, ())
+    messages.extend(native_history_messages(request.history))
     if request.rejected is not None:
         messages.append(rejection_message(request.rejected))
     append_response(

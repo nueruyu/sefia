@@ -39,7 +39,8 @@ async def test_repairs_decoding_error_with_rejected_completion(
     assert isinstance(result, ResultDecision) and result.result == "done"
     assert transport.request_decision.await_count == 2
     rejected = transport.request_decision.await_args.kwargs["request"].rejected
-    assert rejected.content == content
+    assert rejected.completion is error.completion
+    assert rejected.completion.content == content
     assert rejected.reason.endswith("response could not be decoded")
     repairs = [
         c.args[0]
@@ -86,11 +87,11 @@ async def test_repairs_validation_failure_and_forwards_rejected_data(
     assert isinstance(result, ResultDecision) and result.result == "done"
     assert transport.request_decision.await_count == 2
     rejected = transport.request_decision.await_args.kwargs["request"].rejected
-    assert rejected.content == content
+    assert rejected.completion.content == content
     assert rejected.reason
 
 
-async def test_native_repair_includes_rejected_tool_call(
+async def test_repair_preserves_rejected_completion_semantics(
     transport: AsyncMock, make_strategy: Callable[..., LLMInferenceStrategy]
 ) -> None:
     completion = LLMCompletion(
@@ -115,11 +116,8 @@ async def test_native_repair_includes_rejected_tool_call(
     )
 
     rejected = transport.request_decision.await_args.kwargs["request"].rejected
-    assert json.loads(rejected.content) == {
-        "tool_calls": [
-            {"id": "call-1", "name": "unknown", "arguments": {"query": "lost"}}
-        ]
-    }
+    assert rejected.completion is completion
+    assert rejected.reason.endswith("invalid decision")
 
 
 async def test_repair_preserves_executor_history(
@@ -148,8 +146,8 @@ async def test_repair_preserves_executor_history(
         c.kwargs["request"] for c in transport.request_decision.await_args_list
     ]
     assert history == snapshot
-    assert first.history == retry.history == tuple(snapshot)
-    assert first.message_layout is retry.message_layout
+    assert first.history is retry.history
+    assert first.inference_prompt is retry.inference_prompt
     assert first.rejected is None
     assert retry.rejected is not None
 

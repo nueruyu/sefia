@@ -87,28 +87,32 @@ composition and decision validation:
 layout = MessageLayout.default(function_info)
 for composer in message_composers:
     layout = composer.compose(function_info, layout)
-request = DecisionRequest(function=function_info, message_layout=layout, ...)
+request = materialize(layout, history, model_backend)
+transport.request_decision(request, prompt_renderer, ...)
 ```
 
 1. It creates `MessageLayout.default(function_info)` and passes the layout through each
    configured `MessageComposer` in order. A composer can transform the layout based on
    application conventions while treating `FunctionInfo` as read-only metadata.
-2. `DecisionSpec` describes which next decisions are valid. `DecisionRequest` carries
-   the composed layout, prior tool interactions, and any rejected response.
-3. `DecisionTransport` consumes the raw layout. It calls `ModelBackend.dump()` for
-   remaining arguments and tool results, producing `StructuredData` only when those
-   values cross into LLM input representation.
-4. `PromptRenderer` renders `InferencePrompt` from function instructions, normalized
-   arguments, and any textual tool definitions. `DecisionTransport` places that prompt
-   between application messages and owns history, repair, and response instructions.
+2. `DecisionSpec` describes which next decisions are valid. The strategy calls
+   `ModelBackend.to_structured_data()` for retained arguments, tool-call arguments, and
+   tool results. It constructs an `InferencePrompt` and semantic history containing
+   only provider-neutral `StructuredData`.
+3. `DecisionRequest` carries that materialized prompt, application messages, semantic
+   history, decision contract, and any rejection facts. It contains no conversion
+   callback for the transport.
+4. `PromptRenderer` renders the materialized `InferencePrompt` in the configured
+   presentation format. `DecisionTransport` places that prompt between application
+   messages and owns history, repair, and response instructions.
 5. `LLMClient.complete()` returns a provider-neutral `LLMCompletion`.
 6. The transport decodes its protocol into `DecodedDecision`; its `decision_data` is
    structured but not yet semantically valid.
 7. `DecisionSpec` validates that data as a `StepDecision`.
 
-The layout is composed once per strategy invocation. A new inference step or a
+The layout is composed and materialized once per strategy invocation. A new inference step or a
 `DecisionMiddleware` retry invokes the strategy again; an internal response repair
-reuses the same layout. Composers are strategy collaborators, not execution middleware.
+reuses the same semantic request data and adds rejection facts. Composers are strategy
+collaborators, not execution middleware.
 
 `DecisionSpec` selects one of three shapes:
 

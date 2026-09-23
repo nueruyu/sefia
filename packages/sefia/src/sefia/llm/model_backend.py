@@ -9,7 +9,7 @@ class ModelBackend(ToolFunctionInspector, ResultFormatFactory, ABC):
     """Bridges Python models and Sefia's provider-neutral LLM data."""
 
     @abstractmethod
-    def dump(self, value: object) -> StructuredData:
+    def to_structured_data(self, value: object) -> StructuredData:
         """Normalize an application value for an LLM boundary."""
 
 

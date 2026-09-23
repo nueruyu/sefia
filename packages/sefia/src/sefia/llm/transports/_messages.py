@@ -1,34 +1,34 @@
-from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import replace
 
-from ...inference import HistoryItem, ToolCallsDecision
-from .._messages import Message
-from .._prompt_renderer import InferencePrompt, PromptRenderer
-from .._text import json_block, text_block
+from .._messages import LLMCompletion, Message
+from .._prompt_renderer import PromptRenderer
+from .._text import compact_json, json_block, text_block
+from ..json_schema import JsonValue
 from ..step_decision import StepTool
 from ..structured_data import StructuredData
-from ._base import DecisionRequest, RejectedDecision
+from ._base import (
+    DecisionHistoryItem,
+    DecisionRequest,
+    DecisionToolCalls,
+    RejectedDecision,
+)
 
 
 def materialize_application_messages(
     request: DecisionRequest,
     renderer: PromptRenderer,
     tools: tuple[StepTool, ...],
-    dump: Callable[[object], StructuredData],
 ) -> list[Message]:
-    layout = request.message_layout
-    arguments = StructuredData.from_object(
-        {name: dump(value) for name, value in layout.arguments.items()}
-    )
-    prompt = InferencePrompt(
-        function=request.function,
-        arguments=arguments,
+    prompt = replace(
+        request.inference_prompt,
+        arguments=deepcopy(request.inference_prompt.arguments),
         tools=tools,
     )
     return [
-        *deepcopy(layout.before),
+        *deepcopy(request.messages_before),
         Message(role="user", content=renderer.render(prompt)),
-        *deepcopy(layout.after),
+        *deepcopy(request.messages_after),
     ]
 
 
@@ -37,10 +37,11 @@ def response_message(response_instructions: str) -> Message:
 
 
 def rejection_message(rejected: RejectedDecision) -> Message:
+    content = _rejected_completion_content(rejected.completion)
     previous = (
         "The previous response was empty."
-        if not rejected.content
-        else "Previous response:\n" + text_block(rejected.content)
+        if not content
+        else "Previous response:\n" + text_block(content)
     )
     return Message(
         role="user",
@@ -59,8 +60,8 @@ def append_response(
 ) -> None:
     response = response_message(response_instructions)
     if (
-        not request.message_layout.before
-        and not request.message_layout.after
+        not request.messages_before
+        and not request.messages_after
         and not request.history
         and request.rejected is None
     ):
@@ -72,12 +73,11 @@ def append_response(
 
 
 def _text_history_message(
-    history: tuple[HistoryItem, ...],
-    dump: Callable[[object], StructuredData],
+    history: tuple[DecisionHistoryItem, ...],
 ) -> Message:
     records: list[StructuredData] = []
     for item in history:
-        if isinstance(item, ToolCallsDecision):
+        if isinstance(item, DecisionToolCalls):
             records.extend(
                 StructuredData.from_object(
                     {
@@ -85,7 +85,7 @@ def _text_history_message(
                             {
                                 "id": StructuredData.from_scalar(call.id),
                                 "name": StructuredData.from_scalar(call.name),
-                                "arguments": dump(call.arguments),
+                                "arguments": call.arguments,
                             }
                         )
                     }
@@ -99,7 +99,7 @@ def _text_history_message(
                         "tool_result": StructuredData.from_object(
                             {
                                 "id": StructuredData.from_scalar(item.tool_call_id),
-                                "result": dump(item.result),
+                                "result": item.result,
                             }
                         )
                     }
@@ -118,12 +118,42 @@ def build_text_messages(
     renderer: PromptRenderer,
     tools: tuple[StepTool, ...],
     response_instructions: str,
-    dump: Callable[[object], StructuredData],
 ) -> list[Message]:
-    messages = materialize_application_messages(request, renderer, tools, dump)
+    messages = materialize_application_messages(request, renderer, tools)
     if request.history:
-        messages.append(_text_history_message(request.history, dump))
+        messages.append(_text_history_message(request.history))
     if request.rejected is not None:
         messages.append(rejection_message(request.rejected))
     append_response(messages, request, response_instructions)
     return messages
+
+
+def _rejected_completion_content(completion: LLMCompletion) -> str | None:
+    if (
+        not completion.tool_calls
+        and completion.structured_output is None
+        and completion.content is not None
+    ):
+        return completion.content
+    if (
+        completion.content is None
+        and not completion.tool_calls
+        and completion.structured_output is None
+    ):
+        return None
+
+    response: dict[str, JsonValue] = {}
+    if completion.content is not None:
+        response["content"] = completion.content
+    if completion.tool_calls:
+        response["tool_calls"] = [
+            {
+                "id": call.id,
+                "name": call.name,
+                "arguments": call.arguments.to_json_value(),
+            }
+            for call in completion.tool_calls
+        ]
+    if completion.structured_output is not None:
+        response["structured_output"] = completion.structured_output.to_json_value()
+    return compact_json(response)

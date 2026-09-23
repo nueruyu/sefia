@@ -39,7 +39,6 @@ async def test_uses_the_rendered_prompt_without_a_model() -> None:
         _request(),
         observer,
         stream=False,
-        dump=PydanticModelBackend().dump,
     )
 
     sent = client.complete.await_args.kwargs
@@ -74,7 +73,6 @@ async def test_streams_fenced_json_after_prose() -> None:
         _request(),
         observer,
         stream=True,
-        dump=PydanticModelBackend().dump,
     )
     callback = client.complete.await_args.kwargs["stream_callback"]
     for character in content:
@@ -95,7 +93,6 @@ async def test_reports_undecodable_response() -> None:
             _request(),
             RecordingDecisionObserver(),
             stream=False,
-            dump=PydanticModelBackend().dump,
         )
 
     assert exc_info.value.completion is completion

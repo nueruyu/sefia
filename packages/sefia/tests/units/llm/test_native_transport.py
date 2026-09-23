@@ -4,10 +4,6 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sefia._tool_system import ToolRegistry
-from sefia.inference import (
-    ToolCallResult,
-    ToolCallsDecision,
-)
 from sefia.llm import (
     InferencePrompt,
     LLMCompletion,
@@ -17,12 +13,16 @@ from sefia.llm import (
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
-from sefia.llm.transports import DecisionRequest, NativeDecisionTransport
+from sefia.llm.transports import (
+    DecisionRequest,
+    DecisionToolCalls,
+    DecisionToolResult,
+    NativeDecisionTransport,
+)
 from sefia.pydantic import PydanticModelBackend
 from sefia.testing import (
     RecordingDecisionObserver,
     make_decision_request,
-    make_tool_call_request,
 )
 
 
@@ -81,7 +81,6 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
         _request(decision),
         observer,
         stream=False,
-        dump=PydanticModelBackend().dump,
     )
 
     assert decoded.decision_data.tree == {
@@ -113,7 +112,6 @@ async def test_native_transport_decodes_typed_result() -> None:
         _request(decision),
         RecordingDecisionObserver(),
         stream=False,
-        dump=PydanticModelBackend().dump,
     )
 
     assert decoded.decision_data.tree == {
@@ -134,7 +132,6 @@ async def test_native_transport_requires_a_tool_call() -> None:
             _request(decision),
             RecordingDecisionObserver(),
             stream=False,
-            dump=PydanticModelBackend().dump,
         )
 
 
@@ -146,14 +143,19 @@ async def test_native_transport_forwards_history_in_tool_only_mode() -> None:
     request = make_decision_request(
         _decision(Never, lookup),
         history=(
-            ToolCallsDecision(
-                [
-                    make_tool_call_request(
-                        id="call-1", name="lookup", arguments={"key": "first"}
-                    )
-                ]
+            DecisionToolCalls(
+                (
+                    ToolCall(
+                        id="call-1",
+                        name="lookup",
+                        arguments=StructuredData.from_json({"key": "first"}),
+                    ),
+                )
             ),
-            ToolCallResult(tool_call_id="call-1", result="found"),
+            DecisionToolResult(
+                tool_call_id="call-1",
+                result=StructuredData.from_scalar("found"),
+            ),
         ),
     )
 
@@ -163,7 +165,6 @@ async def test_native_transport_forwards_history_in_tool_only_mode() -> None:
         request,
         RecordingDecisionObserver(),
         stream=False,
-        dump=PydanticModelBackend().dump,
     )
 
     sent = client.complete.await_args.kwargs
@@ -208,7 +209,6 @@ async def test_native_transport_uses_collision_free_name_for_prompt_and_decoding
         _request(decision),
         RecordingDecisionObserver(),
         stream=False,
-        dump=PydanticModelBackend().dump,
     )
 
     sent = client.complete.await_args.kwargs
