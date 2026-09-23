@@ -1,9 +1,10 @@
+import json
 from copy import deepcopy
 from dataclasses import replace
 
+from .._markdown import json_block, text_block
 from .._messages import LLMCompletion, Message
 from .._prompt_renderer import PromptRenderer
-from .._text import compact_json, json_block, text_block
 from ..json_schema import JsonValue
 from ..step_decision import StepTool
 from ..structured_data import StructuredData
@@ -15,7 +16,7 @@ from ._base import (
 )
 
 
-def materialize_application_messages(
+def _build_application_messages(
     request: DecisionRequest,
     renderer: PromptRenderer,
     tools: tuple[StepTool, ...],
@@ -32,11 +33,11 @@ def materialize_application_messages(
     ]
 
 
-def response_message(response_instructions: str) -> Message:
+def _response_message(response_instructions: str) -> Message:
     return Message(role="user", content=f"## Response\n\n{response_instructions}")
 
 
-def rejection_message(rejected: RejectedDecision) -> Message:
+def _rejection_message(rejected: RejectedDecision) -> Message:
     content = _rejected_completion_content(rejected.completion)
     previous = (
         "The previous response was empty."
@@ -53,12 +54,12 @@ def rejection_message(rejected: RejectedDecision) -> Message:
     )
 
 
-def append_response(
+def _append_response(
     messages: list[Message],
     request: DecisionRequest,
     response_instructions: str,
 ) -> None:
-    response = response_message(response_instructions)
+    response = _response_message(response_instructions)
     if (
         not request.messages_before
         and not request.messages_after
@@ -119,12 +120,12 @@ def build_text_messages(
     tools: tuple[StepTool, ...],
     response_instructions: str,
 ) -> list[Message]:
-    messages = materialize_application_messages(request, renderer, tools)
+    messages = _build_application_messages(request, renderer, tools)
     if request.history:
         messages.append(_text_history_message(request.history))
     if request.rejected is not None:
-        messages.append(rejection_message(request.rejected))
-    append_response(messages, request, response_instructions)
+        messages.append(_rejection_message(request.rejected))
+    _append_response(messages, request, response_instructions)
     return messages
 
 
@@ -156,4 +157,4 @@ def _rejected_completion_content(completion: LLMCompletion) -> str | None:
         ]
     if completion.structured_output is not None:
         response["structured_output"] = completion.structured_output.to_json_value()
-    return compact_json(response)
+    return json.dumps(response, ensure_ascii=False, separators=(",", ":"))

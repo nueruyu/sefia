@@ -21,9 +21,9 @@ from ._messages import LLMCompletion, Message, ToolCall
 from ._prompt_renderer import InferencePrompt, PromptRenderer
 from ._tool_call_ids import ToolCallIdRegistry
 from .exceptions import DecisionDecodingError, LLMCompletionDecodingError
-from .model_backend import ModelBackend
+from .result_format import ResultFormatFactory
 from .step_decision import DecisionSpec
-from .structured_data import StructuredData
+from .structured_data import StructuredData, StructuredDataConverter
 from .streaming import (
     OutputStreamEvent,
     StringDelta as OutputStringDelta,
@@ -117,7 +117,8 @@ class LLMInferenceStrategy(InferenceStrategy):
     def __init__(
         self,
         llm_client: LLMClient,
-        model_backend: ModelBackend,
+        result_format_factory: ResultFormatFactory,
+        structured_data_converter: StructuredDataConverter,
         prompt_renderer: PromptRenderer,
         decision_transport: DecisionTransport,
         stream: bool = False,
@@ -128,7 +129,8 @@ class LLMInferenceStrategy(InferenceStrategy):
         if max_repair_attempts < 0:
             raise ValueError("max_repair_attempts must be non-negative")
         self.llm_client = llm_client
-        self._model_backend = model_backend
+        self._result_format_factory = result_format_factory
+        self._structured_data_converter = structured_data_converter
         self._prompt_renderer = prompt_renderer
         self._decision_transport = decision_transport
         self._stream = stream
@@ -155,7 +157,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         decision_spec = DecisionSpec.for_inference(
             output_type=function_info.return_type,
             tools=tools.get_all(),
-            result_format_factory=self._model_backend,
+            result_format_factory=self._result_format_factory,
         )
         request = self._materialize_request(
             function_info,
@@ -198,7 +200,7 @@ class LLMInferenceStrategy(InferenceStrategy):
     ) -> DecisionRequest:
         arguments = StructuredData.from_object(
             {
-                name: self._model_backend.to_structured_data(value)
+                name: self._structured_data_converter.to_structured_data(value)
                 for name, value in layout.arguments.items()
             }
         )
@@ -221,7 +223,7 @@ class LLMInferenceStrategy(InferenceStrategy):
                     ToolCall(
                         id=call.id,
                         name=call.name,
-                        arguments=self._model_backend.to_structured_data(
+                        arguments=self._structured_data_converter.to_structured_data(
                             call.arguments
                         ),
                     )
@@ -230,7 +232,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             )
         return DecisionToolResult(
             tool_call_id=item.tool_call_id,
-            result=self._model_backend.to_structured_data(item.result),
+            result=self._structured_data_converter.to_structured_data(item.result),
         )
 
     async def _complete_once(

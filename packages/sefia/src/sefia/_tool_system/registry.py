@@ -39,9 +39,9 @@ class ToolRegistry:
         concurrent: bool = False,
     ) -> None:
         if inspector is None:
-            from ..pydantic._model_backend import PydanticModelBackend
+            from ..pydantic import PydanticToolFunctionInspector
 
-            inspector = PydanticModelBackend()
+            inspector = PydanticToolFunctionInspector()
         self.register(
             SignatureToolEntry(
                 func,

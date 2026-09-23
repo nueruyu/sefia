@@ -11,7 +11,10 @@ from sefia.inference import ResultDecision, StepDecision, ToolCallsDecision
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.json_schema import SchemaNode
 from sefia.llm.step_decision import DecisionSpec
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticToolFunctionInspector,
+)
 from sefia_litellm._schema import StructuredDecisionFormat
 
 
@@ -19,7 +22,7 @@ def _decision_model(output_type: Any, tools: list[ToolEntry]) -> DecisionSpec:
     return DecisionSpec.for_inference(
         output_type=output_type,
         tools=tools,
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
 
 
@@ -37,12 +40,12 @@ def _process(
 
 
 def _signature_tool(function: Any, *, name: str) -> ToolEntry:
-    backend = PydanticModelBackend()
+    inspector = PydanticToolFunctionInspector()
     return SignatureToolEntry(
         function,
         name=name,
         schema_source=function,
-        inspector=backend,
+        inspector=inspector,
     )
 
 

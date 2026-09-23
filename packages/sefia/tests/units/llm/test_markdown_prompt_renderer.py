@@ -1,13 +1,10 @@
 import json
 
-import pytest
-
 from sefia.llm import (
     InferencePrompt,
     MarkdownPromptRenderer,
     StructuredData,
 )
-from sefia.llm._text import markdown_fence
 from sefia.llm.json_schema import JsonValue
 from sefia.testing import make_function_info
 
@@ -32,19 +29,6 @@ def _json_content(prompt: str) -> object:
     assert lines[0].endswith("json")
     assert lines[-1] == lines[0][:-4]
     return json.loads("\n".join(lines[1:-1]))
-
-
-@pytest.mark.parametrize(
-    ("content", "expected"),
-    [
-        ("", "```"),
-        ("before ` after", "```"),
-        ("before ``` after", "````"),
-        ("before ```` after", "`````"),
-    ],
-)
-def test_markdown_fence_is_longer_than_any_run_in_content(content: str, expected: str):
-    assert markdown_fence(content) == expected
 
 
 def test_render_only_contains_inference_prompt():

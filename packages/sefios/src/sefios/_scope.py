@@ -11,8 +11,20 @@ from glyff_pydantic import (
     PydanticArgumentCanonicalizer,
     PydanticSerializer,
 )
-from sefia import HistoryStorage, Policy, Profile, ToolCollector
-from sefia.llm import LLMClient, MessageComposer, PromptRenderer
+from sefia import (
+    HistoryStorage,
+    Policy,
+    Profile,
+    ToolCollector,
+    ToolFunctionInspector,
+)
+from sefia.llm import (
+    LLMClient,
+    MessageComposer,
+    PromptRenderer,
+    StructuredDataConverter,
+)
+from sefia.llm.result_format import ResultFormatFactory
 from sefia.llm.transports import DecisionTransport
 
 from ._interaction_context import bind_interaction_channel
@@ -38,7 +50,11 @@ class SessionScope:
     ``tool_collector`` customizes tool discovery for a run. A collector passed to
     :meth:`session` overrides the instance default; passing ``None`` there inherits
     the instance default rather than resetting it. When neither is set,
-    :class:`~sefia.Session` builds its own :class:`DefaultToolCollector`.
+    :class:`~sefia.Session` builds its own :class:`DefaultToolCollector` using the
+    configured ``tool_function_inspector``. A custom collector does not use that
+    inspector. Result formats and structured-data conversion are configured
+    independently through ``result_format_factory`` and
+    ``structured_data_converter``.
     """
 
     def __init__(
@@ -54,6 +70,9 @@ class SessionScope:
         persistence: PersistenceProvider | None = None,
         history_storage: HistoryStorage | None = None,
         tool_collector: ToolCollector | None = None,
+        tool_function_inspector: ToolFunctionInspector | None = None,
+        result_format_factory: ResultFormatFactory | None = None,
+        structured_data_converter: StructuredDataConverter | None = None,
         prompt_renderer: PromptRenderer | None = None,
         decision_transport: DecisionTransport | None = None,
         message_composers: Sequence[MessageComposer] | None = None,
@@ -68,6 +87,9 @@ class SessionScope:
         self.persistence = persistence or MemoryPersistence()
         self.history_storage = history_storage
         self.tool_collector = tool_collector
+        self.tool_function_inspector = tool_function_inspector
+        self.result_format_factory = result_format_factory
+        self.structured_data_converter = structured_data_converter
         self.prompt_renderer = prompt_renderer
         self.decision_transport = decision_transport
         self.message_composers = tuple(message_composers or ())
@@ -82,6 +104,9 @@ class SessionScope:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
+        tool_function_inspector: ToolFunctionInspector | None = None,
+        result_format_factory: ResultFormatFactory | None = None,
+        structured_data_converter: StructuredDataConverter | None = None,
         prompt_renderer: PromptRenderer | None = None,
         decision_transport: DecisionTransport | None = None,
         message_composers: Sequence[MessageComposer] | None = None,
@@ -92,6 +117,21 @@ class SessionScope:
         resolved_stream = self.stream if stream is None else stream
         resolved_tool_collector = (
             self.tool_collector if tool_collector is None else tool_collector
+        )
+        resolved_tool_function_inspector = (
+            self.tool_function_inspector
+            if tool_function_inspector is None
+            else tool_function_inspector
+        )
+        resolved_result_format_factory = (
+            self.result_format_factory
+            if result_format_factory is None
+            else result_format_factory
+        )
+        resolved_structured_data_converter = (
+            self.structured_data_converter
+            if structured_data_converter is None
+            else structured_data_converter
         )
         resolved_prompt_renderer = (
             self.prompt_renderer if prompt_renderer is None else prompt_renderer
@@ -153,6 +193,9 @@ class SessionScope:
                     profiles=final_profiles,
                     stream=resolved_stream,
                     tool_collector=resolved_tool_collector,
+                    tool_function_inspector=resolved_tool_function_inspector,
+                    result_format_factory=resolved_result_format_factory,
+                    structured_data_converter=resolved_structured_data_converter,
                     history_storage=self.history_storage,
                     prompt_renderer=resolved_prompt_renderer,
                     decision_transport=resolved_decision_transport,

@@ -33,7 +33,10 @@ from sefia.llm.transports import (
     RejectedDecision,
     StructuredDecisionTransport,
 )
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticStructuredDataConverter,
+)
 from sefia.testing import (
     RecordingDecisionObserver,
     make_decision_request,
@@ -81,7 +84,8 @@ async def test_message_composers_transform_in_declared_order() -> None:
     log: list[str] = []
     strategy = LLMInferenceStrategy(
         AsyncMock(spec=LLMClient),
-        PydanticModelBackend(),
+        PydanticResultFormatFactory(),
+        PydanticStructuredDataConverter(),
         _renderer(),
         StructuredDecisionTransport(),
         message_composers=(_Layer("A", log), _Layer("B", log), _Layer("C", log)),
@@ -100,7 +104,7 @@ async def test_message_composers_transform_in_declared_order() -> None:
 
 def _spec() -> DecisionSpec:
     return DecisionSpec.for_inference(
-        output_type=str, tools=[], result_format_factory=PydanticModelBackend()
+        output_type=str, tools=[], result_format_factory=PydanticResultFormatFactory()
     )
 
 
@@ -344,7 +348,8 @@ async def test_client_mutation_does_not_change_layout_used_for_repair() -> None:
     client.complete.side_effect = complete
     strategy = LLMInferenceStrategy(
         client,
-        PydanticModelBackend(),
+        PydanticResultFormatFactory(),
+        PydanticStructuredDataConverter(),
         _renderer(),
         StructuredDecisionTransport(),
         message_composers=(_SourceComposer(),),

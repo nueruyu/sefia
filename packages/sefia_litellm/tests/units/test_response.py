@@ -22,7 +22,7 @@ from sefia.llm import ToolCall
 from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._response import decode_completion
 from sefia_litellm._schema import StructuredDecisionFormat
 
@@ -234,7 +234,7 @@ def _decision_spec() -> DecisionSpec:
     return DecisionSpec.for_inference(
         output_type=_CityResult,
         tools=[],
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
 
 

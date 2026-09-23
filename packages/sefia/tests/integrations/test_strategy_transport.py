@@ -21,7 +21,10 @@ from sefia.llm.transports import (
     NativeDecisionTransport,
     StructuredDecisionTransport,
 )
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticStructuredDataConverter,
+)
 from sefia.testing import make_function_info
 
 
@@ -65,7 +68,13 @@ async def test_transport_feedback_follows_inference_prompt_and_result_is_restore
     client.complete.side_effect = [LLMCompletion(content="invalid"), valid]
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "prompt"
-    strategy = LLMInferenceStrategy(client, PydanticModelBackend(), renderer, transport)
+    strategy = LLMInferenceStrategy(
+        client,
+        PydanticResultFormatFactory(),
+        PydanticStructuredDataConverter(),
+        renderer,
+        transport,
+    )
 
     decision = await strategy.decide_next_step(
         make_function_info(return_type=Result),
@@ -124,7 +133,12 @@ async def test_never_mode_is_preserved_through_strategy_and_transport(
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "prompt"
     strategy = LLMInferenceStrategy(
-        client, PydanticModelBackend(), renderer, transport, max_repair_attempts=0
+        client,
+        PydanticResultFormatFactory(),
+        PydanticStructuredDataConverter(),
+        renderer,
+        transport,
+        max_repair_attempts=0,
     )
     function = make_function_info(return_type=Never)
     publisher = AsyncMock(spec=EventPublisher)

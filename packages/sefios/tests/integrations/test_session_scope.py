@@ -1,7 +1,10 @@
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any
 
 import glyff
+import pytest
+import sefia
 from typing_extensions import final, override
 
 from sefia import (
@@ -14,6 +17,11 @@ from sefia import (
 from sefia.exceptions import InferenceError
 from sefia.inference import FunctionInfo, ResultDecision, StepDecision
 from sefia.llm import LLMCompletion, Message, MessageComposer, MessageLayout
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticStructuredDataConverter,
+    PydanticToolFunctionInspector,
+)
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefia.tool_collectors import StaticToolCollector
 from sefios.middleware import Retrier
@@ -130,6 +138,72 @@ async def test_session_message_composers_override_scope_default() -> None:
         "scope",
         "session",
     ]
+
+
+async def test_python_llm_capabilities_inherit_and_override_independently(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scope_inspector = PydanticToolFunctionInspector()
+    scope_result_factory = PydanticResultFormatFactory()
+    scope_converter = PydanticStructuredDataConverter()
+    session_inspector = PydanticToolFunctionInspector()
+    session_result_factory = PydanticResultFormatFactory()
+    session_converter = PydanticStructuredDataConverter()
+    captured: list[dict[str, Any]] = []
+
+    class _RecordingSession:
+        def __init__(self, **kwargs: Any) -> None:
+            captured.append(kwargs)
+
+        async def __aenter__(self) -> "_RecordingSession":
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_value: BaseException | None,
+            traceback: object | None,
+        ) -> None:
+            pass
+
+    monkeypatch.setattr(sefia, "Session", _RecordingSession)
+    scope = SessionScope(
+        llm_client=MockLLMClient([]),
+        tool_function_inspector=scope_inspector,
+        result_format_factory=scope_result_factory,
+        structured_data_converter=scope_converter,
+    )
+
+    async with scope.session(session_id="scope-capabilities"):
+        pass
+    async with scope.session(
+        session_id="inspector-override",
+        tool_function_inspector=session_inspector,
+    ):
+        pass
+    async with scope.session(
+        session_id="result-factory-override",
+        result_format_factory=session_result_factory,
+    ):
+        pass
+    async with scope.session(
+        session_id="converter-override",
+        structured_data_converter=session_converter,
+    ):
+        pass
+
+    assert captured[0]["tool_function_inspector"] is scope_inspector
+    assert captured[0]["result_format_factory"] is scope_result_factory
+    assert captured[0]["structured_data_converter"] is scope_converter
+    assert captured[1]["tool_function_inspector"] is session_inspector
+    assert captured[1]["result_format_factory"] is scope_result_factory
+    assert captured[1]["structured_data_converter"] is scope_converter
+    assert captured[2]["tool_function_inspector"] is scope_inspector
+    assert captured[2]["result_format_factory"] is session_result_factory
+    assert captured[2]["structured_data_converter"] is scope_converter
+    assert captured[3]["tool_function_inspector"] is scope_inspector
+    assert captured[3]["result_format_factory"] is scope_result_factory
+    assert captured[3]["structured_data_converter"] is session_converter
 
 
 async def test_memory_persistence_is_default(

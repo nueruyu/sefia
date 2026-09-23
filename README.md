@@ -100,10 +100,17 @@ For custom message composition, applications can configure `MessageComposer` thr
 `SessionScope` or `Session` and return a `MessageLayout`. A composer places application
 messages before and after Sefia's standard inference prompt and selects which
 arguments remain in that prompt. The layout keeps application values raw until the
-LLM strategy uses the configured `ModelBackend` to normalize them to `StructuredData`
-before constructing a transport-facing request.
+LLM strategy uses the configured `StructuredDataConverter` to normalize them to
+`StructuredData` before constructing a transport-facing request.
 Argument semantics stay with the application. See
 [the `@infer` contract](./docs/infer-contract.md#composing-llm-messages).
+
+Sefia exposes three independent Python/LLM integration seams.
+`ToolFunctionInspector` interprets Python callables for tool schemas and binding,
+`ResultFormatFactory` creates validation and restoration contracts for inference
+results, and `StructuredDataConverter` projects runtime Python values into
+provider-neutral `StructuredData`. `Session` and `SessionScope` configure them
+independently and provide separate Pydantic-backed defaults.
 
 ## Quickstart
 

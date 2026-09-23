@@ -25,5 +25,4 @@ def json_block(value: JsonValue) -> str:
     return _code_block(json.dumps(value, ensure_ascii=False, indent=2), "json")
 
 
-def compact_json(value: JsonValue) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+__all__ = ["json_block", "markdown_fence", "text_block"]

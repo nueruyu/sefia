@@ -1,4 +1,5 @@
 import json
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import TypeAlias, cast
@@ -10,6 +11,13 @@ from .json_schema import JsonScalar, JsonValue
 StructuredDataTree: TypeAlias = (
     JsonScalar | list["StructuredDataTree"] | dict[JsonScalar, "StructuredDataTree"]
 )
+
+
+class StructuredDataConverter(ABC):
+    """Converts Python runtime values to provider-neutral structured data."""
+
+    @abstractmethod
+    def to_structured_data(self, value: object) -> "StructuredData": ...
 
 
 @final
@@ -151,4 +159,4 @@ def _to_json_key(key: JsonScalar) -> str:
     return key if isinstance(key, str) else str(key)
 
 
-__all__ = ["StructuredData", "StructuredDataTree"]
+__all__ = ["StructuredData", "StructuredDataConverter", "StructuredDataTree"]

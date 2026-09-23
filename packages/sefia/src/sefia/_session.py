@@ -6,18 +6,23 @@ from typing_extensions import final
 
 from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import Policy
-from .llm.model_backend import ModelBackend
 from ._interfaces.history_storage import HistoryStorage
 from ._profiles import Profile
-from ._tool_system import ToolCollector
+from ._tool_system import ToolCollector, ToolFunctionInspector
 from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
 from .llm._message_composer import MessageComposer
 from .llm._strategy import LLMInferenceStrategy
 from .llm._markdown_prompt_renderer import MarkdownPromptRenderer
 from .llm._prompt_renderer import PromptRenderer
+from .llm.result_format import ResultFormatFactory
+from .llm.structured_data import StructuredDataConverter
 from .llm.transports import DecisionTransport, StructuredDecisionTransport
-from .pydantic._model_backend import PydanticModelBackend
+from .pydantic import (
+    PydanticResultFormatFactory,
+    PydanticStructuredDataConverter,
+    PydanticToolFunctionInspector,
+)
 from .tool_collectors import DefaultToolCollector
 
 
@@ -26,6 +31,9 @@ class Session:
     """
     Manages the lifecycle of an inference execution.
     Wraps a glyff.Session and sets up the sefia SessionContext.
+
+    Tool inspection configures only the default tool collector. Result-format
+    creation and structured-data conversion are independent strategy dependencies.
     """
 
     def __init__(
@@ -35,7 +43,9 @@ class Session:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
-        model_backend: ModelBackend | None = None,
+        tool_function_inspector: ToolFunctionInspector | None = None,
+        result_format_factory: ResultFormatFactory | None = None,
+        structured_data_converter: StructuredDataConverter | None = None,
         stream: bool = False,
         history_storage: HistoryStorage | None = None,
         max_repair_attempts: int = 2,
@@ -49,20 +59,28 @@ class Session:
         self._policies: list[Policy] = list(policies) if policies is not None else []
         self._history_storage = history_storage or GlyffHistoryStorage()
 
-        model_backend = model_backend or PydanticModelBackend()
+        if tool_collector is None:
+            if tool_function_inspector is None:
+                tool_function_inspector = PydanticToolFunctionInspector()
+            tool_collector = DefaultToolCollector(inspector=tool_function_inspector)
+        if result_format_factory is None:
+            result_format_factory = PydanticResultFormatFactory()
+        if structured_data_converter is None:
+            structured_data_converter = PydanticStructuredDataConverter()
 
-        self._tool_collector = tool_collector or DefaultToolCollector(
-            inspector=model_backend
-        )
-        prompt_renderer = prompt_renderer or MarkdownPromptRenderer()
-        decision_transport = decision_transport or StructuredDecisionTransport()
+        self._tool_collector = tool_collector
+        if prompt_renderer is None:
+            prompt_renderer = MarkdownPromptRenderer()
+        if decision_transport is None:
+            decision_transport = StructuredDecisionTransport()
         message_composers = tuple(message_composers)
 
         # A profile only swaps the client; the rest of the strategy is shared.
         def make_strategy(client: LLMClient) -> LLMInferenceStrategy:
             return LLMInferenceStrategy(
                 client,
-                model_backend=model_backend,
+                result_format_factory=result_format_factory,
+                structured_data_converter=structured_data_converter,
                 prompt_renderer=prompt_renderer,
                 decision_transport=decision_transport,
                 message_composers=message_composers,

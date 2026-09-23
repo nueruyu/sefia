@@ -7,7 +7,7 @@ from sefia.llm import (
 from sefia.llm.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.llm.structured_data import StructuredData
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._request import build_completion_request
 
 
@@ -20,7 +20,7 @@ def _decision_spec() -> DecisionSpec:
     return DecisionSpec.for_inference(
         output_type=_CityResult,
         tools=[],
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
 
 

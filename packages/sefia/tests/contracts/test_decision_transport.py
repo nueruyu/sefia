@@ -19,7 +19,7 @@ from sefia.llm.transports import (
     PromptedDecisionTransport,
     StructuredDecisionTransport,
 )
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import (
     DecisionTransportCase,
     DecisionTransportContract,
@@ -46,7 +46,7 @@ def _case(
         DecisionSpec.for_inference(
             output_type=str,
             tools=tools.get_all(),
-            result_format_factory=PydanticModelBackend(),
+            result_format_factory=PydanticResultFormatFactory(),
         )
     )
     data: JsonObject

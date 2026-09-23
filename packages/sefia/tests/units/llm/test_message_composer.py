@@ -12,14 +12,18 @@ from sefia.llm import (
     MessageLayout,
 )
 from sefia.llm.transports import StructuredDecisionTransport
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticStructuredDataConverter,
+)
 from sefia.testing import make_function_info
 
 
 def _strategy(*composers: MessageComposer) -> LLMInferenceStrategy:
     return LLMInferenceStrategy(
         AsyncMock(spec=LLMClient),
-        PydanticModelBackend(),
+        PydanticResultFormatFactory(),
+        PydanticStructuredDataConverter(),
         MarkdownPromptRenderer(),
         StructuredDecisionTransport(),
         message_composers=composers,

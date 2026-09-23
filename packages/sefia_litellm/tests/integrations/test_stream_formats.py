@@ -18,7 +18,7 @@ from sefia.llm.streaming import (
 from sefia.llm.streaming import (
     StringEnd as OutputStringEnd,
 )
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._schema import StructuredDecisionFormat
 from sefia_litellm._schema._data_format import StructuredDataFormat
 from sefia_litellm._streaming import (
@@ -80,7 +80,7 @@ def _structured_decision_format(
         DecisionSpec.for_inference(
             output_type=str,
             tools=registry.get_all(),
-            result_format_factory=PydanticModelBackend(),
+            result_format_factory=PydanticResultFormatFactory(),
         )
     )
 

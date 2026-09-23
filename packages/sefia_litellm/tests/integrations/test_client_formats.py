@@ -8,7 +8,7 @@ from sefia.llm import (
 )
 from sefia.llm.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._client import (
     LiteLLMClient,
 )
@@ -28,7 +28,7 @@ async def test_complete_envelopes_tool_or_result_union(
     decision_spec = DecisionSpec.for_inference(
         output_type=str,
         tools=registry.get_all(),
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
     mock_acompletion.return_value = make_litellm_response(
         content=(

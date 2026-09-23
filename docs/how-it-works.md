@@ -87,17 +87,18 @@ composition and decision validation:
 layout = MessageLayout.default(function_info)
 for composer in message_composers:
     layout = composer.compose(function_info, layout)
-request = materialize(layout, history, model_backend)
+request = materialize(layout, history, structured_data_converter)
 transport.request_decision(request, prompt_renderer, ...)
 ```
 
 1. It creates `MessageLayout.default(function_info)` and passes the layout through each
    configured `MessageComposer` in order. A composer can transform the layout based on
    application conventions while treating `FunctionInfo` as read-only metadata.
-2. `DecisionSpec` describes which next decisions are valid. The strategy calls
-   `ModelBackend.to_structured_data()` for retained arguments, tool-call arguments, and
-   tool results. It constructs an `InferencePrompt` and semantic history containing
-   only provider-neutral `StructuredData`.
+2. `DecisionSpec` describes which next decisions are valid using the configured
+   `ResultFormatFactory`. Independently, the strategy calls
+   `StructuredDataConverter.to_structured_data()` for retained arguments, tool-call
+   arguments, and tool results. It constructs an `InferencePrompt` and semantic
+   history containing only provider-neutral `StructuredData`.
 3. `DecisionRequest` carries that materialized prompt, application messages, semantic
    history, decision contract, and any rejection facts. It contains no conversion
    callback for the transport.
@@ -134,14 +135,16 @@ adapter nests every structured decision under a required `payload` property, giv
 all decision modes the same object-root wire shape. It removes that envelope from
 completed output and stream paths.
 
-The Pydantic backend owns Python-aware boundaries: `_function_models.py` reflects
-callable parameters, `_structured_data.py` normalizes arbitrary Python values into
-`StructuredData`, and `_result_format.py` produces a JSON Schema and restores a
-decoded result to its declared Python type. `StructuredData` is Sefia's single
-provider-neutral structured tree for both values supplied to an LLM and values decoded
-from one. Its explicit JSON projection converts scalar mapping keys and detects
-collisions. The backend does not know JSON text, Markdown, provider wire payloads, or
-the step-decision shape.
+Sefia keeps three Python/LLM capabilities independent. `ToolFunctionInspector`
+interprets callables for tool schemas and binding. `ResultFormatFactory` produces a
+result schema and restores a decoded result to its declared Python type.
+`StructuredDataConverter` normalizes runtime Python values into `StructuredData`.
+`Session` supplies separate Pydantic-backed defaults from
+`pydantic/_tool_function_inspector.py`, `_result_format.py`, and
+`_structured_data.py`. `StructuredData` is Sefia's single provider-neutral structured
+tree for both values supplied to an LLM and values decoded from one. Its explicit JSON
+projection converts scalar mapping keys and detects collisions. None of these three
+capabilities knows JSON text, Markdown, provider wire payloads, or message ordering.
 
 `DecisionSpec.for_inference()` composes these leaves. It exposes the decision mode,
 result format, and tools, and validates a returned value as the corresponding
@@ -151,8 +154,8 @@ result schema interfaces and decoded values live in `sefia.llm.result_format` an
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 `MarkdownPromptRenderer` renders only the standard inference prompt from an
-`InferencePrompt` whose arguments are already `StructuredData`. Private text helpers
-format JSON-compatible projections without interpreting Python objects. Textual and
+`InferencePrompt` whose arguments are already `StructuredData`. Private Markdown
+helpers format code blocks without interpreting Python objects. Textual and
 native transport builders each build their complete final message sequence:
 application messages before the prompt, the prompt, application messages after it,
 execution history, repair feedback, and response instructions.

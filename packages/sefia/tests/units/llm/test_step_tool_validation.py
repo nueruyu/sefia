@@ -10,7 +10,7 @@ from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.json_schema import JsonValue
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 
 
 def _noop(**kwargs: Any) -> None:
@@ -27,7 +27,7 @@ def test_a_malformed_schema_is_rejected_up_front():
         DecisionSpec.for_inference(
             output_type=Never,
             tools=[tool],
-            result_format_factory=PydanticModelBackend(),
+            result_format_factory=PydanticResultFormatFactory(),
         )
 
 
@@ -47,7 +47,7 @@ def test_a_schema_is_validated_under_its_declared_dialect():
     decision_spec = DecisionSpec.for_inference(
         output_type=Never,
         tools=[tool],
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
     tool_call_ids = ToolCallIdRegistry()
 
@@ -86,7 +86,7 @@ def decision_spec() -> DecisionSpec:
     return DecisionSpec.for_inference(
         output_type=Never,
         tools=registry.get_all(),
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
 
 

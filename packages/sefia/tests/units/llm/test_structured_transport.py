@@ -8,7 +8,7 @@ from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.transports import DecisionRequest, StructuredDecisionTransport
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import RecordingDecisionObserver, make_decision_request
 
 
@@ -16,7 +16,7 @@ def _request() -> DecisionRequest:
     decision = DecisionSpec.for_inference(
         output_type=str,
         tools=[],
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
     return make_decision_request(decision)
 

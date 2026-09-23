@@ -21,6 +21,7 @@ from ._tool_system import (
     ToolEntry,
     ToolCollector,
     ToolDefinition,
+    ToolFunctionInspector,
     ToolRegistry,
     Tools,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "SignatureToolEntry",
     "JsonSchemaToolEntry",
     "ToolDefinition",
+    "ToolFunctionInspector",
     "ToolCollector",
     "ToolRegistry",
 ]

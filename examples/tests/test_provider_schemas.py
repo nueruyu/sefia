@@ -3,7 +3,10 @@ from importlib import import_module
 from sefia._tool_system import SignatureToolEntry, ToolEntry
 from sefia.llm.json_schema import JsonObject, SchemaNode
 from sefia.llm.step_decision import DecisionSpec
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticToolFunctionInspector,
+)
 from sefia_litellm._schema import StructuredDecisionFormat
 from sefios.tools import WebSearch
 
@@ -16,7 +19,7 @@ def _decision_schema(output_type: object, tools: list[ToolEntry]):
     return DecisionSpec.for_inference(
         output_type=output_type,
         tools=tools,
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
 
 
@@ -25,14 +28,14 @@ def _wire_decision_schema(schema: JsonObject) -> SchemaNode:
 
 
 def test_news_writer_schema_composes_nested_research_tool_types() -> None:
-    backend = PydanticModelBackend()
+    inspector = PydanticToolFunctionInspector()
     researcher = news_agents.Researcher(WebSearch())
     research = researcher.research_topic
     tool = SignatureToolEntry(
         research,
-        name=backend.tool_name(research),
+        name=inspector.tool_name(research),
         schema_source=research,
-        inspector=backend,
+        inspector=inspector,
     )
 
     decision_spec = _decision_schema(news_models.NewsArticle, [tool])

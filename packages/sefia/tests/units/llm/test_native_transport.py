@@ -19,7 +19,10 @@ from sefia.llm.transports import (
     DecisionToolResult,
     NativeDecisionTransport,
 )
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticToolFunctionInspector,
+)
 from sefia.testing import (
     RecordingDecisionObserver,
     make_decision_request,
@@ -37,14 +40,18 @@ class Result:
 
 
 def _decision(output_type: Any, *functions: Any) -> DecisionSpec:
-    backend = PydanticModelBackend()
+    inspector = PydanticToolFunctionInspector()
     registry = ToolRegistry()
     for function in functions:
-        registry.add(function, name=backend.tool_name(function))
+        registry.add(
+            function,
+            name=inspector.tool_name(function),
+            inspector=inspector,
+        )
     return DecisionSpec.for_inference(
         output_type=output_type,
         tools=registry.get_all(),
-        result_format_factory=backend,
+        result_format_factory=PydanticResultFormatFactory(),
     )
 
 
@@ -201,7 +208,7 @@ async def test_native_transport_uses_collision_free_name_for_prompt_and_decoding
     decision = DecisionSpec.for_inference(
         output_type=str,
         tools=registry.get_all(),
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
     decoded = await NativeDecisionTransport().request_decision(
         client,

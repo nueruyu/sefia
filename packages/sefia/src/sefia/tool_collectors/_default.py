@@ -48,9 +48,9 @@ class DefaultToolCollector(ToolCollector):
 
     def __init__(self, inspector: ToolFunctionInspector | None = None):
         if inspector is None:
-            from ..pydantic._model_backend import PydanticModelBackend
+            from ..pydantic import PydanticToolFunctionInspector
 
-            inspector = PydanticModelBackend()
+            inspector = PydanticToolFunctionInspector()
         self._inspector = inspector
 
     @override

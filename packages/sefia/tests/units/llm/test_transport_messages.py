@@ -1,11 +1,11 @@
 from sefia.llm import LLMCompletion, ToolCall
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import RejectedDecision
-from sefia.llm.transports._messages import rejection_message
+from sefia.llm.transports._messages import _rejection_message
 
 
 def test_rejection_message_describes_empty_previous_response() -> None:
-    message = rejection_message(
+    message = _rejection_message(
         RejectedDecision(completion=LLMCompletion(), reason="empty response")
     )
 
@@ -17,7 +17,7 @@ def test_rejection_message_describes_empty_previous_response() -> None:
 
 
 def test_rejection_message_safely_fences_previous_content() -> None:
-    message = rejection_message(
+    message = _rejection_message(
         RejectedDecision(
             completion=LLMCompletion(content="invalid ```json"),
             reason="invalid schema",
@@ -41,7 +41,7 @@ def test_rejection_message_represents_structured_completion_output() -> None:
         structured_output=StructuredData.from_json({"decision": "invalid"}),
     )
 
-    message = rejection_message(
+    message = _rejection_message(
         RejectedDecision(completion=completion, reason="invalid decision")
     )
 

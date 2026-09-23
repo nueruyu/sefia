@@ -43,7 +43,7 @@ from ..llm.step_decision import DecisionSpec, StepTool
 from ..llm.structured_data import StructuredData
 from ..llm.streaming import OutputStreamCallback, OutputStreamEvent
 from ..llm.transports import DecisionObserver
-from ..pydantic import PydanticModelBackend
+from ..pydantic import PydanticStructuredDataConverter
 from ._decision_transport_contract import (
     DecisionTransportCase,
     DecisionTransportContract,
@@ -196,7 +196,7 @@ def result_completion(result: Any) -> LLMCompletion:
     including dataclasses and Pydantic models, which serialize to the object
     shape the step-decision schema validates.
     """
-    data = PydanticModelBackend().to_structured_data(
+    data = PydanticStructuredDataConverter().to_structured_data(
         {"decision": "result", "result": result}
     )
     return LLMCompletion(content=json.dumps(data.to_json_value()))
@@ -204,7 +204,7 @@ def result_completion(result: Any) -> LLMCompletion:
 
 def tool_calls_completion(*calls: tuple[str, dict[str, Any]]) -> LLMCompletion:
     """A scripted "tool_calls" decision from ``(tool_name, arguments)`` pairs."""
-    data = PydanticModelBackend().to_structured_data(
+    data = PydanticStructuredDataConverter().to_structured_data(
         {
             "decision": "tool_calls",
             "tool_calls": [

@@ -1,7 +1,9 @@
+import json
+
 from typing_extensions import final, override
 
+from ._markdown import json_block
 from ._prompt_renderer import InferencePrompt, PromptRenderer
-from ._text import compact_json, json_block
 from .step_decision import StepTool
 
 
@@ -30,4 +32,5 @@ class MarkdownPromptRenderer(PromptRenderer):
     def _render_tool(self, tool: StepTool) -> str:
         description = f" — {tool.description}" if tool.description else ""
         schema = tool.arguments.to_dict()
-        return f"- `{tool.name}`{description}\n  Arguments: {compact_json(schema)}"
+        arguments = json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+        return f"- `{tool.name}`{description}\n  Arguments: {arguments}"

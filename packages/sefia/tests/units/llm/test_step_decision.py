@@ -12,7 +12,10 @@ from sefia.llm._tool_call_ids import ToolCallIdRegistry
 from sefia.llm.json_schema import JsonValue
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.llm.structured_data import StructuredData
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticToolFunctionInspector,
+)
 
 
 @dataclass(frozen=True)
@@ -31,7 +34,8 @@ def chat_tool() -> str:
     raise NotImplementedError
 
 
-_BACKEND = PydanticModelBackend()
+_RESULT_FORMAT_FACTORY = PydanticResultFormatFactory()
+_TOOL_INSPECTOR = PydanticToolFunctionInspector()
 
 
 @dataclass(frozen=True)
@@ -54,18 +58,18 @@ def _step(output_type: Any, tools: list[ToolEntry]) -> _StepDecisionFixture:
         DecisionSpec.for_inference(
             output_type=output_type,
             tools=tools,
-            result_format_factory=_BACKEND,
+            result_format_factory=_RESULT_FORMAT_FACTORY,
         )
     )
 
 
 def _tool(func: Callable[..., Any]) -> ToolEntry:
-    name = _BACKEND.tool_name(func)
+    name = _TOOL_INSPECTOR.tool_name(func)
     return SignatureToolEntry(
         func,
         name=name,
         schema_source=func,
-        inspector=_BACKEND,
+        inspector=_TOOL_INSPECTOR,
     )
 
 
@@ -207,7 +211,7 @@ def test_decision_spec_rejects_tool_modes_without_tools() -> None:
             output_type=Never,
             tools=[],
             mode=StepDecisionMode.TOOLS_REQUIRED,
-            result_format_factory=PydanticModelBackend(),
+            result_format_factory=PydanticResultFormatFactory(),
         )
 
     with pytest.raises(ValueError, match="require at least one tool"):
@@ -215,7 +219,7 @@ def test_decision_spec_rejects_tool_modes_without_tools() -> None:
             output_type=str,
             tools=[],
             mode=StepDecisionMode.TOOLS_OR_RESULT,
-            result_format_factory=PydanticModelBackend(),
+            result_format_factory=PydanticResultFormatFactory(),
         )
 
 

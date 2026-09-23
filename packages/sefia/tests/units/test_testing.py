@@ -7,7 +7,7 @@ from sefia.llm import LLMCompletion, Message, ToolCall
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import DecisionToolResult
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import (
     LLMClientCase,
     MockLLMClient,
@@ -66,7 +66,7 @@ def test_test_data_factories_preserve_explicit_values() -> None:
     decision_spec = DecisionSpec.for_inference(
         output_type=str,
         tools=[],
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
 
     request = make_decision_request(

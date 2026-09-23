@@ -8,7 +8,7 @@ from ._prompt_renderer import (
     PromptRenderer,
 )
 from ._strategy import LLMInferenceStrategy
-from .structured_data import StructuredData
+from .structured_data import StructuredData, StructuredDataConverter
 
 __all__ = [
     "LLMClient",
@@ -22,4 +22,5 @@ __all__ = [
     "PromptRenderer",
     "MarkdownPromptRenderer",
     "StructuredData",
+    "StructuredDataConverter",
 ]
