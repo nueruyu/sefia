@@ -6,6 +6,11 @@ from sefia.llm import Message, ToolCall
 from sefia.llm.structured_data import StructuredData
 
 
+class _MutableValue:
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
 def test_message_fields_are_immutable() -> None:
     message = Message(role="user", content="hello")
 
@@ -43,6 +48,32 @@ def test_message_content_returns_a_detached_nested_value() -> None:
     assert message.content == [
         {"type": "text", "text": "original", "metadata": {"index": 1}}
     ]
+
+
+def test_message_owns_mutable_content_leaf_input() -> None:
+    source = _MutableValue("original")
+    message = Message(role="user", content=[source])
+
+    source.value = "changed"
+
+    content = message.content
+    assert isinstance(content, list)
+    assert isinstance(content[0], _MutableValue)
+    assert content[0].value == "original"
+
+
+def test_message_returns_a_detached_mutable_content_leaf() -> None:
+    message = Message(role="user", content=[_MutableValue("original")])
+
+    content = message.content
+    assert isinstance(content, list)
+    assert isinstance(content[0], _MutableValue)
+    content[0].value = "changed"
+
+    projected = message.content
+    assert isinstance(projected, list)
+    assert isinstance(projected[0], _MutableValue)
+    assert projected[0].value == "original"
 
 
 def test_message_owns_tool_call_collection() -> None:

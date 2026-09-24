@@ -196,7 +196,7 @@ def test_build_text_decision_messages_owns_text_history_representation() -> None
     assert '"value": "found"' in content
 
 
-def test_decision_request_is_immutable_and_adds_rejection_as_a_new_value() -> None:
+def test_decision_request_is_frozen_and_adds_rejection_as_a_new_value() -> None:
     decision_spec = DecisionSpec.for_inference(
         output_type=str,
         tools=[],

@@ -98,9 +98,9 @@ transport.request_decision(request, prompt_renderer, ...)
    `ResultFormatFactory`. Independently, the strategy calls
    `StructuredDataConverter.to_structured_data()` for retained arguments, tool-call
    arguments, and tool results.
-3. `DecisionRequest` carries the function, materialized arguments, immutable
-   application messages, semantic history, decision contract, and any rejection
-   facts. `DecisionSpec.tools` is the single authoritative tool set.
+3. The frozen `DecisionRequest` carries the function, materialized arguments,
+   immutable application messages, semantic history, decision contract, and any
+   rejection facts. `DecisionSpec.tools` is the single authoritative tool set.
 4. The transport constructs `InferencePrompt` with the tools appropriate to its
    protocol, and `PromptRenderer` renders it in the configured presentation format.
    `DecisionTransport` places that prompt between application messages and owns
@@ -164,8 +164,8 @@ application messages before the prompt, the prompt, application messages after i
 execution history, repair feedback, and response instructions.
 They combine inference and response text into one message
 for the default first step. `Message`, `ToolCall`, and `StructuredData` are immutable,
-so application layouts, semantic requests, event handlers, and clients can share the
-same values without defensive copying.
+so those LLM-boundary values can be shared among application layouts, decision
+requests, event handlers, and clients without defensive copying.
 `StructuredDecisionTransport` requests structured output;
 `PromptedDecisionTransport` asks for the same JSON decision in ordinary response
 text; `sefia.llm.transports.NativeDecisionTransport` exposes application tools and a

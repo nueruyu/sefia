@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypeVar
 
 from .structured_data import StructuredData
 
@@ -46,17 +47,11 @@ class ToolCall:
     arguments: StructuredData
 
 
-def _copy_content(value: Any) -> Any:
-    if isinstance(value, list):
-        return [_copy_content(item) for item in cast(list[Any], value)]
-    if isinstance(value, dict):
-        return {
-            key: _copy_content(item)
-            for key, item in cast(dict[Any, Any], value).items()
-        }
-    if isinstance(value, tuple):
-        return tuple(_copy_content(item) for item in cast(tuple[Any, ...], value))
-    return value
+_T = TypeVar("_T")
+
+
+def _copy_content(value: _T) -> _T:
+    return deepcopy(value)
 
 
 @dataclass

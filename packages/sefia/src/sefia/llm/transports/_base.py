@@ -49,7 +49,7 @@ DecisionHistoryItem: TypeAlias = DecisionToolCalls | DecisionToolResult
 
 @dataclass(frozen=True)
 class DecisionRequest:
-    """Immutable semantic input ready for decision-protocol presentation."""
+    """Semantic input ready for decision-protocol presentation."""
 
     messages_before: tuple[Message, ...]
     function: FunctionInfo
