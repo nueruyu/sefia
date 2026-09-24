@@ -33,7 +33,7 @@ from sefia.testing import (
     result_completion,
     tool_calls_completion,
 )
-from sefia.tool_collectors import StaticToolCollector
+from sefia.tool_collectors import DefaultToolCollector, StaticToolCollector
 
 infer = sefia.Domain(
     glyff.Domain(
@@ -139,22 +139,6 @@ class _RecordingStructuredDataConverter(StructuredDataConverter):
         return self._delegate.to_structured_data(value)
 
 
-class _UnusedToolFunctionInspector(ToolFunctionInspector):
-    @override
-    def tool_name(self, func: Callable[..., Any]) -> str:
-        raise AssertionError("custom collector must not use the inspector")
-
-    @override
-    def definition(self, func: Callable[..., Any], *, name: str) -> ToolDefinition:
-        raise AssertionError("custom collector must not use the inspector")
-
-    @override
-    def bind(
-        self, func: Callable[..., Any], arguments: dict[str, Any]
-    ) -> dict[str, Any]:
-        raise AssertionError("custom collector must not use the inspector")
-
-
 async def test_session_connects_a_custom_prompt_renderer_to_the_transport() -> None:
     client = MockLLMClient([result_completion(_Report("custom", "rendered"))])
     renderer = Mock(spec=PromptRenderer)
@@ -206,7 +190,7 @@ async def test_session_wires_independent_python_llm_capabilities() -> None:
 
     async with memory_session(
         client,
-        tool_function_inspector=inspector,
+        tool_collector=DefaultToolCollector(inspector=inspector),
         result_format_factory=result_format_factory,
         structured_data_converter=converter,
     ):
@@ -222,9 +206,7 @@ async def test_session_wires_independent_python_llm_capabilities() -> None:
     assert {"value": 7} in converter.values
 
 
-async def test_custom_tool_collector_does_not_require_the_configured_inspector() -> (
-    None
-):
+async def test_custom_tool_collector_keeps_strategy_capabilities_independent() -> None:
     result_format_factory = _RecordingResultFormatFactory()
     converter = _RecordingStructuredDataConverter()
     payload = _Input(value=9)
@@ -233,7 +215,6 @@ async def test_custom_tool_collector_does_not_require_the_configured_inspector()
     async with memory_session(
         client,
         tool_collector=StaticToolCollector([]),
-        tool_function_inspector=_UnusedToolFunctionInspector(),
         result_format_factory=result_format_factory,
         structured_data_converter=converter,
     ):

@@ -64,6 +64,8 @@ keeps ordinary Python values. After composition, `LLMInferenceStrategy` calls
 `StructuredDataConverter.to_structured_data()` to materialize the remaining values
 before it constructs the transport-facing `DecisionRequest`. JSON is only a later
 projection where the selected transport needs textual representation.
+`Message`, `ToolCall`, and `StructuredData` are immutable LLM-boundary values, so a
+composer can safely reuse messages from the incoming layout without copying them.
 `PromptRenderer` renders only this inference prompt from function instructions,
 remaining arguments, and any textual tool definitions. The transport appends Sefia's
 execution history, repair feedback, and response instructions in that order. A

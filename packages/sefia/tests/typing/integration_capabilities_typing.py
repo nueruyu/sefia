@@ -14,6 +14,7 @@ from sefia.pydantic import (
     PydanticStructuredDataConverter,
     PydanticToolFunctionInspector,
 )
+from sefia.tool_collectors import DefaultToolCollector
 
 
 tool_function_inspector: ToolFunctionInspector = PydanticToolFunctionInspector()
@@ -39,7 +40,7 @@ def make_session(client: LLMClient, glyff_session: glyff.Session) -> Session:
     return Session(
         client,
         glyff_session,
-        tool_function_inspector=tool_function_inspector,
+        tool_collector=DefaultToolCollector(inspector=tool_function_inspector),
         result_format_factory=result_format_factory,
         structured_data_converter=structured_data_converter,
     )

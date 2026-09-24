@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 from typing_extensions import final, override
 
 from ..._client import LLMClient
@@ -45,7 +43,7 @@ class NativeDecisionTransport(DecisionTransport):
                 request.decision_spec, result_tool
             ),
         )
-        await observer.before_request(tuple(deepcopy(messages)))
+        await observer.before_request(tuple(messages))
 
         completion = await client.complete(
             messages=messages,

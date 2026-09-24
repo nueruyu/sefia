@@ -97,14 +97,14 @@ transport.request_decision(request, prompt_renderer, ...)
 2. `DecisionSpec` describes which next decisions are valid using the configured
    `ResultFormatFactory`. Independently, the strategy calls
    `StructuredDataConverter.to_structured_data()` for retained arguments, tool-call
-   arguments, and tool results. It constructs an `InferencePrompt` and semantic
-   history containing only provider-neutral `StructuredData`.
-3. `DecisionRequest` carries that materialized prompt, application messages, semantic
-   history, decision contract, and any rejection facts. It contains no conversion
-   callback for the transport.
-4. `PromptRenderer` renders the materialized `InferencePrompt` in the configured
-   presentation format. `DecisionTransport` places that prompt between application
-   messages and owns history, repair, and response instructions.
+   arguments, and tool results.
+3. `DecisionRequest` carries the function, materialized arguments, immutable
+   application messages, semantic history, decision contract, and any rejection
+   facts. `DecisionSpec.tools` is the single authoritative tool set.
+4. The transport constructs `InferencePrompt` with the tools appropriate to its
+   protocol, and `PromptRenderer` renders it in the configured presentation format.
+   `DecisionTransport` places that prompt between application messages and owns
+   history, repair, and response instructions.
 5. `LLMClient.complete()` returns a provider-neutral `LLMCompletion`.
 6. The transport decodes its protocol into `DecodedDecision`; its `decision_data` is
    structured but not yet semantically valid.
@@ -139,10 +139,13 @@ Sefia keeps three Python/LLM capabilities independent. `ToolFunctionInspector`
 interprets callables for tool schemas and binding. `ResultFormatFactory` produces a
 result schema and restores a decoded result to its declared Python type.
 `StructuredDataConverter` normalizes runtime Python values into `StructuredData`.
-`Session` supplies separate Pydantic-backed defaults from
+`Session` directly configures the latter two strategy capabilities. Custom tool
+inspection is configured through `DefaultToolCollector(inspector=...)`. Sefia supplies
+separate Pydantic-backed defaults from
 `pydantic/_tool_function_inspector.py`, `_result_format.py`, and
 `_structured_data.py`. `StructuredData` is Sefia's single provider-neutral structured
-tree for both values supplied to an LLM and values decoded from one. Its explicit JSON
+tree for both values supplied to an LLM and values decoded from one. It recursively
+owns constructor inputs and returns detached tree projections. Its explicit JSON
 projection converts scalar mapping keys and detects collisions. None of these three
 capabilities knows JSON text, Markdown, provider wire payloads, or message ordering.
 
@@ -155,13 +158,14 @@ result schema interfaces and decoded values live in `sefia.llm.result_format` an
 
 `MarkdownPromptRenderer` renders only the standard inference prompt from an
 `InferencePrompt` whose arguments are already `StructuredData`. Private Markdown
-helpers format code blocks without interpreting Python objects. Textual and
-native transport builders each build their complete final message sequence:
+helpers format code blocks without interpreting Python objects. Shared transport
+framing builds the complete final message sequence:
 application messages before the prompt, the prompt, application messages after it,
 execution history, repair feedback, and response instructions.
 They combine inference and response text into one message
-for the default first step. The transport copies application messages into each
-request and sends event handlers a separate snapshot of the final messages.
+for the default first step. `Message`, `ToolCall`, and `StructuredData` are immutable,
+so application layouts, semantic requests, event handlers, and clients can share the
+same values without defensive copying.
 `StructuredDecisionTransport` requests structured output;
 `PromptedDecisionTransport` asks for the same JSON decision in ordinary response
 text; `sefia.llm.transports.NativeDecisionTransport` exposes application tools and a
@@ -172,13 +176,15 @@ progress events, so final results, repair, token
 streams, reasoning streams, and tool-argument previews do not depend on the selected
 transport.
 
-An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
+An invalid reply backed by an actual `LLMCompletion` (empty body, malformed JSON,
+schema violation, unknown tool) is
 first **repaired in place**: the strategy creates a new request containing the
 invalid output and validation error, and asks again, up to
 `max_repair_attempts` times (default 2; configurable on
 `LLMInferenceStrategy` / `Session` / `SessionScope`). The rejected response lives only
 inside that one (engraved) step's final message sequence — it never enters the step history, so an
-invalid decision is never persisted. Only when the budget is spent does the
+invalid decision is never persisted. Generic inference failures without a rejected
+completion propagate to the outer retry/resume mechanism. Only when the repair budget is spent does the
 `InvalidInferenceResponseError` propagate as described below.
 
 (Why the unified schema rather than native tool-calling, and the tradeoff it makes:

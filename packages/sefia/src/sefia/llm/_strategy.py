@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from copy import deepcopy
-from dataclasses import replace
 
 from typing_extensions import final, override
 
@@ -18,7 +16,7 @@ from ._client import LLMClient
 from ._message_composer import MessageComposer
 from ._message_layout import MessageLayout
 from ._messages import LLMCompletion, Message, ToolCall
-from ._prompt_renderer import InferencePrompt, PromptRenderer
+from ._prompt_renderer import PromptRenderer
 from ._tool_call_ids import ToolCallIdRegistry
 from .exceptions import DecisionDecodingError, LLMCompletionDecodingError
 from .result_format import ResultFormatFactory
@@ -165,28 +163,20 @@ class LLMInferenceStrategy(InferenceStrategy):
             decision_spec,
             history,
         )
-        rejected: RejectedDecision | None = None
-
         for attempt in range(self._max_repair_attempts + 1):
             try:
-                return await self._complete_once(
-                    replace(request, rejected=rejected),
-                    tools,
-                    publisher,
-                )
-            except InvalidInferenceResponseError as error:
+                return await self._complete_once(request, tools, publisher)
+            except _InvalidDecisionCompletionError as error:
                 if attempt == self._max_repair_attempts:
                     raise
                 await publisher.publish(
                     events.DecisionRepairAttempt(error=error, attempt=attempt + 1)
                 )
-                rejected = RejectedDecision(
-                    completion=(
-                        error.completion
-                        if isinstance(error, _InvalidDecisionCompletionError)
-                        else LLMCompletion(content=error.raw_content)
-                    ),
-                    reason=error.detail,
+                request = request.with_rejection(
+                    RejectedDecision(
+                        completion=error.completion,
+                        reason=error.detail,
+                    )
                 )
 
         raise AssertionError("unreachable")
@@ -205,13 +195,10 @@ class LLMInferenceStrategy(InferenceStrategy):
             }
         )
         return DecisionRequest(
-            messages_before=tuple(deepcopy(layout.before)),
-            inference_prompt=InferencePrompt(
-                function=function_info,
-                arguments=arguments,
-                tools=decision_spec.tools,
-            ),
-            messages_after=tuple(deepcopy(layout.after)),
+            messages_before=layout.before,
+            function=function_info,
+            arguments=arguments,
+            messages_after=layout.after,
             decision_spec=decision_spec,
             history=tuple(self._materialize_history_item(item) for item in history),
         )

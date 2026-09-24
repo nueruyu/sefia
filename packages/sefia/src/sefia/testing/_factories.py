@@ -7,7 +7,7 @@ from .._history import StepHistory
 from .._interfaces.middleware import DecisionContext, StepContext
 from .._tool_system import ToolRegistry
 from ..inference import FunctionInfo, ToolCallRequest
-from ..llm import InferencePrompt, Message, StructuredData
+from ..llm import Message, StructuredData
 from ..llm.step_decision import DecisionSpec
 from ..llm.transports import (
     DecisionHistoryItem,
@@ -59,13 +59,8 @@ def make_decision_request(
     function = make_function_info() if function is None else function
     return DecisionRequest(
         messages_before=messages_before,
-        inference_prompt=InferencePrompt(
-            function=function,
-            arguments=(
-                StructuredData.from_object({}) if arguments is None else arguments
-            ),
-            tools=decision_spec.tools,
-        ),
+        function=function,
+        arguments=(StructuredData.from_object({}) if arguments is None else arguments),
         messages_after=messages_after,
         decision_spec=decision_spec,
         history=history,

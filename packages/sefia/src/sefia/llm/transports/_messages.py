@@ -1,10 +1,8 @@
 import json
-from copy import deepcopy
-from dataclasses import replace
 
 from .._markdown import json_block, text_block
 from .._messages import LLMCompletion, Message
-from .._prompt_renderer import PromptRenderer
+from .._prompt_renderer import InferencePrompt, PromptRenderer
 from ..json_schema import JsonValue
 from ..step_decision import StepTool
 from ..structured_data import StructuredData
@@ -21,15 +19,15 @@ def _build_application_messages(
     renderer: PromptRenderer,
     tools: tuple[StepTool, ...],
 ) -> list[Message]:
-    prompt = replace(
-        request.inference_prompt,
-        arguments=deepcopy(request.inference_prompt.arguments),
+    prompt = InferencePrompt(
+        function=request.function,
+        arguments=request.arguments,
         tools=tools,
     )
     return [
-        *deepcopy(request.messages_before),
+        *request.messages_before,
         Message(role="user", content=renderer.render(prompt)),
-        *deepcopy(request.messages_after),
+        *request.messages_after,
     ]
 
 
@@ -122,8 +120,13 @@ def build_decision_messages(
         and request.rejected is None
     ):
         prompt_content = messages[0].content
+        response_content = response.content
         assert isinstance(prompt_content, str)
-        messages[0].content = f"{prompt_content}\n\n{response.content}"
+        assert isinstance(response_content, str)
+        messages[0] = Message(
+            role="user",
+            content=f"{prompt_content}\n\n{response_content}",
+        )
     else:
         messages.append(response)
     return messages

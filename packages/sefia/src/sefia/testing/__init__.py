@@ -68,6 +68,16 @@ from ._tool_collector_contract import ToolCollectorCase, ToolCollectorContract
 def _snapshot_value(value: Any) -> Any:
     if isinstance(value, StructuredData):
         return _snapshot_value(value.tree)
+    if isinstance(value, Message):
+        result: dict[str, Any] = {"role": value.role}
+        content = value.content
+        if content is not None:
+            result["content"] = _snapshot_value(content)
+        if value.tool_call_id is not None:
+            result["tool_call_id"] = value.tool_call_id
+        if value.tool_calls is not None:
+            result["tool_calls"] = [_snapshot_value(call) for call in value.tool_calls]
+        return result
     if is_dataclass(value) and not isinstance(value, type):
         result: dict[str, Any] = {}
         for item in fields(value):

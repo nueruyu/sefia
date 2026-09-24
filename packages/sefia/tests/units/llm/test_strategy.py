@@ -60,7 +60,7 @@ async def test_strategy_passes_request_to_transport_and_validates_result(
     sent = transport.request_decision.await_args.kwargs
     assert sent["client"] is strategy.llm_client
     assert sent["stream"] is stream
-    assert sent["request"].inference_prompt.function is function
+    assert sent["request"].function is function
     assert sent["request"].history == ()
     assert sent["request"].rejected is None
     assert sent["request"].decision_spec.result is not None
@@ -103,7 +103,7 @@ async def test_strategy_materializes_arguments_and_history_before_transport(
     )
 
     request = transport.request_decision.await_args.kwargs["request"]
-    assert request.inference_prompt.arguments.tree == {
+    assert request.arguments.tree == {
         "model": {"value": 3},
         "record": {
             "identifier": str(identifier),

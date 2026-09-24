@@ -4,9 +4,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TypeAlias
 
+from ...inference import FunctionInfo
 from .._client import LLMClient
 from .._messages import LLMCompletion, Message, ToolCall
-from .._prompt_renderer import InferencePrompt, PromptRenderer
+from .._prompt_renderer import PromptRenderer
 from ..structured_data import StructuredData
 from ..step_decision import DecisionSpec
 from ..streaming import OutputStreamEvent
@@ -48,12 +49,26 @@ DecisionHistoryItem: TypeAlias = DecisionToolCalls | DecisionToolResult
 
 @dataclass(frozen=True)
 class DecisionRequest:
+    """Immutable semantic input ready for decision-protocol presentation."""
+
     messages_before: tuple[Message, ...]
-    inference_prompt: InferencePrompt
+    function: FunctionInfo
+    arguments: StructuredData
     messages_after: tuple[Message, ...]
     decision_spec: DecisionSpec
     history: tuple[DecisionHistoryItem, ...]
     rejected: RejectedDecision | None = None
+
+    def with_rejection(self, rejected: RejectedDecision) -> "DecisionRequest":
+        return DecisionRequest(
+            messages_before=self.messages_before,
+            function=self.function,
+            arguments=self.arguments,
+            messages_after=self.messages_after,
+            decision_spec=self.decision_spec,
+            history=self.history,
+            rejected=rejected,
+        )
 
 
 @dataclass(frozen=True)

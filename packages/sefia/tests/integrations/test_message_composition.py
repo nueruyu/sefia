@@ -1,5 +1,4 @@
 import json
-from copy import deepcopy
 from unittest.mock import AsyncMock
 
 import pytest
@@ -26,6 +25,7 @@ from sefia.llm import (
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
+    DecisionRequest,
     NativeDecisionTransport,
     PromptedDecisionTransport,
     DecisionToolCalls,
@@ -108,45 +108,26 @@ def _spec() -> DecisionSpec:
     )
 
 
+def _spec_with_tool() -> DecisionSpec:
+    registry = ToolRegistry()
+
+    def lookup(query: str) -> str:
+        """Look up a value."""
+        return query
+
+    registry.add(lookup, name="lookup")
+    return DecisionSpec.for_inference(
+        output_type=str,
+        tools=registry.get_all(),
+        result_format_factory=PydanticResultFormatFactory(),
+    )
+
+
 def _renderer() -> MarkdownPromptRenderer:
     return MarkdownPromptRenderer()
 
 
-@pytest.mark.parametrize(
-    ("transport", "completion"),
-    [
-        (
-            StructuredDecisionTransport(),
-            LLMCompletion(
-                structured_output=StructuredData.from_json(
-                    {"decision": "result", "result": "done"}
-                )
-            ),
-        ),
-        (
-            PromptedDecisionTransport(),
-            LLMCompletion(content='{"decision":"result","result":"done"}'),
-        ),
-        (
-            NativeDecisionTransport(),
-            LLMCompletion(
-                tool_calls=[
-                    ToolCall(
-                        id="result-1",
-                        name="return_result",
-                        arguments=StructuredData.from_json({"result": "done"}),
-                    )
-                ]
-            ),
-        ),
-    ],
-)
-async def test_transport_preserves_application_plan_then_appends_history_and_repair(
-    transport: StructuredDecisionTransport
-    | PromptedDecisionTransport
-    | NativeDecisionTransport,
-    completion: LLMCompletion,
-) -> None:
+def _request_with_application_messages() -> tuple[DecisionRequest, tuple[Message, ...]]:
     function = make_function_info(bound_arguments={"knowledge": {"foo": "bar"}})
     application_messages = (
         Message(role="developer", content="Reply briefly."),
@@ -173,15 +154,60 @@ async def test_transport_preserves_application_plan_then_appends_history_and_rep
         completion=LLMCompletion(content="bad"),
         reason="invalid",
     )
-    request = make_decision_request(
-        _spec(),
-        function=function,
-        arguments=StructuredData.from_json({"knowledge": {"foo": "bar"}}),
-        messages_before=(application_messages[0],),
-        messages_after=application_messages[1:],
-        history=history,
-        rejected=rejected,
+    return (
+        make_decision_request(
+            _spec(),
+            function=function,
+            arguments=StructuredData.from_json({"knowledge": {"foo": "bar"}}),
+            messages_before=(application_messages[0],),
+            messages_after=application_messages[1:],
+            history=history,
+            rejected=rejected,
+        ),
+        application_messages,
     )
+
+
+def _assert_application_prefix(
+    messages: list[Message], application_messages: tuple[Message, ...]
+) -> None:
+    assert messages[0] is application_messages[0]
+    prompt_content = messages[1].content
+    assert isinstance(prompt_content, str)
+    assert "## Task arguments" in prompt_content
+    assert '"foo": "bar"' in prompt_content
+    assert "## Response" not in prompt_content
+    assert all(
+        messages[index + 2] is message
+        for index, message in enumerate(application_messages[1:])
+    )
+
+
+@pytest.mark.parametrize(
+    ("transport", "completion", "passes_decision_spec"),
+    [
+        (
+            StructuredDecisionTransport(),
+            LLMCompletion(
+                structured_output=StructuredData.from_json(
+                    {"decision": "result", "result": "done"}
+                )
+            ),
+            True,
+        ),
+        (
+            PromptedDecisionTransport(),
+            LLMCompletion(content='{"decision":"result","result":"done"}'),
+            False,
+        ),
+    ],
+)
+async def test_text_transport_appends_text_history_after_application_messages(
+    transport: StructuredDecisionTransport | PromptedDecisionTransport,
+    completion: LLMCompletion,
+    passes_decision_spec: bool,
+) -> None:
+    request, application_messages = _request_with_application_messages()
     client = AsyncMock()
     client.complete.return_value = completion
     observer = RecordingDecisionObserver()
@@ -198,46 +224,86 @@ async def test_transport_preserves_application_plan_then_appends_history_and_rep
     sent = client.complete.await_args.kwargs
     messages = sent["messages"]
     assert observer.messages == tuple(messages)
-    assert messages[0] == application_messages[0]
-    assert messages[0] is not application_messages[0]
-    assert messages[1].role == "user"
-    assert "## Task arguments" in messages[1].content
-    assert '"foo": "bar"' in messages[1].content
-    assert "## Response" not in messages[1].content
-    assert all(
-        messages[i + 2] == item and messages[i + 2] is not item
-        for i, item in enumerate(application_messages[1:])
+    _assert_application_prefix(messages, application_messages)
+    history_content = messages[5].content
+    assert isinstance(history_content, str)
+    assert "Previous tool interactions" in history_content
+    assert '"value": "found"' in history_content
+    repair_content = messages[-2].content
+    response_content = messages[-1].content
+    assert isinstance(repair_content, str)
+    assert isinstance(response_content, str)
+    assert "Correct the previous response" in repair_content
+    assert "## Response" in response_content
+    assert sent["decision_spec"] is (
+        request.decision_spec if passes_decision_spec else None
     )
-    assert "Correct the previous response" in messages[-2].content
-    assert "## Response" in messages[-1].content
-    if isinstance(transport, NativeDecisionTransport):
-        assert [message.role for message in messages[5:7]] == ["assistant", "tool"]
-        assert messages[5].tool_calls[0].id == messages[6].tool_call_id == "call-1"
-        assert json.loads(messages[6].content) == {"value": "found"}
-        assert sent["tools"][0].name == "return_result"
-    else:
-        assert messages[5].role == "user"
-        assert "Previous tool interactions" in messages[5].content
-        assert '"value": "found"' in messages[5].content
-        assert (
-            sent["decision_spec"] is request.decision_spec
-            if isinstance(transport, StructuredDecisionTransport)
-            else sent["decision_spec"] is None
-        )
+
+
+async def test_native_transport_appends_native_history_after_application_messages() -> (
+    None
+):
+    request, application_messages = _request_with_application_messages()
+    client = AsyncMock()
+    client.complete.return_value = LLMCompletion(
+        tool_calls=[
+            ToolCall(
+                id="result-1",
+                name="return_result",
+                arguments=StructuredData.from_json({"result": "done"}),
+            )
+        ]
+    )
+
+    decoded = await NativeDecisionTransport().request_decision(
+        client,
+        _renderer(),
+        request,
+        RecordingDecisionObserver(),
+        False,
+    )
+
+    assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
+    sent = client.complete.await_args.kwargs
+    messages = sent["messages"]
+    _assert_application_prefix(messages, application_messages)
+    assert [message.role for message in messages[5:7]] == ["assistant", "tool"]
+    calls = messages[5].tool_calls
+    assert calls is not None
+    assert calls[0].id == messages[6].tool_call_id == "call-1"
+    tool_content = messages[6].content
+    assert isinstance(tool_content, str)
+    assert json.loads(tool_content) == {"value": "found"}
+    assert sent["tools"][0].name == "return_result"
+    assert sent["decision_spec"] is None
+    repair_content = messages[-2].content
+    response_content = messages[-1].content
+    assert isinstance(repair_content, str)
+    assert isinstance(response_content, str)
+    assert "Correct the previous response" in repair_content
+    assert "## Response" in response_content
 
 
 @pytest.mark.parametrize(
-    "transport",
+    ("transport", "completion"),
     [
-        StructuredDecisionTransport(),
-        PromptedDecisionTransport(),
-        NativeDecisionTransport(),
+        (
+            StructuredDecisionTransport(),
+            LLMCompletion(
+                structured_output=StructuredData.from_json(
+                    {"decision": "result", "result": "done"}
+                )
+            ),
+        ),
+        (
+            PromptedDecisionTransport(),
+            LLMCompletion(content='{"decision":"result","result":"done"}'),
+        ),
     ],
 )
-async def test_default_layout_sends_one_inference_message_on_first_step(
-    transport: StructuredDecisionTransport
-    | PromptedDecisionTransport
-    | NativeDecisionTransport,
+async def test_text_transport_default_layout_sends_one_message_on_first_step(
+    transport: StructuredDecisionTransport | PromptedDecisionTransport,
+    completion: LLMCompletion,
 ) -> None:
     function = make_function_info(bound_arguments={"topic": "sefia"})
     request = make_decision_request(
@@ -246,25 +312,7 @@ async def test_default_layout_sends_one_inference_message_on_first_step(
         arguments=StructuredData.from_json({"topic": "sefia"}),
     )
     client = AsyncMock()
-    client.complete.return_value = (
-        LLMCompletion(
-            structured_output=StructuredData.from_json(
-                {"decision": "result", "result": "done"}
-            )
-        )
-        if isinstance(transport, StructuredDecisionTransport)
-        else LLMCompletion(content='{"decision":"result","result":"done"}')
-        if isinstance(transport, PromptedDecisionTransport)
-        else LLMCompletion(
-            tool_calls=[
-                ToolCall(
-                    "result-1",
-                    "return_result",
-                    StructuredData.from_json({"result": "done"}),
-                )
-            ]
-        )
-    )
+    client.complete.return_value = completion
 
     await transport.request_decision(
         client,
@@ -277,8 +325,83 @@ async def test_default_layout_sends_one_inference_message_on_first_step(
     messages = client.complete.await_args.kwargs["messages"]
     assert len(messages) == 1
     assert messages[0].role == "user"
-    assert '"topic": "sefia"' in messages[0].content
-    assert "## Response" in messages[0].content
+    content = messages[0].content
+    assert isinstance(content, str)
+    assert '"topic": "sefia"' in content
+    assert "## Response" in content
+
+
+@pytest.mark.parametrize(
+    ("transport", "completion"),
+    [
+        (
+            StructuredDecisionTransport(),
+            LLMCompletion(
+                structured_output=StructuredData.from_json(
+                    {"decision": "result", "result": "done"}
+                )
+            ),
+        ),
+        (
+            PromptedDecisionTransport(),
+            LLMCompletion(content='{"decision":"result","result":"done"}'),
+        ),
+    ],
+)
+async def test_text_transport_puts_decision_tools_in_the_inference_prompt(
+    transport: StructuredDecisionTransport | PromptedDecisionTransport,
+    completion: LLMCompletion,
+) -> None:
+    request = make_decision_request(_spec_with_tool())
+    client = AsyncMock()
+    client.complete.return_value = completion
+    renderer = _CapturingRenderer()
+
+    await transport.request_decision(
+        client,
+        renderer,
+        request,
+        RecordingDecisionObserver(),
+        False,
+    )
+
+    assert renderer.prompts[0].tools == request.decision_spec.tools
+
+
+async def test_native_transport_default_layout_sends_one_message_on_first_step() -> (
+    None
+):
+    request = make_decision_request(
+        _spec(),
+        function=make_function_info(bound_arguments={"topic": "sefia"}),
+        arguments=StructuredData.from_json({"topic": "sefia"}),
+    )
+    client = AsyncMock()
+    client.complete.return_value = LLMCompletion(
+        tool_calls=[
+            ToolCall(
+                "result-1",
+                "return_result",
+                StructuredData.from_json({"result": "done"}),
+            )
+        ]
+    )
+
+    await NativeDecisionTransport().request_decision(
+        client,
+        _renderer(),
+        request,
+        RecordingDecisionObserver(),
+        False,
+    )
+
+    messages = client.complete.await_args.kwargs["messages"]
+    assert len(messages) == 1
+    assert messages[0].role == "user"
+    content = messages[0].content
+    assert isinstance(content, str)
+    assert '"topic": "sefia"' in content
+    assert "## Response" in content
 
 
 async def test_text_and_native_transports_share_repair_framing() -> None:
@@ -362,7 +485,7 @@ async def test_custom_prompt_renderer_receives_materialized_request() -> None:
     assert '"value": "history"' in messages[1].content
 
 
-async def test_client_mutation_does_not_change_layout_used_for_repair() -> None:
+async def test_repair_reuses_immutable_application_message() -> None:
     source = Message(role="developer", content=[{"text": "original"}])
     layouts: list[MessageLayout] = []
 
@@ -387,10 +510,11 @@ async def test_client_mutation_does_not_change_layout_used_for_repair() -> None:
     ]
 
     async def complete(*, messages: list[Message], **_kwargs: object) -> LLMCompletion:
-        observed.append(deepcopy(messages[0]))
-        messages[0].role = "user"
-        assert isinstance(messages[0].content, list)
-        messages[0].content[0]["text"] = "changed by client"
+        observed.append(messages[0])
+        content = messages[0].content
+        assert isinstance(content, list)
+        content[0]["text"] = "changed locally"
+        messages[0] = Message(role="user", content="replacement")
         return completions.pop(0)
 
     client.complete.side_effect = complete
@@ -410,7 +534,7 @@ async def test_client_mutation_does_not_change_layout_used_for_repair() -> None:
     assert isinstance(decision, ResultDecision)
     assert decision.result == "done"
     assert observed == [source, source]
-    assert all(message is not source for message in observed)
+    assert all(message is source for message in observed)
     assert source.content == [{"text": "original"}]
     assert len(layouts) == 1
     assert layouts[0].before[0] is source

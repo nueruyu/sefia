@@ -1,4 +1,7 @@
+from dataclasses import FrozenInstanceError, fields
 from unittest.mock import Mock
+
+import pytest
 
 from sefia.llm import LLMCompletion, ToolCall
 from sefia.llm import Message, PromptRenderer
@@ -123,8 +126,31 @@ def test_build_decision_messages_owns_final_framing_order() -> None:
     assert isinstance(repair, str)
     assert "Correct the previous response" in repair
     assert messages[-1].content == "## Response\n\nrespond"
-    assert messages[0] is not before
-    assert messages[2] is not after
+    assert messages[0] is before
+    assert messages[2] is after
+    assert messages[3] is history
+
+
+def test_default_first_step_constructs_one_combined_message() -> None:
+    decision_spec = DecisionSpec.for_inference(
+        output_type=str,
+        tools=[],
+        result_format_factory=PydanticResultFormatFactory(),
+    )
+    renderer = Mock(spec=PromptRenderer)
+    renderer.render.return_value = "inference"
+
+    messages = build_decision_messages(
+        request=make_decision_request(decision_spec),
+        renderer=renderer,
+        prompt_tools=(),
+        history_messages=[],
+        response_instructions="respond",
+    )
+
+    assert messages == [
+        Message(role="user", content="inference\n\n## Response\n\nrespond")
+    ]
 
 
 def test_build_text_decision_messages_owns_text_history_representation() -> None:
@@ -168,3 +194,37 @@ def test_build_text_decision_messages_owns_text_history_representation() -> None
     assert '"query": "sefia"' in content
     assert '"result": {' in content
     assert '"value": "found"' in content
+
+
+def test_decision_request_is_immutable_and_adds_rejection_as_a_new_value() -> None:
+    decision_spec = DecisionSpec.for_inference(
+        output_type=str,
+        tools=[],
+        result_format_factory=PydanticResultFormatFactory(),
+    )
+    request = make_decision_request(decision_spec)
+    rejected = RejectedDecision(
+        completion=LLMCompletion(content="invalid"),
+        reason="invalid decision",
+    )
+
+    retry = request.with_rejection(rejected)
+
+    assert request.rejected is None
+    assert retry.rejected is rejected
+    assert retry.function is request.function
+    assert retry.arguments is request.arguments
+    assert retry.messages_before is request.messages_before
+    assert retry.messages_after is request.messages_after
+    assert retry.history is request.history
+    assert {field.name for field in fields(request)} == {
+        "messages_before",
+        "function",
+        "arguments",
+        "messages_after",
+        "decision_spec",
+        "history",
+        "rejected",
+    }
+    with pytest.raises(FrozenInstanceError):
+        setattr(request, "rejected", rejected)

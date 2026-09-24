@@ -1,7 +1,7 @@
 import pytest
 
-from sefia.llm.structured_data import StructuredData
-from sefia.llm.json_schema import JsonScalar
+from sefia.llm.structured_data import StructuredData, StructuredDataTree
+from sefia.llm.json_schema import JsonScalar, JsonValue
 
 
 def test_from_json_builds_nested_structured_data() -> None:
@@ -121,3 +121,86 @@ def test_to_json_value_rejects_key_collisions(
 
     with pytest.raises(ValueError, match="same JSON key"):
         value.to_json_value()
+
+
+def test_from_tree_owns_nested_input() -> None:
+    source: StructuredDataTree = {"items": [{"value": 1}]}
+    data = StructuredData.from_tree(source)
+
+    assert isinstance(source, dict)
+    items = source["items"]
+    assert isinstance(items, list)
+    item = items[0]
+    assert isinstance(item, dict)
+    item["value"] = 2
+
+    assert data.tree == {"items": [{"value": 1}]}
+
+
+def test_from_json_owns_nested_input() -> None:
+    source: JsonValue = {"items": [{"value": 1}]}
+    data = StructuredData.from_json(source)
+
+    assert isinstance(source, dict)
+    items = source["items"]
+    assert isinstance(items, list)
+    item = items[0]
+    assert isinstance(item, dict)
+    item["value"] = 2
+
+    assert data.tree == {"items": [{"value": 1}]}
+
+
+def test_tree_returns_a_detached_nested_projection() -> None:
+    data = StructuredData.from_json({"items": [{"value": 1}]})
+
+    tree = data.tree
+    assert isinstance(tree, dict)
+    items = tree["items"]
+    assert isinstance(items, list)
+    item = items[0]
+    assert isinstance(item, dict)
+    item["value"] = 2
+    items.append(None)
+
+    assert data.tree == {"items": [{"value": 1}]}
+
+
+def test_from_array_does_not_retain_mutable_aliases() -> None:
+    child = StructuredData.from_json({"items": [1]})
+    data = StructuredData.from_array([child])
+    child_tree = child.tree
+    assert isinstance(child_tree, dict)
+    items = child_tree["items"]
+    assert isinstance(items, list)
+    items.append(2)
+
+    assert data.tree == [{"items": [1]}]
+
+
+def test_from_object_does_not_retain_mapping_or_value_aliases() -> None:
+    child = StructuredData.from_json({"items": [1]})
+    fields = {"child": child}
+    data = StructuredData.from_object(fields)
+    fields["child"] = StructuredData.from_scalar("changed")
+    child_tree = child.tree
+    assert isinstance(child_tree, dict)
+    items = child_tree["items"]
+    assert isinstance(items, list)
+    items.append(2)
+
+    assert data.tree == {"child": {"items": [1]}}
+
+
+def test_from_mapping_does_not_retain_mapping_or_value_aliases() -> None:
+    child = StructuredData.from_json({"items": [1]})
+    entries: dict[JsonScalar, StructuredData] = {1: child}
+    data = StructuredData.from_mapping(entries)
+    entries[1] = StructuredData.from_scalar("changed")
+    child_tree = child.tree
+    assert isinstance(child_tree, dict)
+    items = child_tree["items"]
+    assert isinstance(items, list)
+    items.append(2)
+
+    assert data.tree == {1: {"items": [1]}}

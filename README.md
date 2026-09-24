@@ -109,8 +109,9 @@ Sefia exposes three independent Python/LLM integration seams.
 `ToolFunctionInspector` interprets Python callables for tool schemas and binding,
 `ResultFormatFactory` creates validation and restoration contracts for inference
 results, and `StructuredDataConverter` projects runtime Python values into
-provider-neutral `StructuredData`. `Session` and `SessionScope` configure them
-independently and provide separate Pydantic-backed defaults.
+provider-neutral `StructuredData`. Configure custom inspection on a
+`DefaultToolCollector`; `Session` and `SessionScope` configure the two strategy
+capabilities independently. Each seam has a separate Pydantic-backed default.
 
 ## Quickstart
 

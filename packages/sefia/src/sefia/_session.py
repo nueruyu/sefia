@@ -8,7 +8,7 @@ from ._context import ProfileBinding, SessionContext, context_var
 from ._interfaces import Policy
 from ._interfaces.history_storage import HistoryStorage
 from ._profiles import Profile
-from ._tool_system import ToolCollector, ToolFunctionInspector
+from ._tool_system import ToolCollector
 from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
 from .llm._message_composer import MessageComposer
@@ -21,7 +21,6 @@ from .llm.transports import DecisionTransport, StructuredDecisionTransport
 from .pydantic import (
     PydanticResultFormatFactory,
     PydanticStructuredDataConverter,
-    PydanticToolFunctionInspector,
 )
 from .tool_collectors import DefaultToolCollector
 
@@ -32,8 +31,8 @@ class Session:
     Manages the lifecycle of an inference execution.
     Wraps a glyff.Session and sets up the sefia SessionContext.
 
-    Tool inspection configures only the default tool collector. Result-format
-    creation and structured-data conversion are independent strategy dependencies.
+    Result-format creation and structured-data conversion are independent strategy
+    dependencies. Custom tool inspection is configured on ``DefaultToolCollector``.
     """
 
     def __init__(
@@ -43,7 +42,6 @@ class Session:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
-        tool_function_inspector: ToolFunctionInspector | None = None,
         result_format_factory: ResultFormatFactory | None = None,
         structured_data_converter: StructuredDataConverter | None = None,
         stream: bool = False,
@@ -60,9 +58,7 @@ class Session:
         self._history_storage = history_storage or GlyffHistoryStorage()
 
         if tool_collector is None:
-            if tool_function_inspector is None:
-                tool_function_inspector = PydanticToolFunctionInspector()
-            tool_collector = DefaultToolCollector(inspector=tool_function_inspector)
+            tool_collector = DefaultToolCollector()
         if result_format_factory is None:
             result_format_factory = PydanticResultFormatFactory()
         if structured_data_converter is None:

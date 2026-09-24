@@ -1,7 +1,6 @@
 import json
-from copy import deepcopy
 
-from ..._messages import Message, ToolCall
+from ..._messages import Message
 from ...step_decision import DecisionSpec, StepDecisionMode, StepTool
 from .._base import DecisionHistoryItem, DecisionToolCalls
 
@@ -33,14 +32,7 @@ def native_history_messages(
             messages.append(
                 Message(
                     role="assistant",
-                    tool_calls=[
-                        ToolCall(
-                            id=call.id,
-                            name=call.name,
-                            arguments=deepcopy(call.arguments),
-                        )
-                        for call in item.calls
-                    ],
+                    tool_calls=item.calls,
                 )
             )
         else:

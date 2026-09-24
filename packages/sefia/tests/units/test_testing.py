@@ -23,8 +23,8 @@ def test_llm_client_cases_have_independent_default_messages() -> None:
     first = LLMClientCase(MockLLMClient([]), LLMCompletion())
     second = LLMClientCase(MockLLMClient([]), LLMCompletion())
 
-    first.messages[0].content = "changed"
-
+    assert first.messages is not second.messages
+    assert first.messages[0] == Message(role="user", content="Hello")
     assert second.messages[0].content == "Hello"
 
 
@@ -75,9 +75,9 @@ def test_test_data_factories_preserve_explicit_values() -> None:
         history=history,
     )
 
-    assert request.inference_prompt.function is function
+    assert request.function is function
     assert request.history == history
-    assert request.inference_prompt.function.bound_arguments == {"question": "Why?"}
+    assert request.function.bound_arguments == {"question": "Why?"}
     assert call.name == "lookup"
 
 

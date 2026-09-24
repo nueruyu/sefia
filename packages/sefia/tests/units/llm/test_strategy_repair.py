@@ -147,9 +147,33 @@ async def test_repair_preserves_executor_history(
     ]
     assert history == snapshot
     assert first.history is retry.history
-    assert first.inference_prompt is retry.inference_prompt
+    assert first.function is retry.function
+    assert first.arguments is retry.arguments
     assert first.rejected is None
     assert retry.rejected is not None
+
+
+async def test_generic_inference_failure_is_not_converted_to_repair_feedback(
+    transport: AsyncMock, make_strategy: Callable[..., LLMInferenceStrategy]
+) -> None:
+    error = InvalidInferenceResponseError("recover on a new inference attempt")
+    transport.request_decision.side_effect = error
+    publisher = AsyncMock(spec=EventPublisher)
+
+    with pytest.raises(InvalidInferenceResponseError) as exc_info:
+        await make_strategy().decide_next_step(
+            make_function_info(return_type=str),
+            [],
+            ToolRegistry(),
+            publisher,
+        )
+
+    assert exc_info.value is error
+    transport.request_decision.assert_awaited_once()
+    assert not any(
+        isinstance(call.args[0], DecisionRepairAttempt)
+        for call in publisher.publish.await_args_list
+    )
 
 
 @pytest.mark.parametrize("budget", [0, 2])

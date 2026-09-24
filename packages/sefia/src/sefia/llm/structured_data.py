@@ -27,54 +27,30 @@ class StructuredData:
 
     It represents normalized application values supplied to an LLM and structured
     values decoded from an LLM or provider representation. Unlike JSON, logical
-    mappings may retain scalar keys.
+    mappings may retain scalar keys. Instances own their recursive tree and expose
+    only detached mutable projections.
     """
 
     _tree: StructuredDataTree
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_tree", _copy_tree(self._tree))
+
     @classmethod
     def from_json(cls, value: JsonValue) -> "StructuredData":
-        return cls._from_json_value(value)
+        return cls(_copy_json_tree(value))
 
     @classmethod
     def parse_json(cls, text: str) -> "StructuredData":
-        return cls._from_json_value(cast(object, json.loads(text)))
+        return cls(_copy_json_tree(cast(object, json.loads(text))))
 
     @classmethod
     def from_tree(cls, tree: StructuredDataTree) -> "StructuredData":
-        return cls._from_tree(tree)
-
-    @classmethod
-    def _from_json_value(cls, value: object) -> "StructuredData":
-        if isinstance(value, list):
-            items = cast(list[object], value)
-            return cls([cls._from_json_value(item).tree for item in items])
-        if isinstance(value, dict):
-            fields = cast(dict[object, object], value)
-            if not all(isinstance(key, str) for key in fields):
-                raise ValueError("JSON objects must have string keys")
-            return cls(
-                {
-                    key: cls._from_json_value(item).tree
-                    for key, item in fields.items()
-                    if isinstance(key, str)
-                }
-            )
-        if value is None or isinstance(value, str | int | float | bool):
-            return cls(value)
-        raise ValueError(f"Unsupported JSON value: {value!r}")
+        return cls(tree)
 
     @classmethod
     def _from_tree(cls, tree: object) -> "StructuredData":
-        if isinstance(tree, list):
-            items = cast(list[StructuredDataTree], tree)
-            return cls(list(items))
-        if isinstance(tree, dict):
-            fields = cast(dict[JsonScalar, StructuredDataTree], tree)
-            return cls(dict(fields))
-        if tree is None or isinstance(tree, str | int | float | bool):
-            return cls(tree)
-        raise ValueError(f"Unsupported structured data: {tree!r}")
+        return cls(cast(StructuredDataTree, tree))
 
     @classmethod
     def from_scalar(cls, value: JsonScalar) -> "StructuredData":
@@ -82,21 +58,21 @@ class StructuredData:
 
     @classmethod
     def from_array(cls, values: Iterable["StructuredData"]) -> "StructuredData":
-        return cls([value.tree for value in values])
+        return cls([value._tree for value in values])
 
     @classmethod
     def from_object(cls, fields: Mapping[str, "StructuredData"]) -> "StructuredData":
-        return cls({name: value.tree for name, value in fields.items()})
+        return cls({name: value._tree for name, value in fields.items()})
 
     @classmethod
     def from_mapping(
         cls, entries: Mapping[JsonScalar, "StructuredData"]
     ) -> "StructuredData":
-        return cls({key: value.tree for key, value in entries.items()})
+        return cls({key: value._tree for key, value in entries.items()})
 
     @property
     def tree(self) -> StructuredDataTree:
-        return self._tree
+        return _copy_tree(self._tree)
 
     def to_json_value(self) -> JsonValue:
         """Project this structured tree into JSON-compatible data."""
@@ -147,6 +123,36 @@ def _to_json_value(tree: StructuredDataTree) -> JsonValue:
             result[json_key] = _to_json_value(value)
         return result
     return tree
+
+
+def _copy_tree(tree: object) -> StructuredDataTree:
+    if isinstance(tree, list):
+        return [_copy_tree(item) for item in cast(list[object], tree)]
+    if isinstance(tree, dict):
+        return {
+            cast(JsonScalar, key): _copy_tree(value)
+            for key, value in cast(dict[object, object], tree).items()
+        }
+    if tree is None or isinstance(tree, str | int | float | bool):
+        return tree
+    raise ValueError(f"Unsupported structured data: {tree!r}")
+
+
+def _copy_json_tree(value: object) -> StructuredDataTree:
+    if isinstance(value, list):
+        return [_copy_json_tree(item) for item in cast(list[object], value)]
+    if isinstance(value, dict):
+        fields = cast(dict[object, object], value)
+        if not all(isinstance(key, str) for key in fields):
+            raise ValueError("JSON objects must have string keys")
+        return {
+            key: _copy_json_tree(item)
+            for key, item in fields.items()
+            if isinstance(key, str)
+        }
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    raise ValueError(f"Unsupported JSON value: {value!r}")
 
 
 def _to_json_key(key: JsonScalar) -> str:

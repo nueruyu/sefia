@@ -66,6 +66,7 @@ class _CompletionClient(LLMClient):
     def __init__(self, case: DecisionTransportCase) -> None:
         self.case = case
         self.calls = 0
+        self.messages: list[Message] | None = None
 
     @override
     async def complete(
@@ -78,6 +79,7 @@ class _CompletionClient(LLMClient):
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMCompletion:
         self.calls += 1
+        self.messages = messages
         if reasoning_callback is not None:
             for chunk in self.case.reasoning_chunks:
                 await reasoning_callback(chunk)
@@ -115,6 +117,11 @@ class DecisionTransportContract(ABC):
         assert decoded.completion is decision_transport_case.completion
         assert len(observer.requests) == 1
         assert len(observer.requests[0]) == 1
+        assert client.messages is not None
+        assert all(
+            observed is sent
+            for observed, sent in zip(observer.requests[0], client.messages)
+        )
         assert observer.requests[0][0].role == "user"
         content = observer.requests[0][0].content
         assert isinstance(content, str)

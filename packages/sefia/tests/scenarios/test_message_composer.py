@@ -299,22 +299,22 @@ class _FixedApplicationMessage(MessageComposer):
         )
 
 
-class _MutateObservedMessages(EventHandler[BeforeLLMCall]):
+class _ObserveMessages(EventHandler[BeforeLLMCall]):
+    def __init__(self) -> None:
+        self.messages: tuple[Message, ...] | None = None
+
     @override
     async def handle(self, event: BeforeLLMCall) -> None:
-        message = event.messages[0]
-        message.role = "user"
-        assert isinstance(message.content, list)
-        message.content[0]["text"] = "changed by handler"
-        event.messages[-1].content = "changed control"
+        self.messages = event.messages
 
 
-async def test_before_llm_call_handler_cannot_change_client_request() -> None:
+async def test_before_llm_call_handler_receives_immutable_request_values() -> None:
     application_message = Message(role="developer", content=[{"text": "original"}])
+    observer = _ObserveMessages()
     infer = Domain(glyff.Domain("tests.message-observation", version="1")).infer
 
     @infer
-    @policy(Policy(handlers=lambda: [_MutateObservedMessages()]))
+    @policy(Policy(handlers=lambda: [observer]))
     async def answer(topic: str) -> str:
         """Answer the task."""
         ...
@@ -328,6 +328,8 @@ async def test_before_llm_call_handler_cannot_change_client_request() -> None:
         assert await answer("topic") == "done"
 
     sent = client.requests[0]["messages"]
+    assert observer.messages is not None
+    assert observer.messages[0] is application_message
     assert sent[0] == {"role": "developer", "content": [{"text": "original"}]}
     assert sent[-1]["content"].startswith("## Response")
     assert application_message.content == [{"text": "original"}]

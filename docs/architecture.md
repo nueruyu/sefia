@@ -82,7 +82,7 @@ submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 | `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
 | `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
 | `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallsDecision`, `ResultDecision` |
-| `_session.py` | Composition root: wraps a `glyff.Session`, selects independent tool-inspection, result-format, and structured-data-conversion defaults, builds strategies, and installs the context. | `Session` |
+| `_session.py` | Composition root: wraps a `glyff.Session`, selects the default tool collector plus independent result-format and structured-data-conversion defaults, builds strategies, and installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |
 | `_history.py` | The run's conversation history as pure in-memory state (loading/persistence/step-count live on the executor). | `StepHistory` |
 | `history_storages/` | `HistoryStorage` implementations (default: history in the run's glyff metadata). | `GlyffHistoryStorage` |
@@ -93,7 +93,7 @@ submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `streaming.py` | The tool-arg streaming side channel (`preview`). | `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: message composition retains raw application values, the strategy materializes them and execution history into `StructuredData`, and transports own final history, repair, and response protocol assembly from the resulting semantic `DecisionRequest`. | `LLMInferenceStrategy`, `MessageComposer`, `MessageLayout`, `StructuredData`, `StructuredDataConverter`, `ResultFormatFactory`, `InferencePrompt`, `LLMClient`, `DecisionTransport`, `PromptRenderer` |
+| `llm/` | The **default** `InferenceStrategy`: message composition retains raw application values, the strategy materializes them and execution history into immutable LLM values, and transports create `InferencePrompt` plus final history, repair, and response protocol framing from the semantic `DecisionRequest`. | `LLMInferenceStrategy`, `MessageComposer`, `MessageLayout`, `Message`, `ToolCall`, `StructuredData`, `StructuredDataConverter`, `ResultFormatFactory`, `InferencePrompt`, `LLMClient`, `DecisionTransport`, `PromptRenderer` |
 | `llm/transports/` | Transport contract and structured, prompted, and native protocols. The private `_native/` package separates native orchestration, prompt/history conversion, result-tool construction, and decoding. | `DecisionTransport`, `StructuredDecisionTransport`, `PromptedDecisionTransport`, `NativeDecisionTransport` |
 | `pydantic/` | Independent Pydantic-backed implementations for tool callable inspection, result schema generation/restoration, and Python-value conversion to `StructuredData`. | `PydanticToolFunctionInspector`, `PydanticResultFormatFactory`, `PydanticStructuredDataConverter` |
 | `testing/` | Public test doubles, stable test-data factories, and reusable conformance contracts for applications and extension implementations. | `MockLLMClient`, `MemoryHistoryStorage`, `make_decision_request`, `make_step_context`, `make_decision_context`, `LLMClientContract`, `HistoryStorageContract`, `DecisionTransportContract`, `ToolCollectorContract` |
@@ -177,7 +177,7 @@ implementation noted in parentheses.
 | Change how CLI or HTTP apps are wired to sessions, tools, and cost | the facades in `sefios/cli/` / `sefios/fastapi/` |
 | Change which methods are tools (the `Tools[...]` grant rule) | `tool_collectors/_default.py`, role alias in `_tool_system/roles.py`, scanners in `_introspection.py` |
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
-| Change Python callable inspection or binding | implement `ToolFunctionInspector`; reference `pydantic/_tool_function_inspector.py` |
+| Change Python callable inspection or binding | implement `ToolFunctionInspector` and pass it to `DefaultToolCollector`; reference `pydantic/_tool_function_inspector.py` |
 | Support another result type system | implement `ResultFormatFactory`; reference `pydantic/_result_format.py` |
 | Convert another family of runtime values | implement `StructuredDataConverter`; reference `pydantic/_structured_data.py` |
 | Register a tool from a raw JSON Schema (no signature) | `JsonSchemaToolEntry` / `ToolRegistry.add_json_tool` in `_tool_system/` |

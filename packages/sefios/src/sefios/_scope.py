@@ -16,7 +16,6 @@ from sefia import (
     Policy,
     Profile,
     ToolCollector,
-    ToolFunctionInspector,
 )
 from sefia.llm import (
     LLMClient,
@@ -50,11 +49,10 @@ class SessionScope:
     ``tool_collector`` customizes tool discovery for a run. A collector passed to
     :meth:`session` overrides the instance default; passing ``None`` there inherits
     the instance default rather than resetting it. When neither is set,
-    :class:`~sefia.Session` builds its own :class:`DefaultToolCollector` using the
-    configured ``tool_function_inspector``. A custom collector does not use that
-    inspector. Result formats and structured-data conversion are configured
-    independently through ``result_format_factory`` and
-    ``structured_data_converter``.
+    :class:`~sefia.Session` builds its own :class:`DefaultToolCollector`. Custom
+    inspection is configured directly on that collector. Result formats and
+    structured-data conversion are configured independently through
+    ``result_format_factory`` and ``structured_data_converter``.
     """
 
     def __init__(
@@ -70,7 +68,6 @@ class SessionScope:
         persistence: PersistenceProvider | None = None,
         history_storage: HistoryStorage | None = None,
         tool_collector: ToolCollector | None = None,
-        tool_function_inspector: ToolFunctionInspector | None = None,
         result_format_factory: ResultFormatFactory | None = None,
         structured_data_converter: StructuredDataConverter | None = None,
         prompt_renderer: PromptRenderer | None = None,
@@ -87,7 +84,6 @@ class SessionScope:
         self.persistence = persistence or MemoryPersistence()
         self.history_storage = history_storage
         self.tool_collector = tool_collector
-        self.tool_function_inspector = tool_function_inspector
         self.result_format_factory = result_format_factory
         self.structured_data_converter = structured_data_converter
         self.prompt_renderer = prompt_renderer
@@ -104,7 +100,6 @@ class SessionScope:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
-        tool_function_inspector: ToolFunctionInspector | None = None,
         result_format_factory: ResultFormatFactory | None = None,
         structured_data_converter: StructuredDataConverter | None = None,
         prompt_renderer: PromptRenderer | None = None,
@@ -117,11 +112,6 @@ class SessionScope:
         resolved_stream = self.stream if stream is None else stream
         resolved_tool_collector = (
             self.tool_collector if tool_collector is None else tool_collector
-        )
-        resolved_tool_function_inspector = (
-            self.tool_function_inspector
-            if tool_function_inspector is None
-            else tool_function_inspector
         )
         resolved_result_format_factory = (
             self.result_format_factory
@@ -193,7 +183,6 @@ class SessionScope:
                     profiles=final_profiles,
                     stream=resolved_stream,
                     tool_collector=resolved_tool_collector,
-                    tool_function_inspector=resolved_tool_function_inspector,
                     result_format_factory=resolved_result_format_factory,
                     structured_data_converter=resolved_structured_data_converter,
                     history_storage=self.history_storage,

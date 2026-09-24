@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 from typing_extensions import final, override
 
 from .._client import LLMClient
@@ -45,7 +43,7 @@ class PromptedDecisionTransport(DecisionTransport):
                 for event in stream_decoder.feed(json_text):
                     await observer.output(event)
 
-        await observer.before_request(tuple(deepcopy(messages)))
+        await observer.before_request(tuple(messages))
         completion = await client.complete(
             messages=messages,
             tools=None,

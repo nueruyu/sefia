@@ -23,13 +23,15 @@ def test_native_history_messages() -> None:
     messages = native_history_messages((DecisionToolCalls((call,)), result))
 
     assert [message.role for message in messages] == ["assistant", "tool"]
-    assert messages[0].tool_calls == [
+    assert messages[0].tool_calls == (
         ToolCall(
             id=call.id,
             name=call.name,
             arguments=StructuredData.from_json({"key": "first"}),
-        )
-    ]
+        ),
+    )
+    assert messages[0].tool_calls is not None
+    assert messages[0].tool_calls[0] is call
     assert messages[1].tool_call_id == call.id
     assert messages[1].content == '{"value":"found"}'
 

@@ -139,12 +139,12 @@ and any textual tool definitions. `MessageLayout` retains raw application values
 `StructuredData`, then creates a provider-neutral `DecisionRequest`. Its configured
 `ResultFormatFactory` independently defines result validation and restoration. Default
 tool collection uses a separate `ToolFunctionInspector` for callable schemas and
-binding. `Session` selects each capability independently. Transports place the
+binding; custom inspection is supplied through `DefaultToolCollector`. Transports place the
 inference prompt between the application messages, then append Sefia execution
 history, repair feedback, and response instructions. Renderers and transports project
 structured trees to JSON text only where their presentation requires it.
-Observation events receive a separate message snapshot so handlers cannot change the
-LLM request.
+`StructuredData`, `ToolCall`, and `Message` are immutable provider-neutral values, so
+the layout, decision request, observer event, and client request can safely share them.
 
 ## Durability & resumable HITL
 
