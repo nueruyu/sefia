@@ -10,7 +10,7 @@ from .structured_data import StructuredData
 
 @dataclass(frozen=True, init=False)
 class Message:
-    """An immutable provider-neutral message sent to an LLM."""
+    """A provider-neutral message sent to an LLM."""
 
     role: Literal["system", "developer", "user", "assistant", "tool"]
     _content: str | list[Any] | None = field(repr=False)
@@ -40,7 +40,7 @@ class Message:
 
 @dataclass(frozen=True)
 class ToolCall:
-    """An immutable provider-neutral tool call requested by the LLM."""
+    """A provider-neutral tool call requested by the LLM."""
 
     id: str
     name: str

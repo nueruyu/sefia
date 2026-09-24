@@ -27,8 +27,7 @@ class StructuredData:
 
     It represents normalized application values supplied to an LLM and structured
     values decoded from an LLM or provider representation. Unlike JSON, logical
-    mappings may retain scalar keys. Instances own their recursive tree and expose
-    only detached mutable projections.
+    mappings may retain scalar keys.
     """
 
     _tree: StructuredDataTree

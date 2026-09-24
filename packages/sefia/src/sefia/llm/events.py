@@ -10,7 +10,7 @@ from .step_decision import DecisionSpec
 
 @dataclass(frozen=True)
 class BeforeLLMCall(Event):
-    """Exposes the immutable messages immediately before a call to the LLM."""
+    """Exposes the messages immediately before a call to the LLM."""
 
     messages: tuple[Message, ...]
     decision_spec: DecisionSpec
