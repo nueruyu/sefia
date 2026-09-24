@@ -98,9 +98,8 @@ transport.request_decision(request, prompt_renderer, ...)
    `ResultFormatFactory`. Independently, the strategy calls
    `StructuredDataConverter.to_structured_data()` for retained arguments, tool-call
    arguments, and tool results.
-3. The frozen `DecisionRequest` carries the function, materialized arguments,
-   immutable application messages, semantic history, decision contract, and any
-   rejection facts. `DecisionSpec.tools` is the single authoritative tool set.
+3. The `DecisionRequest` carries the function, materialized arguments, application
+   messages, semantic history, decision contract, and rejection facts.
 4. The transport constructs `InferencePrompt` with the tools appropriate to its
    protocol, and `PromptRenderer` renders it in the configured presentation format.
    `DecisionTransport` places that prompt between application messages and owns
@@ -144,8 +143,7 @@ inspection is configured through `DefaultToolCollector(inspector=...)`. Sefia su
 separate Pydantic-backed defaults from
 `pydantic/_tool_function_inspector.py`, `_result_format.py`, and
 `_structured_data.py`. `StructuredData` is Sefia's single provider-neutral structured
-tree for both values supplied to an LLM and values decoded from one. It recursively
-owns constructor inputs and returns detached tree projections. Its explicit JSON
+tree for both values supplied to an LLM and values decoded from one. Its explicit JSON
 projection converts scalar mapping keys and detects collisions. None of these three
 capabilities knows JSON text, Markdown, provider wire payloads, or message ordering.
 
@@ -163,9 +161,7 @@ framing builds the complete final message sequence:
 application messages before the prompt, the prompt, application messages after it,
 execution history, repair feedback, and response instructions.
 They combine inference and response text into one message
-for the default first step. `Message`, `ToolCall`, and `StructuredData` are immutable,
-so those LLM-boundary values can be shared among application layouts, decision
-requests, event handlers, and clients without defensive copying.
+for the default first step.
 `StructuredDecisionTransport` requests structured output;
 `PromptedDecisionTransport` asks for the same JSON decision in ordinary response
 text; `sefia.llm.transports.NativeDecisionTransport` exposes application tools and a

@@ -64,8 +64,6 @@ keeps ordinary Python values. After composition, `LLMInferenceStrategy` calls
 `StructuredDataConverter.to_structured_data()` to materialize the remaining values
 before it constructs the transport-facing `DecisionRequest`. JSON is only a later
 projection where the selected transport needs textual representation.
-`Message`, `ToolCall`, and `StructuredData` are immutable LLM-boundary values, so a
-composer can safely reuse messages from the incoming layout without copying them.
 `PromptRenderer` renders only this inference prompt from function instructions,
 remaining arguments, and any textual tool definitions. The transport appends Sefia's
 execution history, repair feedback, and response instructions in that order. A
@@ -73,10 +71,8 @@ composer cannot move those protocol messages.
 
 For example, an application can define its own `Annotated` metadata for a
 conversation argument and interpret it inside its own `MessageComposer`. This is
-an application convention, not a Sefia annotation scheme. Sefia appends its tool
-execution history after the application layout, then repair feedback when needed,
-then response instructions. With the default layout and no history, inference and
-response instructions remain in one user message.
+an application convention, not a Sefia annotation scheme. With the default layout
+and no history, inference and response instructions remain in one user message.
 
 Import `Message`, `MessageComposer`, and `MessageLayout` from `sefia.llm`.
 Composers are applied in configured order on each strategy call. They should be

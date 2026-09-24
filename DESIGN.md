@@ -143,8 +143,6 @@ binding; custom inspection is supplied through `DefaultToolCollector`. Transport
 inference prompt between the application messages, then append Sefia execution
 history, repair feedback, and response instructions. Renderers and transports project
 structured trees to JSON text only where their presentation requires it.
-`StructuredData`, `ToolCall`, and `Message` are immutable provider-neutral values, so
-the layout, decision request, observer event, and client request can safely share them.
 
 ## Durability & resumable HITL
 
