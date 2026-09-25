@@ -5,6 +5,7 @@ from sefia import DecisionContext
 from sefia.inference import ToolCallResult
 from sefia.llm import LLMCompletion, Message, ToolCall
 from sefia.llm.step_decision import DecisionSpec
+from sefia.llm.streaming import OutputStreamEvent
 from sefia.llm.streaming import StringDelta as OutputStringDelta
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import DecisionToolResult
@@ -98,7 +99,7 @@ async def test_mock_llm_client_emits_scripted_callbacks() -> None:
     )
     content_chunks: list[str] = []
     reasoning_chunks: list[str] = []
-    output_events: list[object] = []
+    output_events: list[OutputStreamEvent] = []
 
     async def on_content(text: str) -> None:
         content_chunks.append(text)
@@ -106,14 +107,14 @@ async def test_mock_llm_client_emits_scripted_callbacks() -> None:
     async def on_reasoning(text: str) -> None:
         reasoning_chunks.append(text)
 
-    async def on_output(event: object) -> None:
+    async def on_output(event: OutputStreamEvent) -> None:
         output_events.append(event)
 
     returned = await client.complete(
         [Message(role="user", content="hello")],
         stream_callback=on_content,
         reasoning_callback=on_reasoning,
-        output_callback=on_output,  # type: ignore[arg-type]
+        output_callback=on_output,
     )
 
     assert returned is completion
