@@ -138,9 +138,7 @@ def candidate_version() -> str:
     minimums = [_version_tuple(minimum) for minimum, _ in all_bounds]
     highest = max(minimums)
     same_line_patches = [
-        patch
-        for major, minor, patch in minimums
-        if (major, minor) == highest[:2]
+        patch for major, minor, patch in minimums if (major, minor) == highest[:2]
     ]
     candidate = (highest[0], highest[1], max(same_line_patches) + 1000)
 
@@ -192,9 +190,7 @@ def matrix(distributions: list[str]) -> dict[str, list[dict[str, str]]]:
 
 def minimum_matrix(distributions: list[str]) -> dict[str, list[dict[str, str]]]:
     minimum_distributions = [
-        distribution
-        for distribution in distributions
-        if _internal_bounds(distribution)
+        distribution for distribution in distributions if _internal_bounds(distribution)
     ]
     return matrix(minimum_distributions)
 
@@ -296,9 +292,7 @@ def write_candidate_constraints(
     output: Path,
 ) -> None:
     wheels = verify_artifacts(artifact_dir, version)
-    lines = [
-        f"{name} @ {wheels[name].resolve().as_uri()}" for name in PACKAGE_ORDER
-    ]
+    lines = [f"{name} @ {wheels[name].resolve().as_uri()}" for name in PACKAGE_ORDER]
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
