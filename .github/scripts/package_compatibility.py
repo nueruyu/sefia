@@ -390,13 +390,15 @@ def verify_minimum_installed(
     for line in constraints.read_text(encoding="utf-8").splitlines():
         if not line:
             continue
-        name, version = line.split("==", 1)
-        expected[name] = version
+        name, minimum_version = line.split("==", 1)
+        expected[name] = minimum_version
 
-    for name, version in expected.items():
+    for name, minimum_version in expected.items():
         actual = metadata.version(name)
-        if actual != version:
-            raise ValueError(f"Installed {name} is {actual}, expected {version}.")
+        if actual != minimum_version:
+            raise ValueError(
+                f"Installed {name} is {actual}, expected {minimum_version}."
+            )
 
     wheels = verify_artifacts(artifact_dir, version)
     target = metadata.distribution(distribution)
