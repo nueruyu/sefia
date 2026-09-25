@@ -101,11 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
-      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEFIA: ${{ needs.prepare.outputs.version }}
-      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEFIA_LITELLM: ${{ needs.prepare.outputs.version }}
-      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEFIA_TYPER: ${{ needs.prepare.outputs.version }}
-      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEFIA_FASTAPI: ${{ needs.prepare.outputs.version }}
-      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEFIOS: ${{ needs.prepare.outputs.version }}
+      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.prepare.outputs.version }}
 
     steps:
       - name: Checkout repository
