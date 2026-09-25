@@ -97,7 +97,7 @@ def test_request_sends_correct_request_to_litellm():
     assert call_args["temperature"] == 0.5
 
 
-def test_request_encodes_native_tool_call_history_for_wire_schema() -> None:
+def test_request_encodes_native_tool_call_history_for_provider_schema() -> None:
     tool = StepTool(
         name="categorize",
         description="",

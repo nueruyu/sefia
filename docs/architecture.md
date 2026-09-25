@@ -107,7 +107,7 @@ implementation noted in parentheses.
 | Interface | Swap to… | Default |
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
-| `PromptRenderer` | render the standard inference prompt from function instructions, normalized structured arguments, and textual tool definitions | `llm/MarkdownPromptRenderer` |
+| `PromptRenderer` | render the standard inference prompt from function instructions, materialized JSON-compatible arguments, and textual tool definitions | `llm/MarkdownPromptRenderer` |
 | `DecisionTransport` | change how a decision request is prompted, sent, and decoded; raise `sefia.llm.exceptions.DecisionDecodingError` when a completion cannot be decoded as a decision | `llm/transports/` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider; raise `sefia.llm.exceptions.LLMCompletionDecodingError` for received responses that cannot be represented safely | `sefia_litellm.LiteLLMClient` |
 | `ToolFunctionInspector` | interpret Python callables for tool names, schemas, and argument binding | `pydantic/PydanticToolFunctionInspector` |

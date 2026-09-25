@@ -39,7 +39,7 @@ class ProviderJsonFormat:
         cls, document: JsonSchemaDocument, policy: SchemaPolicy
     ) -> "ProviderJsonFormat":
         prepared = prepare_schema(document.mutable_copy(), policy)
-        return cls(prepared.wire_schema, prepared.dictionary_format)
+        return cls(prepared.schema, prepared.dictionary_format)
 
     def decode(self, data: JsonSnapshot) -> JsonSnapshot:
         if self.dictionary_format is None:

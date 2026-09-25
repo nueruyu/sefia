@@ -82,7 +82,7 @@ USER_DEFINED_SCHEMA_POLICY = SchemaPolicy(
 @final
 @dataclass(frozen=True)
 class PreparedSchema:
-    wire_schema: SchemaObject
+    schema: SchemaObject
     dictionary_format: UniformDictionaryFormat | None
 
 

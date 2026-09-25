@@ -19,9 +19,7 @@ def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
         "additionalProperties": False,
     }
 
-    schema = prepare_schema(
-        deepcopy(raw_schema), USER_DEFINED_SCHEMA_POLICY
-    ).wire_schema
+    schema = prepare_schema(deepcopy(raw_schema), USER_DEFINED_SCHEMA_POLICY).schema
 
     assert schema == raw_schema
 
@@ -120,9 +118,7 @@ def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
         "additionalProperties": False,
     }
 
-    schema = prepare_schema(
-        deepcopy(raw_schema), USER_DEFINED_SCHEMA_POLICY
-    ).wire_schema
+    schema = prepare_schema(deepcopy(raw_schema), USER_DEFINED_SCHEMA_POLICY).schema
 
     assert schema == raw_schema
 
@@ -139,7 +135,7 @@ def test_generated_schema_is_corrected_recursively() -> None:
         },
     }
     prepared = prepare_schema(schema, GENERATED_SCHEMA_POLICY)
-    assert prepared.wire_schema == {
+    assert prepared.schema == {
         "type": "object",
         "properties": {"value": {"anyOf": [{"type": "string"}, {"type": "integer"}]}},
         "required": ["value"],
@@ -183,4 +179,4 @@ def test_raw_tool_schema_closes_objects(location: str) -> None:
 
     prepared = prepare_schema(deepcopy(wrappers[location]), USER_DEFINED_SCHEMA_POLICY)
 
-    assert prepared.wire_schema == expected[location]
+    assert prepared.schema == expected[location]
