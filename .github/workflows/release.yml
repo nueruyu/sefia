@@ -1,0 +1,312 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: PEP 440 version without the v tag prefix
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/scripts/release_artifacts.py
+      - packages/*/pyproject.toml
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Resolve candidate version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve candidate version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+              echo "Releases must be dispatched from main, got $GITHUB_REF." >&2
+              exit 1
+            fi
+
+            version="$INPUT_VERSION"
+            python -m pip install --quiet "packaging>=24"
+            RELEASE_VERSION="$version" python - <<'PY'
+          import os
+          from packaging.version import InvalidVersion, Version
+
+          raw = os.environ["RELEASE_VERSION"]
+          try:
+              parsed = Version(raw)
+          except InvalidVersion as error:
+              raise SystemExit(f"Invalid PEP 440 version: {raw!r}") from error
+          if str(parsed) != raw:
+              raise SystemExit(
+                  f"Version must be canonical PEP 440 without a v prefix: {raw!r} -> {parsed}"
+              )
+          if parsed.local is not None:
+              raise SystemExit("PyPI release versions must not contain a local version label.")
+          PY
+
+            if git show-ref --verify --quiet "refs/tags/v${version}"; then
+              echo "Tag v${version} already exists." >&2
+              exit 1
+            fi
+          else
+            version="$(python - <<'PY'
+          import re
+          import tomllib
+          from pathlib import Path
+
+          data = tomllib.loads(
+              Path("packages/sefia_litellm/pyproject.toml").read_text(encoding="utf-8")
+          )
+          dependencies = data["project"]["dependencies"]
+          sefia_dependency = next(
+              dependency for dependency in dependencies if dependency.startswith("sefia>=")
+          )
+          match = re.fullmatch(r"sefia>=([^,]+),<(.+)", sefia_dependency)
+          if match is None:
+              raise SystemExit(f"Unexpected sefia dependency: {sefia_dependency}")
+          print(match.group(1))
+          PY
+          )"
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Candidate version: ${version}"
+
+  build:
+    name: Build release artifacts
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEFIA: ${{ needs.prepare.outputs.version }}
+      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEFIA_LITELLM: ${{ needs.prepare.outputs.version }}
+      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEFIA_TYPER: ${{ needs.prepare.outputs.version }}
+      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEFIA_FASTAPI: ${{ needs.prepare.outputs.version }}
+      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SEFIOS: ${{ needs.prepare.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build frontend
+        run: python -m pip install --upgrade build
+
+      - name: Build all distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-dist
+          for package in sefia sefia_litellm sefia_typer sefia_fastapi sefios; do
+            python -m build --sdist --outdir "$GITHUB_WORKSPACE/release-dist" "packages/${package}"
+            python -m build --wheel --outdir "$GITHUB_WORKSPACE/release-dist" "packages/${package}"
+          done
+
+      - name: Verify artifact names and versions
+        run: >
+          python .github/scripts/release_artifacts.py verify
+          --artifact-dir release-dist
+          --version "$RELEASE_VERSION"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-distributions
+          path: release-dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  validate:
+    name: Validate ${{ matrix.distribution }}
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distribution: sefia
+            requirement: sefia[testing]
+            module: sefia
+            tests: packages/sefia/tests
+          - distribution: sefia-litellm
+            requirement: sefia-litellm
+            module: sefia_litellm
+            tests: packages/sefia_litellm/tests
+          - distribution: sefia-typer
+            requirement: sefia-typer
+            module: sefia_typer
+            tests: packages/sefia_typer/tests
+          - distribution: sefia-fastapi
+            requirement: sefia-fastapi
+            module: sefia_fastapi
+            tests: packages/sefia_fastapi/tests
+          - distribution: sefios
+            requirement: sefios[all]
+            module: sefios
+            tests: packages/sefios/tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download candidate distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: release-distributions
+          path: release-dist
+
+      - name: Create isolated environment
+        run: python -m venv .release-venv
+
+      - name: Install candidate package
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          REQUIREMENT: ${{ matrix.requirement }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python_bin="$GITHUB_WORKSPACE/.release-venv/bin/python"
+          "$python_bin" -m pip install --upgrade pip
+          "$python_bin" .github/scripts/release_artifacts.py constraints \
+            --artifact-dir release-dist \
+            --version "$RELEASE_VERSION" \
+            --output candidate-constraints.txt
+          "$python_bin" -m pip install \
+            --constraint candidate-constraints.txt \
+            "${REQUIREMENT}==${RELEASE_VERSION}" \
+            "pytest>=8.0" \
+            "pytest-asyncio>=0.23" \
+            "pytest-mock>=3.12.0"
+
+      - name: Verify internal packages came from candidate wheels
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: >
+          .release-venv/bin/python .github/scripts/release_artifacts.py verify-installed
+          --artifact-dir release-dist
+          --version "$RELEASE_VERSION"
+          --distribution "${{ matrix.distribution }}"
+
+      - name: Verify target import resolves from the isolated environment
+        env:
+          MODULE_NAME: ${{ matrix.module }}
+        run: |
+          .release-venv/bin/python - <<'PY'
+          import importlib
+          import os
+          import site
+          from pathlib import Path
+
+          module = importlib.import_module(os.environ["MODULE_NAME"])
+          module_path = Path(module.__file__).resolve()
+          site_roots = [Path(path).resolve() for path in site.getsitepackages()]
+          if not any(module_path.is_relative_to(root) for root in site_roots):
+              raise SystemExit(
+                  f"{os.environ['MODULE_NAME']} resolved outside site-packages: {module_path}"
+              )
+          print(module_path)
+          PY
+
+      - name: Check installed dependency graph
+        run: .release-venv/bin/python -m pip check
+
+      - name: Run package tests against installed artifacts
+        env:
+          PYTHONNOUSERSITE: "1"
+          PYTHONPATH: ""
+        run: >
+          .release-venv/bin/python -m pytest
+          "${{ matrix.tests }}"
+          --import-mode=importlib
+          --asyncio-mode=auto
+          -m "not e2e"
+
+  publish:
+    name: Publish validated distributions to PyPI
+    if: github.event_name == 'workflow_dispatch'
+    needs:
+      - prepare
+      - build
+      - validate
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download validated distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: release-distributions
+          path: release-dist
+
+      - name: Publish all distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: release-dist/
+
+  release:
+    name: Create tag and GitHub release
+    if: github.event_name == 'workflow_dispatch'
+    needs:
+      - prepare
+      - publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download published distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: release-distributions
+          path: release-dist
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: >
+          gh release create "v${RELEASE_VERSION}" release-dist/*
+          --repo "$GITHUB_REPOSITORY"
+          --target "$GITHUB_SHA"
+          --title "v${RELEASE_VERSION}"
+          --generate-notes
