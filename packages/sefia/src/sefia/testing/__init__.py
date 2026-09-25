@@ -115,6 +115,7 @@ class ScriptedCompletion:
         object.__setattr__(self, "reasoning_chunks", tuple(self.reasoning_chunks))
         object.__setattr__(self, "output_events", tuple(self.output_events))
 
+
 @final
 class MockLLMClient(LLMClient):
     """An ``LLMClient`` that replays scripted ``completions`` and records every
