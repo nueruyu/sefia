@@ -21,8 +21,9 @@ conformance contracts in their own pytest suites.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
-from dataclasses import fields, is_dataclass, replace
+from dataclasses import dataclass, fields, is_dataclass, replace
 from typing import Any, AsyncGenerator, Callable, Coroutine, cast
 
 import glyff
@@ -96,13 +97,35 @@ def _snapshot_value(value: Any) -> Any:
 
 
 @final
+@dataclass(frozen=True)
+class ScriptedCompletion:
+    """A final completion plus deterministic callback values for ``MockLLMClient``.
+
+    Callback sequences are emitted only when the corresponding callback is supplied.
+    The final ``completion`` remains the authoritative response returned by the client.
+    """
+
+    completion: LLMCompletion
+    content_chunks: Sequence[str] = ()
+    reasoning_chunks: Sequence[str] = ()
+    output_events: Sequence[OutputStreamEvent] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "content_chunks", tuple(self.content_chunks))
+        object.__setattr__(self, "reasoning_chunks", tuple(self.reasoning_chunks))
+        object.__setattr__(self, "output_events", tuple(self.output_events))
+
+
+@final
 class MockLLMClient(LLMClient):
     """An ``LLMClient`` that replays scripted ``completions`` and records every
     request it receives in ``requests`` (messages as plain dicts, plus the
     tools, output schema, and callbacks)."""
 
-    def __init__(self, completions: list[LLMCompletion]):
-        self.completions = list(completions)
+    def __init__(
+        self, completions: Sequence[LLMCompletion | ScriptedCompletion]
+    ) -> None:
+        self.completions: list[LLMCompletion | ScriptedCompletion] = list(completions)
         self.requests: list[dict[str, Any]] = []
 
     @override
@@ -129,7 +152,21 @@ class MockLLMClient(LLMClient):
         )
         if not self.completions:
             raise AssertionError("MockLLMClient has no more completions.")
-        completion = self.completions.pop(0)
+        scripted = self.completions.pop(0)
+        if isinstance(scripted, ScriptedCompletion):
+            completion = scripted.completion
+            if reasoning_callback is not None:
+                for chunk in scripted.reasoning_chunks:
+                    await reasoning_callback(chunk)
+            if stream_callback is not None:
+                for chunk in scripted.content_chunks:
+                    await stream_callback(chunk)
+            if output_callback is not None:
+                for event in scripted.output_events:
+                    await output_callback(event)
+        else:
+            completion = scripted
+
         if (
             decision_spec is not None
             and completion.structured_output is None
@@ -259,6 +296,7 @@ __all__ = [
     "MemoryHistoryStorage",
     "MockLLMClient",
     "RecordingDecisionObserver",
+    "ScriptedCompletion",
     "StreamingLLMClientCase",
     "StreamingLLMClientContract",
     "ToolCollectorCase",

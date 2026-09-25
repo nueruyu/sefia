@@ -5,12 +5,15 @@ from sefia import DecisionContext
 from sefia.inference import ToolCallResult
 from sefia.llm import LLMCompletion, Message, ToolCall
 from sefia.llm.step_decision import DecisionSpec
+from sefia.llm.streaming import OutputStreamEvent
+from sefia.llm.streaming import StringDelta as OutputStringDelta
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import DecisionToolResult
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import (
     LLMClientCase,
     MockLLMClient,
+    ScriptedCompletion,
     make_decision_context,
     make_decision_request,
     make_function_info,
@@ -79,6 +82,45 @@ def test_test_data_factories_preserve_explicit_values() -> None:
     assert request.history == history
     assert request.function.bound_arguments == {"question": "Why?"}
     assert call.name == "lookup"
+
+
+async def test_mock_llm_client_emits_scripted_callbacks() -> None:
+    completion = LLMCompletion(content="done")
+    output_event = OutputStringDelta(("result",), "d")
+    client = MockLLMClient(
+        [
+            ScriptedCompletion(
+                completion,
+                content_chunks=("do", "ne"),
+                reasoning_chunks=("think", "ing"),
+                output_events=(output_event,),
+            )
+        ]
+    )
+    content_chunks: list[str] = []
+    reasoning_chunks: list[str] = []
+    output_events: list[OutputStreamEvent] = []
+
+    async def on_content(text: str) -> None:
+        content_chunks.append(text)
+
+    async def on_reasoning(text: str) -> None:
+        reasoning_chunks.append(text)
+
+    async def on_output(event: OutputStreamEvent) -> None:
+        output_events.append(event)
+
+    returned = await client.complete(
+        [Message(role="user", content="hello")],
+        stream_callback=on_content,
+        reasoning_callback=on_reasoning,
+        output_callback=on_output,
+    )
+
+    assert returned is completion
+    assert content_chunks == ["do", "ne"]
+    assert reasoning_chunks == ["think", "ing"]
+    assert output_events == [output_event]
 
 
 async def test_mock_llm_client_snapshots_core_messages() -> None:
