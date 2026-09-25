@@ -2,15 +2,15 @@ from copy import deepcopy
 
 import pytest
 from sefia.llm.json import JsonCompatible, JsonSnapshot
-from sefia_litellm._schema._json import JsonObject
+from sefia_litellm._schema._types import SchemaObject
 from sefia_litellm._schema._uniform_dictionary import UniformDictionaryFormat
 
 
-def _mapping(value: JsonObject) -> JsonObject:
+def _mapping(value: SchemaObject) -> SchemaObject:
     return {"type": "object", "additionalProperties": value}
 
 
-def _object(**properties: JsonObject) -> JsonObject:
+def _object(**properties: SchemaObject) -> SchemaObject:
     return {
         "type": "object",
         "properties": {name: value for name, value in properties.items()},
@@ -108,20 +108,22 @@ def _object(**properties: JsonObject) -> JsonObject:
     ],
 )
 def test_mapping_format_round_trip(
-    schema: JsonObject, logical: JsonCompatible, wire: JsonCompatible
+    schema: SchemaObject, logical: JsonCompatible, wire: JsonCompatible
 ) -> None:
-    data_format = UniformDictionaryFormat.from_schema(deepcopy(schema))
+    provider_format = UniformDictionaryFormat.from_schema(deepcopy(schema))
 
     assert (
-        data_format.encode(JsonSnapshot.capture(logical)).to_json_compatible() == wire
+        provider_format.encode(JsonSnapshot.capture(logical)).to_json_compatible()
+        == wire
     )
     assert (
-        data_format.decode(JsonSnapshot.capture(wire)).to_json_compatible() == logical
+        provider_format.decode(JsonSnapshot.capture(wire)).to_json_compatible()
+        == logical
     )
 
 
 def test_entry_schema_preserves_mapping_constraints() -> None:
-    data_format = UniformDictionaryFormat.from_schema(
+    provider_format = UniformDictionaryFormat.from_schema(
         {
             **_mapping({"type": "string"}),
             "minProperties": 1,
@@ -132,7 +134,7 @@ def test_entry_schema_preserves_mapping_constraints() -> None:
         }
     )
 
-    assert data_format.schema == {
+    assert provider_format.schema == {
         "type": "array",
         "minItems": 1,
         "maxItems": 2,
@@ -175,9 +177,9 @@ def test_hybrid_object_is_not_lowered_as_a_dictionary() -> None:
 def test_mapping_restoration_rejects_invalid_entries(
     wire: JsonCompatible, message: str
 ) -> None:
-    data_format = UniformDictionaryFormat.from_schema(_mapping({"type": "string"}))
+    provider_format = UniformDictionaryFormat.from_schema(_mapping({"type": "string"}))
     with pytest.raises(ValueError, match=message):
-        data_format.decode(JsonSnapshot.capture(wire))
+        provider_format.decode(JsonSnapshot.capture(wire))
 
 
 @pytest.mark.parametrize(
@@ -190,7 +192,7 @@ def test_mapping_restoration_rejects_invalid_entries(
 def test_union_restoration_resolves_shared_definitions(
     logical: JsonCompatible, wire: JsonCompatible
 ) -> None:
-    data_format = UniformDictionaryFormat.from_schema(
+    provider_format = UniformDictionaryFormat.from_schema(
         {
             "anyOf": [{"$ref": "#/$defs/Mapped"}, {"$ref": "#/$defs/Later"}],
             "$defs": {
@@ -204,15 +206,17 @@ def test_union_restoration_resolves_shared_definitions(
     )
 
     assert (
-        data_format.decode(JsonSnapshot.capture(wire)).to_json_compatible() == logical
+        provider_format.decode(JsonSnapshot.capture(wire)).to_json_compatible()
+        == logical
     )
     assert (
-        data_format.encode(JsonSnapshot.capture(logical)).to_json_compatible() == wire
+        provider_format.encode(JsonSnapshot.capture(logical)).to_json_compatible()
+        == wire
     )
 
 
 @pytest.mark.parametrize("key", [1, True, None])
 def test_rejects_non_string_wire_key(key: JsonCompatible) -> None:
-    data_format = UniformDictionaryFormat.from_schema(_mapping({"type": "integer"}))
+    provider_format = UniformDictionaryFormat.from_schema(_mapping({"type": "integer"}))
     with pytest.raises(ValueError, match="mapping key must be a string"):
-        data_format.decode(JsonSnapshot.capture([{"key": key, "value": 1}]))
+        provider_format.decode(JsonSnapshot.capture([{"key": key, "value": 1}]))

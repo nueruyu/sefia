@@ -7,13 +7,13 @@ from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from typing_extensions import final
 
 from ._schema import StructuredDecisionFormat
-from ._schema._json import JsonObject
-from ._schema._json_wire_format import JsonWireFormat
+from ._schema._types import SchemaObject
+from ._schema._provider_format import ProviderJsonFormat
 
 
 class _JsonSchemaResponseDefinition(TypedDict):
     name: str
-    schema: JsonObject
+    schema: SchemaObject
     strict: bool
 
 
@@ -28,7 +28,7 @@ class CompletionRequest:
     messages: list[dict[str, Any]]
     api_kwargs: dict[str, Any]
     decision_format: StructuredDecisionFormat | None
-    tool_data_formats: dict[str, JsonWireFormat]
+    tool_provider_formats: dict[str, ProviderJsonFormat]
 
 
 def build_completion_request(
@@ -39,9 +39,11 @@ def build_completion_request(
     client_kwargs: dict[str, Any],
     stream: bool,
 ) -> CompletionRequest:
-    tool_data_formats = {tool.name: _tool_data_format(tool) for tool in tools or []}
+    tool_provider_formats = {
+        tool.name: _tool_provider_format(tool) for tool in tools or []
+    }
     wire_messages = [
-        _encode_message(message, tool_data_formats) for message in messages
+        _encode_message(message, tool_provider_formats) for message in messages
     ]
     decision_format = (
         StructuredDecisionFormat.from_spec(decision_spec)
@@ -51,7 +53,7 @@ def build_completion_request(
     api_kwargs = client_kwargs.copy()
     if tools:
         api_kwargs["tools"] = [
-            _encode_tool_definition(tool, tool_data_formats[tool.name])
+            _encode_tool_definition(tool, tool_provider_formats[tool.name])
             for tool in tools
         ]
     if decision_format is not None:
@@ -62,23 +64,23 @@ def build_completion_request(
         wire_messages,
         api_kwargs,
         decision_format,
-        tool_data_formats,
+        tool_provider_formats,
     )
 
 
-def _tool_data_format(tool: StepTool) -> JsonWireFormat:
+def _tool_provider_format(tool: StepTool) -> ProviderJsonFormat:
     if tool.schema_source is ToolSchemaSource.GENERATED:
-        return JsonWireFormat.from_generated_schema(tool.arguments)
-    return JsonWireFormat.from_user_schema(tool.arguments)
+        return ProviderJsonFormat.from_generated_schema(tool.arguments)
+    return ProviderJsonFormat.from_user_schema(tool.arguments)
 
 
 def _encode_tool_definition(
     tool: StepTool,
-    data_format: JsonWireFormat,
+    provider_format: ProviderJsonFormat,
 ) -> dict[str, Any]:
     function: dict[str, Any] = {
         "name": tool.name,
-        "parameters": data_format.schema,
+        "parameters": provider_format.schema,
     }
     if tool.description:
         function["description"] = tool.description
@@ -87,7 +89,7 @@ def _encode_tool_definition(
 
 def _encode_message(
     message: Message,
-    tool_data_formats: dict[str, JsonWireFormat],
+    tool_provider_formats: dict[str, ProviderJsonFormat],
 ) -> dict[str, Any]:
     wire_message: dict[str, Any] = {"role": message.role}
     content = message.content
@@ -97,7 +99,7 @@ def _encode_message(
         wire_message["tool_call_id"] = message.tool_call_id
     if message.tool_calls is not None:
         wire_message["tool_calls"] = [
-            _encode_tool_call(call, tool_data_formats.get(call.name))
+            _encode_tool_call(call, tool_provider_formats.get(call.name))
             for call in message.tool_calls
         ]
     return wire_message
@@ -105,11 +107,11 @@ def _encode_message(
 
 def _encode_tool_call(
     call: ToolCall,
-    data_format: JsonWireFormat | None,
+    provider_format: ProviderJsonFormat | None,
 ) -> dict[str, Any]:
     arguments = (
-        data_format.encode(call.arguments)
-        if data_format is not None
+        provider_format.encode(call.arguments)
+        if provider_format is not None
         else call.arguments
     )
     return {

@@ -4,20 +4,20 @@ from sefia.json_schema import JsonSchemaDocument
 from sefia.llm.json import JsonSnapshot
 from typing_extensions import final
 
-from ._json import JsonObject
 from ._policy import (
     GENERATED_SCHEMA_POLICY,
     USER_DEFINED_SCHEMA_POLICY,
     SchemaPolicy,
     prepare_schema,
 )
+from ._types import SchemaObject
 from ._uniform_dictionary import UniformDictionaryFormat
 
 
 @final
 @dataclass(frozen=True)
-class JsonWireFormat:
-    schema: JsonObject
+class ProviderJsonFormat:
+    schema: SchemaObject
     dictionary_format: UniformDictionaryFormat | None
 
     @property
@@ -25,17 +25,19 @@ class JsonWireFormat:
         return self.dictionary_format is not None
 
     @classmethod
-    def from_generated_schema(cls, document: JsonSchemaDocument) -> "JsonWireFormat":
+    def from_generated_schema(
+        cls, document: JsonSchemaDocument
+    ) -> "ProviderJsonFormat":
         return cls._from_schema(document, GENERATED_SCHEMA_POLICY)
 
     @classmethod
-    def from_user_schema(cls, document: JsonSchemaDocument) -> "JsonWireFormat":
+    def from_user_schema(cls, document: JsonSchemaDocument) -> "ProviderJsonFormat":
         return cls._from_schema(document, USER_DEFINED_SCHEMA_POLICY)
 
     @classmethod
     def _from_schema(
         cls, document: JsonSchemaDocument, policy: SchemaPolicy
-    ) -> "JsonWireFormat":
+    ) -> "ProviderJsonFormat":
         prepared = prepare_schema(document.mutable_copy(), policy)
         return cls(prepared.wire_schema, prepared.dictionary_format)
 

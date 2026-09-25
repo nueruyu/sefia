@@ -2,4 +2,4 @@ from typing import TypeAlias
 
 from sefia.llm.json import JsonCompatible
 
-JsonObject: TypeAlias = dict[str, JsonCompatible]
+SchemaObject: TypeAlias = dict[str, JsonCompatible]

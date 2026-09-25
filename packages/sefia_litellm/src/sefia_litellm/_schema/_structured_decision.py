@@ -16,8 +16,8 @@ from sefia.llm.step_decision import (
 from sefia.llm.streaming import OutputStreamEvent, Scalar, StringDelta, StringEnd
 from typing_extensions import final
 
-from ._json import JsonObject
-from ._json_wire_format import JsonWireFormat
+from ._types import SchemaObject
+from ._provider_format import ProviderJsonFormat
 
 K = SchemaKeyword
 _PAYLOAD_FIELD = "payload"
@@ -25,8 +25,8 @@ _PAYLOAD_FIELD = "payload"
 
 @final
 @dataclass(frozen=True)
-class _ToolFormat:
-    arguments: JsonWireFormat
+class _ToolProviderFormat:
+    arguments: ProviderJsonFormat
     description: str | None
 
 
@@ -35,29 +35,31 @@ class StructuredDecisionFormat:
     def __init__(
         self,
         schema: JsonSchemaDocument,
-        result_format: JsonWireFormat | None,
-        tool_formats: dict[str, _ToolFormat],
+        result_provider_format: ProviderJsonFormat | None,
+        tool_provider_formats: dict[str, _ToolProviderFormat],
     ) -> None:
         self._schema = schema
-        self._result_format = result_format
-        self._tool_formats = tool_formats
+        self._result_provider_format = result_provider_format
+        self._tool_provider_formats = tool_provider_formats
 
     @classmethod
     def from_spec(cls, spec: DecisionSpec) -> "StructuredDecisionFormat":
-        result_format = (
-            JsonWireFormat.from_generated_schema(spec.result.schema)
+        result_provider_format = (
+            ProviderJsonFormat.from_generated_schema(spec.result.schema)
             if spec.result is not None
             else None
         )
-        tool_formats = {
-            tool.name: _ToolFormat(
-                arguments=_tool_data_format(tool),
+        tool_provider_formats = {
+            tool.name: _ToolProviderFormat(
+                arguments=_tool_provider_format(tool),
                 description=tool.description,
             )
             for tool in spec.tools
         }
-        schema = _build_schema(spec.mode, result_format, tool_formats)
-        return cls(JsonSchemaDocument(schema), result_format, tool_formats)
+        schema = _build_schema(spec.mode, result_provider_format, tool_provider_formats)
+        return cls(
+            JsonSchemaDocument(schema), result_provider_format, tool_provider_formats
+        )
 
     @property
     def schema(self) -> JsonSchemaDocument:
@@ -95,10 +97,10 @@ class StructuredDecisionFormat:
     def _decode_result(
         self, data: JsonSnapshot, fields: dict[str, JsonSnapshot]
     ) -> JsonSnapshot:
-        if self._result_format is None or "result" not in fields:
+        if self._result_provider_format is None or "result" not in fields:
             return data
         return JsonSnapshot.from_object(
-            {**fields, "result": self._result_format.decode(fields["result"])}
+            {**fields, "result": self._result_provider_format.decode(fields["result"])}
         )
 
     def _decode_tool_calls(
@@ -130,15 +132,17 @@ class StructuredDecisionFormat:
             tool_name = name.as_string() if name is not None else None
         except ValueError:
             return data
-        tool_format = (
-            self._tool_formats.get(tool_name) if tool_name is not None else None
+        tool_provider_format = (
+            self._tool_provider_formats.get(tool_name)
+            if tool_name is not None
+            else None
         )
-        if tool_format is None or "arguments" not in fields:
+        if tool_provider_format is None or "arguments" not in fields:
             return data
         return JsonSnapshot.from_object(
             {
                 **fields,
-                "arguments": tool_format.arguments.decode(fields["arguments"]),
+                "arguments": tool_provider_format.arguments.decode(fields["arguments"]),
             }
         )
 
@@ -153,23 +157,23 @@ class StructuredDecisionFormat:
         return Scalar(path, event.value)
 
 
-def _tool_data_format(tool: StepTool) -> JsonWireFormat:
+def _tool_provider_format(tool: StepTool) -> ProviderJsonFormat:
     if tool.schema_source is ToolSchemaSource.GENERATED:
-        return JsonWireFormat.from_generated_schema(tool.arguments)
-    return JsonWireFormat.from_user_schema(tool.arguments)
+        return ProviderJsonFormat.from_generated_schema(tool.arguments)
+    return ProviderJsonFormat.from_user_schema(tool.arguments)
 
 
 def _build_schema(
     mode: StepDecisionMode,
-    result_format: JsonWireFormat | None,
-    tool_formats: dict[str, _ToolFormat],
-) -> JsonObject:
-    definitions: JsonObject = {}
+    result_provider_format: ProviderJsonFormat | None,
+    tool_provider_formats: dict[str, _ToolProviderFormat],
+) -> SchemaObject:
+    definitions: SchemaObject = {}
     registry = DefinitionRegistry(definitions)
     decision = _decision_schema(
         mode,
-        result_format,
-        tool_formats,
+        result_provider_format,
+        tool_provider_formats,
         registry,
     )
     root = SchemaNode.object_schema({_PAYLOAD_FIELD: decision})
@@ -180,21 +184,23 @@ def _build_schema(
 
 def _decision_schema(
     mode: StepDecisionMode,
-    result_format: JsonWireFormat | None,
-    tool_formats: dict[str, _ToolFormat],
+    result_provider_format: ProviderJsonFormat | None,
+    tool_provider_formats: dict[str, _ToolProviderFormat],
     registry: DefinitionRegistry,
-) -> JsonObject:
-    branches: list[JsonObject] = []
+) -> SchemaObject:
+    branches: list[SchemaObject] = []
     if mode is not StepDecisionMode.RESULT_ONLY:
         branches.append(
             _tool_calls_schema(
-                tool_formats,
+                tool_provider_formats,
                 registry,
             )
         )
     if mode is not StepDecisionMode.TOOLS_REQUIRED:
-        assert result_format is not None
-        imported = registry.import_schema(result_format.schema, namespace="result")
+        assert result_provider_format is not None
+        imported = registry.import_schema(
+            result_provider_format.schema, namespace="result"
+        )
         branches.append(
             _closed_object({"decision": _literal("result"), "result": imported})
         )
@@ -204,20 +210,20 @@ def _decision_schema(
 
 
 def _tool_calls_schema(
-    tool_formats: dict[str, _ToolFormat],
+    tool_provider_formats: dict[str, _ToolProviderFormat],
     registry: DefinitionRegistry,
-) -> JsonObject:
-    calls: list[JsonObject] = []
-    for index, (name, tool_format) in enumerate(tool_formats.items()):
+) -> SchemaObject:
+    calls: list[SchemaObject] = []
+    for index, (name, tool_provider_format) in enumerate(tool_provider_formats.items()):
         imported = registry.import_schema(
-            tool_format.arguments.schema,
+            tool_provider_format.arguments.schema,
             namespace=f"tool_{index}",
         )
         call = _closed_object({"name": _literal(name), "arguments": imported})
-        if tool_format.description:
-            call[K.DESCRIPTION] = tool_format.description
+        if tool_provider_format.description:
+            call[K.DESCRIPTION] = tool_provider_format.description
         calls.append(call)
-    items: JsonObject = calls[0] if len(calls) == 1 else _branch_union(calls)
+    items: SchemaObject = calls[0] if len(calls) == 1 else _branch_union(calls)
     return _closed_object(
         {
             "decision": _literal("tool_calls"),
@@ -226,7 +232,7 @@ def _tool_calls_schema(
     )
 
 
-def _closed_object(properties: JsonObject) -> JsonObject:
+def _closed_object(properties: SchemaObject) -> SchemaObject:
     return {
         K.TYPE: "object",
         K.PROPERTIES: properties,
@@ -235,11 +241,11 @@ def _closed_object(properties: JsonObject) -> JsonObject:
     }
 
 
-def _branch_union(branches: list[JsonObject]) -> JsonObject:
+def _branch_union(branches: list[SchemaObject]) -> SchemaObject:
     """Build a provider-compatible union of const-disjoint schema branches."""
     # Anthropic rejects OpenAPI's discriminator in native structured output.
     return {K.ANY_OF: [*branches]}
 
 
-def _literal(value: str) -> JsonObject:
+def _literal(value: str) -> SchemaObject:
     return {K.TYPE: "string", K.CONST: value}

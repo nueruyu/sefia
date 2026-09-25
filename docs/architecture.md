@@ -154,7 +154,7 @@ implementation noted in parentheses.
 | `_schema/_structured_decision.py` | Builds the provider-compatible decision schema inside a uniform object-root payload envelope, and restores completed output and stream paths to the logical `DecisionSpec` shape. |
 | `_schema/_policy.py` | Declares independent generated/user-defined schema policies, applies permitted corrections, and validates the shared strict-output constraints. |
 | `_schema/_uniform_dictionary.py` | Defines uniform-dictionary entry-array encoding and decoding. |
-| `_schema/_json_wire_format.py` | Translates provider-neutral structured data to and from one prepared wire schema; it has no tool knowledge. |
+| `_schema/_provider_format.py` | Translates provider-neutral structured data to and from one prepared wire schema; it has no tool knowledge. |
 
 ## Where to change what
 

@@ -5,7 +5,7 @@ from typing import TypeAlias, cast
 
 from typing_extensions import final
 
-from ._json import copy_json, require_json_compatible, require_json_scalar
+from ._json_tree import copy_json, require_json_compatible, require_json_scalar
 
 JsonCompatible: TypeAlias = (
     str

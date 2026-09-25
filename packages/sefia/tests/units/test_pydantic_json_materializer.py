@@ -41,9 +41,9 @@ class _Unknown:
     ],
 )
 def test_materialize_normalizes_primitives(value: object, expected: object) -> None:
-    converter = PydanticJsonMaterializer()
+    materializer = PydanticJsonMaterializer()
 
-    assert converter.materialize(value) == expected
+    assert materializer.materialize(value) == expected
 
 
 def test_materialize_normalizes_nested_application_values() -> None:
@@ -69,7 +69,7 @@ def test_materialize_normalizes_nested_application_values() -> None:
     }
 
 
-def test_materialize_rejects_non_string_key_alongside_string_equivalent() -> None:
+def test_materialize_rejects_non_string_mapping_keys() -> None:
     identifier = UUID("12345678-1234-5678-1234-567812345678")
 
     with pytest.raises(ValueError, match="JSON object keys must be strings"):

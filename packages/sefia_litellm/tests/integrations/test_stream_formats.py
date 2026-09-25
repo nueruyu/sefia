@@ -20,7 +20,7 @@ from sefia.llm.streaming import (
 )
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._schema import StructuredDecisionFormat
-from sefia_litellm._schema._json_wire_format import JsonWireFormat
+from sefia_litellm._schema._provider_format import ProviderJsonFormat
 from sefia_litellm._streaming import (
     consume_completion_stream,
 )
@@ -133,7 +133,7 @@ async def test_restores_translated_native_tool_arguments(
             tool_calls=[_tool_call("categorize", wire_arguments)],
         ),
     )
-    data_format = JsonWireFormat.from_generated_schema(
+    provider_format = ProviderJsonFormat.from_generated_schema(
         JsonSchemaDocument.from_mapping(
             {
                 "type": "object",
@@ -166,7 +166,7 @@ async def test_restores_translated_native_tool_arguments(
         reasoning_callback=None,
         messages=[],
         decision_format=None,
-        tool_data_formats={"categorize": data_format},
+        tool_provider_formats={"categorize": provider_format},
         requested_model="gpt-4o",
     )
 

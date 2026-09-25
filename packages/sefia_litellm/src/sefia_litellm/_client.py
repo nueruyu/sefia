@@ -145,7 +145,7 @@ class LiteLLMClient(LLMClient):
                     reasoning_callback=reasoning_callback,
                     messages=request.messages,
                     decision_format=request.decision_format,
-                    tool_data_formats=request.tool_data_formats,
+                    tool_provider_formats=request.tool_provider_formats,
                     requested_model=self.model,
                 )
         except Exception as error:
@@ -163,7 +163,7 @@ class LiteLLMClient(LLMClient):
             response,
             requested_model=self.model,
             decision_format=request.decision_format,
-            tool_data_formats=request.tool_data_formats,
+            tool_provider_formats=request.tool_provider_formats,
         )
 
 

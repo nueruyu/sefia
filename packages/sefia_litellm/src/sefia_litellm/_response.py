@@ -8,7 +8,7 @@ from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.json import JsonSnapshot
 
 from ._schema import StructuredDecisionFormat
-from ._schema._json_wire_format import JsonWireFormat
+from ._schema._provider_format import ProviderJsonFormat
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage
@@ -25,7 +25,7 @@ def decode_completion(
     *,
     requested_model: str,
     decision_format: StructuredDecisionFormat | None,
-    tool_data_formats: dict[str, JsonWireFormat] | None = None,
+    tool_provider_formats: dict[str, ProviderJsonFormat] | None = None,
 ) -> LLMCompletion:
     if not response.choices:
         raise LLMCompletionDecodingError(
@@ -46,9 +46,9 @@ def decode_completion(
         cost=_calculate_cost(response),
     )
     try:
-        argument_formats = tool_data_formats or {}
+        argument_provider_formats = tool_provider_formats or {}
         completion.tool_calls = [
-            _decode_tool_call(call, argument_formats)
+            _decode_tool_call(call, argument_provider_formats)
             for call in (message.tool_calls or [])
         ]
     except ValueError as error:
@@ -59,7 +59,7 @@ def decode_completion(
 
 def _decode_tool_call(
     call: ChatCompletionMessageToolCall | ChatCompletionMessageCustomToolCall,
-    tool_data_formats: dict[str, JsonWireFormat],
+    tool_provider_formats: dict[str, ProviderJsonFormat],
 ) -> ToolCall:
     if getattr(call, "type", None) == "custom":
         raise ValueError("LLM returned an unsupported custom tool call")
@@ -71,9 +71,9 @@ def _decode_tool_call(
     if not isinstance(arguments_json, str):
         raise ValueError(f"Native tool call {name!r} has no JSON arguments.")
     arguments = JsonSnapshot.parse_json(arguments_json)
-    data_format = tool_data_formats.get(name)
-    if data_format is not None:
-        arguments = data_format.decode(arguments)
+    provider_format = tool_provider_formats.get(name)
+    if provider_format is not None:
+        arguments = provider_format.decode(arguments)
     return ToolCall(id=function_call.id, name=name, arguments=arguments)
 
 

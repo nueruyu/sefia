@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import final, override
 
-from ..llm._json import require_json_compatible, require_json_scalar
+from ..llm._json_tree import require_json_compatible, require_json_scalar
 from ..llm.json import JsonCompatible, JsonMaterializer
 
 

@@ -6,7 +6,7 @@ from sefia.json_schema import SchemaKeyword, SchemaNode, SchemaPath
 from sefia.llm.json import JsonCompatible, JsonSnapshot
 from typing_extensions import final
 
-from ._json import JsonObject
+from ._types import SchemaObject
 
 K = SchemaKeyword
 
@@ -20,10 +20,10 @@ _PROPERTY_TO_ITEM_CONSTRAINT = {
 @final
 @dataclass(frozen=True)
 class UniformDictionarySchema:
-    key_schema: JsonObject
-    value_schema: JsonObject
-    annotations: JsonObject
-    entry_array_constraints: JsonObject
+    key_schema: SchemaObject
+    value_schema: SchemaObject
+    annotations: SchemaObject
+    entry_array_constraints: SchemaObject
 
     @classmethod
     def from_node(cls, node: SchemaNode) -> "UniformDictionarySchema":
@@ -51,7 +51,7 @@ class UniformDictionarySchema:
             },
         )
 
-    def to_entry_array_schema(self) -> JsonObject:
+    def to_entry_array_schema(self) -> SchemaObject:
         entry = SchemaNode.object_schema(
             {"key": self.key_schema, "value": self.value_schema}
         )
@@ -66,11 +66,11 @@ class UniformDictionarySchema:
 @final
 @dataclass(frozen=True)
 class UniformDictionaryFormat:
-    schema: JsonObject
+    schema: SchemaObject
     mapping_paths: frozenset[SchemaPath]
 
     @classmethod
-    def from_schema(cls, schema: JsonObject) -> "UniformDictionaryFormat":
+    def from_schema(cls, schema: SchemaObject) -> "UniformDictionaryFormat":
         mapping_paths: set[SchemaPath] = set()
         while cursor := _find_dictionary_schema(schema):
             path, node, dictionary = cursor
@@ -88,7 +88,7 @@ class UniformDictionaryFormat:
 
 
 def _find_dictionary_schema(
-    schema: JsonObject,
+    schema: SchemaObject,
 ) -> tuple[SchemaPath, SchemaNode, UniformDictionarySchema] | None:
     for cursor in SchemaNode(schema).walk():
         if _is_dictionary_schema(cursor.node):
@@ -108,8 +108,8 @@ def _is_dictionary_schema(node: SchemaNode) -> bool:
 
 def _decode(
     data: JsonSnapshot,
-    schema: JsonObject,
-    root: JsonObject,
+    schema: SchemaObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> JsonSnapshot:
@@ -139,8 +139,8 @@ def _decode(
 
 def _encode(
     data: JsonSnapshot,
-    schema: JsonObject,
-    root: JsonObject,
+    schema: SchemaObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> JsonSnapshot:
@@ -168,10 +168,10 @@ def _encode(
 
 
 def _resolve(
-    schema: JsonObject,
-    root: JsonObject,
+    schema: SchemaObject,
+    root: SchemaObject,
     path: SchemaPath,
-) -> tuple[JsonObject, SchemaPath]:
+) -> tuple[SchemaObject, SchemaPath]:
     node = SchemaNode(schema)
     reference = node.local_reference
     if reference is None:
@@ -182,7 +182,7 @@ def _resolve(
     return resolved.value, (K.DEFINITIONS, reference.definition, *reference.path)
 
 
-def _matches(data: JsonCompatible, schema: JsonObject, root: JsonObject) -> bool:
+def _matches(data: JsonCompatible, schema: SchemaObject, root: SchemaObject) -> bool:
     candidate = deepcopy(schema)
     for keyword in (K.DEFINITIONS, K.LEGACY_DEFINITIONS):
         if keyword in root:
@@ -196,7 +196,7 @@ def _matches(data: JsonCompatible, schema: JsonObject, root: JsonObject) -> bool
 def _decode_object(
     data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> JsonSnapshot:
@@ -224,7 +224,7 @@ def _decode_object(
 def _decode_array(
     data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> JsonSnapshot:
@@ -244,7 +244,7 @@ def _decode_array(
 def _decode_dictionary(
     data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> JsonSnapshot:
@@ -279,7 +279,7 @@ def _decode_dictionary(
 def _encode_dictionary(
     data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> JsonSnapshot:
@@ -317,7 +317,7 @@ def _encode_dictionary(
 def _encode_object(
     data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> JsonSnapshot:
@@ -345,7 +345,7 @@ def _encode_object(
 def _encode_array(
     data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
 ) -> JsonSnapshot:
