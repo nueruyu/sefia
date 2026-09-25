@@ -137,7 +137,7 @@ def test_tutorial_cli_pause_resume(
     assert paused.exit_code == 0, paused.output
     assert "DONE:" not in paused.output
     assert len(llm.requests) == 1
-    started_session = re.search(r"Starting new session: (\\S+)", paused.output)
+    started_session = re.search(r"Starting new session: (\S+)", paused.output)
     assert started_session is not None
     session_id = started_session[1]
 
