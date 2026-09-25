@@ -64,6 +64,43 @@ server (`OLLAMA_API_BASE`, e.g. `http://localhost:11434`) with the model
 already pulled. Run them when touching the LiteLLM adapter, the
 prompt/decision schema, or before a release.
 
+## Releases
+
+Releases are created by the `Release` workflow in
+`.github/workflows/release.yml`. Do not publish by pushing a `v*` tag directly.
+
+Dispatch the workflow from `main` with the canonical PEP 440 version **without**
+the `v` prefix. Before anything is published, the workflow:
+
+1. builds the wheel and sdist for every publishable workspace package with that
+   candidate version;
+2. verifies the artifact metadata;
+3. installs each package into its own fresh virtual environment;
+4. constrains every internal Sefia dependency to the candidate wheels rather than
+   an existing PyPI release;
+5. runs `pip check` and that package's test suite against the installed artifacts.
+
+Only after all five isolated validations pass does the workflow publish the same
+artifacts to PyPI. The `v<version>` tag and GitHub Release are created after PyPI
+publication succeeds, so a validation or publication failure does not leave a release
+tag behind.
+
+The release workflow uses PyPI Trusted Publishing with the GitHub `pypi`
+environment. Each of these PyPI projects must authorize the same publisher:
+
+- owner: `nueruyu`
+- repository: `sefia`
+- workflow: `release.yml`
+- environment: `pypi`
+
+Configure that publisher for `sefia`, `sefia-litellm`, `sefia-typer`,
+`sefia-fastapi`, and `sefios` before the first release through the consolidated
+workflow. The old per-package workflow publisher registrations can then be removed.
+
+The release workflow also runs its build/install validation on pull requests that
+change the workflow, its artifact helper, or package metadata. Pull-request runs never
+request an OIDC publishing token and never create tags or releases.
+
 ## Where to make a change
 
 The per-module map and the **where-to-change-what** table are in
