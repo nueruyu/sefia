@@ -423,7 +423,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    candidate = subparsers.add_parser("candidate-version")
+    subparsers.add_parser("candidate-version")
 
     affected = subparsers.add_parser("matrix")
     affected.add_argument("--base")
