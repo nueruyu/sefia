@@ -137,17 +137,18 @@ def test_tutorial_cli_pause_resume(
     assert paused.exit_code == 0, paused.output
     assert "DONE:" not in paused.output
     assert len(llm.requests) == 1
-    session_id = first.cli.get_active_session()
-    assert session_id is not None
+    started_session = re.search(r"Starting new session: ([^\\s]+)", paused.output)
+    assert started_session is not None
+    session_id = started_session[1]
 
     resumed = load_code(code, "hitl_cli", monkeypatch)
-    assert resumed.cli.get_active_session() == session_id
     interaction_id = re.search(r"INTERACTION_REQUIRED:([^\]]+)", paused.output)
     assert interaction_id is not None
     done = CliRunner().invoke(
         resumed.app, ["--interaction-id", interaction_id[1], "--answer", "yes, approve"]
     )
     assert done.exit_code == 0, done.output
+    assert f"Resuming session {session_id}" in done.output
     assert "DONE: Approved report" in done.output
     assert len(llm.requests) == 2
     assert not llm.completions
