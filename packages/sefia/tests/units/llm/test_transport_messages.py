@@ -2,8 +2,7 @@ from dataclasses import FrozenInstanceError, fields
 from unittest.mock import Mock
 
 import pytest
-from sefia.llm import LLMCompletion, Message, PromptRenderer, ToolCall
-from sefia.llm.json import JsonSnapshot
+from sefia.llm import JsonSnapshot, LLMCompletion, Message, PromptRenderer, ToolCall
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.transports import (
     DecisionToolCalls,

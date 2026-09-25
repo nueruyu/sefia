@@ -6,8 +6,8 @@ from pydantic import Field
 from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import UnknownToolDecisionError
 from sefia.inference import ToolCallsDecision
+from sefia.llm import JsonCompatible, JsonSnapshot
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.json import JsonCompatible, JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import PydanticResultFormatFactory
 

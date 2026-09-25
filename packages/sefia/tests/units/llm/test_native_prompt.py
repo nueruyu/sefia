@@ -1,7 +1,6 @@
 from unittest.mock import Mock
 
-from sefia.llm import ToolCall
-from sefia.llm.json import JsonSnapshot
+from sefia.llm import JsonSnapshot, ToolCall
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode, StepTool
 from sefia.llm.transports import DecisionToolCalls, DecisionToolResult
 from sefia.llm.transports._native._prompt import (

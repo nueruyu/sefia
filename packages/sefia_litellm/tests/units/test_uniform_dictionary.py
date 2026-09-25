@@ -1,7 +1,7 @@
 from copy import deepcopy
 
 import pytest
-from sefia.llm.json import JsonCompatible, JsonSnapshot
+from sefia.llm import JsonCompatible, JsonSnapshot
 from sefia_litellm._schema._types import SchemaObject
 from sefia_litellm._schema._uniform_dictionary import UniformDictionaryFormat
 

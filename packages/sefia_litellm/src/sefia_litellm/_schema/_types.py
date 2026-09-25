@@ -1,5 +1,5 @@
 from typing import TypeAlias
 
-from sefia.llm.json import JsonCompatible
+from sefia.llm import JsonCompatible
 
 SchemaObject: TypeAlias = dict[str, JsonCompatible]

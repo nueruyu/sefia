@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from ..inference import FunctionInfo
-from .json import JsonSnapshot
+from ._json import JsonSnapshot
 from .step_decision import StepTool
 
 

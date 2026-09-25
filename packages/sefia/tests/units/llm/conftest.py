@@ -2,8 +2,13 @@ from collections.abc import Callable
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from sefia.llm import LLMClient, LLMCompletion, LLMInferenceStrategy, PromptRenderer
-from sefia.llm.json import JsonSnapshot
+from sefia.llm import (
+    JsonSnapshot,
+    LLMClient,
+    LLMCompletion,
+    LLMInferenceStrategy,
+    PromptRenderer,
+)
 from sefia.llm.transports import DecisionTransport, DecodedDecision
 from sefia.pydantic import (
     PydanticJsonMaterializer,

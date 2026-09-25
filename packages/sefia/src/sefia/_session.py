@@ -11,11 +11,11 @@ from ._profiles import Profile
 from ._tool_system import ToolCollector
 from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
+from .llm._json import JsonMaterializer
 from .llm._markdown_prompt_renderer import MarkdownPromptRenderer
 from .llm._message_composer import MessageComposer
 from .llm._prompt_renderer import PromptRenderer
 from .llm._strategy import LLMInferenceStrategy
-from .llm.json import JsonMaterializer
 from .llm.result_format import ResultFormatFactory
 from .llm.transports import DecisionTransport, StructuredDecisionTransport
 from .pydantic import (

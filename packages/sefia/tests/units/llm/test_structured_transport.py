@@ -1,9 +1,14 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from sefia.llm import InferencePrompt, LLMCompletion, Message, PromptRenderer
+from sefia.llm import (
+    InferencePrompt,
+    JsonSnapshot,
+    LLMCompletion,
+    Message,
+    PromptRenderer,
+)
 from sefia.llm.exceptions import DecisionDecodingError
-from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.transports import DecisionRequest, StructuredDecisionTransport
 from sefia.pydantic import PydanticResultFormatFactory

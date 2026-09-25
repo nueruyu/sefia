@@ -1,5 +1,5 @@
+from ..._json import JsonSnapshot
 from ..._messages import ToolCall
-from ...json import JsonSnapshot
 from ...step_decision import StepTool
 
 

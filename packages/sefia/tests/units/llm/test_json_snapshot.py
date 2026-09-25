@@ -1,5 +1,5 @@
 import pytest
-from sefia.llm.json import JsonCompatible, JsonSnapshot
+from sefia.llm import JsonCompatible, JsonSnapshot
 
 
 def test_capture_builds_nested_snapshot() -> None:

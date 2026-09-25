@@ -12,8 +12,7 @@ from litellm import (
 )
 from pytest_mock import MockerFixture
 from sefia.json_schema import JsonSchemaDocument
-from sefia.llm import LLMCompletion, ToolCall
-from sefia.llm.json import JsonSnapshot
+from sefia.llm import JsonSnapshot, LLMCompletion, ToolCall
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.llm.streaming import StringDelta, StringEnd
 from sefia.pydantic import PydanticResultFormatFactory

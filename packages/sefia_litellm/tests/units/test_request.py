@@ -2,10 +2,10 @@ from dataclasses import dataclass
 
 from sefia.json_schema import JsonSchemaDocument
 from sefia.llm import (
+    JsonSnapshot,
     Message,
     ToolCall,
 )
-from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._request import build_completion_request

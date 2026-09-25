@@ -1,6 +1,5 @@
 import pytest
-from sefia.llm import ToolCall
-from sefia.llm.json import JsonSnapshot
+from sefia.llm import JsonSnapshot, ToolCall
 from sefia.llm.transports._native._decoding import decode_native_tool_calls
 
 

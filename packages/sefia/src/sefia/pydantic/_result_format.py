@@ -4,7 +4,7 @@ from pydantic import TypeAdapter, ValidationError
 from typing_extensions import final, override
 
 from ..json_schema import JsonSchemaDocument
-from ..llm.json import JsonSnapshot
+from ..llm._json import JsonSnapshot
 from ..llm.result_format import ResultFormat, ResultFormatFactory
 
 

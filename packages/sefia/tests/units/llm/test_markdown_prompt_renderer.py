@@ -2,10 +2,10 @@ import json
 
 from sefia.llm import (
     InferencePrompt,
+    JsonCompatible,
     JsonSnapshot,
     MarkdownPromptRenderer,
 )
-from sefia.llm.json import JsonCompatible
 from sefia.testing import make_function_info
 
 

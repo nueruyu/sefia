@@ -9,8 +9,8 @@ from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCallsDecision
 from ..json_schema import JsonSchemaDocument
+from ._json import JsonSnapshot
 from ._tool_call_ids import ToolCallIdRegistry
-from .json import JsonSnapshot
 from .result_format import ResultFormat, ResultFormatFactory
 
 

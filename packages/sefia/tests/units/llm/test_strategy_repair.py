@@ -7,10 +7,9 @@ from sefia import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import ResultDecision, ToolCallResult, ToolCallsDecision
-from sefia.llm import LLMCompletion, LLMInferenceStrategy, ToolCall
+from sefia.llm import JsonSnapshot, LLMCompletion, LLMInferenceStrategy, ToolCall
 from sefia.llm.events import DecisionRepairAttempt
 from sefia.llm.exceptions import DecisionDecodingError, LLMCompletionDecodingError
-from sefia.llm.json import JsonSnapshot
 from sefia.llm.transports import DecodedDecision
 from sefia.testing import make_function_info, make_tool_call_request
 

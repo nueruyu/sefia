@@ -1,10 +1,10 @@
 from typing_extensions import final, override
 
 from .._client import LLMClient
+from .._json import JsonSnapshot
 from .._prompt_renderer import PromptRenderer
 from .._prompted_response import PromptedJsonStreamExtractor, extract_prompted_json
 from ..exceptions import DecisionDecodingError
-from ..json import JsonSnapshot
 from ..streaming import JsonOutputStreamDecoder
 from ._base import (
     DecisionObserver,

@@ -153,7 +153,7 @@ detached mutable projection.
 result format, and tools, and validates a returned value as the corresponding
 `StepDecision`. Step-decision specifications live in `sefia.llm.step_decision`;
 result schema interfaces and decoded values live in `sefia.llm.result_format` and
-`sefia.llm.json`.
+`sefia.llm`.
 `sefia.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 `MarkdownPromptRenderer` renders only the standard inference prompt from an

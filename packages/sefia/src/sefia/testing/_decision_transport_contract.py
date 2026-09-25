@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from typing_extensions import override
 
 from ..llm._client import LLMClient
+from ..llm._json import JsonSnapshot
 from ..llm._messages import LLMCompletion, Message
 from ..llm._prompt_renderer import InferencePrompt, PromptRenderer
-from ..llm.json import JsonSnapshot
 from ..llm.step_decision import DecisionSpec, StepTool
 from ..llm.streaming import (
     OutputStreamCallback,

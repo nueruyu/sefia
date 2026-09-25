@@ -3,8 +3,7 @@ from dataclasses import FrozenInstanceError, fields
 import pytest
 from sefia import DecisionContext
 from sefia.inference import ToolCallResult
-from sefia.llm import LLMCompletion, Message, ToolCall
-from sefia.llm.json import JsonSnapshot
+from sefia.llm import JsonSnapshot, LLMCompletion, Message, ToolCall
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.transports import DecisionToolResult
 from sefia.pydantic import PydanticResultFormatFactory

@@ -1,4 +1,5 @@
 from ._client import LLMClient
+from ._json import JsonCompatible, JsonMaterializer, JsonSnapshot
 from ._markdown_prompt_renderer import MarkdownPromptRenderer
 from ._message_composer import MessageComposer
 from ._message_layout import MessageLayout
@@ -8,7 +9,6 @@ from ._prompt_renderer import (
     PromptRenderer,
 )
 from ._strategy import LLMInferenceStrategy
-from .json import JsonCompatible, JsonMaterializer, JsonSnapshot
 
 __all__ = [
     "LLMClient",

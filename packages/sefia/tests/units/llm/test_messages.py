@@ -1,8 +1,7 @@
 from dataclasses import FrozenInstanceError
 
 import pytest
-from sefia.llm import Message, ToolCall
-from sefia.llm.json import JsonSnapshot
+from sefia.llm import JsonSnapshot, Message, ToolCall
 
 
 class _MutableValue:

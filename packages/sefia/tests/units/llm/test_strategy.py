@@ -15,14 +15,13 @@ from sefia.inference import (
     ToolCallResult,
     ToolCallsDecision,
 )
-from sefia.llm import LLMCompletion, LLMInferenceStrategy, Message
+from sefia.llm import JsonSnapshot, LLMCompletion, LLMInferenceStrategy, Message
 from sefia.llm.events import (
     AfterLLMCall,
     BeforeLLMCall,
     LLMReasoningTokenReceived,
     LLMTokenReceived,
 )
-from sefia.llm.json import JsonSnapshot
 from sefia.llm.transports import (
     DecisionObserver,
     DecisionToolCalls,

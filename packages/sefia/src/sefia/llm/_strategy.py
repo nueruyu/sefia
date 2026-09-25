@@ -13,13 +13,13 @@ from ..streaming import ArgEvent, Scalar, StreamHandler, StringDelta, StringEnd
 from . import events
 from ._arg_stream import ToolArgStreamer
 from ._client import LLMClient
+from ._json import JsonMaterializer, JsonSnapshot
 from ._message_composer import MessageComposer
 from ._message_layout import MessageLayout
 from ._messages import LLMCompletion, Message, ToolCall
 from ._prompt_renderer import PromptRenderer
 from ._tool_call_ids import ToolCallIdRegistry
 from .exceptions import DecisionDecodingError, LLMCompletionDecodingError
-from .json import JsonMaterializer, JsonSnapshot
 from .result_format import ResultFormatFactory
 from .step_decision import DecisionSpec
 from .streaming import (

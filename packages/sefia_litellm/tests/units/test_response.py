@@ -18,9 +18,8 @@ from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
     ChatCompletionMessageCustomToolCall,
 )
 from pytest_mock import MockerFixture
-from sefia.llm import ToolCall
+from sefia.llm import JsonSnapshot, ToolCall
 from sefia.llm.exceptions import LLMCompletionDecodingError
-from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._response import decode_completion

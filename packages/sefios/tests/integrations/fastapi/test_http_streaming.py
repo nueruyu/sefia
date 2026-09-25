@@ -6,8 +6,7 @@ from typing import Any
 
 import pytest
 from sefia import Tools
-from sefia.llm import LLMClient, LLMCompletion, Message
-from sefia.llm.json import JsonSnapshot
+from sefia.llm import JsonSnapshot, LLMClient, LLMCompletion, Message
 from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import OutputStreamCallback, StringDelta, StringEnd
 from sefia_fastapi.events import SSEEvent

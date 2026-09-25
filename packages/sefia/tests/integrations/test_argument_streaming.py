@@ -7,9 +7,8 @@ import pytest
 from sefia import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.inference import FunctionInfo, ToolCallsDecision
-from sefia.llm import LLMCompletion, LLMInferenceStrategy, Message
+from sefia.llm import JsonSnapshot, LLMCompletion, LLMInferenceStrategy, Message
 from sefia.llm._client import LLMClient
-from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import (
     OutputStreamCallback,

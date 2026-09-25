@@ -39,7 +39,7 @@ from typing_extensions import final, override
 from .._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from .._session import Session
 from ..llm import LLMClient, LLMCompletion, Message
-from ..llm.json import JsonSnapshot
+from ..llm._json import JsonSnapshot
 from ..llm.step_decision import DecisionSpec, StepTool
 from ..llm.streaming import OutputStreamCallback, OutputStreamEvent
 from ..llm.transports import DecisionObserver

@@ -6,12 +6,12 @@ import pytest
 from sefia._tool_system import ToolRegistry
 from sefia.llm import (
     InferencePrompt,
+    JsonSnapshot,
     LLMCompletion,
     PromptRenderer,
     ToolCall,
 )
 from sefia.llm.exceptions import DecisionDecodingError
-from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.transports import (
     DecisionRequest,

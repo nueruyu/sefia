@@ -8,8 +8,8 @@ from sefia.inference import (
     ResultDecision,
     ToolCallsDecision,
 )
+from sefia.llm import JsonCompatible, JsonSnapshot
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.json import JsonCompatible, JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
 from sefia.pydantic import (
     PydanticResultFormatFactory,

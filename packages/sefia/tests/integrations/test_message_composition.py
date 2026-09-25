@@ -10,6 +10,7 @@ from sefia.inference import (
 )
 from sefia.llm import (
     InferencePrompt,
+    JsonSnapshot,
     LLMClient,
     LLMCompletion,
     LLMInferenceStrategy,
@@ -20,7 +21,6 @@ from sefia.llm import (
     PromptRenderer,
     ToolCall,
 )
-from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.transports import (
     DecisionRequest,

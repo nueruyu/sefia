@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import jsonschema.validators
 from sefia.json_schema import SchemaKeyword, SchemaNode, SchemaPath
-from sefia.llm.json import JsonCompatible, JsonSnapshot
+from sefia.llm import JsonCompatible, JsonSnapshot
 from typing_extensions import final
 
 from ._types import SchemaObject

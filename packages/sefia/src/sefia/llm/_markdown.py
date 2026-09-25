@@ -1,7 +1,7 @@
 import json
 import re
 
-from sefia.llm.json import JsonCompatible
+from ._json import JsonCompatible
 
 
 def markdown_fence(content: str) -> str:

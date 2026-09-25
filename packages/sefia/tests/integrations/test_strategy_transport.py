@@ -8,13 +8,13 @@ from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import ResultDecision, ToolCallsDecision
 from sefia.llm import (
+    JsonSnapshot,
     LLMClient,
     LLMCompletion,
     LLMInferenceStrategy,
     PromptRenderer,
     ToolCall,
 )
-from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import StepDecisionMode
 from sefia.llm.transports import (
     DecisionTransport,

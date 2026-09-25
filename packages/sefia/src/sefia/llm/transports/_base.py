@@ -6,9 +6,9 @@ from typing import TypeAlias
 
 from ...inference import FunctionInfo
 from .._client import LLMClient
+from .._json import JsonSnapshot
 from .._messages import LLMCompletion, Message, ToolCall
 from .._prompt_renderer import PromptRenderer
-from ..json import JsonSnapshot
 from ..step_decision import DecisionSpec
 from ..streaming import OutputStreamEvent
 

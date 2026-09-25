@@ -3,9 +3,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from sefia.llm import LLMCompletion, ToolCall
+from sefia.llm import JsonSnapshot, LLMCompletion, ToolCall
 from sefia.llm.exceptions import LLMCompletionDecodingError
-from sefia.llm.json import JsonSnapshot
 
 from ._schema import StructuredDecisionFormat
 from ._schema._provider_format import ProviderJsonFormat

@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeVar
 
-from .json import JsonSnapshot
+from ._json import JsonSnapshot
 
 
 @dataclass(frozen=True, init=False)

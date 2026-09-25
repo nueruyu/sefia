@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sefia.json_schema import JsonSchemaDocument
-from sefia.llm.json import JsonSnapshot
+from sefia.llm import JsonSnapshot
 from typing_extensions import final
 
 from ._policy import (
