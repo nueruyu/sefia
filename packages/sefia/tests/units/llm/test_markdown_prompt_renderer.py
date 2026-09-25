@@ -5,7 +5,7 @@ from sefia.llm import (
     MarkdownPromptRenderer,
     StructuredData,
 )
-from sefia.llm.json_schema import JsonValue
+from sefia.json_schema import JsonValue
 from sefia.testing import make_function_info
 
 

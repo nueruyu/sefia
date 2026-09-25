@@ -5,7 +5,7 @@ from jsonweir import IncrementalJsonParser
 from jsonweir import events as js
 from typing_extensions import TypeAlias, final
 
-from .json_schema import SchemaPath
+from ..json_schema import SchemaPath
 
 
 @final

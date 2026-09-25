@@ -1,5 +1,5 @@
 import pytest
-from sefia.llm.json_schema import (
+from sefia.json_schema import (
     JsonSchemaDocument,
     LocalDefinitionRef,
 )

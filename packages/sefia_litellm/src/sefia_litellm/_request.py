@@ -5,7 +5,7 @@ from typing import Any, Literal, TypedDict
 from typing_extensions import final
 
 from sefia.llm import Message, ToolCall
-from sefia.llm.json_schema import JsonObject
+from sefia.json_schema import JsonObject
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 
 from ._schema import StructuredDecisionFormat

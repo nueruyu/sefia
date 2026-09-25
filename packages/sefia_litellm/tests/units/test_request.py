@@ -4,7 +4,7 @@ from sefia.llm import (
     Message,
     ToolCall,
 )
-from sefia.llm.json_schema import JsonSchemaDocument
+from sefia.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticResultFormatFactory

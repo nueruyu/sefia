@@ -5,7 +5,7 @@ from typing import cast
 import jsonschema.validators
 from typing_extensions import final
 
-from sefia.llm.json_schema import (
+from sefia.json_schema import (
     JsonObject,
     JsonScalar,
     JsonValue,

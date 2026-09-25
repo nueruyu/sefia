@@ -3,7 +3,7 @@ from enum import StrEnum
 
 from typing_extensions import final
 
-from sefia.llm.json_schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
+from sefia.json_schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
 
 from ._uniform_dictionary import UniformDictionaryFormat
 

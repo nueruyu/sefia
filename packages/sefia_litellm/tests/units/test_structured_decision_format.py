@@ -8,7 +8,7 @@ from sefia._tool_system import (
     SignatureToolEntry,
     ToolEntry,
 )
-from sefia.llm.json_schema import SchemaNode
+from sefia.json_schema import SchemaNode
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import OutputStreamEvent, Scalar, StringDelta, StringEnd
 from sefia.pydantic import (

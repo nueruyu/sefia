@@ -9,7 +9,7 @@ from sefia._tool_system import (
 )
 from sefia.inference import ResultDecision, StepDecision, ToolCallsDecision
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.json_schema import SchemaNode
+from sefia.json_schema import SchemaNode
 from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import (
     PydanticResultFormatFactory,

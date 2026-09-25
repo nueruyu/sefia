@@ -6,7 +6,7 @@ from sefia._tool_system import ToolRegistry
 from sefia.llm import (
     Message,
 )
-from sefia.llm.json_schema import JsonSchemaDocument
+from sefia.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._client import (

@@ -6,7 +6,7 @@ from typing import TypeAlias, cast
 
 from typing_extensions import final
 
-from .json_schema import JsonScalar, JsonValue
+from ..json_schema import JsonScalar, JsonValue
 
 StructuredDataTree: TypeAlias = (
     JsonScalar | list["StructuredDataTree"] | dict[JsonScalar, "StructuredDataTree"]

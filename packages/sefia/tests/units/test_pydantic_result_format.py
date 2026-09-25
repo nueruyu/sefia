@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import pytest
 
 from sefia.llm import StructuredData
-from sefia.llm.json_schema import SchemaNode
+from sefia.json_schema import SchemaNode
 from sefia.pydantic import PydanticResultFormatFactory
 
 

@@ -3,7 +3,7 @@ import json
 from .._markdown import json_block, text_block
 from .._messages import LLMCompletion, Message
 from .._prompt_renderer import InferencePrompt, PromptRenderer
-from ..json_schema import JsonValue
+from ...json_schema import JsonValue
 from ..step_decision import StepTool
 from ..structured_data import StructuredData
 from ._base import (

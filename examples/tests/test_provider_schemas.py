@@ -1,7 +1,7 @@
 from importlib import import_module
 
 from sefia._tool_system import SignatureToolEntry, ToolEntry
-from sefia.llm.json_schema import JsonObject, SchemaNode
+from sefia.json_schema import JsonObject, SchemaNode
 from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import (
     PydanticResultFormatFactory,

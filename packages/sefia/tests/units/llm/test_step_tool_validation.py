@@ -7,7 +7,7 @@ from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import UnknownToolDecisionError
 from sefia.inference import ToolCallsDecision
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.json_schema import JsonValue
+from sefia.json_schema import JsonValue
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticResultFormatFactory

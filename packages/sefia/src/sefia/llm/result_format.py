@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .json_schema import JsonSchemaDocument
+from ..json_schema import JsonSchemaDocument
 from .structured_data import StructuredData
 
 

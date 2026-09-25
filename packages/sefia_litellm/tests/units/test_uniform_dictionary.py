@@ -1,7 +1,7 @@
 from copy import deepcopy
 
 import pytest
-from sefia.llm.json_schema import JsonObject
+from sefia.json_schema import JsonObject
 from sefia.llm.structured_data import StructuredData, StructuredDataTree
 from sefia_litellm._schema._uniform_dictionary import UniformDictionaryFormat
 

@@ -3,7 +3,7 @@ from typing import cast
 
 from typing_extensions import final
 
-from sefia.llm.json_schema import (
+from sefia.json_schema import (
     DefinitionRegistry,
     JsonObject,
     JsonSchemaDocument,

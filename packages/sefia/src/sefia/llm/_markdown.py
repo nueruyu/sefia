@@ -1,7 +1,7 @@
 import json
 import re
 
-from .json_schema import JsonValue
+from ..json_schema import JsonValue
 
 
 def markdown_fence(content: str) -> str:

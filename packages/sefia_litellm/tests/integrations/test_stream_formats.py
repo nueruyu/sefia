@@ -7,7 +7,7 @@ from litellm import (
 )
 from pytest_mock import MockerFixture
 from sefia._tool_system import ToolRegistry
-from sefia.llm.json_schema import JsonSchemaDocument
+from sefia.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import (
     OutputStreamEvent,

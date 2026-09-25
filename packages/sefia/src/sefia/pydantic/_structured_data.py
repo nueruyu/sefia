@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import final, override
 
-from ..llm.json_schema import JsonScalar
+from ..json_schema import JsonScalar
 from ..llm.structured_data import StructuredData, StructuredDataConverter
 
 

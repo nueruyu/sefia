@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from typing_extensions import final
 
-from sefia.llm.json_schema import JsonObject, JsonSchemaDocument
+from sefia.json_schema import JsonObject, JsonSchemaDocument
 from sefia.llm.structured_data import StructuredData
 
 from ._uniform_dictionary import UniformDictionaryFormat

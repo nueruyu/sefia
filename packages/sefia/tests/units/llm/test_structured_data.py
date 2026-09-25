@@ -1,7 +1,7 @@
 import pytest
 
 from sefia.llm.structured_data import StructuredData, StructuredDataTree
-from sefia.llm.json_schema import JsonScalar, JsonValue
+from sefia.json_schema import JsonScalar, JsonValue
 
 
 def test_from_json_builds_nested_structured_data() -> None:

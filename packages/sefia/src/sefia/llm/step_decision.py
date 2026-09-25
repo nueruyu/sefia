@@ -9,7 +9,7 @@ from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCallsDecision
 from ._tool_call_ids import ToolCallIdRegistry
-from .json_schema import JsonSchemaDocument
+from ..json_schema import JsonSchemaDocument
 from .result_format import ResultFormat, ResultFormatFactory
 from .structured_data import StructuredData
 

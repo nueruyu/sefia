@@ -3,7 +3,7 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 from typing_extensions import final, override
 
-from ..llm.json_schema import JsonSchemaDocument
+from ..json_schema import JsonSchemaDocument
 from ..llm.result_format import ResultFormat, ResultFormatFactory
 from ..llm.structured_data import StructuredData
 

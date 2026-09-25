@@ -2,7 +2,7 @@ from copy import deepcopy
 from typing import Any
 
 import pytest
-from sefia.llm.json_schema import JsonObject
+from sefia.json_schema import JsonObject
 from sefia_litellm._schema._policy import (
     GENERATED_SCHEMA_POLICY,
     USER_DEFINED_SCHEMA_POLICY,

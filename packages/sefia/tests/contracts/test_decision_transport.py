@@ -9,7 +9,7 @@ import pytest
 import sefia.llm.transports as transports
 from sefia import ToolRegistry
 from sefia.llm import LLMCompletion, ToolCall
-from sefia.llm.json_schema import JsonObject
+from sefia.json_schema import JsonObject
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import OutputStreamEvent, StringDelta, StringEnd
 from sefia.llm.structured_data import StructuredData
