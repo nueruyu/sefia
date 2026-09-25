@@ -72,11 +72,12 @@ class JsonSnapshot:
 
     @classmethod
     def from_object(cls, fields: Mapping[str, "JsonSnapshot"]) -> "JsonSnapshot":
-        if not all(
-            isinstance(key, str) for key in cast(Mapping[object, object], fields)
-        ):
-            raise ValueError("JSON object keys must be strings")
-        return cls.__wrap({key: value.__tree for key, value in fields.items()})
+        owned: dict[str, JsonCompatible] = {}
+        for key, value in cast(Mapping[object, JsonSnapshot], fields).items():
+            if not isinstance(key, str):
+                raise ValueError("JSON object keys must be strings")
+            owned[key] = value.__tree
+        return cls.__wrap(owned)
 
     def to_json_compatible(self) -> JsonCompatible:
         return copy_json(self.__tree)

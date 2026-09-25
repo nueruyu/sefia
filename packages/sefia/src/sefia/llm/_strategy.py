@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from typing_extensions import final, override
+from typing_extensions import assert_never, final, override
 
 from .._interfaces import InferenceStrategy
 from .._tool_system import ToolRegistry
@@ -24,11 +24,8 @@ from .result_format import ResultFormatFactory
 from .step_decision import DecisionSpec
 from .streaming import (
     OutputStreamEvent,
-)
-from .streaming import (
+    Scalar as OutputScalar,
     StringDelta as OutputStringDelta,
-)
-from .streaming import (
     StringEnd as OutputStringEnd,
 )
 from .transports import (
@@ -103,12 +100,15 @@ class _StrategyDecisionObserver(DecisionObserver):
 
         name = path[3]
         argument_event: ArgEvent
-        if isinstance(event, OutputStringDelta):
-            argument_event = StringDelta(name=name, text=event.text)
-        elif isinstance(event, OutputStringEnd):
-            argument_event = StringEnd(name=name, value=event.value)
-        else:
-            argument_event = Scalar(name=name, value=event.value)
+        match event:
+            case OutputStringDelta():
+                argument_event = StringDelta(name=name, text=event.text)
+            case OutputStringEnd():
+                argument_event = StringEnd(name=name, value=event.value)
+            case OutputScalar():
+                argument_event = Scalar(name=name, value=event.value)
+            case _:
+                assert_never(event)
         streamer.on_argument(path[1], argument_event)
 
 
