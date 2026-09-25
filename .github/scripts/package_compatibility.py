@@ -380,7 +380,12 @@ def verify_candidate_installed(
         )
 
 
-def verify_minimum_installed(distribution: str, constraints: Path) -> None:
+def verify_minimum_installed(
+    distribution: str,
+    constraints: Path,
+    artifact_dir: Path,
+    version: str,
+) -> None:
     expected = {}
     for line in constraints.read_text(encoding="utf-8").splitlines():
         if not line:
@@ -393,11 +398,24 @@ def verify_minimum_installed(distribution: str, constraints: Path) -> None:
         if actual != version:
             raise ValueError(f"Installed {name} is {actual}, expected {version}.")
 
+    wheels = verify_artifacts(artifact_dir, version)
     target = metadata.distribution(distribution)
+    if target.version != version:
+        raise ValueError(
+            f"Installed {distribution} is {target.version}, expected {version}."
+        )
+
     direct_url_text = target.read_text("direct_url.json")
     if direct_url_text is None:
         raise ValueError(
             f"Current {distribution} was not installed from the candidate wheel."
+        )
+    direct_url = json.loads(direct_url_text).get("url")
+    expected_url = wheels[distribution].resolve().as_uri()
+    if direct_url != expected_url:
+        raise ValueError(
+            f"Installed {distribution} came from {direct_url!r}, "
+            f"expected candidate wheel {expected_url!r}."
         )
 
 
@@ -446,6 +464,8 @@ def _parser() -> argparse.ArgumentParser:
     minimum_installed = subparsers.add_parser("verify-minimum-installed")
     minimum_installed.add_argument("--distribution", required=True)
     minimum_installed.add_argument("--constraints", type=Path, required=True)
+    minimum_installed.add_argument("--artifact-dir", type=Path, required=True)
+    minimum_installed.add_argument("--version", required=True)
 
     return parser
 
@@ -491,7 +511,12 @@ def main() -> None:
             args.distribution,
         )
     elif args.command == "verify-minimum-installed":
-        verify_minimum_installed(args.distribution, args.constraints)
+        verify_minimum_installed(
+            args.distribution,
+            args.constraints,
+            args.artifact_dir,
+            args.version,
+        )
     else:
         raise AssertionError(f"Unsupported command: {args.command}")
 
