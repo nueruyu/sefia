@@ -1,8 +1,8 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import Any
 
 from ..event_system import EventHandler
-from .middleware import Middleware
+from .middleware import MiddlewareSet
 
 
 class Policy:
@@ -19,7 +19,7 @@ class Policy:
 
     For one-off composition, build a policy directly from factories::
 
-        Policy(middleware=lambda: [Retrier(max_retries=5)])
+        Policy(middleware=lambda: MiddlewareSet(inference=(Retrier(max_retries=5),)))
 
     Each factory is called once per inference run, so stateful middleware
     (e.g. retry counters) is correctly scoped to a single run. Named, reusable
@@ -31,13 +31,13 @@ class Policy:
     # Class-level fallbacks so subclasses whose __init__ does not call
     # super().__init__() (e.g. dataclasses) still get empty defaults.
     _handlers_factory: Callable[[], list[EventHandler[Any]]] | None = None
-    _middleware_factory: Callable[[], Sequence[Middleware]] | None = None
+    _middleware_factory: Callable[[], MiddlewareSet] | None = None
 
     def __init__(
         self,
         *,
         handlers: Callable[[], list[EventHandler[Any]]] | None = None,
-        middleware: Callable[[], Sequence[Middleware]] | None = None,
+        middleware: Callable[[], MiddlewareSet] | None = None,
     ):
         self._handlers_factory = handlers
         self._middleware_factory = middleware
@@ -46,6 +46,8 @@ class Policy:
         """Create observation handlers used by this policy (default: none)."""
         return self._handlers_factory() if self._handlers_factory else []
 
-    def create_middleware(self) -> Sequence[Middleware]:
+    def create_middleware(self) -> MiddlewareSet:
         """Create control middleware used by this policy (default: none)."""
-        return self._middleware_factory() if self._middleware_factory else []
+        return (
+            self._middleware_factory() if self._middleware_factory else MiddlewareSet()
+        )

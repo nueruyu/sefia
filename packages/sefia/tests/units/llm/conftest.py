@@ -5,7 +5,10 @@ import pytest
 from sefia.llm import LLMClient, LLMCompletion, LLMInferenceStrategy, PromptRenderer
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import DecisionTransport, DecodedDecision
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticStructuredDataConverter,
+)
 
 
 @pytest.fixture
@@ -25,7 +28,8 @@ def make_strategy(transport: AsyncMock) -> Callable[..., LLMInferenceStrategy]:
     ) -> LLMInferenceStrategy:
         return LLMInferenceStrategy(
             llm_client=Mock(spec=LLMClient),
-            result_format_factory=PydanticModelBackend(),
+            result_format_factory=PydanticResultFormatFactory(),
+            structured_data_converter=PydanticStructuredDataConverter(),
             prompt_renderer=Mock(spec=PromptRenderer),
             decision_transport=transport,
             stream=stream,

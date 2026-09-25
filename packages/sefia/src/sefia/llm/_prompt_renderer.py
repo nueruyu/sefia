@@ -1,37 +1,26 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from ..inference import FunctionInfo, HistoryItem, ToolCallResult
+from ..inference import FunctionInfo
 from .step_decision import StepTool
+from .structured_data import StructuredData
 
 
 @dataclass(frozen=True)
-class RejectedDecision:
-    content: str | None
-    reason: str
-
-
-@dataclass(frozen=True)
-class DecisionPrompt:
+class InferencePrompt:
     function: FunctionInfo
+    arguments: StructuredData
     tools: tuple[StepTool, ...]
-    history: tuple[HistoryItem, ...]
-    response_instructions: str
-    rejected: RejectedDecision | None = None
 
 
 class PromptRenderer(ABC):
-    """Renders decision prompts and tool-result message content as text."""
+    """Renders the standard inference prompt from function data and tools."""
 
     @abstractmethod
-    def render(self, prompt: DecisionPrompt) -> str: ...
-
-    @abstractmethod
-    def render_tool_result(self, result: ToolCallResult) -> str: ...
+    def render(self, prompt: InferencePrompt) -> str: ...
 
 
 __all__ = [
-    "DecisionPrompt",
+    "InferencePrompt",
     "PromptRenderer",
-    "RejectedDecision",
 ]

@@ -43,7 +43,7 @@ from ..llm.step_decision import DecisionSpec, StepTool
 from ..llm.structured_data import StructuredData
 from ..llm.streaming import OutputStreamCallback, OutputStreamEvent
 from ..llm.transports import DecisionObserver
-from ..pydantic._json_utils import pydantic_json_default
+from ..pydantic import PydanticStructuredDataConverter
 from ._decision_transport_contract import (
     DecisionTransportCase,
     DecisionTransportContract,
@@ -68,6 +68,16 @@ from ._tool_collector_contract import ToolCollectorCase, ToolCollectorContract
 def _snapshot_value(value: Any) -> Any:
     if isinstance(value, StructuredData):
         return _snapshot_value(value.tree)
+    if isinstance(value, Message):
+        result: dict[str, Any] = {"role": value.role}
+        content = value.content
+        if content is not None:
+            result["content"] = _snapshot_value(content)
+        if value.tool_call_id is not None:
+            result["tool_call_id"] = value.tool_call_id
+        if value.tool_calls is not None:
+            result["tool_calls"] = [_snapshot_value(call) for call in value.tool_calls]
+        return result
     if is_dataclass(value) and not isinstance(value, type):
         result: dict[str, Any] = {}
         for item in fields(value):
@@ -165,16 +175,16 @@ class RecordingDecisionObserver(DecisionObserver):
     """Records decision transport callbacks for assertions in tests."""
 
     def __init__(self) -> None:
-        self.prompt: str | None = None
-        self.prompts: list[str] = []
+        self.messages: tuple[Message, ...] | None = None
+        self.requests: list[tuple[Message, ...]] = []
         self.response_texts: list[str] = []
         self.reasoning_texts: list[str] = []
         self.output_events: list[OutputStreamEvent] = []
 
     @override
-    async def before_request(self, prompt: str) -> None:
-        self.prompt = prompt
-        self.prompts.append(prompt)
+    async def before_request(self, messages: tuple[Message, ...]) -> None:
+        self.messages = messages
+        self.requests.append(messages)
 
     @override
     async def response_text(self, text: str) -> None:
@@ -196,27 +206,23 @@ def result_completion(result: Any) -> LLMCompletion:
     including dataclasses and Pydantic models, which serialize to the object
     shape the step-decision schema validates.
     """
-    return LLMCompletion(
-        content=json.dumps(
-            {"decision": "result", "result": result},
-            default=pydantic_json_default,
-        )
+    data = PydanticStructuredDataConverter().to_structured_data(
+        {"decision": "result", "result": result}
     )
+    return LLMCompletion(content=json.dumps(data.to_json_value()))
 
 
 def tool_calls_completion(*calls: tuple[str, dict[str, Any]]) -> LLMCompletion:
     """A scripted "tool_calls" decision from ``(tool_name, arguments)`` pairs."""
-    return LLMCompletion(
-        content=json.dumps(
-            {
-                "decision": "tool_calls",
-                "tool_calls": [
-                    {"name": name, "arguments": arguments} for name, arguments in calls
-                ],
-            },
-            default=pydantic_json_default,
-        )
+    data = PydanticStructuredDataConverter().to_structured_data(
+        {
+            "decision": "tool_calls",
+            "tool_calls": [
+                {"name": name, "arguments": arguments} for name, arguments in calls
+            ],
+        }
     )
+    return LLMCompletion(content=json.dumps(data.to_json_value()))
 
 
 @asynccontextmanager

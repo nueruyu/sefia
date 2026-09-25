@@ -1,15 +1,14 @@
-from typing import cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from typing_extensions import override
 
-from sefia.llm import DecisionPrompt, LLMCompletion, Message, PromptRenderer
+from sefia.llm import InferencePrompt, LLMCompletion, Message, PromptRenderer
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.transports import DecisionRequest, StructuredDecisionTransport
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import RecordingDecisionObserver, make_decision_request
 
 
@@ -17,7 +16,7 @@ def _request() -> DecisionRequest:
     decision = DecisionSpec.for_inference(
         output_type=str,
         tools=[],
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
     return make_decision_request(decision)
 
@@ -41,21 +40,26 @@ async def test_renders_and_delivers_one_complete_prompt() -> None:
     observer = RecordingDecisionObserver()
 
     decoded = await StructuredDecisionTransport().request_decision(
-        client, renderer, request, observer, stream=False
+        client,
+        renderer,
+        request,
+        observer,
+        stream=False,
     )
 
     sent = client.complete.await_args.kwargs
-    assert sent["messages"] == [Message(role="user", content="complete prompt")]
+    assert len(sent["messages"]) == 1
+    assert sent["messages"][0].role == "user"
+    content = sent["messages"][0].content
+    assert content.startswith("complete prompt\n\n## Response\n\n")
     assert sent["decision_spec"] is request.decision_spec
-    assert observer.prompt == "complete prompt"
+    assert observer.messages == tuple(sent["messages"])
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
     assert decoded.completion is completion
     renderer.render.assert_called_once()
-    rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
-    assert "provided structured output schema" in (
-        rendered_prompt.response_instructions
-    )
-    assert '"decision"' not in rendered_prompt.response_instructions
+    assert isinstance(renderer.render.call_args.args[0], InferencePrompt)
+    assert "provided structured output schema" in content
+    assert '"decision"' not in content
 
 
 async def test_observer_finishes_before_the_client_request() -> None:
@@ -74,12 +78,16 @@ async def test_observer_finishes_before_the_client_request() -> None:
 
     class Observer(RecordingDecisionObserver):
         @override
-        async def before_request(self, prompt: str) -> None:
-            await super().before_request(prompt)
+        async def before_request(self, messages: tuple[Message, ...]) -> None:
+            await super().before_request(messages)
             order.append("observed")
 
     await StructuredDecisionTransport().request_decision(
-        client, _renderer(), _request(), Observer(), stream=False
+        client,
+        _renderer(),
+        _request(),
+        Observer(),
+        stream=False,
     )
 
     assert order == ["observed", "request"]

@@ -17,7 +17,7 @@ def _require_policy(value: object) -> Policy:
         return value
     raise TypeError(
         "@policy must be called with a Policy instance, "
-        "e.g. @policy(Policy(middleware=lambda: [Retrier(max_retries=5)]))."
+        "e.g. @policy(Policy(middleware=lambda: MiddlewareSet(inference=(Retrier(max_retries=5),))))."
     )
 
 

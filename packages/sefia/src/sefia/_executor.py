@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, Awaitable, Callable, cast, overload
+from typing import Any, Awaitable, Callable, TypeAlias, cast, overload
 
 from . import events
 from ._history import StepHistory
@@ -10,7 +10,6 @@ from ._interfaces.middleware import (
     DecisionMiddleware,
     InferenceContext,
     InferenceMiddleware,
-    Middleware,
     StepContext,
     StepMiddleware,
 )
@@ -26,6 +25,9 @@ from .inference import (
     ToolCallRequest,
     ToolCallResult,
 )
+
+_Middleware: TypeAlias = InferenceMiddleware | StepMiddleware | DecisionMiddleware
+_MiddlewareContext: TypeAlias = InferenceContext | StepContext | DecisionContext
 
 
 @overload
@@ -53,8 +55,8 @@ def _compose(
 
 
 def _compose(
-    middlewares: Sequence[Middleware],
-    ctx: InferenceContext | StepContext | DecisionContext,
+    middlewares: Sequence[_Middleware],
+    ctx: _MiddlewareContext,
     core: Callable[[], Awaitable[Any]],
 ) -> Callable[[], Awaitable[Any]]:
     """
@@ -71,8 +73,8 @@ def _compose(
 
 
 def _layer(
-    middleware: Middleware,
-    ctx: InferenceContext | StepContext | DecisionContext,
+    middleware: _Middleware,
+    ctx: _MiddlewareContext,
     nxt: Callable[[], Awaitable[Any]],
 ) -> Callable[[], Awaitable[Any]]:
     async def call() -> Any:

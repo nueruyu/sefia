@@ -1,7 +1,6 @@
 from typing_extensions import final, override
 
 from ..._client import LLMClient
-from ..._messages import Message
 from ..._prompt_renderer import PromptRenderer
 from ...exceptions import DecisionDecodingError
 from .._base import (
@@ -10,8 +9,9 @@ from .._base import (
     DecodedDecision,
     DecisionTransport,
 )
+from .._messages import build_decision_messages
 from ._decoding import decode_native_tool_calls
-from ._prompt import native_history_messages, render_native_prompt
+from ._prompt import native_history_messages, native_response_instructions
 from ._result_tool import create_result_tool
 
 
@@ -33,14 +33,20 @@ class NativeDecisionTransport(DecisionTransport):
         if result_tool is not None:
             tools.append(result_tool)
 
-        prompt = render_native_prompt(request, prompt_renderer, result_tool)
-        await observer.before_request(prompt)
+        history_messages = native_history_messages(request.history)
+        messages = build_decision_messages(
+            request=request,
+            renderer=prompt_renderer,
+            prompt_tools=(),
+            history_messages=history_messages,
+            response_instructions=native_response_instructions(
+                request.decision_spec, result_tool
+            ),
+        )
+        await observer.before_request(tuple(messages))
 
         completion = await client.complete(
-            messages=[
-                Message(role="user", content=prompt),
-                *native_history_messages(request.history, prompt_renderer),
-            ],
+            messages=messages,
             tools=tools,
             decision_spec=None,
             stream_callback=observer.response_text if stream else None,

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pytest
 from pydantic import BaseModel
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticToolFunctionInspector
 
 
 def _sample_func(a: int, b: str = "x") -> bool:
@@ -22,10 +22,10 @@ class _UnhashableCallable:
         return self is other
 
 
-def test_definition():
-    backend = PydanticModelBackend()
+def test_definition() -> None:
+    inspector = PydanticToolFunctionInspector()
 
-    definition = backend.definition(_sample_func, name="_sample_func")
+    definition = inspector.definition(_sample_func, name="_sample_func")
 
     assert definition.name == "_sample_func"
     assert definition.description == "Sample function."
@@ -37,56 +37,55 @@ def test_definition():
     assert params["additionalProperties"] is False
 
 
-def test_tool_name_sanitizes_complex_names():
+def test_tool_name_sanitizes_complex_names() -> None:
     class Outer:
         class Inner:
-            def my_method(
-                self,
-            ):
+            def my_method(self) -> None:
                 pass
 
-    name = PydanticModelBackend().tool_name(Outer.Inner.my_method)
+    name = PydanticToolFunctionInspector().tool_name(Outer.Inner.my_method)
 
     assert name.endswith("Outer_Inner_my_method")
     assert "." not in name
     assert "<" not in name
 
 
-def test_definition_is_cached():
-    backend = PydanticModelBackend()
+def test_definition_is_cached() -> None:
+    inspector = PydanticToolFunctionInspector()
 
-    definition1 = backend.definition(_sample_func, name="_sample_func")
-    definition2 = backend.definition(_sample_func, name="_sample_func")
+    definition1 = inspector.definition(_sample_func, name="_sample_func")
+    definition2 = inspector.definition(_sample_func, name="_sample_func")
 
     assert definition1 is definition2
 
 
-def test_definition_caches_unhashable_callables():
-    backend = PydanticModelBackend()
+def test_definition_caches_unhashable_callables() -> None:
+    inspector = PydanticToolFunctionInspector()
     func = _UnhashableCallable()
 
-    definition1 = backend.definition(func, name="unhashable")
-    definition2 = backend.definition(func, name="unhashable")
+    definition1 = inspector.definition(func, name="unhashable")
+    definition2 = inspector.definition(func, name="unhashable")
 
     assert definition1 is definition2
 
 
-def test_definition_rejects_positional_only_parameters():
-    backend = PydanticModelBackend()
+def test_definition_rejects_positional_only_parameters() -> None:
+    inspector = PydanticToolFunctionInspector()
 
     with pytest.raises(ValueError, match="positional-only.*keyword arguments"):
-        backend.definition(_positional_only_func, name="_positional_only_func")
+        inspector.definition(_positional_only_func, name="_positional_only_func")
 
 
-def test_bind_coerces_and_passes_extra_keys_through():
-    backend = PydanticModelBackend()
+def test_bind_coerces_and_passes_extra_keys_through() -> None:
+    inspector = PydanticToolFunctionInspector()
 
-    # Declared params are coerced; the shape is enforced upstream, so bind
-    # passes any additional keys through unchanged.
-    assert backend.bind(_sample_func, {"a": "1", "b": "y"}) == {"a": 1, "b": "y"}
+    assert inspector.bind(_sample_func, {"a": "1", "b": "y"}) == {
+        "a": 1,
+        "b": "y",
+    }
 
 
-def test_bind_preserves_coerced_model_and_dataclass_instances():
+def test_bind_preserves_coerced_model_and_dataclass_instances() -> None:
     class Point(BaseModel):
         x: int
         y: int
@@ -97,12 +96,10 @@ def test_bind_preserves_coerced_model_and_dataclass_instances():
 
     def func(point: Point, box: Box) -> None: ...
 
-    bound = PydanticModelBackend().bind(
+    bound = PydanticToolFunctionInspector().bind(
         func, {"point": {"x": 1, "y": 2}, "box": {"width": 3}}
     )
 
-    # The coerced instances survive binding — a recursive dump would
-    # flatten them back into dicts.
     assert bound["point"] == Point(x=1, y=2)
     assert isinstance(bound["box"], Box)
     assert bound["box"].width == 3

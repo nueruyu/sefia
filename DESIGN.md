@@ -105,11 +105,10 @@ raise to reject it, or return a decision without calling the strategy. History a
 function metadata stay outside this context because their nested mutable objects
 could alter strategy inputs without tracking or persisting those changes.
 
-Attach middleware through `Policy(middleware=lambda: [...])`; factories remain
-scoped to each inference run, with context → domain → profile → function ordering.
-The public `Middleware` type alias names the supported control scopes. Policy
-factories and `create_middleware()` return `Sequence[Middleware]`, allowing
-subclasses to return narrower types such as `list[StepMiddleware]` or tuples.
+Attach middleware through `Policy(middleware=lambda: MiddlewareSet(...))`; each
+factory runs once per inference run, with session → domain → profile → function
+ordering within each category. `MiddlewareSet` makes the three lifecycle locations
+explicit.
 
 Rejecting a decision must fail the engraved decision execution before it commits,
 so retry/resume can regenerate the decision instead of replaying a rejected
@@ -120,6 +119,30 @@ decision; a middleware error or invalid return emits `InferenceStepFailed` inste
 Semantic validation is one downstream use case. Core adds no validation API or
 coupling to the LLM strategy's internal response repair loop. Extension authors can
 build isolated middleware tests with `sefia.testing.make_decision_context()`.
+
+## LLM message composition
+
+`LLMInferenceStrategy` creates a default `MessageLayout`, applies configured
+`MessageComposer` instances in sequence, builds a `DecisionSpec`, calls the transport,
+and validates the response. Applications configure composers through `Session` or
+`SessionScope`. Each composer can inspect `FunctionInfo`, place application messages
+before or after Sefia's standard inference prompt, and select its remaining arguments
+using application-defined conventions. Sefia assigns no meaning to annotations or models.
+Composers should treat `FunctionInfo` as read-only and remain reentrant across calls.
+
+Composers transform LLM input representation. They are not execution middleware and
+cannot wrap, retry, or short-circuit the inference loop. `PromptRenderer` renders
+Sefia's standard inference prompt from function instructions, remaining arguments,
+and any textual tool definitions. `MessageLayout` retains raw application values until
+`LLMInferenceStrategy` consumes it. The strategy uses the configured
+`StructuredDataConverter` to materialize retained arguments and execution history as
+`StructuredData`, then creates a provider-neutral `DecisionRequest`. Its configured
+`ResultFormatFactory` independently defines result validation and restoration. Default
+tool collection uses a separate `ToolFunctionInspector` for callable schemas and
+binding; custom inspection is supplied through `DefaultToolCollector`. Transports place the
+inference prompt between the application messages, then append Sefia execution
+history, repair feedback, and response instructions. Renderers and transports project
+structured trees to JSON text only where their presentation requires it.
 
 ## Durability & resumable HITL
 

@@ -6,10 +6,9 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from ..inference import ToolCallResult
 from ..llm._client import LLMClient
 from ..llm._messages import LLMCompletion, Message
-from ..llm._prompt_renderer import DecisionPrompt, PromptRenderer
+from ..llm._prompt_renderer import InferencePrompt, PromptRenderer
 from ..llm.step_decision import DecisionSpec, StepTool
 from ..llm.streaming import (
     OutputStreamCallback,
@@ -35,24 +34,20 @@ class DecisionTransportCase:
 
 class _Renderer(PromptRenderer):
     @override
-    def render(self, prompt: DecisionPrompt) -> str:
+    def render(self, prompt: InferencePrompt) -> str:
         return "contract prompt"
-
-    @override
-    def render_tool_result(self, result: ToolCallResult) -> str:
-        return "contract tool result"
 
 
 class _Observer(DecisionObserver):
     def __init__(self) -> None:
-        self.prompts: list[str] = []
+        self.requests: list[tuple[Message, ...]] = []
         self.response_texts: list[str] = []
         self.reasoning_texts: list[str] = []
         self.output_events: list[OutputStreamEvent] = []
 
     @override
-    async def before_request(self, prompt: str) -> None:
-        self.prompts.append(prompt)
+    async def before_request(self, messages: tuple[Message, ...]) -> None:
+        self.requests.append(messages)
 
     @override
     async def response_text(self, text: str) -> None:
@@ -71,6 +66,7 @@ class _CompletionClient(LLMClient):
     def __init__(self, case: DecisionTransportCase) -> None:
         self.case = case
         self.calls = 0
+        self.messages: list[Message] | None = None
 
     @override
     async def complete(
@@ -83,6 +79,7 @@ class _CompletionClient(LLMClient):
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None = None,
     ) -> LLMCompletion:
         self.calls += 1
+        self.messages = messages
         if reasoning_callback is not None:
             for chunk in self.case.reasoning_chunks:
                 await reasoning_callback(chunk)
@@ -109,12 +106,26 @@ class DecisionTransportContract(ABC):
         observer = _Observer()
 
         decoded = await decision_transport_case.transport.request_decision(
-            client, _Renderer(), decision_transport_case.request, observer, stream=False
+            client,
+            _Renderer(),
+            decision_transport_case.request,
+            observer,
+            stream=False,
         )
 
         assert decoded.decision_data == decision_transport_case.expected_data
         assert decoded.completion is decision_transport_case.completion
-        assert observer.prompts == ["contract prompt"]
+        assert len(observer.requests) == 1
+        assert len(observer.requests[0]) == 1
+        assert client.messages is not None
+        assert all(
+            observed is sent
+            for observed, sent in zip(observer.requests[0], client.messages)
+        )
+        assert observer.requests[0][0].role == "user"
+        content = observer.requests[0][0].content
+        assert isinstance(content, str)
+        assert content.startswith("contract prompt\n\n## Response\n\n")
         assert observer.response_texts == []
         assert observer.reasoning_texts == []
         assert observer.output_events == []
@@ -126,12 +137,21 @@ class DecisionTransportContract(ABC):
         observer = _Observer()
 
         decoded = await decision_transport_case.transport.request_decision(
-            client, _Renderer(), decision_transport_case.request, observer, stream=True
+            client,
+            _Renderer(),
+            decision_transport_case.request,
+            observer,
+            stream=True,
         )
 
         assert decoded.decision_data == decision_transport_case.expected_data
         assert decoded.completion is decision_transport_case.completion
-        assert observer.prompts == ["contract prompt"]
+        assert len(observer.requests) == 1
+        assert len(observer.requests[0]) == 1
+        assert observer.requests[0][0].role == "user"
+        content = observer.requests[0][0].content
+        assert isinstance(content, str)
+        assert content.startswith("contract prompt\n\n## Response\n\n")
         assert observer.response_texts == list(decision_transport_case.content_chunks)
         assert observer.reasoning_texts == list(
             decision_transport_case.reasoning_chunks

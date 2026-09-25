@@ -11,7 +11,7 @@ implement each step.
 | --- | --- | --- |
 | `@infer` decorator | `packages/sefia/src/sefia/_authoring/domain.py` | Wraps a function so calling it runs an inference instead of the body. |
 | `InferenceExecutor` | `packages/sefia/src/sefia/_executor.py` | Owns the step loop, tool execution, middleware. |
-| `LLMInferenceStrategy` | `packages/sefia/src/sefia/llm/_strategy.py` | Turns the function + history into a prompt + schema, parses the reply. |
+| `LLMInferenceStrategy` | `packages/sefia/src/sefia/llm/_strategy.py` | Composes a message layout, builds the decision specification, and validates the transport reply. |
 | `DefaultToolCollector` | `packages/sefia/src/sefia/tool_collectors/_default.py` | Discovers tools from the bound object and its held dependencies. |
 | `Session` / `SessionContext` | `packages/sefia/src/sefia/_session.py`, `_context.py` | The durable, contextvar-scoped run; wraps a `glyff.Session`. |
 | glyff | [nueruyu/glyff](https://github.com/nueruyu/glyff) | Content-addressed engrave/replay underneath every engraved call. |
@@ -55,7 +55,7 @@ and return types, see [infer-contract.md](./infer-contract.md).
 
 ```
 loop:
-  decision = strategy.decide_next_step(function_info, history, tools)   # one model call
+  decision = strategy.decide_next_step(function_info, history, tools)
   if decision is FinalAnswer:  return decision.answer
   if decision is ToolCalls:    history += decision; history += run(decision.calls)
 ```
@@ -80,18 +80,39 @@ loop:
 
 ## Turning a function into a prompt
 
-`LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) coordinates six
-domain concepts:
+`LLMInferenceStrategy.decide_next_step` (`llm/_strategy.py`) coordinates message
+composition and decision validation:
 
-1. `DecisionSpec` describes which next decisions are valid.
-2. `DecisionRequest` gathers the task, available tools, prior interactions, and any
-   rejected response.
-3. `DecisionTransport` supplies the response instructions for its protocol and asks
-   `PromptRenderer` to produce the required text.
-4. `LLMClient.complete()` returns a provider-neutral `LLMCompletion`.
-5. The transport decodes its protocol into `DecodedDecision`; its `decision_data` is
+```text
+layout = MessageLayout.default(function_info)
+for composer in message_composers:
+    layout = composer.compose(function_info, layout)
+request = materialize(layout, history, structured_data_converter)
+transport.request_decision(request, prompt_renderer, ...)
+```
+
+1. It creates `MessageLayout.default(function_info)` and passes the layout through each
+   configured `MessageComposer` in order. A composer can transform the layout based on
+   application conventions while treating `FunctionInfo` as read-only metadata.
+2. `DecisionSpec` describes which next decisions are valid using the configured
+   `ResultFormatFactory`. Independently, the strategy calls
+   `StructuredDataConverter.to_structured_data()` for retained arguments, tool-call
+   arguments, and tool results.
+3. The `DecisionRequest` carries the function, materialized arguments, application
+   messages, semantic history, decision contract, and rejection facts.
+4. The transport constructs `InferencePrompt` with the tools appropriate to its
+   protocol, and `PromptRenderer` renders it in the configured presentation format.
+   `DecisionTransport` places that prompt between application messages and owns
+   history, repair, and response instructions.
+5. `LLMClient.complete()` returns a provider-neutral `LLMCompletion`.
+6. The transport decodes its protocol into `DecodedDecision`; its `decision_data` is
    structured but not yet semantically valid.
-6. `DecisionSpec` validates that data as a `StepDecision`.
+7. `DecisionSpec` validates that data as a `StepDecision`.
+
+The layout is composed and materialized once per strategy invocation. A new inference step or a
+`DecisionMiddleware` retry invokes the strategy again; an internal response repair
+reuses the same semantic request data and adds rejection facts. Composers are strategy
+collaborators, not execution middleware.
 
 `DecisionSpec` selects one of three shapes:
 
@@ -113,12 +134,18 @@ adapter nests every structured decision under a required `payload` property, giv
 all decision modes the same object-root wire shape. It removes that envelope from
 completed output and stream paths.
 
-The Pydantic backend is limited to Python-aware leaves: `_function_models.py`
-reflects callable parameters, while `_result_format.py` produces a JSON Schema and
-restores a decoded result to its declared Python type. Provider-neutral tree
-operations live on `StructuredData`; the backend does not know the step-decision
-shape. Provider-side response decoding and stream-path normalization stay inside the
-client implementation.
+Sefia keeps three Python/LLM capabilities independent. `ToolFunctionInspector`
+interprets callables for tool schemas and binding. `ResultFormatFactory` produces a
+result schema and restores a decoded result to its declared Python type.
+`StructuredDataConverter` normalizes runtime Python values into `StructuredData`.
+`Session` directly configures the latter two strategy capabilities. Custom tool
+inspection is configured through `DefaultToolCollector(inspector=...)`. Sefia supplies
+separate Pydantic-backed defaults from
+`pydantic/_tool_function_inspector.py`, `_result_format.py`, and
+`_structured_data.py`. `StructuredData` is Sefia's single provider-neutral structured
+tree for both values supplied to an LLM and values decoded from one. Its explicit JSON
+projection converts scalar mapping keys and detects collisions. None of these three
+capabilities knows JSON text, Markdown, provider wire payloads, or message ordering.
 
 `DecisionSpec.for_inference()` composes these leaves. It exposes the decision mode,
 result format, and tools, and validates a returned value as the corresponding
@@ -127,11 +154,14 @@ result schema interfaces and decoded values live in `sefia.llm.result_format` an
 `sefia.llm.structured_data`.
 `sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
-`MarkdownPromptRenderer` owns the textual representation of instructions, arguments,
-tool descriptions, prior tool interactions, tool results, response forms, and repair
-feedback. It returns text, not protocol messages. A
-transport chooses which concepts are textual, owns the response instructions, invokes
-the renderer, sends protocol messages, and decodes the reply.
+`MarkdownPromptRenderer` renders only the standard inference prompt from an
+`InferencePrompt` whose arguments are already `StructuredData`. Private Markdown
+helpers format code blocks without interpreting Python objects. Shared transport
+framing builds the complete final message sequence:
+application messages before the prompt, the prompt, application messages after it,
+execution history, repair feedback, and response instructions.
+They combine inference and response text into one message
+for the default first step.
 `StructuredDecisionTransport` requests structured output;
 `PromptedDecisionTransport` asks for the same JSON decision in ordinary response
 text; `sefia.llm.transports.NativeDecisionTransport` exposes application tools and a
@@ -142,13 +172,15 @@ progress events, so final results, repair, token
 streams, reasoning streams, and tool-argument previews do not depend on the selected
 transport.
 
-An invalid reply (empty body, malformed JSON, schema violation, unknown tool) is
+An invalid reply backed by an actual `LLMCompletion` (empty body, malformed JSON,
+schema violation, unknown tool) is
 first **repaired in place**: the strategy creates a new request containing the
 invalid output and validation error, and asks again, up to
 `max_repair_attempts` times (default 2; configurable on
 `LLMInferenceStrategy` / `Session` / `SessionScope`). The rejected response lives only
-inside that one (engraved) step's prompt — it never enters the step history, so an
-invalid decision is never persisted. Only when the budget is spent does the
+inside that one (engraved) step's final message sequence — it never enters the step history, so an
+invalid decision is never persisted. Generic inference failures without a rejected
+completion propagate to the outer retry/resume mechanism. Only when the repair budget is spent does the
 `InvalidInferenceResponseError` propagate as described below.
 
 (Why the unified schema rather than native tool-calling, and the tradeoff it makes:

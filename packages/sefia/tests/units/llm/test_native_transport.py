@@ -1,16 +1,11 @@
-import json
 from dataclasses import dataclass
 from typing import Any, Never, cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sefia._tool_system import ToolRegistry
-from sefia.inference import (
-    ToolCallResult,
-    ToolCallsDecision,
-)
 from sefia.llm import (
-    DecisionPrompt,
+    InferencePrompt,
     LLMCompletion,
     PromptRenderer,
     ToolCall,
@@ -18,12 +13,19 @@ from sefia.llm import (
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.structured_data import StructuredData
-from sefia.llm.transports import DecisionRequest, NativeDecisionTransport
-from sefia.pydantic import PydanticModelBackend
+from sefia.llm.transports import (
+    DecisionRequest,
+    DecisionToolCalls,
+    DecisionToolResult,
+    NativeDecisionTransport,
+)
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticToolFunctionInspector,
+)
 from sefia.testing import (
     RecordingDecisionObserver,
     make_decision_request,
-    make_tool_call_request,
 )
 
 
@@ -38,14 +40,18 @@ class Result:
 
 
 def _decision(output_type: Any, *functions: Any) -> DecisionSpec:
-    backend = PydanticModelBackend()
+    inspector = PydanticToolFunctionInspector()
     registry = ToolRegistry()
     for function in functions:
-        registry.add(function, name=backend.tool_name(function))
+        registry.add(
+            function,
+            name=inspector.tool_name(function),
+            inspector=inspector,
+        )
     return DecisionSpec.for_inference(
         output_type=output_type,
         tools=registry.get_all(),
-        result_format_factory=backend,
+        result_format_factory=PydanticResultFormatFactory(),
     )
 
 
@@ -56,11 +62,6 @@ def _request(decision: DecisionSpec) -> DecisionRequest:
 def _renderer() -> Mock:
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "prompt"
-
-    def render_tool_result(result: ToolCallResult) -> str:
-        return json.dumps(result.result)
-
-    renderer.render_tool_result.side_effect = render_tool_result
     return renderer
 
 
@@ -82,7 +83,11 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
     observer = RecordingDecisionObserver()
 
     decoded = await NativeDecisionTransport().request_decision(
-        client, renderer, _request(decision), observer, stream=False
+        client,
+        renderer,
+        _request(decision),
+        observer,
+        stream=False,
     )
 
     assert decoded.decision_data.tree == {
@@ -95,9 +100,9 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
         "return_result",
     ]
     assert sent["decision_spec"] is None
-    assert observer.prompt == "prompt"
-    rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
-    assert "return_result" in rendered_prompt.response_instructions
+    assert observer.messages == tuple(sent["messages"])
+    rendered_prompt = cast(InferencePrompt, renderer.render.call_args.args[0])
+    assert "return_result" in sent["messages"][-1].content
     assert rendered_prompt.tools == ()
 
 
@@ -145,19 +150,28 @@ async def test_native_transport_forwards_history_in_tool_only_mode() -> None:
     request = make_decision_request(
         _decision(Never, lookup),
         history=(
-            ToolCallsDecision(
-                [
-                    make_tool_call_request(
-                        id="call-1", name="lookup", arguments={"key": "first"}
-                    )
-                ]
+            DecisionToolCalls(
+                (
+                    ToolCall(
+                        id="call-1",
+                        name="lookup",
+                        arguments=StructuredData.from_json({"key": "first"}),
+                    ),
+                )
             ),
-            ToolCallResult(tool_call_id="call-1", result="found"),
+            DecisionToolResult(
+                tool_call_id="call-1",
+                result=StructuredData.from_scalar("found"),
+            ),
         ),
     )
 
     decoded = await NativeDecisionTransport().request_decision(
-        client, _renderer(), request, RecordingDecisionObserver(), stream=False
+        client,
+        _renderer(),
+        request,
+        RecordingDecisionObserver(),
+        stream=False,
     )
 
     sent = client.complete.await_args.kwargs
@@ -166,7 +180,10 @@ async def test_native_transport_forwards_history_in_tool_only_mode() -> None:
         "user",
         "assistant",
         "tool",
+        "user",
     ]
+    assert sent["messages"][-1].content.startswith("## Response\n\n")
+    assert "Call one or more available tools." in sent["messages"][-1].content
     assert sent["messages"][1].tool_calls[0].id == "call-1"
     assert sent["messages"][2].tool_call_id == "call-1"
     assert decoded.decision_data.tree == {
@@ -191,7 +208,7 @@ async def test_native_transport_uses_collision_free_name_for_prompt_and_decoding
     decision = DecisionSpec.for_inference(
         output_type=str,
         tools=registry.get_all(),
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
     decoded = await NativeDecisionTransport().request_decision(
         client,
@@ -203,5 +220,5 @@ async def test_native_transport_uses_collision_free_name_for_prompt_and_decoding
 
     sent = client.complete.await_args.kwargs
     assert [tool.name for tool in sent["tools"]] == ["return_result", "return_result_2"]
-    assert "return_result_2" in renderer.render.call_args.args[0].response_instructions
+    assert "return_result_2" in sent["messages"][-1].content
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}

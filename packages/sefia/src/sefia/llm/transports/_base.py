@@ -2,19 +2,20 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import TypeAlias
 
-from ...inference import FunctionInfo, HistoryItem
+from ...inference import FunctionInfo
 from .._client import LLMClient
-from .._messages import LLMCompletion
-from .._prompt_renderer import DecisionPrompt, PromptRenderer, RejectedDecision
+from .._messages import LLMCompletion, Message, ToolCall
+from .._prompt_renderer import PromptRenderer
 from ..structured_data import StructuredData
-from ..step_decision import DecisionSpec, StepTool
+from ..step_decision import DecisionSpec
 from ..streaming import OutputStreamEvent
 
 
 class DecisionObserver(ABC):
     @abstractmethod
-    async def before_request(self, prompt: str) -> None: ...
+    async def before_request(self, messages: tuple[Message, ...]) -> None: ...
 
     @abstractmethod
     async def response_text(self, text: str) -> None: ...
@@ -27,25 +28,46 @@ class DecisionObserver(ABC):
 
 
 @dataclass(frozen=True)
+class RejectedDecision:
+    completion: LLMCompletion
+    reason: str
+
+
+@dataclass(frozen=True)
+class DecisionToolCalls:
+    calls: tuple[ToolCall, ...]
+
+
+@dataclass(frozen=True)
+class DecisionToolResult:
+    tool_call_id: str
+    result: StructuredData
+
+
+DecisionHistoryItem: TypeAlias = DecisionToolCalls | DecisionToolResult
+
+
+@dataclass(frozen=True)
 class DecisionRequest:
+    """Semantic input ready for decision-protocol presentation."""
+
+    messages_before: tuple[Message, ...]
     function: FunctionInfo
+    arguments: StructuredData
+    messages_after: tuple[Message, ...]
     decision_spec: DecisionSpec
-    history: tuple[HistoryItem, ...]
+    history: tuple[DecisionHistoryItem, ...]
     rejected: RejectedDecision | None = None
 
-    def to_prompt(
-        self,
-        response_instructions: str,
-        *,
-        tools: tuple[StepTool, ...],
-        history: tuple[HistoryItem, ...],
-    ) -> DecisionPrompt:
-        return DecisionPrompt(
+    def with_rejection(self, rejected: RejectedDecision) -> "DecisionRequest":
+        return DecisionRequest(
+            messages_before=self.messages_before,
             function=self.function,
-            tools=tools,
-            history=history,
-            response_instructions=response_instructions,
-            rejected=self.rejected,
+            arguments=self.arguments,
+            messages_after=self.messages_after,
+            decision_spec=self.decision_spec,
+            history=self.history,
+            rejected=rejected,
         )
 
 

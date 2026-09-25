@@ -1,28 +1,11 @@
-from typing import cast
+import json
 
-from ....inference import HistoryItem, ToolCallsDecision
-from ..._messages import Message, ToolCall
-from ..._prompt_renderer import PromptRenderer
-from ...structured_data import StructuredData, StructuredDataTree
+from ..._messages import Message
 from ...step_decision import DecisionSpec, StepDecisionMode, StepTool
-from .._base import DecisionRequest
+from .._base import DecisionHistoryItem, DecisionToolCalls
 
 
-def render_native_prompt(
-    request: DecisionRequest,
-    renderer: PromptRenderer,
-    result_tool: StepTool | None,
-) -> str:
-    return renderer.render(
-        request.to_prompt(
-            _response_instructions(request.decision_spec, result_tool),
-            tools=(),
-            history=(),
-        )
-    )
-
-
-def _response_instructions(
+def native_response_instructions(
     spec: DecisionSpec,
     result_tool: StepTool | None,
 ) -> str:
@@ -41,32 +24,26 @@ def _response_instructions(
 
 
 def native_history_messages(
-    history: tuple[HistoryItem, ...],
-    renderer: PromptRenderer,
+    history: tuple[DecisionHistoryItem, ...],
 ) -> list[Message]:
     messages: list[Message] = []
     for item in history:
-        if isinstance(item, ToolCallsDecision):
+        if isinstance(item, DecisionToolCalls):
             messages.append(
                 Message(
                     role="assistant",
-                    tool_calls=[
-                        ToolCall(
-                            id=call.id,
-                            name=call.name,
-                            arguments=StructuredData.from_tree(
-                                cast(StructuredDataTree, call.arguments)
-                            ),
-                        )
-                        for call in item.calls
-                    ],
+                    tool_calls=item.calls,
                 )
             )
         else:
             messages.append(
                 Message(
                     role="tool",
-                    content=renderer.render_tool_result(item),
+                    content=json.dumps(
+                        item.result.to_json_value(),
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
                     tool_call_id=item.tool_call_id,
                 )
             )

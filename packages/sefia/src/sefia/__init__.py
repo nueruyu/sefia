@@ -6,7 +6,7 @@ from ._interfaces import (
     DecisionMiddleware,
     InferenceContext,
     InferenceMiddleware,
-    Middleware,
+    MiddlewareSet,
     InferenceStrategy,
     Policy,
     StepContext,
@@ -21,6 +21,7 @@ from ._tool_system import (
     ToolEntry,
     ToolCollector,
     ToolDefinition,
+    ToolFunctionInspector,
     ToolRegistry,
     Tools,
 )
@@ -40,7 +41,7 @@ __all__ = [
     "HistoryStorage",
     "InferenceStrategy",
     "InferenceMiddleware",
-    "Middleware",
+    "MiddlewareSet",
     "StepMiddleware",
     "DecisionContext",
     "DecisionMiddleware",
@@ -51,6 +52,7 @@ __all__ = [
     "SignatureToolEntry",
     "JsonSchemaToolEntry",
     "ToolDefinition",
+    "ToolFunctionInspector",
     "ToolCollector",
     "ToolRegistry",
 ]

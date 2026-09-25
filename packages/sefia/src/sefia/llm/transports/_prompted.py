@@ -1,7 +1,6 @@
 from typing_extensions import final, override
 
 from .._client import LLMClient
-from .._messages import Message
 from .._prompted_response import PromptedJsonStreamExtractor, extract_prompted_json
 from .._prompt_renderer import PromptRenderer
 from ..exceptions import DecisionDecodingError
@@ -14,6 +13,7 @@ from ._base import (
     DecisionTransport,
 )
 from ._decision_instructions import json_response_instructions
+from ._messages import build_text_decision_messages
 
 
 @final
@@ -27,14 +27,11 @@ class PromptedDecisionTransport(DecisionTransport):
         observer: DecisionObserver,
         stream: bool,
     ) -> DecodedDecision:
-        prompt = prompt_renderer.render(
-            request.to_prompt(
-                json_response_instructions(request.decision_spec),
-                tools=request.decision_spec.tools,
-                history=request.history,
-            )
+        messages = build_text_decision_messages(
+            request=request,
+            renderer=prompt_renderer,
+            response_instructions=json_response_instructions(request.decision_spec),
         )
-        await observer.before_request(prompt)
         stream_decoder = JsonOutputStreamDecoder() if stream else None
         extractor = PromptedJsonStreamExtractor() if stream else None
 
@@ -46,8 +43,9 @@ class PromptedDecisionTransport(DecisionTransport):
                 for event in stream_decoder.feed(json_text):
                     await observer.output(event)
 
+        await observer.before_request(tuple(messages))
         completion = await client.complete(
-            messages=[Message(role="user", content=prompt)],
+            messages=messages,
             tools=None,
             decision_spec=None,
             stream_callback=on_text if stream else None,

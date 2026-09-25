@@ -1,13 +1,21 @@
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
 from unittest.mock import AsyncMock
+from uuid import UUID
 
 import pytest
+from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from sefia import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError, UnknownToolDecisionError
-from sefia.inference import ResultDecision, ToolCallsDecision
-from sefia.llm import LLMCompletion, LLMInferenceStrategy
+from sefia.inference import (
+    ResultDecision,
+    ToolCallResult,
+    ToolCallsDecision,
+)
+from sefia.llm import LLMCompletion, LLMInferenceStrategy, Message
 from sefia.llm.events import (
     AfterLLMCall,
     BeforeLLMCall,
@@ -15,8 +23,23 @@ from sefia.llm.events import (
     LLMTokenReceived,
 )
 from sefia.llm.structured_data import StructuredData
-from sefia.llm.transports import DecisionObserver, DecodedDecision
-from sefia.testing import make_function_info
+from sefia.llm.transports import (
+    DecisionObserver,
+    DecisionToolCalls,
+    DecisionToolResult,
+    DecodedDecision,
+)
+from sefia.testing import make_function_info, make_tool_call_request
+
+
+class _ArgumentModel(BaseModel):
+    value: int
+
+
+@dataclass(frozen=True)
+class _Record:
+    identifier: UUID
+    created_at: datetime
 
 
 @pytest.mark.parametrize("stream", [False, True])
@@ -44,6 +67,59 @@ async def test_strategy_passes_request_to_transport_and_validates_result(
     publisher.publish.assert_awaited_once_with(
         AfterLLMCall(transport.request_decision.return_value.completion)
     )
+    assert "dump" not in sent
+
+
+async def test_strategy_materializes_arguments_and_history_before_transport(
+    transport: AsyncMock,
+    make_strategy: Callable[..., LLMInferenceStrategy],
+) -> None:
+    identifier = UUID("12345678-1234-5678-1234-567812345678")
+    created_at = datetime(2026, 9, 23, 10, 30)
+    record = _Record(identifier=identifier, created_at=created_at)
+    model = _ArgumentModel(value=3)
+    function = make_function_info(
+        bound_arguments={"model": model, "record": record},
+        return_type=str,
+    )
+    history = [
+        ToolCallsDecision(
+            [
+                make_tool_call_request(
+                    id="call-1",
+                    name="lookup",
+                    arguments={"record": record},
+                )
+            ]
+        ),
+        ToolCallResult(tool_call_id="call-1", result=model),
+    ]
+
+    await make_strategy().decide_next_step(
+        function,
+        history,
+        ToolRegistry(),
+        AsyncMock(spec=EventPublisher),
+    )
+
+    request = transport.request_decision.await_args.kwargs["request"]
+    assert request.arguments.tree == {
+        "model": {"value": 3},
+        "record": {
+            "identifier": str(identifier),
+            "created_at": "2026-09-23T10:30:00",
+        },
+    }
+    tool_calls, tool_result = request.history
+    assert isinstance(tool_calls, DecisionToolCalls)
+    assert tool_calls.calls[0].arguments.tree == {
+        "record": {
+            "identifier": str(identifier),
+            "created_at": "2026-09-23T10:30:00",
+        }
+    }
+    assert isinstance(tool_result, DecisionToolResult)
+    assert tool_result.result.tree == {"value": 3}
 
 
 async def test_strategy_assigns_ids_to_validated_tool_calls(
@@ -145,7 +221,7 @@ async def test_transport_observer_notifies_the_supplied_publisher(
     async def respond(
         *, observer: DecisionObserver, **kwargs: object
     ) -> DecodedDecision:
-        await observer.before_request("prompt")
+        await observer.before_request((Message(role="user", content="prompt"),))
         await observer.response_text("answer")
         await observer.reasoning_text("thinking")
         return decoded
@@ -157,7 +233,9 @@ async def test_transport_observer_notifies_the_supplied_publisher(
 
     spec = transport.request_decision.await_args.kwargs["request"].decision_spec
     assert [c.args[0] for c in publisher.publish.await_args_list] == [
-        BeforeLLMCall(prompt="prompt", decision_spec=spec),
+        BeforeLLMCall(
+            messages=(Message(role="user", content="prompt"),), decision_spec=spec
+        ),
         LLMTokenReceived(token="answer"),
         LLMReasoningTokenReceived(token="thinking"),
         AfterLLMCall(decoded.completion),

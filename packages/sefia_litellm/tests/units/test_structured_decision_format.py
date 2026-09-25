@@ -11,7 +11,10 @@ from sefia._tool_system import (
 from sefia.llm.json_schema import SchemaNode
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import OutputStreamEvent, Scalar, StringDelta, StringEnd
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticToolFunctionInspector,
+)
 from sefia_litellm._schema import StructuredDecisionFormat
 
 
@@ -19,7 +22,7 @@ def _decision_model(output_type: Any, tools: list[ToolEntry]) -> DecisionSpec:
     return DecisionSpec.for_inference(
         output_type=output_type,
         tools=tools,
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
 
 
@@ -88,13 +91,13 @@ async def ask_user(question: Annotated[str, Field(min_length=1)]) -> str:
 
 
 def _tool() -> ToolEntry:
-    backend = PydanticModelBackend()
-    name = backend.tool_name(ask_user)
+    inspector = PydanticToolFunctionInspector()
+    name = inspector.tool_name(ask_user)
     return SignatureToolEntry(
         ask_user,
         name=name,
         schema_source=ask_user,
-        inspector=backend,
+        inspector=inspector,
     )
 
 

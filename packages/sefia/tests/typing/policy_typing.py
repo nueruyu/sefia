@@ -1,10 +1,9 @@
-from collections.abc import Sequence
 from typing import assert_type
 
 from sefia import (
     DecisionMiddleware,
     InferenceMiddleware,
-    Middleware,
+    MiddlewareSet,
     Policy,
     StepMiddleware,
     policy,
@@ -18,20 +17,20 @@ policy("not a policy")  # pyright: ignore[reportArgumentType]
 
 class StepPolicy(Policy):
     @override
-    def create_middleware(self) -> list[StepMiddleware]:
-        return []
+    def create_middleware(self) -> MiddlewareSet:
+        return MiddlewareSet()
 
 
 class DecisionPolicy(Policy):
     @override
-    def create_middleware(self) -> tuple[DecisionMiddleware, ...]:
-        return ()
+    def create_middleware(self) -> MiddlewareSet:
+        return MiddlewareSet()
 
 
 class InferencePolicy(Policy):
     @override
-    def create_middleware(self) -> list[InferenceMiddleware]:
-        return []
+    def create_middleware(self) -> MiddlewareSet:
+        return MiddlewareSet()
 
 
 def check_policy_factories(
@@ -40,12 +39,19 @@ def check_policy_factories(
     inference: list[InferenceMiddleware],
 ) -> None:
     assert_type(
-        Policy(middleware=lambda: steps).create_middleware(), Sequence[Middleware]
+        Policy(middleware=lambda: MiddlewareSet(step=tuple(steps))).create_middleware(),
+        MiddlewareSet,
     )
     assert_type(
-        Policy(middleware=lambda: decisions).create_middleware(), Sequence[Middleware]
+        Policy(
+            middleware=lambda: MiddlewareSet(decision=decisions)
+        ).create_middleware(),
+        MiddlewareSet,
     )
     assert_type(
-        Policy(middleware=lambda: inference).create_middleware(), Sequence[Middleware]
+        Policy(
+            middleware=lambda: MiddlewareSet(inference=tuple(inference))
+        ).create_middleware(),
+        MiddlewareSet,
     )
     Policy(middleware=lambda: [object()])  # pyright: ignore[reportArgumentType]

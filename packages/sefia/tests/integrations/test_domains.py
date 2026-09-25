@@ -11,6 +11,7 @@ from sefia import (
     DecisionMiddleware,
     Domain,
     JsonSchemaToolEntry,
+    MiddlewareSet,
     Policy,
     Profile,
     policy,
@@ -172,10 +173,10 @@ async def test_rejected_decision_is_uncommitted_and_regenerated_on_resume(
                 raise ValueError("rejected decision")
             return decision
 
-    def middleware() -> list[DecisionMiddleware]:
+    def middleware() -> MiddlewareSet:
         instance = RejectFirst()
         instances.append(instance)
-        return [instance]
+        return MiddlewareSet(decision=(instance,))
 
     reports = Domain(
         glyff.Domain("com.example.reports", version="1"),
@@ -297,10 +298,10 @@ async def test_decision_middleware_inherits_policy_precedence_and_run_scope(
             return decision
 
     def record_policy(label: str) -> Policy:
-        def middleware() -> list[DecisionMiddleware]:
+        def middleware() -> MiddlewareSet:
             instance = Record(label)
             built.append(instance)
-            return [instance]
+            return MiddlewareSet(decision=(instance,))
 
         return Policy(middleware=middleware)
 

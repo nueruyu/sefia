@@ -1,14 +1,13 @@
-from typing import cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from sefia.llm import DecisionPrompt, LLMCompletion, Message, PromptRenderer
+from sefia.llm import InferencePrompt, LLMCompletion, PromptRenderer
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import StringEnd
 from sefia.llm.transports import DecisionRequest, PromptedDecisionTransport
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import RecordingDecisionObserver, make_decision_request
 
 
@@ -16,7 +15,7 @@ def _request() -> DecisionRequest:
     decision = DecisionSpec.for_inference(
         output_type=str,
         tools=[],
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
     )
     return make_decision_request(decision)
 
@@ -35,20 +34,25 @@ async def test_uses_the_rendered_prompt_without_a_model() -> None:
     renderer = _renderer()
 
     decoded = await PromptedDecisionTransport().request_decision(
-        client, renderer, _request(), observer, stream=False
+        client,
+        renderer,
+        _request(),
+        observer,
+        stream=False,
     )
 
     sent = client.complete.await_args.kwargs
-    assert sent["messages"] == [Message(role="user", content="complete prompt")]
+    assert len(sent["messages"]) == 1
+    assert sent["messages"][0].role == "user"
+    content = sent["messages"][0].content
+    assert content.startswith("complete prompt\n\n## Response\n\n")
+    assert 'For a final result, return: {"decision":"result"' in content
     assert sent["decision_spec"] is None
-    assert observer.prompt == "complete prompt"
+    assert observer.messages == tuple(sent["messages"])
     assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
     assert decoded.completion is completion
-    rendered_prompt = cast(DecisionPrompt, renderer.render.call_args.args[0])
-    assert '{"decision":"result"' in rendered_prompt.response_instructions
-    assert "provided structured output schema" not in (
-        rendered_prompt.response_instructions
-    )
+    assert isinstance(renderer.render.call_args.args[0], InferencePrompt)
+    assert "provided structured output schema" not in content
 
 
 async def test_streams_fenced_json_after_prose() -> None:
@@ -64,7 +68,11 @@ async def test_streams_fenced_json_after_prose() -> None:
     observer = RecordingDecisionObserver()
 
     await PromptedDecisionTransport().request_decision(
-        client, _renderer(), _request(), observer, stream=True
+        client,
+        _renderer(),
+        _request(),
+        observer,
+        stream=True,
     )
     callback = client.complete.await_args.kwargs["stream_callback"]
     for character in content:

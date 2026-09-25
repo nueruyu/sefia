@@ -2,9 +2,7 @@ from typing import Any, Callable
 
 from typing_extensions import final, override
 
-from ..llm.model_backend import ModelBackend
-from ..llm.result_format import ResultFormat
-from .._tool_system import ToolDefinition
+from .._tool_system import ToolDefinition, ToolFunctionInspector
 from ._function_models import (
     PydanticFunctionModelFactory,
     cache_key,
@@ -12,24 +10,19 @@ from ._function_models import (
     get_callable_qualname,
     sanitize_function_name,
 )
-from ._result_format import PydanticResultFormatFactory
 
 
 @final
-class PydanticModelBackend(ModelBackend):
-    """
-    Pydantic-backed tool-function inspector and structured-value schema factory.
-    Supports dataclasses, Pydantic models, primitives, and typing constructs.
-    """
+class PydanticToolFunctionInspector(ToolFunctionInspector):
+    """Inspects and binds Python tool callables with Pydantic."""
 
     def __init__(
         self,
         function_model_factory: PydanticFunctionModelFactory | None = None,
-    ):
+    ) -> None:
         self._function_model_factory = (
             function_model_factory or PydanticFunctionModelFactory()
         )
-        self._result_format_factory = PydanticResultFormatFactory()
         self._definition_cache: dict[Any, ToolDefinition] = {}
 
     @override
@@ -81,6 +74,5 @@ class PydanticModelBackend(ModelBackend):
         # the callable's annotations asked for.
         return {**dict(validated), **(validated.model_extra or {})}
 
-    @override
-    def create(self, python_type: Any) -> ResultFormat:
-        return self._result_format_factory.create(python_type)
+
+__all__ = ["PydanticToolFunctionInspector"]

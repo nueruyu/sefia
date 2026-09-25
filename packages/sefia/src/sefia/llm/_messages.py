@@ -1,28 +1,57 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 from .structured_data import StructuredData
 
 
-@dataclass
+@dataclass(frozen=True, init=False)
 class Message:
-    """Represents a single message in a conversation with an LLM."""
+    """A provider-neutral message sent to an LLM."""
 
-    role: Literal["system", "user", "assistant", "tool"]
-    content: str | list[Any] | None = None
-    tool_call_id: str | None = None  # Required for role="tool" messages
-    tool_calls: list[ToolCall] | None = None
+    role: Literal["system", "developer", "user", "assistant", "tool"]
+    _content: str | list[Any] | None = field(repr=False)
+    tool_call_id: str | None
+    tool_calls: tuple[ToolCall, ...] | None
+
+    def __init__(
+        self,
+        role: Literal["system", "developer", "user", "assistant", "tool"],
+        content: str | list[Any] | None = None,
+        tool_call_id: str | None = None,
+        tool_calls: Sequence[ToolCall] | None = None,
+    ) -> None:
+        object.__setattr__(self, "role", role)
+        object.__setattr__(self, "_content", _copy_content(content))
+        object.__setattr__(self, "tool_call_id", tool_call_id)
+        object.__setattr__(
+            self,
+            "tool_calls",
+            None if tool_calls is None else tuple(tool_calls),
+        )
+
+    @property
+    def content(self) -> str | list[Any] | None:
+        return _copy_content(self._content)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolCall:
-    """Represents a tool call requested by the LLM."""
+    """A provider-neutral tool call requested by the LLM."""
 
     id: str
     name: str
     arguments: StructuredData
+
+
+_T = TypeVar("_T")
+
+
+def _copy_content(value: _T) -> _T:
+    return deepcopy(value)
 
 
 @dataclass

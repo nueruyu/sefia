@@ -4,15 +4,15 @@ from dataclasses import dataclass
 
 from ..event_system import Event
 from ..exceptions import InvalidInferenceResponseError
-from ._messages import LLMCompletion
+from ._messages import LLMCompletion, Message
 from .step_decision import DecisionSpec
 
 
 @dataclass(frozen=True)
 class BeforeLLMCall(Event):
-    """Event fired just before a call to the LLM."""
+    """Exposes the messages immediately before a call to the LLM."""
 
-    prompt: str
+    messages: tuple[Message, ...]
     decision_spec: DecisionSpec
 
 

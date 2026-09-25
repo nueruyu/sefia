@@ -6,10 +6,14 @@ from typing import Any
 from .._history import StepHistory
 from .._interfaces.middleware import DecisionContext, StepContext
 from .._tool_system import ToolRegistry
-from ..inference import FunctionInfo, HistoryItem, ToolCallRequest
-from ..llm import RejectedDecision
+from ..inference import FunctionInfo, ToolCallRequest
+from ..llm import Message, StructuredData
 from ..llm.step_decision import DecisionSpec
-from ..llm.transports import DecisionRequest
+from ..llm.transports import (
+    DecisionHistoryItem,
+    DecisionRequest,
+    RejectedDecision,
+)
 
 
 def _test_function() -> str:
@@ -45,12 +49,19 @@ def make_decision_request(
     decision_spec: DecisionSpec,
     *,
     function: FunctionInfo | None = None,
-    history: tuple[HistoryItem, ...] = (),
+    arguments: StructuredData | None = None,
+    messages_before: tuple[Message, ...] = (),
+    messages_after: tuple[Message, ...] = (),
+    history: tuple[DecisionHistoryItem, ...] = (),
     rejected: RejectedDecision | None = None,
 ) -> DecisionRequest:
-    """Build a decision request with ordinary function metadata."""
+    """Build a materialized decision request for transport tests."""
+    function = make_function_info() if function is None else function
     return DecisionRequest(
-        function=make_function_info() if function is None else function,
+        messages_before=messages_before,
+        function=function,
+        arguments=(StructuredData.from_object({}) if arguments is None else arguments),
+        messages_after=messages_after,
         decision_spec=decision_spec,
         history=history,
         rejected=rejected,

@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from typing import final
 
@@ -11,8 +11,19 @@ from glyff_pydantic import (
     PydanticArgumentCanonicalizer,
     PydanticSerializer,
 )
-from sefia import HistoryStorage, Policy, Profile, ToolCollector
-from sefia.llm import LLMClient, PromptRenderer
+from sefia import (
+    HistoryStorage,
+    Policy,
+    Profile,
+    ToolCollector,
+)
+from sefia.llm import (
+    LLMClient,
+    MessageComposer,
+    PromptRenderer,
+    StructuredDataConverter,
+)
+from sefia.llm.result_format import ResultFormatFactory
 from sefia.llm.transports import DecisionTransport
 
 from ._interaction_context import bind_interaction_channel
@@ -38,7 +49,10 @@ class SessionScope:
     ``tool_collector`` customizes tool discovery for a run. A collector passed to
     :meth:`session` overrides the instance default; passing ``None`` there inherits
     the instance default rather than resetting it. When neither is set,
-    :class:`~sefia.Session` builds its own :class:`DefaultToolCollector`.
+    :class:`~sefia.Session` builds its own :class:`DefaultToolCollector`. Custom
+    inspection is configured directly on that collector. Result formats and
+    structured-data conversion are configured independently through
+    ``result_format_factory`` and ``structured_data_converter``.
     """
 
     def __init__(
@@ -54,8 +68,11 @@ class SessionScope:
         persistence: PersistenceProvider | None = None,
         history_storage: HistoryStorage | None = None,
         tool_collector: ToolCollector | None = None,
+        result_format_factory: ResultFormatFactory | None = None,
+        structured_data_converter: StructuredDataConverter | None = None,
         prompt_renderer: PromptRenderer | None = None,
         decision_transport: DecisionTransport | None = None,
+        message_composers: Sequence[MessageComposer] | None = None,
     ):
         self.model = model
         self.llm_client = llm_client
@@ -67,8 +84,11 @@ class SessionScope:
         self.persistence = persistence or MemoryPersistence()
         self.history_storage = history_storage
         self.tool_collector = tool_collector
+        self.result_format_factory = result_format_factory
+        self.structured_data_converter = structured_data_converter
         self.prompt_renderer = prompt_renderer
         self.decision_transport = decision_transport
+        self.message_composers = tuple(message_composers or ())
 
     @asynccontextmanager
     async def session(
@@ -80,8 +100,11 @@ class SessionScope:
         policies: list[Policy] | None = None,
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
+        result_format_factory: ResultFormatFactory | None = None,
+        structured_data_converter: StructuredDataConverter | None = None,
         prompt_renderer: PromptRenderer | None = None,
         decision_transport: DecisionTransport | None = None,
+        message_composers: Sequence[MessageComposer] | None = None,
     ) -> AsyncGenerator[sefia.Session]:
         """Run code within a configured Sefia session context."""
         llm_client = self.llm_client
@@ -90,6 +113,16 @@ class SessionScope:
         resolved_tool_collector = (
             self.tool_collector if tool_collector is None else tool_collector
         )
+        resolved_result_format_factory = (
+            self.result_format_factory
+            if result_format_factory is None
+            else result_format_factory
+        )
+        resolved_structured_data_converter = (
+            self.structured_data_converter
+            if structured_data_converter is None
+            else structured_data_converter
+        )
         resolved_prompt_renderer = (
             self.prompt_renderer if prompt_renderer is None else prompt_renderer
         )
@@ -97,6 +130,11 @@ class SessionScope:
             self.decision_transport
             if decision_transport is None
             else decision_transport
+        )
+        resolved_message_composers = (
+            self.message_composers
+            if message_composers is None
+            else tuple(message_composers)
         )
 
         if llm_client is None:
@@ -145,9 +183,12 @@ class SessionScope:
                     profiles=final_profiles,
                     stream=resolved_stream,
                     tool_collector=resolved_tool_collector,
+                    result_format_factory=resolved_result_format_factory,
+                    structured_data_converter=resolved_structured_data_converter,
                     history_storage=self.history_storage,
                     prompt_renderer=resolved_prompt_renderer,
                     decision_transport=resolved_decision_transport,
+                    message_composers=resolved_message_composers,
                     max_repair_attempts=self.max_repair_attempts,
                 ) as session:
                     yield session

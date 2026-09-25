@@ -21,7 +21,10 @@ from sefia.llm.transports import (
     NativeDecisionTransport,
     StructuredDecisionTransport,
 )
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticStructuredDataConverter,
+)
 from sefia.testing import make_function_info
 
 
@@ -58,14 +61,20 @@ class Result:
     ],
     ids=["structured", "native"],
 )
-async def test_transport_feedback_reaches_renderer_and_result_is_restored(
+async def test_transport_feedback_follows_inference_prompt_and_result_is_restored(
     transport: DecisionTransport, valid: LLMCompletion
 ) -> None:
     client = AsyncMock(spec=LLMClient)
     client.complete.side_effect = [LLMCompletion(content="invalid"), valid]
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "prompt"
-    strategy = LLMInferenceStrategy(client, PydanticModelBackend(), renderer, transport)
+    strategy = LLMInferenceStrategy(
+        client,
+        PydanticResultFormatFactory(),
+        PydanticStructuredDataConverter(),
+        renderer,
+        transport,
+    )
 
     decision = await strategy.decide_next_step(
         make_function_info(return_type=Result),
@@ -77,11 +86,13 @@ async def test_transport_feedback_reaches_renderer_and_result_is_restored(
     assert isinstance(decision, ResultDecision)
     assert decision.result == Result("done")
     first, retry = [c.args[0] for c in renderer.render.call_args_list]
-    assert first.rejected is None
-    assert retry.rejected.content == "invalid"
-    assert retry.rejected.reason
+    assert first == retry
     assert client.complete.await_count == 2
     sent = client.complete.await_args.kwargs
+    messages = sent["messages"]
+    assert "Correct the previous response" in messages[-2].content
+    assert "invalid" in messages[-2].content
+    assert messages[-1].content.startswith("## Response\n\n")
     assert sent["stream_callback"] is None
     assert sent["reasoning_callback"] is None
 
@@ -122,7 +133,12 @@ async def test_never_mode_is_preserved_through_strategy_and_transport(
     renderer = Mock(spec=PromptRenderer)
     renderer.render.return_value = "prompt"
     strategy = LLMInferenceStrategy(
-        client, PydanticModelBackend(), renderer, transport, max_repair_attempts=0
+        client,
+        PydanticResultFormatFactory(),
+        PydanticStructuredDataConverter(),
+        renderer,
+        transport,
+        max_repair_attempts=0,
     )
     function = make_function_info(return_type=Never)
     publisher = AsyncMock(spec=EventPublisher)
@@ -135,7 +151,8 @@ async def test_never_mode_is_preserved_through_strategy_and_transport(
         assert isinstance(decision, ToolCallsDecision)
         assert [call.name for call in decision.calls] == ["lookup"]
 
-    prompt = renderer.render.call_args.args[0]
     before = publisher.publish.await_args_list[0].args[0]
     assert before.decision_spec.mode is StepDecisionMode.TOOLS_REQUIRED
-    assert "Call one or more available tools." in prompt.response_instructions
+    assert "Call one or more available tools." in (
+        client.complete.await_args.kwargs["messages"][-1].content
+    )

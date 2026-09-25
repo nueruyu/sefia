@@ -39,7 +39,8 @@ async def test_repairs_decoding_error_with_rejected_completion(
     assert isinstance(result, ResultDecision) and result.result == "done"
     assert transport.request_decision.await_count == 2
     rejected = transport.request_decision.await_args.kwargs["request"].rejected
-    assert rejected.content == content
+    assert rejected.completion is error.completion
+    assert rejected.completion.content == content
     assert rejected.reason.endswith("response could not be decoded")
     repairs = [
         c.args[0]
@@ -86,11 +87,11 @@ async def test_repairs_validation_failure_and_forwards_rejected_data(
     assert isinstance(result, ResultDecision) and result.result == "done"
     assert transport.request_decision.await_count == 2
     rejected = transport.request_decision.await_args.kwargs["request"].rejected
-    assert rejected.content == content
+    assert rejected.completion.content == content
     assert rejected.reason
 
 
-async def test_native_repair_includes_rejected_tool_call(
+async def test_repair_preserves_rejected_completion_semantics(
     transport: AsyncMock, make_strategy: Callable[..., LLMInferenceStrategy]
 ) -> None:
     completion = LLMCompletion(
@@ -115,11 +116,8 @@ async def test_native_repair_includes_rejected_tool_call(
     )
 
     rejected = transport.request_decision.await_args.kwargs["request"].rejected
-    assert json.loads(rejected.content) == {
-        "tool_calls": [
-            {"id": "call-1", "name": "unknown", "arguments": {"query": "lost"}}
-        ]
-    }
+    assert rejected.completion is completion
+    assert rejected.reason.endswith("invalid decision")
 
 
 async def test_repair_preserves_executor_history(
@@ -148,9 +146,34 @@ async def test_repair_preserves_executor_history(
         c.kwargs["request"] for c in transport.request_decision.await_args_list
     ]
     assert history == snapshot
-    assert first.history == retry.history == tuple(snapshot)
+    assert first.history is retry.history
+    assert first.function is retry.function
+    assert first.arguments is retry.arguments
     assert first.rejected is None
     assert retry.rejected is not None
+
+
+async def test_generic_inference_failure_is_not_converted_to_repair_feedback(
+    transport: AsyncMock, make_strategy: Callable[..., LLMInferenceStrategy]
+) -> None:
+    error = InvalidInferenceResponseError("recover on a new inference attempt")
+    transport.request_decision.side_effect = error
+    publisher = AsyncMock(spec=EventPublisher)
+
+    with pytest.raises(InvalidInferenceResponseError) as exc_info:
+        await make_strategy().decide_next_step(
+            make_function_info(return_type=str),
+            [],
+            ToolRegistry(),
+            publisher,
+        )
+
+    assert exc_info.value is error
+    transport.request_decision.assert_awaited_once()
+    assert not any(
+        isinstance(call.args[0], DecisionRepairAttempt)
+        for call in publisher.publish.await_args_list
+    )
 
 
 @pytest.mark.parametrize("budget", [0, 2])
@@ -165,7 +188,10 @@ async def test_exhausted_budget_preserves_error_and_limits_attempts(
 
     with pytest.raises(InvalidInferenceResponseError) as exc_info:
         await make_strategy(max_repair_attempts=budget).decide_next_step(
-            make_function_info(return_type=str), [], ToolRegistry(), publisher
+            make_function_info(return_type=str),
+            [],
+            ToolRegistry(),
+            publisher,
         )
 
     assert transport.request_decision.await_count == budget + 1

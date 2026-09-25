@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, TypeAlias
+from typing import Any, Awaitable, Callable
 
 from .._history import StepHistory
 from .._tool_system import ToolRegistry
@@ -88,4 +88,8 @@ class DecisionMiddleware(ABC):
     ) -> StepDecision: ...
 
 
-Middleware: TypeAlias = InferenceMiddleware | StepMiddleware | DecisionMiddleware
+@dataclass(frozen=True)
+class MiddlewareSet:
+    inference: tuple[InferenceMiddleware, ...] = ()
+    step: tuple[StepMiddleware, ...] = ()
+    decision: tuple[DecisionMiddleware, ...] = ()

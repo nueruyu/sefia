@@ -1,13 +1,26 @@
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any
 
 import glyff
+import pytest
+import sefia
 from typing_extensions import final, override
 
-from sefia import DecisionContext, DecisionMiddleware, JsonSchemaToolEntry, Policy
+from sefia import (
+    DecisionContext,
+    DecisionMiddleware,
+    JsonSchemaToolEntry,
+    MiddlewareSet,
+    Policy,
+)
 from sefia.exceptions import InferenceError
-from sefia.inference import ResultDecision, StepDecision
-from sefia.llm import LLMCompletion
+from sefia.inference import FunctionInfo, ResultDecision, StepDecision
+from sefia.llm import LLMCompletion, Message, MessageComposer, MessageLayout
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticStructuredDataConverter,
+)
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefia.tool_collectors import StaticToolCollector
 from sefios.middleware import Retrier
@@ -22,6 +35,21 @@ from sefios import (
 )
 
 infer = domain("packages.sefios.tests.integrations.test_session_scope").infer
+
+
+class _Prefix(MessageComposer):
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    @override
+    async def compose(
+        self, function: FunctionInfo, layout: MessageLayout
+    ) -> MessageLayout:
+        return MessageLayout(
+            before=(Message(role="developer", content=self.text), *layout.before),
+            arguments=layout.arguments,
+            after=layout.after,
+        )
 
 
 class _Probe:
@@ -94,6 +122,75 @@ async def test_session_tool_collector_overrides_init_default(
     assert calls == ["call_tool"]
 
 
+async def test_session_message_composers_override_scope_default() -> None:
+    client = MockLLMClient([result_completion("first"), result_completion("second")])
+    scope = SessionScope(llm_client=client, message_composers=(_Prefix("scope"),))
+
+    async with scope.session(session_id="composer-default"):
+        assert await _Probe().answer() == "first"
+    async with scope.session(
+        session_id="composer-override", message_composers=(_Prefix("session"),)
+    ):
+        assert await _Probe().answer() == "second"
+
+    assert [request["messages"][0]["content"] for request in client.requests] == [
+        "scope",
+        "session",
+    ]
+
+
+async def test_strategy_capabilities_inherit_and_override_independently(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scope_result_factory = PydanticResultFormatFactory()
+    scope_converter = PydanticStructuredDataConverter()
+    session_result_factory = PydanticResultFormatFactory()
+    session_converter = PydanticStructuredDataConverter()
+    captured: list[dict[str, Any]] = []
+
+    class _RecordingSession:
+        def __init__(self, **kwargs: Any) -> None:
+            captured.append(kwargs)
+
+        async def __aenter__(self) -> "_RecordingSession":
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_value: BaseException | None,
+            traceback: object | None,
+        ) -> None:
+            pass
+
+    monkeypatch.setattr(sefia, "Session", _RecordingSession)
+    scope = SessionScope(
+        llm_client=MockLLMClient([]),
+        result_format_factory=scope_result_factory,
+        structured_data_converter=scope_converter,
+    )
+
+    async with scope.session(session_id="scope-capabilities"):
+        pass
+    async with scope.session(
+        session_id="result-factory-override",
+        result_format_factory=session_result_factory,
+    ):
+        pass
+    async with scope.session(
+        session_id="converter-override",
+        structured_data_converter=session_converter,
+    ):
+        pass
+
+    assert captured[0]["result_format_factory"] is scope_result_factory
+    assert captured[0]["structured_data_converter"] is scope_converter
+    assert captured[1]["result_format_factory"] is session_result_factory
+    assert captured[1]["structured_data_converter"] is scope_converter
+    assert captured[2]["result_format_factory"] is scope_result_factory
+    assert captured[2]["structured_data_converter"] is session_converter
+
+
 async def test_memory_persistence_is_default(
     make_mock_llm: Callable[[list[LLMCompletion]], MockLLMClient],
 ) -> None:
@@ -158,7 +255,11 @@ async def test_retrier_regenerates_final_decision_after_committed_tools() -> Non
         persistence=persistence,
         tool_collector=_static_collector("lookup", tool_calls),
         policies=[
-            Policy(middleware=lambda: (Retrier(max_retries=1), RejectFirstResult()))
+            Policy(
+                middleware=lambda: MiddlewareSet(
+                    inference=(Retrier(max_retries=1),), decision=(RejectFirstResult(),)
+                )
+            )
         ],
     )
     async with scope.session(session_id=session_id):

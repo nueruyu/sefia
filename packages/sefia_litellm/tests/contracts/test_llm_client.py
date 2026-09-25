@@ -16,7 +16,7 @@ from sefia.llm.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.llm.streaming import StringDelta, StringEnd
 from sefia.llm.structured_data import StructuredData
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import (
     LLMClientCase,
     LLMClientContract,
@@ -61,7 +61,7 @@ class TestLiteLLMStructuredCompletionContract(LLMClientContract):
         decision_spec = DecisionSpec.for_inference(
             output_type=str,
             tools=[],
-            result_format_factory=PydanticModelBackend(),
+            result_format_factory=PydanticResultFormatFactory(),
         )
         expected = LLMCompletion(
             model="gpt-4o",
@@ -169,7 +169,7 @@ class TestLiteLLMStreamingContract(StreamingLLMClientContract):
         decision_spec = DecisionSpec.for_inference(
             output_type=str,
             tools=[],
-            result_format_factory=PydanticModelBackend(),
+            result_format_factory=PydanticResultFormatFactory(),
         )
         expected = LLMCompletion(
             model="gpt-4o",

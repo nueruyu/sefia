@@ -24,7 +24,10 @@ from sefia.llm.transports import (
     PromptedDecisionTransport,
     StructuredDecisionTransport,
 )
-from sefia.pydantic import PydanticModelBackend
+from sefia.pydantic import (
+    PydanticResultFormatFactory,
+    PydanticStructuredDataConverter,
+)
 from sefia.streaming import ArgStream, StringDelta, StringEnd
 from sefia.testing import make_function_info
 
@@ -112,7 +115,8 @@ async def test_arguments_stream_from_transport_through_strategy_to_tool_handler(
     renderer.render.return_value = "prompt"
     strategy = LLMInferenceStrategy(
         llm_client=_StreamingClient(content),
-        result_format_factory=PydanticModelBackend(),
+        result_format_factory=PydanticResultFormatFactory(),
+        structured_data_converter=PydanticStructuredDataConverter(),
         prompt_renderer=renderer,
         decision_transport=transport,
         stream=True,
