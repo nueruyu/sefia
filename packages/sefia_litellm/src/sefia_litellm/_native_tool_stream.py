@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from sefia.llm.json import JsonCompatible, JsonSnapshot
+from sefia.llm.json import JsonCompatible, JsonPath, JsonSnapshot
 from sefia.llm.streaming import (
     JsonOutputStreamDecoder,
     OutputStreamEvent,
@@ -101,7 +101,7 @@ class NativeToolCallStreamDecoder:
 
 def _json_events(
     tree: JsonCompatible,
-    path: tuple[str | int, ...],
+    path: JsonPath,
 ) -> list[OutputStreamEvent]:
     if isinstance(tree, str):
         return [StringEnd(path, tree)]

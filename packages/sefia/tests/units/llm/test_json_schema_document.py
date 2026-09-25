@@ -76,13 +76,14 @@ def test_local_definition_reference_handles_json_pointer_escaping() -> None:
     ) == {"type": "string"}
 
 
-def test_schema_package_has_no_llm_dependency() -> None:
+def test_schema_package_source_loads_independently_of_sefia_facade() -> None:
     import subprocess
     import sys
     from pathlib import Path
 
     import sefia.json_schema as schema
 
+    # Isolate source dependencies; normal imports also execute sefia's root facade.
     script = """
 import importlib.util
 import sys

@@ -103,3 +103,36 @@ def test_model_dump_must_not_stringify_application_mapping_keys() -> None:
 
     with pytest.raises(ValueError, match="JSON object keys must be strings"):
         PydanticJsonMaterializer().materialize(Model(entries={1: "one"}))
+
+
+def test_model_json_dump_is_validated_without_rebuilding() -> None:
+    from unittest.mock import patch
+
+    from pydantic import TypeAdapter
+
+    dumped = {"items": [{"value": 1}]}
+    with patch.object(TypeAdapter, "dump_python", return_value=dumped):
+        result = PydanticJsonMaterializer().materialize(_Model(value=1))
+    assert result is dumped
+
+
+def test_model_json_dump_is_detached_from_application_containers() -> None:
+    class Model(BaseModel):
+        items: list[dict[str, int]]
+
+    model = Model(items=[{"value": 1}])
+    result = PydanticJsonMaterializer().materialize(model)
+    model.items[0]["value"] = 2
+    model.items.append({"value": 3})
+    assert result == {"items": [{"value": 1}]}
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_materializer_rejects_non_finite_floats(value: float) -> None:
+    class Model(BaseModel):
+        value: float
+
+    materializer = PydanticJsonMaterializer()
+    for source in (value, {"nested": [value]}, Model(value=value)):
+        with pytest.raises(ValueError, match="must be finite"):
+            materializer.materialize(source)

@@ -124,7 +124,7 @@ collaborators, not execution middleware.
 
 `llm/step_decision.py` owns this logical shape. It retains tools and the result's
 `ResultFormat` as separate components and validates decoded values as
-`StepDecision`s. `llm/json_schema` imports `$defs`, resolves name collisions, and
+`StepDecision`s. `json_schema` imports `$defs`, resolves name collisions, and
 rewrites local references without knowing about tools or Pydantic. Recursive JSON
 value types and `SchemaNode` accessors keep schema traversal out of `dict[str, Any]`.
 Every transport returns the same logical decision:
@@ -145,7 +145,7 @@ inspection is configured through `DefaultToolCollector(inspector=...)`. Sefia su
 separate Pydantic-backed defaults from
 `pydantic/_tool_function_inspector.py`, `_result_format.py`, and
 `_json_materializer.py`. `JsonSnapshot` holds the owned JSON representation for
-inputs and decoded outputs. Object keys must be strings. Shape access and snapshot
+inputs and decoded outputs. Object keys must be strings and floating-point numbers must be finite. Shape access and snapshot
 composition share owned subtrees; `to_json_compatible()` explicitly returns a
 detached mutable projection.
 

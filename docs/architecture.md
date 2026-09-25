@@ -164,7 +164,7 @@ implementation noted in parentheses.
 | Change the logical step-decision shape or validation | `llm/step_decision.py` |
 | Change Pydantic value normalization | `pydantic/_json_materializer.py` |
 | Change Pydantic result schema generation or restoration | `pydantic/_result_format.py` |
-| Change generic `$defs` import or `$ref` rewriting | `llm/json_schema/_composition.py` |
+| Change generic `$defs` import or `$ref` rewriting | `json_schema/_composition.py` |
 | Change LiteLLM's structured decision format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |

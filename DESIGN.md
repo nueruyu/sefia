@@ -136,7 +136,8 @@ Sefia's standard inference prompt from function instructions, remaining argument
 and any textual tool definitions. `MessageLayout` retains raw application values until
 `LLMInferenceStrategy` consumes it. The strategy uses the configured
 `JsonMaterializer` to materialize retained arguments and execution history as
-`JsonSnapshot`, then creates a provider-neutral `DecisionRequest`. Its configured
+detached `JsonCompatible` structures. It transfers ownership to `JsonSnapshot`
+values before creating a provider-neutral `DecisionRequest`. Its configured
 `ResultFormatFactory` independently defines result validation and restoration. Default
 tool collection uses a separate `ToolFunctionInspector` for callable schemas and
 binding; custom inspection is supplied through `DefaultToolCollector`. Transports place the

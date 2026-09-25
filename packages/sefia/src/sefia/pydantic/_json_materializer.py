@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import final, override
 
+from ..llm._json import require_json_compatible, require_json_scalar
 from ..llm.json import JsonCompatible, JsonMaterializer
 
 
@@ -24,10 +25,12 @@ def _materialize(value: object) -> JsonCompatible:
     if isinstance(value, Enum):
         return _materialize(value.value)
     if value is None or isinstance(value, str | int | float | bool):
-        return value
+        return require_json_scalar(value)
     if isinstance(value, BaseModel):
         _check_mapping_keys(value)
-        return _materialize(TypeAdapter(type(value)).dump_python(value, mode="json"))
+        return require_json_compatible(
+            TypeAdapter(type(value)).dump_python(value, mode="json")
+        )
     if is_dataclass(value) and not isinstance(value, type):
         return {
             field.name: _materialize(getattr(value, field.name))

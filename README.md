@@ -100,8 +100,9 @@ For custom message composition, applications can configure `MessageComposer` thr
 `SessionScope` or `Session` and return a `MessageLayout`. A composer places application
 messages before and after Sefia's standard inference prompt and selects which
 arguments remain in that prompt. The layout keeps application values raw until the
-LLM strategy uses the configured `JsonMaterializer` to normalize them to
-`JsonSnapshot` before constructing a transport-facing request.
+LLM strategy uses the configured `JsonMaterializer` to produce detached
+`JsonCompatible` structures, then owns them as `JsonSnapshot` values in the
+transport-facing request.
 Argument semantics stay with the application. See
 [the `@infer` contract](./docs/infer-contract.md#composing-llm-messages).
 
@@ -109,7 +110,7 @@ Sefia exposes three independent Python/LLM integration seams.
 `ToolFunctionInspector` interprets Python callables for tool schemas and binding,
 `ResultFormatFactory` creates validation and restoration contracts for inference
 results, and `JsonMaterializer` projects runtime Python values into
-provider-neutral `JsonSnapshot`. Configure custom inspection on a
+detached `JsonCompatible` structures. Configure custom inspection on a
 `DefaultToolCollector`; `Session` and `SessionScope` configure the two strategy
 capabilities independently. Each seam has a separate Pydantic-backed default.
 

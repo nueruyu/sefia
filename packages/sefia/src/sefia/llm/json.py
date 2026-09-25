@@ -1,10 +1,11 @@
 import json
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
-from copy import deepcopy
 from typing import TypeAlias, cast
 
 from typing_extensions import final
+
+from ._json import copy_json, require_json_compatible, require_json_scalar
 
 JsonCompatible: TypeAlias = (
     str
@@ -17,11 +18,15 @@ JsonCompatible: TypeAlias = (
 )
 
 
+JsonPath: TypeAlias = tuple[str | int, ...]
+
+
 class JsonMaterializer(ABC):
     """Materialize application values as detached JSON-compatible structures.
 
-    All object keys must be strings. Returned mutable containers must be detached
-    from application containers; implementations must not retain mutable aliases.
+    All object keys must be strings and all floats finite. Returned containers
+    must be detached from application containers; implementations must not retain
+    mutable aliases.
     The caller may immediately transfer ownership to a snapshot.
     """
 
@@ -41,14 +46,12 @@ class JsonSnapshot:
 
     @classmethod
     def capture(cls, value: JsonCompatible) -> "JsonSnapshot":
-        _validate(value)
-        return cls.__wrap(deepcopy(value))
+        return cls.__wrap(copy_json(value))
 
     @classmethod
     def _from_owned(cls, value: JsonCompatible) -> "JsonSnapshot":
         """Adopt a detached graph whose mutable aliases the caller relinquishes."""
-        _validate(value)
-        return cls.__wrap(value)
+        return cls.__wrap(require_json_compatible(value))
 
     @classmethod
     def __wrap(cls, value: JsonCompatible) -> "JsonSnapshot":
@@ -62,11 +65,7 @@ class JsonSnapshot:
 
     @classmethod
     def from_scalar(cls, value: str | int | float | bool | None) -> "JsonSnapshot":
-        if value is not None and not isinstance(
-            cast(object, value), str | int | float | bool
-        ):
-            raise ValueError("JSON snapshot must be a scalar")
-        return cls.__wrap(value)
+        return cls.__wrap(require_json_scalar(value))
 
     @classmethod
     def from_array(cls, values: Iterable["JsonSnapshot"]) -> "JsonSnapshot":
@@ -81,7 +80,7 @@ class JsonSnapshot:
         return cls.__wrap({key: value.__tree for key, value in fields.items()})
 
     def to_json_compatible(self) -> JsonCompatible:
-        return deepcopy(self.__tree)
+        return copy_json(self.__tree)
 
     def as_object(
         self, description: str = "JSON snapshot"
@@ -115,20 +114,4 @@ class JsonSnapshot:
     __hash__ = None  # pyright: ignore[reportAssignmentType]
 
 
-def _validate(value: object) -> None:
-    if value is None or isinstance(value, str | int | float | bool):
-        return
-    if isinstance(value, list):
-        for item in cast(list[object], value):
-            _validate(item)
-        return
-    if isinstance(value, dict):
-        for key, item in cast(dict[object, object], value).items():
-            if not isinstance(key, str):
-                raise ValueError("JSON object keys must be strings")
-            _validate(item)
-        return
-    raise ValueError(f"Unsupported JSON value: {value!r}")
-
-
-__all__ = ["JsonCompatible", "JsonMaterializer", "JsonSnapshot"]
+__all__ = ["JsonCompatible", "JsonMaterializer", "JsonPath", "JsonSnapshot"]

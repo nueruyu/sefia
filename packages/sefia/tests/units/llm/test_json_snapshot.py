@@ -2,7 +2,7 @@ import pytest
 from sefia.llm.json import JsonCompatible, JsonSnapshot
 
 
-def test_from_json_builds_nested_json_materializer() -> None:
+def test_capture_builds_nested_snapshot() -> None:
     value = JsonSnapshot.capture(
         {"name": "report", "items": [1, True, None], "metadata": {"count": 3}}
     )
@@ -22,7 +22,7 @@ def test_from_json_builds_nested_json_materializer() -> None:
     }
 
 
-def test_parse_json_builds_validated_json_materializer() -> None:
+def test_parse_json_builds_validated_snapshot() -> None:
     value = JsonSnapshot.parse_json('{"items": [1, true, null]}')
 
     assert value.to_json_compatible() == {"items": [1, True, None]}
@@ -70,7 +70,7 @@ def test_to_json_compatible_projects_each_tree_shape(
     assert value.to_json_compatible() == expected
 
 
-def test_from_json_owns_nested_input() -> None:
+def test_capture_owns_nested_input() -> None:
     source: JsonCompatible = {"items": [{"value": 1}]}
     data = JsonSnapshot.capture(source)
 
@@ -84,7 +84,7 @@ def test_from_json_owns_nested_input() -> None:
     assert data.to_json_compatible() == {"items": [{"value": 1}]}
 
 
-def test_tree_returns_a_detached_nested_projection() -> None:
+def test_projection_returns_detached_nested_containers() -> None:
     data = JsonSnapshot.capture({"items": [{"value": 1}]})
 
     tree = data.to_json_compatible()
@@ -141,3 +141,59 @@ def test_capture_rejects_invalid_json(value: object) -> None:
 
     with pytest.raises(ValueError):
         JsonSnapshot.capture(cast(JsonCompatible, value))
+
+
+class _AliasingList(list[JsonCompatible]):
+    def __deepcopy__(self, memo: dict[int, object]) -> "_AliasingList":
+        return self
+
+
+class _AliasingDict(dict[str, JsonCompatible]):
+    def __deepcopy__(self, memo: dict[int, object]) -> "_AliasingDict":
+        return self
+
+
+def test_capture_detaches_container_subclasses_without_copy_hooks() -> None:
+    items = _AliasingList([1])
+    nested = _AliasingDict({"items": items})
+    source = _AliasingList([nested])
+    snapshot = JsonSnapshot.capture(source)
+    items.append(2)
+    nested["added"] = True
+    source.append(None)
+
+    projected = snapshot.to_json_compatible()
+    assert projected == [{"items": [1]}]
+    assert type(projected) is list
+    assert type(projected[0]) is dict
+    assert type(projected[0]["items"]) is list
+    projected[0]["items"].append(3)
+    assert snapshot.to_json_compatible() == [{"items": [1]}]
+
+
+def test_projection_detaches_owned_container_subclasses() -> None:
+    snapshot = JsonSnapshot._from_owned(_AliasingDict({"items": _AliasingList([1])}))
+    projected = snapshot.to_json_compatible()
+    assert isinstance(projected, dict)
+    items = projected["items"]
+    assert isinstance(items, list)
+    items.append(2)
+    assert snapshot.to_json_compatible() == {"items": [1]}
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_snapshot_constructors_reject_non_finite_floats(value: float) -> None:
+    with pytest.raises(ValueError, match="must be finite"):
+        JsonSnapshot.from_scalar(value)
+    with pytest.raises(ValueError, match="must be finite"):
+        JsonSnapshot.capture({"nested": [value]})
+    with pytest.raises(ValueError, match="must be finite"):
+        JsonSnapshot._from_owned({"nested": [value]})
+
+
+@pytest.mark.parametrize(
+    "text", ["NaN", "Infinity", "-Infinity", "1e999", '{"nested": [NaN]}']
+)
+def test_parse_json_rejects_non_finite_numbers(text: str) -> None:
+    with pytest.raises(ValueError, match="must be finite"):
+        JsonSnapshot.parse_json(text)
