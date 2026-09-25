@@ -115,8 +115,7 @@ def verify_artifacts(artifact_dir: Path, version: str) -> dict[str, Path]:
 def write_constraints(artifact_dir: Path, version: str, output: Path) -> None:
     wheels = verify_artifacts(artifact_dir, version)
     lines = [
-        f"{name} @ {wheels[name].resolve().as_uri()}"
-        for name in EXPECTED_DISTRIBUTIONS
+        f"{name} @ {wheels[name].resolve().as_uri()}" for name in EXPECTED_DISTRIBUTIONS
     ]
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
