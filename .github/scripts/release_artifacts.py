@@ -95,14 +95,14 @@ def _discover(
 def verify_artifacts(artifact_dir: Path, version: str) -> dict[str, Path]:
     wheels, sdists = _discover(artifact_dir)
 
-    for name, wheel in wheels.items():
+    for wheel in wheels.values():
         _, artifact_version = _wheel_metadata(wheel)
         if artifact_version != version:
             raise ValueError(
                 f"{wheel.name}: expected version {version}, got {artifact_version}."
             )
 
-    for name, sdist in sdists.items():
+    for sdist in sdists.values():
         _, artifact_version = _sdist_metadata(sdist)
         if artifact_version != version:
             raise ValueError(
