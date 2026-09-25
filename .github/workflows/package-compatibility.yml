@@ -43,7 +43,7 @@ jobs:
             python .github/scripts/package_compatibility.py matrix "${selection_args[@]}"
           )"
           minimum_matrix="$(
-            python .github/scripts/package_compatibility.py minimum-matrix               "${selection_args[@]}"
+            python .github/scripts/package_compatibility.py minimum-matrix "${selection_args[@]}"
           )"
           candidate_version="$(
             python .github/scripts/package_compatibility.py candidate-version
@@ -98,8 +98,8 @@ jobs:
           set -euo pipefail
           mkdir -p candidate-dist
           for package in sefia sefia_litellm sefia_typer sefia_fastapi sefios; do
-            python -m build               --sdist               --outdir "$GITHUB_WORKSPACE/candidate-dist"               "packages/${package}"
-            python -m build               --wheel               --outdir "$GITHUB_WORKSPACE/candidate-dist"               "packages/${package}"
+            python -m build --sdist --outdir "$GITHUB_WORKSPACE/candidate-dist" "packages/${package}"
+            python -m build --wheel --outdir "$GITHUB_WORKSPACE/candidate-dist" "packages/${package}"
           done
 
       - name: Verify candidate artifact metadata
@@ -154,13 +154,13 @@ jobs:
           python_bin="$GITHUB_WORKSPACE/.compat-venv/bin/python"
           "$python_bin" -m pip install --upgrade pip
 
-          "$python_bin" .github/scripts/package_compatibility.py             candidate-constraints             --artifact-dir candidate-dist             --version "$CANDIDATE_VERSION"             --output candidate-constraints.txt
+          "$python_bin" .github/scripts/package_compatibility.py candidate-constraints --artifact-dir candidate-dist --version "$CANDIDATE_VERSION" --output candidate-constraints.txt
 
           target_requirement="$(
-            "$python_bin" .github/scripts/package_compatibility.py               wheel-requirement               --artifact-dir candidate-dist               --version "$CANDIDATE_VERSION"               --distribution "${{ matrix.distribution }}"
+            "$python_bin" .github/scripts/package_compatibility.py wheel-requirement --artifact-dir candidate-dist --version "$CANDIDATE_VERSION" --distribution "${{ matrix.distribution }}"
           )"
 
-          "$python_bin" -m pip install             --constraint candidate-constraints.txt             "$target_requirement"             "pytest>=8.0"             "pytest-asyncio>=0.23"             "pytest-mock>=3.12.0"
+          "$python_bin" -m pip install --constraint candidate-constraints.txt "$target_requirement" "pytest>=8.0" "pytest-asyncio>=0.23" "pytest-mock>=3.12.0"
 
       - name: Verify internal dependencies use candidate wheels
         env:
@@ -225,7 +225,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python .github/scripts/package_compatibility.py             check-minimum-released             --distribution "${{ matrix.distribution }}"
+          python .github/scripts/package_compatibility.py check-minimum-released --distribution "${{ matrix.distribution }}"
           status=$?
           set -e
 
@@ -253,10 +253,10 @@ jobs:
           "$python_bin" -m pip install --upgrade pip
 
           target_requirement="$(
-            "$python_bin" .github/scripts/package_compatibility.py               wheel-requirement               --artifact-dir candidate-dist               --version "$CANDIDATE_VERSION"               --distribution "${{ matrix.distribution }}"
+            "$python_bin" .github/scripts/package_compatibility.py wheel-requirement --artifact-dir candidate-dist --version "$CANDIDATE_VERSION" --distribution "${{ matrix.distribution }}"
           )"
 
-          "$python_bin" -m pip install             --constraint minimum-constraints.txt             "$target_requirement"             "pytest>=8.0"             "pytest-asyncio>=0.23"             "pytest-mock>=3.12.0"
+          "$python_bin" -m pip install --constraint minimum-constraints.txt "$target_requirement" "pytest>=8.0" "pytest-asyncio>=0.23" "pytest-mock>=3.12.0"
 
       - name: Verify declared minimum versions were installed
         if: steps.minimum.outputs.run == 'true'
