@@ -1,0 +1,303 @@
+name: Package compatibility
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Resolve affected packages
+    runs-on: ubuntu-latest
+    outputs:
+      candidate-version: ${{ steps.selection.outputs.candidate-version }}
+      matrix: ${{ steps.selection.outputs.matrix }}
+      has-packages: ${{ steps.selection.outputs.has-packages }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve compatibility matrix
+        id: selection
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            selection_args=(--all)
+          else
+            selection_args=(--base "$BASE_SHA" --head "$HEAD_SHA")
+          fi
+
+          matrix="$(
+            python .github/scripts/package_compatibility.py matrix "${selection_args[@]}"
+          )"
+          candidate_version="$(
+            python .github/scripts/package_compatibility.py candidate-version
+          )"
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "candidate-version=$candidate_version" >> "$GITHUB_OUTPUT"
+
+          if [[ "$matrix" == '{"include":[]}' ]]; then
+            echo "has-packages=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-packages=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "Candidate version: $candidate_version"
+          echo "Matrix: $matrix"
+
+  build:
+    name: Build candidate wheels
+    if: needs.prepare.outputs.has-packages == 'true'
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.prepare.outputs.candidate-version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build frontend
+        run: python -m pip install --upgrade build
+
+      - name: Build all publishable wheels
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p candidate-dist
+          for package in sefia sefia_litellm sefia_typer sefia_fastapi sefios; do
+            python -m build --wheel --outdir "$GITHUB_WORKSPACE/candidate-dist" "packages/${package}"
+          done
+
+      - name: Upload candidate wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-compatibility-candidates
+          path: candidate-dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  validate-candidate:
+    name: Candidate / ${{ matrix.distribution }}
+    if: needs.prepare.outputs.has-packages == 'true'
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download candidate wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: package-compatibility-candidates
+          path: candidate-dist
+
+      - name: Create isolated environment
+        run: python -m venv .compat-venv
+
+      - name: Install candidate package graph
+        env:
+          CANDIDATE_VERSION: ${{ needs.prepare.outputs.candidate-version }}
+          CANDIDATE_DISTRIBUTIONS: ${{ matrix.candidate-distributions }}
+          TARGET_REQUIREMENT: ${{ matrix.requirement }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python_bin="$GITHUB_WORKSPACE/.compat-venv/bin/python"
+          "$python_bin" -m pip install --upgrade pip
+
+          for distribution in $CANDIDATE_DISTRIBUTIONS; do
+            prefix="${distribution//-/_}"
+            wheels=(candidate-dist/"${prefix}"-*.whl)
+            if [[ "${#wheels[@]}" -ne 1 ]]; then
+              echo "Expected one candidate wheel for $distribution." >&2
+              exit 1
+            fi
+            "$python_bin" -m pip install "${wheels[0]}"
+          done
+
+          "$python_bin" -m pip install             "$TARGET_REQUIREMENT==$CANDIDATE_VERSION"             "pytest>=8.0"             "pytest-asyncio>=0.23"             "pytest-mock>=3.12.0"
+
+      - name: Verify candidate versions
+        env:
+          CANDIDATE_VERSION: ${{ needs.prepare.outputs.candidate-version }}
+          CANDIDATE_DISTRIBUTIONS: ${{ matrix.candidate-distributions }}
+        run: |
+          .compat-venv/bin/python - <<'PY'
+          import os
+          from importlib import metadata
+
+          expected = os.environ["CANDIDATE_VERSION"]
+          for distribution in os.environ["CANDIDATE_DISTRIBUTIONS"].split():
+              actual = metadata.version(distribution)
+              if actual != expected:
+                  raise SystemExit(
+                      f"{distribution} is {actual}, expected candidate {expected}."
+                  )
+          PY
+
+      - name: Check installed dependency graph
+        run: .compat-venv/bin/python -m pip check
+
+      - name: Run package tests against candidate graph
+        env:
+          PYTHONNOUSERSITE: "1"
+          PYTHONPATH: ""
+        run: >
+          .compat-venv/bin/python -m pytest
+          "${{ matrix.tests }}"
+          --import-mode=importlib
+          --asyncio-mode=auto
+          -m "not e2e"
+
+  validate-minimum:
+    name: Minimum bounds / ${{ matrix.distribution }}
+    if: needs.prepare.outputs.has-packages == 'true'
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download candidate wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: package-compatibility-candidates
+          path: candidate-dist
+
+      - name: Resolve declared minimum constraints
+        run: >
+          python .github/scripts/package_compatibility.py minimum-constraints
+          --distribution "${{ matrix.distribution }}"
+          --output minimum-constraints.txt
+
+      - name: Check declared minimums are released
+        id: minimum
+        shell: bash
+        run: |
+          set +e
+          python .github/scripts/package_compatibility.py check-minimum-released --distribution "${{ matrix.distribution }}"
+          status=$?
+          set -e
+
+          if [[ "$status" -eq 0 ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$status" -eq 2 ]]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping until every declared lower bound has a release tag."
+          else
+            exit "$status"
+          fi
+
+      - name: Create isolated environment
+        if: steps.minimum.outputs.run == 'true'
+        run: python -m venv .compat-venv
+
+      - name: Install current package with declared minimum dependencies
+        if: steps.minimum.outputs.run == 'true'
+        env:
+          CANDIDATE_VERSION: ${{ needs.prepare.outputs.candidate-version }}
+          DISTRIBUTION: ${{ matrix.distribution }}
+          TARGET_REQUIREMENT: ${{ matrix.requirement }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python_bin="$GITHUB_WORKSPACE/.compat-venv/bin/python"
+          "$python_bin" -m pip install --upgrade pip
+
+          prefix="${DISTRIBUTION//-/_}"
+          wheels=(candidate-dist/"${prefix}"-*.whl)
+          if [[ "${#wheels[@]}" -ne 1 ]]; then
+            echo "Expected one candidate wheel for $DISTRIBUTION." >&2
+            exit 1
+          fi
+
+          wheel_uri="$(
+            "$python_bin" -c               'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve().as_uri())'               "${wheels[0]}"
+          )"
+
+          "$python_bin" -m pip install             --constraint minimum-constraints.txt             "$TARGET_REQUIREMENT @ $wheel_uri"             "pytest>=8.0"             "pytest-asyncio>=0.23"             "pytest-mock>=3.12.0"
+
+      - name: Verify declared minimum versions
+        if: steps.minimum.outputs.run == 'true'
+        env:
+          CANDIDATE_VERSION: ${{ needs.prepare.outputs.candidate-version }}
+          DISTRIBUTION: ${{ matrix.distribution }}
+        run: |
+          .compat-venv/bin/python - <<'PY'
+          import os
+          from importlib import metadata
+          from pathlib import Path
+
+          target = os.environ["DISTRIBUTION"]
+          candidate = os.environ["CANDIDATE_VERSION"]
+          actual_target = metadata.version(target)
+          if actual_target != candidate:
+              raise SystemExit(
+                  f"{target} is {actual_target}, expected candidate {candidate}."
+              )
+
+          for line in Path("minimum-constraints.txt").read_text().splitlines():
+              name, expected = line.split("==", 1)
+              actual = metadata.version(name)
+              if actual != expected:
+                  raise SystemExit(f"{name} is {actual}, expected {expected}.")
+          PY
+
+      - name: Check installed dependency graph
+        if: steps.minimum.outputs.run == 'true'
+        run: .compat-venv/bin/python -m pip check
+
+      - name: Run package tests against declared minimums
+        if: steps.minimum.outputs.run == 'true'
+        env:
+          PYTHONNOUSERSITE: "1"
+          PYTHONPATH: ""
+        run: >
+          .compat-venv/bin/python -m pytest
+          "${{ matrix.tests }}"
+          --import-mode=importlib
+          --asyncio-mode=auto
+          -m "not e2e"

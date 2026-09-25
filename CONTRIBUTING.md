@@ -64,6 +64,39 @@ server (`OLLAMA_API_BASE`, e.g. `http://localhost:11434`) with the model
 already pulled. Run them when touching the LiteLLM adapter, the
 prompt/decision schema, or before a release.
 
+## Package compatibility checks
+
+The `Package compatibility` workflow validates package boundaries without changing
+the release process. Releases still use the existing `v*` tag-triggered publish
+workflows.
+
+On pull requests, the workflow inspects the changed package directories and validates
+that package plus its downstream Sefia packages. For example, a change under
+`packages/sefia/` validates all five publishable packages, while a
+`packages/sefia_litellm/` change validates `sefia-litellm` and `sefios`.
+Changes to the compatibility workflow/helper itself validate the full package set.
+A manual `workflow_dispatch` also runs the full set.
+
+Each selected package gets two compatibility checks:
+
+1. **Candidate graph** — all five current packages are built as wheels at a synthetic
+   version inside the current internal dependency range. The selected
+   package is installed into a fresh virtual environment with every internal
+   dependency constrained to those candidate wheels, followed by `pip check` and
+   that package's tests. This detects workspace-only assumptions and incompatible
+   sibling package metadata.
+2. **Declared minimums** — when the selected package has internal Sefia dependencies,
+   its current wheel is installed against the exact declared lower-bound versions.
+   `pip check` and the package tests then verify that those minimums are real
+   compatibility claims rather than stale metadata.
+
+A declared-minimum check only runs when every referenced lower-bound version has a
+matching repository release tag. This matters while preparing a new release line:
+for example, a package may legitimately declare `sefia>=0.6.0` before `v0.6.0`
+exists. The candidate-graph check still runs immediately; once `v0.6.0` exists,
+the minimum-version check activates automatically and will catch later use of APIs
+that require a newer lower bound.
+
 ## Where to make a change
 
 The per-module map and the **where-to-change-what** table are in
