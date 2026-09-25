@@ -38,7 +38,7 @@ class PreviewToolkit:
         return question
 
     @preview(ask)
-    async def preview_ask(self, tool_call_id: str, stream: ArgStream) -> None:
+    async def _preview_ask(self, tool_call_id: str, stream: ArgStream) -> None:
         self.preview_call_ids.append(tool_call_id)
         async for event in stream:
             if isinstance(event, (StringDelta, StringEnd)):
