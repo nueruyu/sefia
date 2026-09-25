@@ -79,14 +79,14 @@ A manual `workflow_dispatch` also runs the full set.
 
 Each selected package gets two compatibility checks:
 
-1. **Candidate graph** — all five current packages are built as wheels/sdists at a
-   synthetic version inside the current internal dependency range. The selected
+1. **Candidate graph** — all five current packages are built as wheels at a synthetic
+   version inside the current internal dependency range. The selected
    package is installed into a fresh virtual environment with every internal
    dependency constrained to those candidate wheels, followed by `pip check` and
    that package's tests. This detects workspace-only assumptions and incompatible
    sibling package metadata.
-2. **Declared minimums** — the selected current package wheel is installed against
-   the exact lower-bound versions declared for its internal Sefia dependencies.
+2. **Declared minimums** — when the selected package has internal Sefia dependencies,
+   its current wheel is installed against the exact declared lower-bound versions.
    `pip check` and the package tests then verify that those minimums are real
    compatibility claims rather than stale metadata.
 
