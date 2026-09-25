@@ -15,7 +15,7 @@ from typing_extensions import final
 from ._native_tool_stream import NativeToolCallDelta, NativeToolCallStreamDecoder
 from ._response import decode_completion
 from ._schema import StructuredDecisionFormat
-from ._schema._data_format import JsonWireFormat
+from ._schema._json_wire_format import JsonWireFormat
 
 
 class _CompletionDelta(Protocol):

@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Any, cast
 
 from sefia.json_schema import (
     DefinitionRegistry,
@@ -17,7 +16,8 @@ from sefia.llm.step_decision import (
 from sefia.llm.streaming import OutputStreamEvent, Scalar, StringDelta, StringEnd
 from typing_extensions import final
 
-from ._data_format import JsonWireFormat
+from ._json import JsonObject
+from ._json_wire_format import JsonWireFormat
 
 K = SchemaKeyword
 _PAYLOAD_FIELD = "payload"
@@ -163,8 +163,8 @@ def _build_schema(
     mode: StepDecisionMode,
     result_format: JsonWireFormat | None,
     tool_formats: dict[str, _ToolFormat],
-) -> dict[str, Any]:
-    definitions: dict[str, Any] = {}
+) -> JsonObject:
+    definitions: JsonObject = {}
     registry = DefinitionRegistry(definitions)
     decision = _decision_schema(
         mode,
@@ -183,8 +183,8 @@ def _decision_schema(
     result_format: JsonWireFormat | None,
     tool_formats: dict[str, _ToolFormat],
     registry: DefinitionRegistry,
-) -> dict[str, Any]:
-    branches: list[dict[str, Any]] = []
+) -> JsonObject:
+    branches: list[JsonObject] = []
     if mode is not StepDecisionMode.RESULT_ONLY:
         branches.append(
             _tool_calls_schema(
@@ -206,8 +206,8 @@ def _decision_schema(
 def _tool_calls_schema(
     tool_formats: dict[str, _ToolFormat],
     registry: DefinitionRegistry,
-) -> dict[str, Any]:
-    calls: list[dict[str, Any]] = []
+) -> JsonObject:
+    calls: list[JsonObject] = []
     for index, (name, tool_format) in enumerate(tool_formats.items()):
         imported = registry.import_schema(
             tool_format.arguments.schema,
@@ -217,7 +217,7 @@ def _tool_calls_schema(
         if tool_format.description:
             call[K.DESCRIPTION] = tool_format.description
         calls.append(call)
-    items: dict[str, Any] = calls[0] if len(calls) == 1 else _branch_union(calls)
+    items: JsonObject = calls[0] if len(calls) == 1 else _branch_union(calls)
     return _closed_object(
         {
             "decision": _literal("tool_calls"),
@@ -226,7 +226,7 @@ def _tool_calls_schema(
     )
 
 
-def _closed_object(properties: dict[str, Any]) -> dict[str, Any]:
+def _closed_object(properties: JsonObject) -> JsonObject:
     return {
         K.TYPE: "object",
         K.PROPERTIES: properties,
@@ -235,11 +235,11 @@ def _closed_object(properties: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _branch_union(branches: list[dict[str, Any]]) -> dict[str, Any]:
+def _branch_union(branches: list[JsonObject]) -> JsonObject:
     """Build a provider-compatible union of const-disjoint schema branches."""
     # Anthropic rejects OpenAPI's discriminator in native structured output.
-    return cast(dict[str, Any], {K.ANY_OF: branches})
+    return {K.ANY_OF: [*branches]}
 
 
-def _literal(value: str) -> dict[str, Any]:
+def _literal(value: str) -> JsonObject:
     return {K.TYPE: "string", K.CONST: value}

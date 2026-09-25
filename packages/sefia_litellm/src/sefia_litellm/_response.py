@@ -8,7 +8,7 @@ from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.json import JsonSnapshot
 
 from ._schema import StructuredDecisionFormat
-from ._schema._data_format import JsonWireFormat
+from ._schema._json_wire_format import JsonWireFormat
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage

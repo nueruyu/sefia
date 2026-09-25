@@ -7,12 +7,13 @@ from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from typing_extensions import final
 
 from ._schema import StructuredDecisionFormat
-from ._schema._data_format import JsonWireFormat
+from ._schema._json import JsonObject
+from ._schema._json_wire_format import JsonWireFormat
 
 
 class _JsonSchemaResponseDefinition(TypedDict):
     name: str
-    schema: dict[str, Any]
+    schema: JsonObject
     strict: bool
 
 

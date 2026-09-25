@@ -8,7 +8,7 @@ from ._prompt_renderer import (
     PromptRenderer,
 )
 from ._strategy import LLMInferenceStrategy
-from .json import JsonCompatible, JsonMaterializer, JsonPath, JsonSnapshot
+from .json import JsonCompatible, JsonMaterializer, JsonSnapshot
 
 __all__ = [
     "LLMClient",
@@ -24,5 +24,4 @@ __all__ = [
     "JsonCompatible",
     "JsonSnapshot",
     "JsonMaterializer",
-    "JsonPath",
 ]

@@ -20,7 +20,7 @@ from sefia.llm.streaming import (
 )
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._schema import StructuredDecisionFormat
-from sefia_litellm._schema._data_format import JsonWireFormat
+from sefia_litellm._schema._json_wire_format import JsonWireFormat
 from sefia_litellm._streaming import (
     consume_completion_stream,
 )

@@ -1,16 +1,16 @@
 from copy import deepcopy
-from typing import Any
 
 import pytest
 from sefia.llm.json import JsonCompatible, JsonSnapshot
+from sefia_litellm._schema._json import JsonObject
 from sefia_litellm._schema._uniform_dictionary import UniformDictionaryFormat
 
 
-def _mapping(value: dict[str, Any]) -> dict[str, Any]:
+def _mapping(value: JsonObject) -> JsonObject:
     return {"type": "object", "additionalProperties": value}
 
 
-def _object(**properties: dict[str, Any]) -> dict[str, Any]:
+def _object(**properties: JsonObject) -> JsonObject:
     return {
         "type": "object",
         "properties": {name: value for name, value in properties.items()},
@@ -108,7 +108,7 @@ def _object(**properties: dict[str, Any]) -> dict[str, Any]:
     ],
 )
 def test_mapping_format_round_trip(
-    schema: dict[str, Any], logical: JsonCompatible, wire: JsonCompatible
+    schema: JsonObject, logical: JsonCompatible, wire: JsonCompatible
 ) -> None:
     data_format = UniformDictionaryFormat.from_schema(deepcopy(schema))
 

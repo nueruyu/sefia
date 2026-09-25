@@ -69,7 +69,7 @@ def test_materialize_normalizes_nested_application_values() -> None:
     }
 
 
-def test_materialize_rejects_mapping_key_collisions() -> None:
+def test_materialize_rejects_non_string_key_alongside_string_equivalent() -> None:
     identifier = UUID("12345678-1234-5678-1234-567812345678")
 
     with pytest.raises(ValueError, match="JSON object keys must be strings"):

@@ -11,7 +11,7 @@ from sefia.llm.streaming import (
 )
 from typing_extensions import final
 
-from ._schema._data_format import JsonWireFormat
+from ._schema._json_wire_format import JsonWireFormat
 
 
 class _FunctionCallDelta(Protocol):

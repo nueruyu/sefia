@@ -2,6 +2,7 @@ from copy import deepcopy
 from typing import Any
 
 import pytest
+from sefia_litellm._schema._json import JsonObject
 from sefia_litellm._schema._policy import (
     GENERATED_SCHEMA_POLICY,
     USER_DEFINED_SCHEMA_POLICY,
@@ -10,7 +11,7 @@ from sefia_litellm._schema._policy import (
 
 
 def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
-    raw_schema: dict[str, Any] = {
+    raw_schema: JsonObject = {
         "title": "SearchArguments",
         "type": "object",
         "properties": {"query": {"title": "Query", "type": "string"}},
@@ -64,7 +65,7 @@ def test_compatible_raw_tool_schema_is_preserved_verbatim() -> None:
     ],
 )
 def test_incompatible_raw_tool_schema_is_rejected(
-    raw_schema: dict[str, Any], message: str
+    raw_schema: JsonObject, message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
         prepare_schema(deepcopy(raw_schema), USER_DEFINED_SCHEMA_POLICY)
@@ -86,7 +87,7 @@ _UNSUPPORTED_COMPOSITIONS: list[tuple[str, Any]] = [
     _UNSUPPORTED_COMPOSITIONS,
 )
 def test_unsupported_composition_keyword_is_rejected(keyword: str, value: Any) -> None:
-    raw_schema: dict[str, Any] = {
+    raw_schema: JsonObject = {
         "type": "object",
         "properties": {"query": {"type": "string"}},
         "required": ["query"],
@@ -112,7 +113,7 @@ def test_unsupported_composition_keyword_is_rejected(keyword: str, value: Any) -
     ],
 )
 def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
-    raw_schema: dict[str, Any] = {
+    raw_schema: JsonObject = {
         "type": "object",
         "properties": {property_name: {"type": "string"}},
         "required": [property_name],
@@ -127,7 +128,7 @@ def test_schema_keyword_is_allowed_as_property_name(property_name: str) -> None:
 
 
 def test_generated_schema_is_corrected_recursively() -> None:
-    schema: dict[str, Any] = {
+    schema: JsonObject = {
         "title": "Result",
         "type": "object",
         "properties": {
@@ -148,14 +149,14 @@ def test_generated_schema_is_corrected_recursively() -> None:
 
 @pytest.mark.parametrize("location", ["root", "property", "items", "$defs", "anyOf"])
 def test_raw_tool_schema_closes_objects(location: str) -> None:
-    object_schema: dict[str, Any] = {
+    object_schema: JsonObject = {
         "title": "SearchArguments",
         "type": "object",
         "properties": {"query": {"title": "Query", "type": "string"}},
         "required": ["query"],
     }
     closed_schema = {**object_schema, "additionalProperties": False}
-    wrappers: dict[str, dict[str, Any]] = {
+    wrappers: dict[str, JsonObject] = {
         "root": object_schema,
         "property": {
             "type": "object",
@@ -167,7 +168,7 @@ def test_raw_tool_schema_closes_objects(location: str) -> None:
         "$defs": {"$defs": {"Search": object_schema}, "$ref": "#/$defs/Search"},
         "anyOf": {"anyOf": [object_schema, {"type": "null"}]},
     }
-    expected: dict[str, dict[str, Any]] = {
+    expected: dict[str, JsonObject] = {
         "root": closed_schema,
         "property": {
             "type": "object",

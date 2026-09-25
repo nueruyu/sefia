@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from typing import Any
 
 from sefia.json_schema import JsonSchemaDocument
 from sefia.llm.json import JsonSnapshot
 from typing_extensions import final
 
+from ._json import JsonObject
 from ._policy import (
     GENERATED_SCHEMA_POLICY,
     USER_DEFINED_SCHEMA_POLICY,
@@ -17,7 +17,7 @@ from ._uniform_dictionary import UniformDictionaryFormat
 @final
 @dataclass(frozen=True)
 class JsonWireFormat:
-    schema: dict[str, Any]
+    schema: JsonObject
     dictionary_format: UniformDictionaryFormat | None
 
     @property
