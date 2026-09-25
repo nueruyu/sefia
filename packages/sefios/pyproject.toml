@@ -6,7 +6,7 @@ license = { file = "LICENSE" }
 authors = [{ name = "nueruyu" }]
 requires-python = ">=3.11"
 dependencies = [
-    "sefia>=0.3.0",
+    "sefia>=0.6.0,<0.7.0",
     "typing-extensions>=4.13.0",
     "glyff>=0.16.0",
     "glyff-pydantic>=0.16.0",
@@ -38,10 +38,10 @@ classifiers = [
 testing = ["pytest>=8.0", "pytest-asyncio>=0.23"]
 file-store = ["glyff-file-store>=0.16.0"]
 sqlite = ["glyff-sqlite>=0.16.0"]
-litellm = ["sefia-litellm>=0.1.0"]
+litellm = ["sefia-litellm>=0.6.0,<0.7.0"]
 web = ["ddgs>=9.0"]
-cli = ["sefia-typer>=0.2.0"]
-fastapi = ["sefia-fastapi>=0.3.0"]
+cli = ["sefia-typer>=0.6.0,<0.7.0"]
+fastapi = ["sefia-fastapi>=0.6.0,<0.7.0"]
 all = [
     "sefios[litellm]",
     "sefios[web]",
