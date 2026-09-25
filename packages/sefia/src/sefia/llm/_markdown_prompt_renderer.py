@@ -20,7 +20,7 @@ class MarkdownPromptRenderer(PromptRenderer):
         return "\n\n".join(sections)
 
     def _render_arguments(self, prompt: InferencePrompt) -> str:
-        arguments = prompt.arguments.to_json_value()
+        arguments = prompt.arguments.to_json_compatible()
         if arguments == {}:
             return "## Task arguments\n\nNone."
         return "## Task arguments\n\n" + json_block(arguments)

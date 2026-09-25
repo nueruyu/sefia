@@ -18,10 +18,10 @@ from sefia import (
     ToolCollector,
 )
 from sefia.llm import (
+    JsonMaterializer,
     LLMClient,
     MessageComposer,
     PromptRenderer,
-    StructuredDataConverter,
 )
 from sefia.llm.result_format import ResultFormatFactory
 from sefia.llm.transports import DecisionTransport
@@ -51,8 +51,8 @@ class SessionScope:
     the instance default rather than resetting it. When neither is set,
     :class:`~sefia.Session` builds its own :class:`DefaultToolCollector`. Custom
     inspection is configured directly on that collector. Result formats and
-    structured-data conversion are configured independently through
-    ``result_format_factory`` and ``structured_data_converter``.
+    JSON materialization are configured independently through
+    ``result_format_factory`` and ``json_materializer``.
     """
 
     def __init__(
@@ -69,7 +69,7 @@ class SessionScope:
         history_storage: HistoryStorage | None = None,
         tool_collector: ToolCollector | None = None,
         result_format_factory: ResultFormatFactory | None = None,
-        structured_data_converter: StructuredDataConverter | None = None,
+        json_materializer: JsonMaterializer | None = None,
         prompt_renderer: PromptRenderer | None = None,
         decision_transport: DecisionTransport | None = None,
         message_composers: Sequence[MessageComposer] | None = None,
@@ -85,7 +85,7 @@ class SessionScope:
         self.history_storage = history_storage
         self.tool_collector = tool_collector
         self.result_format_factory = result_format_factory
-        self.structured_data_converter = structured_data_converter
+        self.json_materializer = json_materializer
         self.prompt_renderer = prompt_renderer
         self.decision_transport = decision_transport
         self.message_composers = tuple(message_composers or ())
@@ -101,7 +101,7 @@ class SessionScope:
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
         result_format_factory: ResultFormatFactory | None = None,
-        structured_data_converter: StructuredDataConverter | None = None,
+        json_materializer: JsonMaterializer | None = None,
         prompt_renderer: PromptRenderer | None = None,
         decision_transport: DecisionTransport | None = None,
         message_composers: Sequence[MessageComposer] | None = None,
@@ -118,10 +118,8 @@ class SessionScope:
             if result_format_factory is None
             else result_format_factory
         )
-        resolved_structured_data_converter = (
-            self.structured_data_converter
-            if structured_data_converter is None
-            else structured_data_converter
+        resolved_json_materializer = (
+            self.json_materializer if json_materializer is None else json_materializer
         )
         resolved_prompt_renderer = (
             self.prompt_renderer if prompt_renderer is None else prompt_renderer
@@ -184,7 +182,7 @@ class SessionScope:
                     stream=resolved_stream,
                     tool_collector=resolved_tool_collector,
                     result_format_factory=resolved_result_format_factory,
-                    structured_data_converter=resolved_structured_data_converter,
+                    json_materializer=resolved_json_materializer,
                     history_storage=self.history_storage,
                     prompt_renderer=resolved_prompt_renderer,
                     decision_transport=resolved_decision_transport,

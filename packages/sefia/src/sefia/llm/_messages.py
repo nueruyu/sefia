@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeVar
 
-from .structured_data import StructuredData
+from .json import JsonSnapshot
 
 
 @dataclass(frozen=True, init=False)
@@ -44,7 +44,7 @@ class ToolCall:
 
     id: str
     name: str
-    arguments: StructuredData
+    arguments: JsonSnapshot
 
 
 _T = TypeVar("_T")
@@ -65,4 +65,4 @@ class LLMCompletion:
     usage: dict[str, Any] | None = None
     stop_reason: str | None = None
     cost: float | None = None
-    structured_output: StructuredData | None = None
+    structured_output: JsonSnapshot | None = None

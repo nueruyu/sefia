@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
+from sefia.json_schema import JsonSchemaDocument
 from sefia.llm import (
     Message,
     ToolCall,
 )
-from sefia.json_schema import JsonSchemaDocument
+from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
-from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._request import build_completion_request
 
@@ -124,7 +124,7 @@ def test_request_encodes_native_tool_call_history_for_wire_schema() -> None:
                 ToolCall(
                     id="call-1",
                     name="categorize",
-                    arguments=StructuredData.from_json({"labels": {"important": 2}}),
+                    arguments=JsonSnapshot.capture({"labels": {"important": 2}}),
                 )
             ],
         ),

@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 
 import pytest
-
-from sefia.llm import StructuredData
 from sefia.json_schema import SchemaNode
+from sefia.llm import JsonSnapshot
 from sefia.pydantic import PydanticResultFormatFactory
 
 
@@ -17,13 +16,13 @@ def test_result_format_exposes_schema_and_restores_python_value() -> None:
 
     schema = SchemaNode(result_format.schema.to_dict())
     assert schema.properties()["value"].type == "integer"
-    assert result_format.validate(StructuredData.from_json({"value": 3})) == _Result(
+    assert result_format.validate(JsonSnapshot.capture({"value": 3})) == _Result(
         value=3
     )
 
 
-def test_result_format_rejects_invalid_structured_data() -> None:
+def test_result_format_rejects_invalid_json_materializer() -> None:
     result_format = PydanticResultFormatFactory().create(_Result)
 
     with pytest.raises(ValueError):
-        result_format.validate(StructuredData.from_json({"value": "invalid"}))
+        result_format.validate(JsonSnapshot.capture({"value": "invalid"}))

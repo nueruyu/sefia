@@ -1,8 +1,5 @@
 import pytest
-from sefia.json_schema import (
-    JsonSchemaDocument,
-    LocalDefinitionRef,
-)
+from sefia.json_schema import JsonSchemaDocument, LocalDefinitionRef
 
 
 def test_schema_document_rejects_non_json_values() -> None:
@@ -77,3 +74,26 @@ def test_local_definition_reference_handles_json_pointer_escaping() -> None:
     assert nested.resolve_from(
         {"User": {"properties": {"name": {"type": "string"}}}}
     ) == {"type": "string"}
+
+
+def test_schema_package_has_no_llm_dependency() -> None:
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import sefia.json_schema as schema
+
+    script = """
+import importlib.util
+import sys
+spec = importlib.util.spec_from_file_location("schema_boundary_test", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+assert not any(name == "sefia.llm" or name.startswith("sefia.llm.") for name in sys.modules)
+assert not {"JsonValue", "JsonScalar", "JsonObject"} & set(module.__all__)
+"""
+    subprocess.run(
+        [sys.executable, "-c", script, str(Path(schema.__file__))],
+        check=True,
+    )

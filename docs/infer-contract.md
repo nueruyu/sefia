@@ -61,7 +61,7 @@ An application composer returns a `MessageLayout` with messages in `before` and
 inference prompt once between those messages. Unconsumed arguments retain the usual
 JSON rendering; `arguments={}` is valid when every argument is consumed. The layout
 keeps ordinary Python values. After composition, `LLMInferenceStrategy` calls
-`StructuredDataConverter.to_structured_data()` to materialize the remaining values
+`JsonMaterializer.materialize()` to materialize the remaining values
 before it constructs the transport-facing `DecisionRequest`. JSON is only a later
 projection where the selected transport needs textual representation.
 `PromptRenderer` renders only this inference prompt from function instructions,

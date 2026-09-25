@@ -3,16 +3,15 @@
 import json
 from collections.abc import Callable
 from inspect import signature
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import pytest
 import sefia.llm.transports as transports
 from sefia import ToolRegistry
 from sefia.llm import LLMCompletion, ToolCall
-from sefia.json_schema import JsonObject
+from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import OutputStreamEvent, StringDelta, StringEnd
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
     DecisionTransport,
     NativeDecisionTransport,
@@ -49,13 +48,13 @@ def _case(
             result_format_factory=PydanticResultFormatFactory(),
         )
     )
-    data: JsonObject
+    data: dict[str, Any]
     if kind == "result":
         data = {"decision": "result", "result": "done"}
         call = ToolCall(
             id="call-1",
             name="return_result",
-            arguments=StructuredData.from_json({"result": "done"}),
+            arguments=JsonSnapshot.capture({"result": "done"}),
         )
         logical_events: tuple[OutputStreamEvent, ...] = (
             StringDelta(("decision",), "result"),
@@ -79,7 +78,7 @@ def _case(
         call = ToolCall(
             id="call-1",
             name="lookup",
-            arguments=StructuredData.from_json({"key": "item"}),
+            arguments=JsonSnapshot.capture({"key": "item"}),
         )
         native_events = (
             StringDelta(("tool_calls", 0, "name"), "lookup"),
@@ -92,7 +91,7 @@ def _case(
             StringEnd(("decision",), "tool_calls"),
             *native_events,
         )
-    expected = StructuredData.from_json(data)
+    expected = JsonSnapshot.capture(data)
     content = json.dumps(data)
     events = native_events if native else logical_events
     return DecisionTransportCase(

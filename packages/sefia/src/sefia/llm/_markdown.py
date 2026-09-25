@@ -1,7 +1,7 @@
 import json
 import re
 
-from ..json_schema import JsonValue
+from sefia.llm.json import JsonCompatible
 
 
 def markdown_fence(content: str) -> str:
@@ -21,7 +21,7 @@ def text_block(value: str) -> str:
     return _code_block(value, "text")
 
 
-def json_block(value: JsonValue) -> str:
+def json_block(value: JsonCompatible) -> str:
     return _code_block(json.dumps(value, ensure_ascii=False, indent=2), "json")
 
 

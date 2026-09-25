@@ -13,7 +13,7 @@ from sefia.llm.streaming import (
     StringEnd as OutputStringEnd,
 )
 from sefia_litellm._schema import StructuredDecisionFormat
-from sefia_litellm._schema._data_format import StructuredDataFormat
+from sefia_litellm._schema._data_format import JsonWireFormat
 from sefia_litellm._streaming import (
     consume_completion_stream,
 )
@@ -130,9 +130,7 @@ async def test_stream_dispatches_decoder_events_and_forwards_formats(
     native.finish.return_value = [final_event]
     decision_format = Mock(spec=StructuredDecisionFormat)
     decision_format.decode_stream_event.return_value = logical
-    tool_formats: dict[str, StructuredDataFormat] = {
-        "lookup": Mock(spec=StructuredDataFormat)
-    }
+    tool_formats: dict[str, JsonWireFormat] = {"lookup": Mock(spec=JsonWireFormat)}
     callback = AsyncMock()
     wire_response = make_litellm_response(content="done")
     builder = mocker.patch("litellm.stream_chunk_builder", return_value=wire_response)

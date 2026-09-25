@@ -39,11 +39,11 @@ from typing_extensions import final, override
 from .._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from .._session import Session
 from ..llm import LLMClient, LLMCompletion, Message
+from ..llm.json import JsonSnapshot
 from ..llm.step_decision import DecisionSpec, StepTool
-from ..llm.structured_data import StructuredData
 from ..llm.streaming import OutputStreamCallback, OutputStreamEvent
 from ..llm.transports import DecisionObserver
-from ..pydantic import PydanticStructuredDataConverter
+from ..pydantic import PydanticJsonMaterializer
 from ._decision_transport_contract import (
     DecisionTransportCase,
     DecisionTransportContract,
@@ -66,8 +66,8 @@ from ._tool_collector_contract import ToolCollectorCase, ToolCollectorContract
 
 
 def _snapshot_value(value: Any) -> Any:
-    if isinstance(value, StructuredData):
-        return _snapshot_value(value.tree)
+    if isinstance(value, JsonSnapshot):
+        return _snapshot_value(value.to_json_compatible())
     if isinstance(value, Message):
         result: dict[str, Any] = {"role": value.role}
         content = value.content
@@ -138,7 +138,7 @@ class MockLLMClient(LLMClient):
             try:
                 completion = replace(
                     completion,
-                    structured_output=StructuredData.parse_json(completion.content),
+                    structured_output=JsonSnapshot.parse_json(completion.content),
                 )
             except json.JSONDecodeError:
                 pass
@@ -206,15 +206,15 @@ def result_completion(result: Any) -> LLMCompletion:
     including dataclasses and Pydantic models, which serialize to the object
     shape the step-decision schema validates.
     """
-    data = PydanticStructuredDataConverter().to_structured_data(
+    data = PydanticJsonMaterializer().materialize(
         {"decision": "result", "result": result}
     )
-    return LLMCompletion(content=json.dumps(data.to_json_value()))
+    return LLMCompletion(content=json.dumps(data))
 
 
 def tool_calls_completion(*calls: tuple[str, dict[str, Any]]) -> LLMCompletion:
     """A scripted "tool_calls" decision from ``(tool_name, arguments)`` pairs."""
-    data = PydanticStructuredDataConverter().to_structured_data(
+    data = PydanticJsonMaterializer().materialize(
         {
             "decision": "tool_calls",
             "tool_calls": [
@@ -222,7 +222,7 @@ def tool_calls_completion(*calls: tuple[str, dict[str, Any]]) -> LLMCompletion:
             ],
         }
     )
-    return LLMCompletion(content=json.dumps(data.to_json_value()))
+    return LLMCompletion(content=json.dumps(data))
 
 
 @asynccontextmanager

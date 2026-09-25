@@ -9,12 +9,12 @@ from typing_extensions import override
 from ..llm._client import LLMClient
 from ..llm._messages import LLMCompletion, Message
 from ..llm._prompt_renderer import InferencePrompt, PromptRenderer
+from ..llm.json import JsonSnapshot
 from ..llm.step_decision import DecisionSpec, StepTool
 from ..llm.streaming import (
     OutputStreamCallback,
     OutputStreamEvent,
 )
-from ..llm.structured_data import StructuredData
 from ..llm.transports import DecisionObserver, DecisionRequest, DecisionTransport
 
 
@@ -24,7 +24,7 @@ class DecisionTransportCase:
 
     transport: DecisionTransport
     completion: LLMCompletion
-    expected_data: StructuredData
+    expected_data: JsonSnapshot
     request: DecisionRequest
     content_chunks: Sequence[str] = ()
     reasoning_chunks: Sequence[str] = ()

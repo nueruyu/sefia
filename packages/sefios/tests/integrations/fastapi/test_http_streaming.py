@@ -7,9 +7,9 @@ from typing import Any
 import pytest
 from sefia import Tools
 from sefia.llm import LLMClient, LLMCompletion, Message
+from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import OutputStreamCallback, StringDelta, StringEnd
-from sefia.llm.structured_data import StructuredData
 from sefia_fastapi.events import SSEEvent
 from sefios import domain
 from sefios.exceptions import InteractionRequired
@@ -43,7 +43,7 @@ async def _stream_completion(
     return LLMCompletion(
         content=content,
         structured_output=(
-            StructuredData.parse_json(content) if decision_spec is not None else None
+            JsonSnapshot.parse_json(content) if decision_spec is not None else None
         ),
     )
 

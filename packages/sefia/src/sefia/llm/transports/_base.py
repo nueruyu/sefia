@@ -8,7 +8,7 @@ from ...inference import FunctionInfo
 from .._client import LLMClient
 from .._messages import LLMCompletion, Message, ToolCall
 from .._prompt_renderer import PromptRenderer
-from ..structured_data import StructuredData
+from ..json import JsonSnapshot
 from ..step_decision import DecisionSpec
 from ..streaming import OutputStreamEvent
 
@@ -41,7 +41,7 @@ class DecisionToolCalls:
 @dataclass(frozen=True)
 class DecisionToolResult:
     tool_call_id: str
-    result: StructuredData
+    result: JsonSnapshot
 
 
 DecisionHistoryItem: TypeAlias = DecisionToolCalls | DecisionToolResult
@@ -53,7 +53,7 @@ class DecisionRequest:
 
     messages_before: tuple[Message, ...]
     function: FunctionInfo
-    arguments: StructuredData
+    arguments: JsonSnapshot
     messages_after: tuple[Message, ...]
     decision_spec: DecisionSpec
     history: tuple[DecisionHistoryItem, ...]
@@ -75,7 +75,7 @@ class DecisionRequest:
 class DecodedDecision:
     """Decision data decoded by a transport, before semantic validation."""
 
-    decision_data: StructuredData
+    decision_data: JsonSnapshot
     completion: LLMCompletion
 
 

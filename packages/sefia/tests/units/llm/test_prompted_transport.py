@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-
 from sefia.llm import InferencePrompt, LLMCompletion, PromptRenderer
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
@@ -49,7 +48,10 @@ async def test_uses_the_rendered_prompt_without_a_model() -> None:
     assert 'For a final result, return: {"decision":"result"' in content
     assert sent["decision_spec"] is None
     assert observer.messages == tuple(sent["messages"])
-    assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
+    assert decoded.decision_data.to_json_compatible() == {
+        "decision": "result",
+        "result": "done",
+    }
     assert decoded.completion is completion
     assert isinstance(renderer.render.call_args.args[0], InferencePrompt)
     assert "provided structured output schema" not in content

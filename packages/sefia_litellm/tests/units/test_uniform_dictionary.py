@@ -1,16 +1,16 @@
 from copy import deepcopy
+from typing import Any
 
 import pytest
-from sefia.json_schema import JsonObject
-from sefia.llm.structured_data import StructuredData, StructuredDataTree
+from sefia.llm.json import JsonCompatible, JsonSnapshot
 from sefia_litellm._schema._uniform_dictionary import UniformDictionaryFormat
 
 
-def _mapping(value: JsonObject) -> JsonObject:
+def _mapping(value: dict[str, Any]) -> dict[str, Any]:
     return {"type": "object", "additionalProperties": value}
 
 
-def _object(**properties: JsonObject) -> JsonObject:
+def _object(**properties: dict[str, Any]) -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {name: value for name, value in properties.items()},
@@ -108,12 +108,16 @@ def _object(**properties: JsonObject) -> JsonObject:
     ],
 )
 def test_mapping_format_round_trip(
-    schema: JsonObject, logical: StructuredDataTree, wire: StructuredDataTree
+    schema: dict[str, Any], logical: JsonCompatible, wire: JsonCompatible
 ) -> None:
     data_format = UniformDictionaryFormat.from_schema(deepcopy(schema))
 
-    assert data_format.encode(StructuredData.from_tree(logical)).tree == wire
-    assert data_format.decode(StructuredData.from_tree(wire)).tree == logical
+    assert (
+        data_format.encode(JsonSnapshot.capture(logical)).to_json_compatible() == wire
+    )
+    assert (
+        data_format.decode(JsonSnapshot.capture(wire)).to_json_compatible() == logical
+    )
 
 
 def test_entry_schema_preserves_mapping_constraints() -> None:
@@ -169,11 +173,11 @@ def test_hybrid_object_is_not_lowered_as_a_dictionary() -> None:
     ],
 )
 def test_mapping_restoration_rejects_invalid_entries(
-    wire: StructuredDataTree, message: str
+    wire: JsonCompatible, message: str
 ) -> None:
     data_format = UniformDictionaryFormat.from_schema(_mapping({"type": "string"}))
     with pytest.raises(ValueError, match=message):
-        data_format.decode(StructuredData.from_tree(wire))
+        data_format.decode(JsonSnapshot.capture(wire))
 
 
 @pytest.mark.parametrize(
@@ -184,7 +188,7 @@ def test_mapping_restoration_rejects_invalid_entries(
     ],
 )
 def test_union_restoration_resolves_shared_definitions(
-    logical: StructuredDataTree, wire: StructuredDataTree
+    logical: JsonCompatible, wire: JsonCompatible
 ) -> None:
     data_format = UniformDictionaryFormat.from_schema(
         {
@@ -199,5 +203,16 @@ def test_union_restoration_resolves_shared_definitions(
         }
     )
 
-    assert data_format.decode(StructuredData.from_tree(wire)).tree == logical
-    assert data_format.encode(StructuredData.from_tree(logical)).tree == wire
+    assert (
+        data_format.decode(JsonSnapshot.capture(wire)).to_json_compatible() == logical
+    )
+    assert (
+        data_format.encode(JsonSnapshot.capture(logical)).to_json_compatible() == wire
+    )
+
+
+@pytest.mark.parametrize("key", [1, True, None])
+def test_rejects_non_string_wire_key(key: JsonCompatible) -> None:
+    data_format = UniformDictionaryFormat.from_schema(_mapping({"type": "integer"}))
+    with pytest.raises(ValueError, match="mapping key must be a string"):
+        data_format.decode(JsonSnapshot.capture([{"key": key, "value": 1}]))

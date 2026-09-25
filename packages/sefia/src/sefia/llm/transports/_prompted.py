@@ -1,16 +1,16 @@
 from typing_extensions import final, override
 
 from .._client import LLMClient
-from .._prompted_response import PromptedJsonStreamExtractor, extract_prompted_json
 from .._prompt_renderer import PromptRenderer
+from .._prompted_response import PromptedJsonStreamExtractor, extract_prompted_json
 from ..exceptions import DecisionDecodingError
-from ..structured_data import StructuredData
+from ..json import JsonSnapshot
 from ..streaming import JsonOutputStreamDecoder
 from ._base import (
     DecisionObserver,
     DecisionRequest,
-    DecodedDecision,
     DecisionTransport,
+    DecodedDecision,
 )
 from ._decision_instructions import json_response_instructions
 from ._messages import build_text_decision_messages
@@ -57,7 +57,7 @@ class PromptedDecisionTransport(DecisionTransport):
                 completion, "LLM did not provide response content."
             )
         try:
-            data = StructuredData.parse_json(extract_prompted_json(completion.content))
+            data = JsonSnapshot.parse_json(extract_prompted_json(completion.content))
         except ValueError as error:
             raise DecisionDecodingError(completion, str(error)) from error
         return DecodedDecision(decision_data=data, completion=completion)

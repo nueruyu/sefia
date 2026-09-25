@@ -1,17 +1,13 @@
 from dataclasses import dataclass
-from typing import cast
-
-from typing_extensions import final
+from typing import Any, cast
 
 from sefia.json_schema import (
     DefinitionRegistry,
-    JsonObject,
     JsonSchemaDocument,
-    JsonValue,
     SchemaKeyword,
     SchemaNode,
 )
-from sefia.llm.structured_data import StructuredData
+from sefia.llm.json import JsonCompatible, JsonSnapshot
 from sefia.llm.step_decision import (
     DecisionSpec,
     StepDecisionMode,
@@ -19,8 +15,9 @@ from sefia.llm.step_decision import (
     ToolSchemaSource,
 )
 from sefia.llm.streaming import OutputStreamEvent, Scalar, StringDelta, StringEnd
+from typing_extensions import final
 
-from ._data_format import StructuredDataFormat
+from ._data_format import JsonWireFormat
 
 K = SchemaKeyword
 _PAYLOAD_FIELD = "payload"
@@ -29,7 +26,7 @@ _PAYLOAD_FIELD = "payload"
 @final
 @dataclass(frozen=True)
 class _ToolFormat:
-    arguments: StructuredDataFormat
+    arguments: JsonWireFormat
     description: str | None
 
 
@@ -38,7 +35,7 @@ class StructuredDecisionFormat:
     def __init__(
         self,
         schema: JsonSchemaDocument,
-        result_format: StructuredDataFormat | None,
+        result_format: JsonWireFormat | None,
         tool_formats: dict[str, _ToolFormat],
     ) -> None:
         self._schema = schema
@@ -48,7 +45,7 @@ class StructuredDecisionFormat:
     @classmethod
     def from_spec(cls, spec: DecisionSpec) -> "StructuredDecisionFormat":
         result_format = (
-            StructuredDataFormat.from_generated_schema(spec.result.schema)
+            JsonWireFormat.from_generated_schema(spec.result.schema)
             if spec.result is not None
             else None
         )
@@ -66,14 +63,14 @@ class StructuredDecisionFormat:
     def schema(self) -> JsonSchemaDocument:
         return self._schema
 
-    def decode_json(self, text: str) -> StructuredData:
-        return self._decode(StructuredData.parse_json(text))
+    def decode_json(self, text: str) -> JsonSnapshot:
+        return self._decode(JsonSnapshot.parse_json(text))
 
-    def decode(self, data: JsonValue) -> StructuredData:
-        return self._decode(StructuredData.from_json(data))
+    def decode(self, data: JsonCompatible) -> JsonSnapshot:
+        return self._decode(JsonSnapshot.capture(data))
 
-    def _decode(self, data: StructuredData) -> StructuredData:
-        envelope = data.to_object("structured decision envelope")
+    def _decode(self, data: JsonSnapshot) -> JsonSnapshot:
+        envelope = data.as_object("structured decision envelope")
         if set(envelope) != {_PAYLOAD_FIELD}:
             raise ValueError(
                 "structured decision envelope must contain only the payload field"
@@ -81,12 +78,12 @@ class StructuredDecisionFormat:
         data = envelope[_PAYLOAD_FIELD]
 
         try:
-            fields = data.to_object()
+            fields = data.as_object()
         except ValueError:
             return data
         decision = fields.get("decision")
         try:
-            decision_name = decision.to_string() if decision is not None else None
+            decision_name = decision.as_string() if decision is not None else None
         except ValueError:
             return data
         if decision_name == "result":
@@ -96,41 +93,41 @@ class StructuredDecisionFormat:
         return data
 
     def _decode_result(
-        self, data: StructuredData, fields: dict[str, StructuredData]
-    ) -> StructuredData:
+        self, data: JsonSnapshot, fields: dict[str, JsonSnapshot]
+    ) -> JsonSnapshot:
         if self._result_format is None or "result" not in fields:
             return data
-        return StructuredData.from_object(
+        return JsonSnapshot.from_object(
             {**fields, "result": self._result_format.decode(fields["result"])}
         )
 
     def _decode_tool_calls(
-        self, data: StructuredData, fields: dict[str, StructuredData]
-    ) -> StructuredData:
+        self, data: JsonSnapshot, fields: dict[str, JsonSnapshot]
+    ) -> JsonSnapshot:
         tool_calls = fields.get("tool_calls")
         if tool_calls is None:
             return data
         try:
-            calls = tool_calls.to_array()
+            calls = tool_calls.as_array()
         except ValueError:
             return data
-        return StructuredData.from_object(
+        return JsonSnapshot.from_object(
             {
                 **fields,
-                "tool_calls": StructuredData.from_array(
+                "tool_calls": JsonSnapshot.from_array(
                     self._decode_tool_call(call) for call in calls
                 ),
             }
         )
 
-    def _decode_tool_call(self, data: StructuredData) -> StructuredData:
+    def _decode_tool_call(self, data: JsonSnapshot) -> JsonSnapshot:
         try:
-            fields = data.to_object()
+            fields = data.as_object()
         except ValueError:
             return data
         name = fields.get("name")
         try:
-            tool_name = name.to_string() if name is not None else None
+            tool_name = name.as_string() if name is not None else None
         except ValueError:
             return data
         tool_format = (
@@ -138,7 +135,7 @@ class StructuredDecisionFormat:
         )
         if tool_format is None or "arguments" not in fields:
             return data
-        return StructuredData.from_object(
+        return JsonSnapshot.from_object(
             {
                 **fields,
                 "arguments": tool_format.arguments.decode(fields["arguments"]),
@@ -156,18 +153,18 @@ class StructuredDecisionFormat:
         return Scalar(path, event.value)
 
 
-def _tool_data_format(tool: StepTool) -> StructuredDataFormat:
+def _tool_data_format(tool: StepTool) -> JsonWireFormat:
     if tool.schema_source is ToolSchemaSource.GENERATED:
-        return StructuredDataFormat.from_generated_schema(tool.arguments)
-    return StructuredDataFormat.from_user_schema(tool.arguments)
+        return JsonWireFormat.from_generated_schema(tool.arguments)
+    return JsonWireFormat.from_user_schema(tool.arguments)
 
 
 def _build_schema(
     mode: StepDecisionMode,
-    result_format: StructuredDataFormat | None,
+    result_format: JsonWireFormat | None,
     tool_formats: dict[str, _ToolFormat],
-) -> JsonObject:
-    definitions: JsonObject = {}
+) -> dict[str, Any]:
+    definitions: dict[str, Any] = {}
     registry = DefinitionRegistry(definitions)
     decision = _decision_schema(
         mode,
@@ -183,11 +180,11 @@ def _build_schema(
 
 def _decision_schema(
     mode: StepDecisionMode,
-    result_format: StructuredDataFormat | None,
+    result_format: JsonWireFormat | None,
     tool_formats: dict[str, _ToolFormat],
     registry: DefinitionRegistry,
-) -> JsonObject:
-    branches: list[JsonObject] = []
+) -> dict[str, Any]:
+    branches: list[dict[str, Any]] = []
     if mode is not StepDecisionMode.RESULT_ONLY:
         branches.append(
             _tool_calls_schema(
@@ -209,8 +206,8 @@ def _decision_schema(
 def _tool_calls_schema(
     tool_formats: dict[str, _ToolFormat],
     registry: DefinitionRegistry,
-) -> JsonObject:
-    calls: list[JsonObject] = []
+) -> dict[str, Any]:
+    calls: list[dict[str, Any]] = []
     for index, (name, tool_format) in enumerate(tool_formats.items()):
         imported = registry.import_schema(
             tool_format.arguments.schema,
@@ -220,7 +217,7 @@ def _tool_calls_schema(
         if tool_format.description:
             call[K.DESCRIPTION] = tool_format.description
         calls.append(call)
-    items: JsonObject = calls[0] if len(calls) == 1 else _branch_union(calls)
+    items: dict[str, Any] = calls[0] if len(calls) == 1 else _branch_union(calls)
     return _closed_object(
         {
             "decision": _literal("tool_calls"),
@@ -229,7 +226,7 @@ def _tool_calls_schema(
     )
 
 
-def _closed_object(properties: JsonObject) -> JsonObject:
+def _closed_object(properties: dict[str, Any]) -> dict[str, Any]:
     return {
         K.TYPE: "object",
         K.PROPERTIES: properties,
@@ -238,11 +235,11 @@ def _closed_object(properties: JsonObject) -> JsonObject:
     }
 
 
-def _branch_union(branches: list[JsonObject]) -> JsonObject:
+def _branch_union(branches: list[dict[str, Any]]) -> dict[str, Any]:
     """Build a provider-compatible union of const-disjoint schema branches."""
     # Anthropic rejects OpenAPI's discriminator in native structured output.
-    return cast(JsonObject, {K.ANY_OF: branches})
+    return cast(dict[str, Any], {K.ANY_OF: branches})
 
 
-def _literal(value: str) -> JsonObject:
+def _literal(value: str) -> dict[str, Any]:
     return {K.TYPE: "string", K.CONST: value}

@@ -7,9 +7,8 @@ from sefia import JsonSchemaToolEntry, ToolRegistry
 from sefia.exceptions import UnknownToolDecisionError
 from sefia.inference import ToolCallsDecision
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.json_schema import JsonValue
+from sefia.llm.json import JsonCompatible, JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticResultFormatFactory
 
 
@@ -52,7 +51,7 @@ def test_a_schema_is_validated_under_its_declared_dialect():
     tool_call_ids = ToolCallIdRegistry()
 
     valid = decision_spec.validate(
-        StructuredData.from_json(
+        JsonSnapshot.capture(
             {
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "pair", "arguments": {"pair": ["a", 1]}}],
@@ -65,7 +64,7 @@ def test_a_schema_is_validated_under_its_declared_dialect():
 
     with pytest.raises(ValueError, match="Step decision validation failed"):
         decision_spec.validate(
-            StructuredData.from_json(
+            JsonSnapshot.capture(
                 {
                     "decision": "tool_calls",
                     "tool_calls": [{"name": "pair", "arguments": {"pair": [1, "a"]}}],
@@ -94,9 +93,9 @@ def decision_spec() -> DecisionSpec:
     "arguments", [{}, {"question": ""}, {"question": "Hi", "extra": 1}]
 )
 def test_rejects_invalid_tool_arguments(
-    decision_spec: DecisionSpec, arguments: JsonValue
+    decision_spec: DecisionSpec, arguments: JsonCompatible
 ) -> None:
-    data = StructuredData.from_json(
+    data = JsonSnapshot.capture(
         {
             "decision": "tool_calls",
             "tool_calls": [{"name": "ask_user", "arguments": arguments}],
@@ -107,7 +106,7 @@ def test_rejects_invalid_tool_arguments(
 
 
 def test_accepts_valid_tool_arguments(decision_spec: DecisionSpec) -> None:
-    data = StructuredData.from_json(
+    data = JsonSnapshot.capture(
         {
             "decision": "tool_calls",
             "tool_calls": [{"name": "ask_user", "arguments": {"question": "Hello"}}],
@@ -120,7 +119,7 @@ def test_accepts_valid_tool_arguments(decision_spec: DecisionSpec) -> None:
 
 
 def test_rejects_unknown_tool(decision_spec: DecisionSpec) -> None:
-    data = StructuredData.from_json(
+    data = JsonSnapshot.capture(
         {"decision": "tool_calls", "tool_calls": [{"name": "unknown", "arguments": {}}]}
     )
     with pytest.raises(UnknownToolDecisionError) as exc_info:
@@ -131,5 +130,26 @@ def test_rejects_unknown_tool(decision_spec: DecisionSpec) -> None:
 def test_never_mode_rejects_result(decision_spec: DecisionSpec) -> None:
     with pytest.raises(ValueError, match="Step decision validation failed"):
         decision_spec.validate(
-            StructuredData.from_json({"decision": "result", "result": "bye"}), None
+            JsonSnapshot.capture({"decision": "result", "result": "bye"}), None
         )
+
+
+def test_tool_validation_projects_once_and_returns_detached_arguments(
+    decision_spec: DecisionSpec, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sefia.llm.step_decision import _ToolValidator
+
+    snapshot = JsonSnapshot.capture({"question": "Hello"})
+    projection = JsonSnapshot.to_json_compatible
+    calls = 0
+
+    def project(self: JsonSnapshot) -> JsonCompatible:
+        nonlocal calls
+        calls += 1
+        return projection(self)
+
+    monkeypatch.setattr(JsonSnapshot, "to_json_compatible", project)
+    arguments = _ToolValidator(decision_spec.tools[0]).validate(snapshot)
+    assert calls == 1
+    arguments["question"] = "Changed"
+    assert projection(snapshot) == {"question": "Hello"}

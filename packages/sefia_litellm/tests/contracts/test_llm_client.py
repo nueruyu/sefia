@@ -11,11 +11,11 @@ from litellm import (
     ModelResponse,
 )
 from pytest_mock import MockerFixture
-from sefia.llm import LLMCompletion, ToolCall
 from sefia.json_schema import JsonSchemaDocument
+from sefia.llm import LLMCompletion, ToolCall
+from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.llm.streaming import StringDelta, StringEnd
-from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import (
     LLMClientCase,
@@ -67,7 +67,7 @@ class TestLiteLLMStructuredCompletionContract(LLMClientContract):
             model="gpt-4o",
             content=content,
             stop_reason="stop",
-            structured_output=StructuredData.from_json(
+            structured_output=JsonSnapshot.capture(
                 {"decision": "result", "result": "done"}
             ),
         )
@@ -118,7 +118,7 @@ class TestLiteLLMNativeToolContract(LLMClientContract):
                 ToolCall(
                     id="call-1",
                     name="lookup",
-                    arguments=StructuredData.from_json({"key": "item"}),
+                    arguments=JsonSnapshot.capture({"key": "item"}),
                 )
             ],
             stop_reason="tool_calls",
@@ -176,7 +176,7 @@ class TestLiteLLMStreamingContract(StreamingLLMClientContract):
             content=content,
             reasoning_content="Let me think.",
             stop_reason="stop",
-            structured_output=StructuredData.from_json(
+            structured_output=JsonSnapshot.capture(
                 {"decision": "result", "result": "done"}
             ),
         )

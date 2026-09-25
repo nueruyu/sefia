@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Never, cast
+from typing import Any, Never
 
 import jsonschema.validators
 from typing_extensions import final
@@ -8,10 +8,10 @@ from typing_extensions import final
 from .._tool_system import JsonSchemaToolEntry, ToolEntry
 from ..exceptions import UnknownToolDecisionError
 from ..inference import ResultDecision, StepDecision, ToolCallRequest, ToolCallsDecision
-from ._tool_call_ids import ToolCallIdRegistry
 from ..json_schema import JsonSchemaDocument
+from ._tool_call_ids import ToolCallIdRegistry
+from .json import JsonSnapshot
 from .result_format import ResultFormat, ResultFormatFactory
-from .structured_data import StructuredData
 
 
 class StepDecisionMode(Enum):
@@ -43,9 +43,10 @@ class _ToolValidator:
         validator_cls.check_schema(schema)
         self._validator = validator_cls(schema)
 
-    def validate(self, arguments: StructuredData) -> dict[str, Any]:
-        arguments.to_object("arguments")
-        argument_data = cast(dict[str, Any], arguments.tree)
+    def validate(self, arguments: JsonSnapshot) -> dict[str, Any]:
+        argument_data = arguments.to_json_compatible()
+        if not isinstance(argument_data, dict):
+            raise ValueError("arguments must be an object")
         errors = sorted(
             self._validator.iter_errors(argument_data),
             key=lambda error: list(error.path),
@@ -140,13 +141,13 @@ class DecisionSpec:
         return self._result
 
     def validate(
-        self, data: StructuredData, tool_call_ids: ToolCallIdRegistry | None
+        self, data: JsonSnapshot, tool_call_ids: ToolCallIdRegistry | None
     ) -> StepDecision:
         try:
-            fields = data.to_object("step decision")
+            fields = data.as_object("step decision")
             decision = fields.get("decision")
             decision_name = (
-                decision.to_string("decision") if decision is not None else None
+                decision.as_string("decision") if decision is not None else None
             )
             if decision_name == "tool_calls":
                 if self._mode is StepDecisionMode.RESULT_ONLY:
@@ -164,11 +165,11 @@ class DecisionSpec:
 
     def _validate_tool_calls(
         self,
-        fields: dict[str, StructuredData],
+        fields: dict[str, JsonSnapshot],
         tool_call_ids: ToolCallIdRegistry | None,
     ) -> ToolCallsDecision:
         _require_exact_fields(fields, {"decision", "tool_calls"})
-        calls = fields["tool_calls"].to_array("tool_calls")
+        calls = fields["tool_calls"].as_array("tool_calls")
         if not calls:
             raise ValueError("tool_calls must be a non-empty array")
         if tool_call_ids is None:
@@ -176,9 +177,9 @@ class DecisionSpec:
 
         requests: list[ToolCallRequest] = []
         for index, call_data in enumerate(calls):
-            call = call_data.to_object("tool call")
+            call = call_data.as_object("tool call")
             _require_exact_fields(call, {"name", "arguments"})
-            name = call["name"].to_string("tool name")
+            name = call["name"].as_string("tool name")
             tool = self._tools.get(name)
             if tool is None:
                 raise UnknownToolDecisionError(name)
@@ -191,16 +192,14 @@ class DecisionSpec:
             )
         return ToolCallsDecision(requests)
 
-    def _validate_result(self, fields: dict[str, StructuredData]) -> ResultDecision:
+    def _validate_result(self, fields: dict[str, JsonSnapshot]) -> ResultDecision:
         _require_exact_fields(fields, {"decision", "result"})
         if self._result is None:
             raise ValueError("result is not allowed")
         return ResultDecision(self._result.validate(fields["result"]))
 
 
-def _require_exact_fields(
-    fields: dict[str, StructuredData], expected: set[str]
-) -> None:
+def _require_exact_fields(fields: dict[str, JsonSnapshot], expected: set[str]) -> None:
     actual = set(fields)
     if actual != expected:
         missing = expected - actual

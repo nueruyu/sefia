@@ -14,16 +14,16 @@ from sefia.llm import (
     PromptRenderer,
     ToolCall,
 )
+from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import StepDecisionMode
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
     DecisionTransport,
     NativeDecisionTransport,
     StructuredDecisionTransport,
 )
 from sefia.pydantic import (
+    PydanticJsonMaterializer,
     PydanticResultFormatFactory,
-    PydanticStructuredDataConverter,
 )
 from sefia.testing import make_function_info
 
@@ -39,7 +39,7 @@ class Result:
         (
             StructuredDecisionTransport(),
             LLMCompletion(
-                structured_output=StructuredData.from_json(
+                structured_output=JsonSnapshot.capture(
                     {"decision": "result", "result": {"value": "done"}}
                 )
             ),
@@ -51,9 +51,7 @@ class Result:
                     ToolCall(
                         id="call-2",
                         name="return_result",
-                        arguments=StructuredData.from_json(
-                            {"result": {"value": "done"}}
-                        ),
+                        arguments=JsonSnapshot.capture({"result": {"value": "done"}}),
                     )
                 ]
             ),
@@ -71,7 +69,7 @@ async def test_transport_feedback_follows_inference_prompt_and_result_is_restore
     strategy = LLMInferenceStrategy(
         client,
         PydanticResultFormatFactory(),
-        PydanticStructuredDataConverter(),
+        PydanticJsonMaterializer(),
         renderer,
         transport,
     )
@@ -108,7 +106,7 @@ async def test_never_mode_is_preserved_through_strategy_and_transport(
 ) -> None:
     tools = ToolRegistry()
     tools.add(lambda: "ok", name="lookup")
-    data = StructuredData.from_json(
+    data = JsonSnapshot.capture(
         {"decision": "result", "result": "done"}
         if returns_result
         else {
@@ -122,7 +120,7 @@ async def test_never_mode_is_preserved_through_strategy_and_transport(
             ToolCall(
                 id="provider-id",
                 name="return_result" if returns_result else "lookup",
-                arguments=StructuredData.from_json(
+                arguments=JsonSnapshot.capture(
                     {"result": "done"} if returns_result else {}
                 ),
             )
@@ -135,7 +133,7 @@ async def test_never_mode_is_preserved_through_strategy_and_transport(
     strategy = LLMInferenceStrategy(
         client,
         PydanticResultFormatFactory(),
-        PydanticStructuredDataConverter(),
+        PydanticJsonMaterializer(),
         renderer,
         transport,
         max_repair_attempts=0,

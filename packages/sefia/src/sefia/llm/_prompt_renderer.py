@@ -2,14 +2,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from ..inference import FunctionInfo
+from .json import JsonSnapshot
 from .step_decision import StepTool
-from .structured_data import StructuredData
 
 
 @dataclass(frozen=True)
 class InferencePrompt:
     function: FunctionInfo
-    arguments: StructuredData
+    arguments: JsonSnapshot
     tools: tuple[StepTool, ...]
 
 

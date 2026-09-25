@@ -3,8 +3,6 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 from typing import Any, Coroutine, Protocol, cast
 
-from typing_extensions import final
-
 from sefia.llm import LLMCompletion
 from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.streaming import (
@@ -12,11 +10,12 @@ from sefia.llm.streaming import (
     OutputStreamCallback,
     OutputStreamEvent,
 )
+from typing_extensions import final
 
 from ._native_tool_stream import NativeToolCallDelta, NativeToolCallStreamDecoder
 from ._response import decode_completion
 from ._schema import StructuredDecisionFormat
-from ._schema._data_format import StructuredDataFormat
+from ._schema._data_format import JsonWireFormat
 
 
 class _CompletionDelta(Protocol):
@@ -33,7 +32,7 @@ async def consume_completion_stream(
     reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
     messages: list[dict[str, Any]],
     decision_format: StructuredDecisionFormat | None,
-    tool_data_formats: dict[str, StructuredDataFormat] | None = None,
+    tool_data_formats: dict[str, JsonWireFormat] | None = None,
     requested_model: str,
 ) -> LLMCompletion:
     import litellm
@@ -92,7 +91,7 @@ class _CompletionStreamState:
         output_callback: OutputStreamCallback | None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
         decision_format: StructuredDecisionFormat | None,
-        tool_data_formats: dict[str, StructuredDataFormat],
+        tool_data_formats: dict[str, JsonWireFormat],
     ) -> None:
         self._content_callback = content_callback
         self._output_callback = output_callback

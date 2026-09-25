@@ -135,8 +135,8 @@ cannot wrap, retry, or short-circuit the inference loop. `PromptRenderer` render
 Sefia's standard inference prompt from function instructions, remaining arguments,
 and any textual tool definitions. `MessageLayout` retains raw application values until
 `LLMInferenceStrategy` consumes it. The strategy uses the configured
-`StructuredDataConverter` to materialize retained arguments and execution history as
-`StructuredData`, then creates a provider-neutral `DecisionRequest`. Its configured
+`JsonMaterializer` to materialize retained arguments and execution history as
+`JsonSnapshot`, then creates a provider-neutral `DecisionRequest`. Its configured
 `ResultFormatFactory` independently defines result validation and restoration. Default
 tool collection uses a separate `ToolFunctionInspector` for callable schemas and
 binding; custom inspection is supplied through `DefaultToolCollector`. Transports place the

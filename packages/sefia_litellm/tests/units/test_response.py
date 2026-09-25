@@ -20,8 +20,8 @@ from litellm.types.utils import (  # pyright: ignore[reportMissingTypeStubs]
 from pytest_mock import MockerFixture
 from sefia.llm import ToolCall
 from sefia.llm.exceptions import LLMCompletionDecodingError
+from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._response import decode_completion
 from sefia_litellm._schema import StructuredDecisionFormat
@@ -67,7 +67,7 @@ def test_converts_response_and_calculates_cost(mocker: MockerFixture) -> None:
         ToolCall(
             id="call_abc",
             name="get_weather",
-            arguments=StructuredData.from_json({"city": "Tokyo"}),
+            arguments=JsonSnapshot.capture({"city": "Tokyo"}),
         )
     ]
 
@@ -272,7 +272,7 @@ def test_response_decodes_native_structured_output(
     )
 
     assert response.structured_output is not None
-    assert response.structured_output.tree == {
+    assert response.structured_output.to_json_compatible() == {
         "decision": "result",
         "result": {"city": "Tokyo"},
     }

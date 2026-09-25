@@ -1,9 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from typing_extensions import final
-
-from sefia.llm.structured_data import StructuredData
+from sefia.llm.json import JsonCompatible, JsonSnapshot
 from sefia.llm.streaming import (
     JsonOutputStreamDecoder,
     OutputStreamEvent,
@@ -11,8 +9,9 @@ from sefia.llm.streaming import (
     StringDelta,
     StringEnd,
 )
+from typing_extensions import final
 
-from ._schema._data_format import StructuredDataFormat
+from ._schema._data_format import JsonWireFormat
 
 
 class _FunctionCallDelta(Protocol):
@@ -43,7 +42,7 @@ class _ToolCallState:
 class NativeToolCallStreamDecoder:
     """Decodes LiteLLM tool-call fragments into logical decision events."""
 
-    def __init__(self, tool_data_formats: dict[str, StructuredDataFormat]) -> None:
+    def __init__(self, tool_data_formats: dict[str, JsonWireFormat]) -> None:
         self._tool_data_formats = tool_data_formats
         self._calls: dict[int, _ToolCallState] = {}
 
@@ -72,13 +71,13 @@ class NativeToolCallStreamDecoder:
                 events.extend(self._decode_available(index, state))
                 continue
             try:
-                data = data_format.decode(
-                    StructuredData.parse_json(state.arguments_json)
-                )
+                data = data_format.decode(JsonSnapshot.parse_json(state.arguments_json))
             except ValueError:
                 continue
             events.extend(
-                _structured_data_events(data, ("tool_calls", index, "arguments"))
+                _json_events(
+                    data.to_json_compatible(), ("tool_calls", index, "arguments")
+                )
             )
         return events
 
@@ -100,11 +99,10 @@ class NativeToolCallStreamDecoder:
         ]
 
 
-def _structured_data_events(
-    data: StructuredData,
+def _json_events(
+    tree: JsonCompatible,
     path: tuple[str | int, ...],
 ) -> list[OutputStreamEvent]:
-    tree = data.tree
     if isinstance(tree, str):
         return [StringEnd(path, tree)]
     if tree is None or isinstance(tree, int | float | bool):
@@ -113,16 +111,14 @@ def _structured_data_events(
         return [
             event
             for index, item in enumerate(tree)
-            for event in _structured_data_events(
-                StructuredData.from_tree(item), (*path, index)
-            )
+            for event in _json_events(item, (*path, index))
         ]
     return [
         event
         for name, item in tree.items()
-        for event in _structured_data_events(
-            StructuredData.from_tree(item),
-            (*path, name if isinstance(name, str | int) else str(name)),
+        for event in _json_events(
+            item,
+            (*path, name),
         )
     ]
 

@@ -3,11 +3,11 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sefia.llm import LLMClient, LLMCompletion, LLMInferenceStrategy, PromptRenderer
-from sefia.llm.structured_data import StructuredData
+from sefia.llm.json import JsonSnapshot
 from sefia.llm.transports import DecisionTransport, DecodedDecision
 from sefia.pydantic import (
+    PydanticJsonMaterializer,
     PydanticResultFormatFactory,
-    PydanticStructuredDataConverter,
 )
 
 
@@ -15,7 +15,7 @@ from sefia.pydantic import (
 def transport() -> AsyncMock:
     transport = AsyncMock(spec=DecisionTransport)
     transport.request_decision.return_value = DecodedDecision(
-        StructuredData.from_json({"decision": "result", "result": "done"}),
+        JsonSnapshot.capture({"decision": "result", "result": "done"}),
         LLMCompletion(content="done"),
     )
     return transport
@@ -29,7 +29,7 @@ def make_strategy(transport: AsyncMock) -> Callable[..., LLMInferenceStrategy]:
         return LLMInferenceStrategy(
             llm_client=Mock(spec=LLMClient),
             result_format_factory=PydanticResultFormatFactory(),
-            structured_data_converter=PydanticStructuredDataConverter(),
+            json_materializer=PydanticJsonMaterializer(),
             prompt_renderer=Mock(spec=PromptRenderer),
             decision_transport=transport,
             stream=stream,

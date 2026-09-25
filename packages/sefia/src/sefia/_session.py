@@ -11,16 +11,16 @@ from ._profiles import Profile
 from ._tool_system import ToolCollector
 from .history_storages import GlyffHistoryStorage
 from .llm._client import LLMClient
-from .llm._message_composer import MessageComposer
-from .llm._strategy import LLMInferenceStrategy
 from .llm._markdown_prompt_renderer import MarkdownPromptRenderer
+from .llm._message_composer import MessageComposer
 from .llm._prompt_renderer import PromptRenderer
+from .llm._strategy import LLMInferenceStrategy
+from .llm.json import JsonMaterializer
 from .llm.result_format import ResultFormatFactory
-from .llm.structured_data import StructuredDataConverter
 from .llm.transports import DecisionTransport, StructuredDecisionTransport
 from .pydantic import (
+    PydanticJsonMaterializer,
     PydanticResultFormatFactory,
-    PydanticStructuredDataConverter,
 )
 from .tool_collectors import DefaultToolCollector
 
@@ -31,7 +31,7 @@ class Session:
     Manages the lifecycle of an inference execution.
     Wraps a glyff.Session and sets up the sefia SessionContext.
 
-    Result-format creation and structured-data conversion are independent strategy
+    Result-format creation and JSON materialization are independent strategy
     dependencies. Custom tool inspection is configured on ``DefaultToolCollector``.
     """
 
@@ -43,7 +43,7 @@ class Session:
         profiles: list[Profile] | None = None,
         tool_collector: ToolCollector | None = None,
         result_format_factory: ResultFormatFactory | None = None,
-        structured_data_converter: StructuredDataConverter | None = None,
+        json_materializer: JsonMaterializer | None = None,
         stream: bool = False,
         history_storage: HistoryStorage | None = None,
         max_repair_attempts: int = 2,
@@ -61,8 +61,8 @@ class Session:
             tool_collector = DefaultToolCollector()
         if result_format_factory is None:
             result_format_factory = PydanticResultFormatFactory()
-        if structured_data_converter is None:
-            structured_data_converter = PydanticStructuredDataConverter()
+        if json_materializer is None:
+            json_materializer = PydanticJsonMaterializer()
 
         self._tool_collector = tool_collector
         if prompt_renderer is None:
@@ -76,7 +76,7 @@ class Session:
             return LLMInferenceStrategy(
                 client,
                 result_format_factory=result_format_factory,
-                structured_data_converter=structured_data_converter,
+                json_materializer=json_materializer,
                 prompt_renderer=prompt_renderer,
                 decision_transport=decision_transport,
                 message_composers=message_composers,

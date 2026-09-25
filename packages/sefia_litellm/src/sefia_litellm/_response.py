@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 from sefia.llm import LLMCompletion, ToolCall
 from sefia.llm.exceptions import LLMCompletionDecodingError
-from sefia.llm.structured_data import StructuredData
+from sefia.llm.json import JsonSnapshot
 
 from ._schema import StructuredDecisionFormat
-from ._schema._data_format import StructuredDataFormat
+from ._schema._data_format import JsonWireFormat
 
 if TYPE_CHECKING:
     from litellm import Choices, ModelResponse, Usage
@@ -25,7 +25,7 @@ def decode_completion(
     *,
     requested_model: str,
     decision_format: StructuredDecisionFormat | None,
-    tool_data_formats: dict[str, StructuredDataFormat] | None = None,
+    tool_data_formats: dict[str, JsonWireFormat] | None = None,
 ) -> LLMCompletion:
     if not response.choices:
         raise LLMCompletionDecodingError(
@@ -53,13 +53,13 @@ def decode_completion(
         ]
     except ValueError as error:
         raise LLMCompletionDecodingError(completion, str(error)) from error
-    _decode_structured_data(completion, decision_format)
+    _decode_structured_output(completion, decision_format)
     return completion
 
 
 def _decode_tool_call(
     call: ChatCompletionMessageToolCall | ChatCompletionMessageCustomToolCall,
-    tool_data_formats: dict[str, StructuredDataFormat],
+    tool_data_formats: dict[str, JsonWireFormat],
 ) -> ToolCall:
     if getattr(call, "type", None) == "custom":
         raise ValueError("LLM returned an unsupported custom tool call")
@@ -70,14 +70,14 @@ def _decode_tool_call(
     arguments_json = cast(object, function_call.function.arguments)
     if not isinstance(arguments_json, str):
         raise ValueError(f"Native tool call {name!r} has no JSON arguments.")
-    arguments = StructuredData.parse_json(arguments_json)
+    arguments = JsonSnapshot.parse_json(arguments_json)
     data_format = tool_data_formats.get(name)
     if data_format is not None:
         arguments = data_format.decode(arguments)
     return ToolCall(id=function_call.id, name=name, arguments=arguments)
 
 
-def _decode_structured_data(
+def _decode_structured_output(
     completion: LLMCompletion,
     decision_format: StructuredDecisionFormat | None,
 ) -> None:

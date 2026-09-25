@@ -2,8 +2,6 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
-from typing_extensions import override
-
 from sefia import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.inference import (
@@ -11,10 +9,10 @@ from sefia.inference import (
     ResultDecision,
 )
 from sefia.llm import (
+    InferencePrompt,
     LLMClient,
     LLMCompletion,
     LLMInferenceStrategy,
-    InferencePrompt,
     MarkdownPromptRenderer,
     Message,
     MessageComposer,
@@ -22,26 +20,27 @@ from sefia.llm import (
     PromptRenderer,
     ToolCall,
 )
+from sefia.llm.json import JsonSnapshot
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
     DecisionRequest,
-    NativeDecisionTransport,
-    PromptedDecisionTransport,
     DecisionToolCalls,
     DecisionToolResult,
+    NativeDecisionTransport,
+    PromptedDecisionTransport,
     RejectedDecision,
     StructuredDecisionTransport,
 )
 from sefia.pydantic import (
+    PydanticJsonMaterializer,
     PydanticResultFormatFactory,
-    PydanticStructuredDataConverter,
 )
 from sefia.testing import (
     RecordingDecisionObserver,
     make_decision_request,
     make_function_info,
 )
+from typing_extensions import override
 
 
 class _CapturingRenderer(PromptRenderer):
@@ -85,7 +84,7 @@ async def test_message_composers_transform_in_declared_order() -> None:
     strategy = LLMInferenceStrategy(
         AsyncMock(spec=LLMClient),
         PydanticResultFormatFactory(),
-        PydanticStructuredDataConverter(),
+        PydanticJsonMaterializer(),
         _renderer(),
         StructuredDecisionTransport(),
         message_composers=(_Layer("A", log), _Layer("B", log), _Layer("C", log)),
@@ -141,13 +140,13 @@ def _request_with_application_messages() -> tuple[DecisionRequest, tuple[Message
                 ToolCall(
                     id="call-1",
                     name="lookup",
-                    arguments=StructuredData.from_object({}),
+                    arguments=JsonSnapshot.from_object({}),
                 ),
             )
         ),
         DecisionToolResult(
             tool_call_id="call-1",
-            result=StructuredData.from_json({"value": "found"}),
+            result=JsonSnapshot.capture({"value": "found"}),
         ),
     )
     rejected = RejectedDecision(
@@ -158,7 +157,7 @@ def _request_with_application_messages() -> tuple[DecisionRequest, tuple[Message
         make_decision_request(
             _spec(),
             function=function,
-            arguments=StructuredData.from_json({"knowledge": {"foo": "bar"}}),
+            arguments=JsonSnapshot.capture({"knowledge": {"foo": "bar"}}),
             messages_before=(application_messages[0],),
             messages_after=application_messages[1:],
             history=history,
@@ -189,7 +188,7 @@ def _assert_application_prefix(
         (
             StructuredDecisionTransport(),
             LLMCompletion(
-                structured_output=StructuredData.from_json(
+                structured_output=JsonSnapshot.capture(
                     {"decision": "result", "result": "done"}
                 )
             ),
@@ -220,7 +219,10 @@ async def test_text_transport_appends_text_history_after_application_messages(
         False,
     )
 
-    assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
+    assert decoded.decision_data.to_json_compatible() == {
+        "decision": "result",
+        "result": "done",
+    }
     sent = client.complete.await_args.kwargs
     messages = sent["messages"]
     assert observer.messages == tuple(messages)
@@ -250,7 +252,7 @@ async def test_native_transport_appends_native_history_after_application_message
             ToolCall(
                 id="result-1",
                 name="return_result",
-                arguments=StructuredData.from_json({"result": "done"}),
+                arguments=JsonSnapshot.capture({"result": "done"}),
             )
         ]
     )
@@ -263,7 +265,10 @@ async def test_native_transport_appends_native_history_after_application_message
         False,
     )
 
-    assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
+    assert decoded.decision_data.to_json_compatible() == {
+        "decision": "result",
+        "result": "done",
+    }
     sent = client.complete.await_args.kwargs
     messages = sent["messages"]
     _assert_application_prefix(messages, application_messages)
@@ -290,7 +295,7 @@ async def test_native_transport_appends_native_history_after_application_message
         (
             StructuredDecisionTransport(),
             LLMCompletion(
-                structured_output=StructuredData.from_json(
+                structured_output=JsonSnapshot.capture(
                     {"decision": "result", "result": "done"}
                 )
             ),
@@ -309,7 +314,7 @@ async def test_text_transport_default_layout_sends_one_message_on_first_step(
     request = make_decision_request(
         _spec(),
         function=function,
-        arguments=StructuredData.from_json({"topic": "sefia"}),
+        arguments=JsonSnapshot.capture({"topic": "sefia"}),
     )
     client = AsyncMock()
     client.complete.return_value = completion
@@ -337,7 +342,7 @@ async def test_text_transport_default_layout_sends_one_message_on_first_step(
         (
             StructuredDecisionTransport(),
             LLMCompletion(
-                structured_output=StructuredData.from_json(
+                structured_output=JsonSnapshot.capture(
                     {"decision": "result", "result": "done"}
                 )
             ),
@@ -374,7 +379,7 @@ async def test_native_transport_default_layout_sends_one_message_on_first_step()
     request = make_decision_request(
         _spec(),
         function=make_function_info(bound_arguments={"topic": "sefia"}),
-        arguments=StructuredData.from_json({"topic": "sefia"}),
+        arguments=JsonSnapshot.capture({"topic": "sefia"}),
     )
     client = AsyncMock()
     client.complete.return_value = LLMCompletion(
@@ -382,7 +387,7 @@ async def test_native_transport_default_layout_sends_one_message_on_first_step()
             ToolCall(
                 "result-1",
                 "return_result",
-                StructuredData.from_json({"result": "done"}),
+                JsonSnapshot.capture({"result": "done"}),
             )
         ]
     )
@@ -414,9 +419,7 @@ async def test_text_and_native_transports_share_repair_framing() -> None:
     )
     text_client = AsyncMock()
     text_client.complete.return_value = LLMCompletion(
-        structured_output=StructuredData.from_json(
-            {"decision": "result", "result": "done"}
-        )
+        structured_output=JsonSnapshot.capture({"decision": "result", "result": "done"})
     )
     native_client = AsyncMock()
     native_client.complete.return_value = LLMCompletion(
@@ -424,7 +427,7 @@ async def test_text_and_native_transports_share_repair_framing() -> None:
             ToolCall(
                 id="result-1",
                 name="return_result",
-                arguments=StructuredData.from_json({"result": "done"}),
+                arguments=JsonSnapshot.capture({"result": "done"}),
             )
         ]
     )
@@ -455,19 +458,17 @@ async def test_text_and_native_transports_share_repair_framing() -> None:
 async def test_custom_prompt_renderer_receives_materialized_request() -> None:
     request = make_decision_request(
         _spec(),
-        arguments=StructuredData.from_json({"payload": {"value": "argument"}}),
+        arguments=JsonSnapshot.capture({"payload": {"value": "argument"}}),
         history=(
             DecisionToolResult(
                 tool_call_id="call-1",
-                result=StructuredData.from_json({"value": "history"}),
+                result=JsonSnapshot.capture({"value": "history"}),
             ),
         ),
     )
     client = AsyncMock()
     client.complete.return_value = LLMCompletion(
-        structured_output=StructuredData.from_json(
-            {"decision": "result", "result": "done"}
-        )
+        structured_output=JsonSnapshot.capture({"decision": "result", "result": "done"})
     )
     renderer = _CapturingRenderer()
 
@@ -479,7 +480,9 @@ async def test_custom_prompt_renderer_receives_materialized_request() -> None:
         False,
     )
 
-    assert renderer.prompts[0].arguments.tree == {"payload": {"value": "argument"}}
+    assert renderer.prompts[0].arguments.to_json_compatible() == {
+        "payload": {"value": "argument"}
+    }
     messages = client.complete.await_args.kwargs["messages"]
     assert messages[0].content == "custom inference prompt"
     assert '"value": "history"' in messages[1].content
@@ -503,7 +506,7 @@ async def test_repair_reuses_immutable_application_message() -> None:
     completions = [
         LLMCompletion(content="invalid"),
         LLMCompletion(
-            structured_output=StructuredData.from_json(
+            structured_output=JsonSnapshot.capture(
                 {"decision": "result", "result": "done"}
             )
         ),
@@ -521,7 +524,7 @@ async def test_repair_reuses_immutable_application_message() -> None:
     strategy = LLMInferenceStrategy(
         client,
         PydanticResultFormatFactory(),
-        PydanticStructuredDataConverter(),
+        PydanticJsonMaterializer(),
         _renderer(),
         StructuredDecisionTransport(),
         message_composers=(_SourceComposer(),),

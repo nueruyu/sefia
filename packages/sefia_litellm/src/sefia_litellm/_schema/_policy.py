@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
+from sefia.json_schema import SchemaKeyword, SchemaNode, SchemaPath
 from typing_extensions import final
-
-from sefia.json_schema import JsonObject, SchemaKeyword, SchemaNode, SchemaPath
 
 from ._uniform_dictionary import UniformDictionaryFormat
 
@@ -82,11 +82,11 @@ USER_DEFINED_SCHEMA_POLICY = SchemaPolicy(
 @final
 @dataclass(frozen=True)
 class PreparedSchema:
-    wire_schema: JsonObject
+    wire_schema: dict[str, Any]
     dictionary_format: UniformDictionaryFormat | None
 
 
-def prepare_schema(schema: JsonObject, policy: SchemaPolicy) -> PreparedSchema:
+def prepare_schema(schema: dict[str, Any], policy: SchemaPolicy) -> PreparedSchema:
     _apply_corrections(schema, policy)
     dictionary_format = (
         UniformDictionaryFormat.from_schema(schema)
@@ -97,7 +97,7 @@ def prepare_schema(schema: JsonObject, policy: SchemaPolicy) -> PreparedSchema:
     return PreparedSchema(schema, dictionary_format)
 
 
-def _apply_corrections(schema: JsonObject, policy: SchemaPolicy) -> None:
+def _apply_corrections(schema: dict[str, Any], policy: SchemaPolicy) -> None:
     for cursor in SchemaNode(schema).walk():
         node = cursor.node
         if policy.strip_titles:
@@ -121,7 +121,7 @@ def _apply_object_corrections(node: SchemaNode, policy: SchemaPolicy) -> None:
         node.value[K.REQUIRED] = list(properties)
 
 
-def _validate(schema: JsonObject, constraints: SchemaConstraints) -> None:
+def _validate(schema: dict[str, Any], constraints: SchemaConstraints) -> None:
     for cursor in SchemaNode(schema).walk():
         path, node = cursor.path, cursor.node
         if K.ONE_OF in node.value:

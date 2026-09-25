@@ -19,17 +19,21 @@ from ._messages import LLMCompletion, Message, ToolCall
 from ._prompt_renderer import PromptRenderer
 from ._tool_call_ids import ToolCallIdRegistry
 from .exceptions import DecisionDecodingError, LLMCompletionDecodingError
+from .json import JsonMaterializer, JsonSnapshot
 from .result_format import ResultFormatFactory
 from .step_decision import DecisionSpec
-from .structured_data import StructuredData, StructuredDataConverter
 from .streaming import (
     OutputStreamEvent,
+)
+from .streaming import (
     StringDelta as OutputStringDelta,
+)
+from .streaming import (
     StringEnd as OutputStringEnd,
 )
 from .transports import (
-    DecisionObserver,
     DecisionHistoryItem,
+    DecisionObserver,
     DecisionRequest,
     DecisionToolCalls,
     DecisionToolResult,
@@ -116,7 +120,7 @@ class LLMInferenceStrategy(InferenceStrategy):
         self,
         llm_client: LLMClient,
         result_format_factory: ResultFormatFactory,
-        structured_data_converter: StructuredDataConverter,
+        json_materializer: JsonMaterializer,
         prompt_renderer: PromptRenderer,
         decision_transport: DecisionTransport,
         stream: bool = False,
@@ -128,7 +132,7 @@ class LLMInferenceStrategy(InferenceStrategy):
             raise ValueError("max_repair_attempts must be non-negative")
         self.llm_client = llm_client
         self._result_format_factory = result_format_factory
-        self._structured_data_converter = structured_data_converter
+        self._json_materializer = json_materializer
         self._prompt_renderer = prompt_renderer
         self._decision_transport = decision_transport
         self._stream = stream
@@ -188,11 +192,8 @@ class LLMInferenceStrategy(InferenceStrategy):
         decision_spec: DecisionSpec,
         history: Sequence[HistoryItem],
     ) -> DecisionRequest:
-        arguments = StructuredData.from_object(
-            {
-                name: self._structured_data_converter.to_structured_data(value)
-                for name, value in layout.arguments.items()
-            }
+        arguments = JsonSnapshot.from_object(
+            {name: self._materialize(value) for name, value in layout.arguments.items()}
         )
         return DecisionRequest(
             messages_before=layout.before,
@@ -210,16 +211,19 @@ class LLMInferenceStrategy(InferenceStrategy):
                     ToolCall(
                         id=call.id,
                         name=call.name,
-                        arguments=self._structured_data_converter.to_structured_data(
-                            call.arguments
-                        ),
+                        arguments=self._materialize(call.arguments),
                     )
                     for call in item.calls
                 )
             )
         return DecisionToolResult(
             tool_call_id=item.tool_call_id,
-            result=self._structured_data_converter.to_structured_data(item.result),
+            result=self._materialize(item.result),
+        )
+
+    def _materialize(self, value: object) -> JsonSnapshot:
+        return JsonSnapshot._from_owned(  # pyright: ignore[reportPrivateUsage]
+            self._json_materializer.materialize(value)
         )
 
     async def _complete_once(
