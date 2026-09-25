@@ -2,11 +2,8 @@ from dataclasses import FrozenInstanceError, fields
 from unittest.mock import Mock
 
 import pytest
-
-from sefia.llm import LLMCompletion, ToolCall
-from sefia.llm import Message, PromptRenderer
+from sefia.llm import JsonSnapshot, LLMCompletion, Message, PromptRenderer, ToolCall
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
     DecisionToolCalls,
     DecisionToolResult,
@@ -68,10 +65,10 @@ def test_rejection_message_represents_structured_completion_output() -> None:
             ToolCall(
                 id="call-1",
                 name="lookup",
-                arguments=StructuredData.from_json({"query": "lost"}),
+                arguments=JsonSnapshot.capture({"query": "lost"}),
             )
         ],
-        structured_output=StructuredData.from_json({"decision": "invalid"}),
+        structured_output=JsonSnapshot.capture({"decision": "invalid"}),
     )
 
     message = _messages(
@@ -169,13 +166,13 @@ def test_build_text_decision_messages_owns_text_history_representation() -> None
                     ToolCall(
                         id="call-1",
                         name="lookup",
-                        arguments=StructuredData.from_json({"query": "sefia"}),
+                        arguments=JsonSnapshot.capture({"query": "sefia"}),
                     ),
                 )
             ),
             DecisionToolResult(
                 tool_call_id="call-1",
-                result=StructuredData.from_json({"value": "found"}),
+                result=JsonSnapshot.capture({"value": "found"}),
             ),
         ),
     )

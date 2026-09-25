@@ -1,19 +1,12 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import cast
 
 import jsonschema.validators
+from sefia.json_schema import SchemaKeyword, SchemaNode, SchemaPath
+from sefia.llm import JsonCompatible, JsonSnapshot
 from typing_extensions import final
 
-from sefia.llm.json_schema import (
-    JsonObject,
-    JsonScalar,
-    JsonValue,
-    SchemaKeyword,
-    SchemaNode,
-    SchemaPath,
-)
-from sefia.llm.structured_data import StructuredData, StructuredDataTree
+from ._types import SchemaObject
 
 K = SchemaKeyword
 
@@ -27,10 +20,10 @@ _PROPERTY_TO_ITEM_CONSTRAINT = {
 @final
 @dataclass(frozen=True)
 class UniformDictionarySchema:
-    key_schema: JsonObject
-    value_schema: JsonObject
-    annotations: JsonObject
-    entry_array_constraints: JsonObject
+    key_schema: SchemaObject
+    value_schema: SchemaObject
+    annotations: SchemaObject
+    entry_array_constraints: SchemaObject
 
     @classmethod
     def from_node(cls, node: SchemaNode) -> "UniformDictionarySchema":
@@ -58,7 +51,7 @@ class UniformDictionarySchema:
             },
         )
 
-    def to_entry_array_schema(self) -> JsonObject:
+    def to_entry_array_schema(self) -> SchemaObject:
         entry = SchemaNode.object_schema(
             {"key": self.key_schema, "value": self.value_schema}
         )
@@ -73,11 +66,11 @@ class UniformDictionarySchema:
 @final
 @dataclass(frozen=True)
 class UniformDictionaryFormat:
-    schema: JsonObject
+    schema: SchemaObject
     mapping_paths: frozenset[SchemaPath]
 
     @classmethod
-    def from_schema(cls, schema: JsonObject) -> "UniformDictionaryFormat":
+    def from_schema(cls, schema: SchemaObject) -> "UniformDictionaryFormat":
         mapping_paths: set[SchemaPath] = set()
         while cursor := _find_dictionary_schema(schema):
             path, node, dictionary = cursor
@@ -87,15 +80,15 @@ class UniformDictionaryFormat:
             mapping_paths.add(path)
         return cls(schema, frozenset(mapping_paths))
 
-    def decode(self, data: StructuredData) -> StructuredData:
+    def decode(self, data: JsonSnapshot) -> JsonSnapshot:
         return _decode(data, self.schema, self.schema, self.mapping_paths, ())
 
-    def encode(self, data: StructuredData) -> StructuredData:
+    def encode(self, data: JsonSnapshot) -> JsonSnapshot:
         return _encode(data, self.schema, self.schema, self.mapping_paths, ())
 
 
 def _find_dictionary_schema(
-    schema: JsonObject,
+    schema: SchemaObject,
 ) -> tuple[SchemaPath, SchemaNode, UniformDictionarySchema] | None:
     for cursor in SchemaNode(schema).walk():
         if _is_dictionary_schema(cursor.node):
@@ -114,19 +107,21 @@ def _is_dictionary_schema(node: SchemaNode) -> bool:
 
 
 def _decode(
-    data: StructuredData,
-    schema: JsonObject,
-    root: JsonObject,
+    data: JsonSnapshot,
+    schema: SchemaObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
-) -> StructuredData:
+) -> JsonSnapshot:
     schema, path = _resolve(schema, root, path)
     node = SchemaNode(schema)
     if path in mapping_paths:
         return _decode_dictionary(data, node, root, mapping_paths, path)
 
-    for index, alternative in enumerate(node.any_of()):
-        if _matches(data.tree, alternative.value, root):
+    alternatives = node.any_of()
+    projected = data.to_json_compatible() if alternatives else None
+    for index, alternative in enumerate(alternatives):
+        if _matches(projected, alternative.value, root):
             return _decode(
                 data,
                 alternative.value,
@@ -143,12 +138,12 @@ def _decode(
 
 
 def _encode(
-    data: StructuredData,
-    schema: JsonObject,
-    root: JsonObject,
+    data: JsonSnapshot,
+    schema: SchemaObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
-) -> StructuredData:
+) -> JsonSnapshot:
     schema, path = _resolve(schema, root, path)
     node = SchemaNode(schema)
     if path in mapping_paths:
@@ -162,7 +157,7 @@ def _encode(
             mapping_paths,
             (*path, K.ANY_OF, index),
         )
-        if _matches(candidate.tree, alternative.value, root):
+        if _matches(candidate.to_json_compatible(), alternative.value, root):
             return candidate
 
     if node.type == "object":
@@ -173,10 +168,10 @@ def _encode(
 
 
 def _resolve(
-    schema: JsonObject,
-    root: JsonObject,
+    schema: SchemaObject,
+    root: SchemaObject,
     path: SchemaPath,
-) -> tuple[JsonObject, SchemaPath]:
+) -> tuple[SchemaObject, SchemaPath]:
     node = SchemaNode(schema)
     reference = node.local_reference
     if reference is None:
@@ -187,7 +182,7 @@ def _resolve(
     return resolved.value, (K.DEFINITIONS, reference.definition, *reference.path)
 
 
-def _matches(data: StructuredDataTree, schema: JsonObject, root: JsonObject) -> bool:
+def _matches(data: JsonCompatible, schema: SchemaObject, root: SchemaObject) -> bool:
     candidate = deepcopy(schema)
     for keyword in (K.DEFINITIONS, K.LEGACY_DEFINITIONS):
         if keyword in root:
@@ -195,22 +190,22 @@ def _matches(data: StructuredDataTree, schema: JsonObject, root: JsonObject) -> 
     validator_cls = jsonschema.validators.validator_for(
         root, default=jsonschema.Draft202012Validator
     )
-    return validator_cls(candidate).is_valid(cast(JsonValue, data))
+    return validator_cls(candidate).is_valid(data)
 
 
 def _decode_object(
-    data: StructuredData,
+    data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
-) -> StructuredData:
+) -> JsonSnapshot:
     try:
-        fields = data.to_object()
+        fields = data.as_object()
     except ValueError:
         return data
     properties = node.properties()
-    return StructuredData.from_object(
+    return JsonSnapshot.from_object(
         {
             name: _decode(
                 value,
@@ -227,39 +222,39 @@ def _decode_object(
 
 
 def _decode_array(
-    data: StructuredData,
+    data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
-) -> StructuredData:
+) -> JsonSnapshot:
     items = node.items()
     if items is None:
         return data
     try:
-        values = data.to_array()
+        values = data.as_array()
     except ValueError:
         return data
-    return StructuredData.from_array(
+    return JsonSnapshot.from_array(
         _decode(value, items.value, root, mapping_paths, (*path, K.ITEMS))
         for value in values
     )
 
 
 def _decode_dictionary(
-    data: StructuredData,
+    data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
-) -> StructuredData:
+) -> JsonSnapshot:
     items = node.items()
     properties = items.properties() if items is not None else {}
     if set(properties) != {"key", "value"}:
         raise ValueError("lowered mapping schema is missing key/value entries")
-    result: dict[JsonScalar, StructuredData] = {}
-    for entry in data.to_array():
-        fields = entry.to_object("mapping entry")
+    result: dict[str, JsonSnapshot] = {}
+    for entry in data.as_array():
+        fields = entry.as_object("mapping entry")
         if set(fields) != {"key", "value"}:
             raise ValueError("mapping entries must contain only key and value")
         key = _decode(
@@ -268,7 +263,7 @@ def _decode_dictionary(
             root,
             mapping_paths,
             (*path, K.ITEMS, K.PROPERTIES, "key"),
-        ).to_scalar("mapping key")
+        ).as_string("mapping key")
         if key in result:
             raise ValueError(f"duplicate mapping key: {key!r}")
         result[key] = _decode(
@@ -278,35 +273,36 @@ def _decode_dictionary(
             mapping_paths,
             (*path, K.ITEMS, K.PROPERTIES, "value"),
         )
-    return StructuredData.from_mapping(result)
+    return JsonSnapshot.from_object(result)
 
 
 def _encode_dictionary(
-    data: StructuredData,
+    data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
-) -> StructuredData:
-    values = data.tree
-    if type(values) is not dict:
+) -> JsonSnapshot:
+    try:
+        values = data.as_object()
+    except ValueError:
         return data
     items = node.items()
     properties = items.properties() if items is not None else {}
     if set(properties) != {"key", "value"}:
         raise ValueError("lowered mapping schema is missing key/value entries")
-    return StructuredData.from_array(
-        StructuredData.from_object(
+    return JsonSnapshot.from_array(
+        JsonSnapshot.from_object(
             {
                 "key": _encode(
-                    StructuredData.from_scalar(key),
+                    JsonSnapshot.from_scalar(key),
                     properties["key"].value,
                     root,
                     mapping_paths,
                     (*path, K.ITEMS, K.PROPERTIES, "key"),
                 ),
                 "value": _encode(
-                    StructuredData.from_tree(value),
+                    value,
                     properties["value"].value,
                     root,
                     mapping_paths,
@@ -319,18 +315,18 @@ def _encode_dictionary(
 
 
 def _encode_object(
-    data: StructuredData,
+    data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
-) -> StructuredData:
+) -> JsonSnapshot:
     try:
-        fields = data.to_object()
+        fields = data.as_object()
     except ValueError:
         return data
     properties = node.properties()
-    return StructuredData.from_object(
+    return JsonSnapshot.from_object(
         {
             name: _encode(
                 value,
@@ -347,20 +343,20 @@ def _encode_object(
 
 
 def _encode_array(
-    data: StructuredData,
+    data: JsonSnapshot,
     node: SchemaNode,
-    root: JsonObject,
+    root: SchemaObject,
     mapping_paths: frozenset[SchemaPath],
     path: SchemaPath,
-) -> StructuredData:
+) -> JsonSnapshot:
     items = node.items()
     if items is None:
         return data
     try:
-        values = data.to_array()
+        values = data.as_array()
     except ValueError:
         return data
-    return StructuredData.from_array(
+    return JsonSnapshot.from_array(
         _encode(value, items.value, root, mapping_paths, (*path, K.ITEMS))
         for value in values
     )

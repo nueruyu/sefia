@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
+from sefia.json_schema import JsonSchemaDocument
 from sefia.llm import (
+    JsonSnapshot,
     Message,
     ToolCall,
 )
-from sefia.llm.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
-from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._request import build_completion_request
 
@@ -97,7 +97,7 @@ def test_request_sends_correct_request_to_litellm():
     assert call_args["temperature"] == 0.5
 
 
-def test_request_encodes_native_tool_call_history_for_wire_schema() -> None:
+def test_request_encodes_native_tool_call_history_for_provider_schema() -> None:
     tool = StepTool(
         name="categorize",
         description="",
@@ -124,7 +124,7 @@ def test_request_encodes_native_tool_call_history_for_wire_schema() -> None:
                 ToolCall(
                     id="call-1",
                     name="categorize",
-                    arguments=StructuredData.from_json({"labels": {"important": 2}}),
+                    arguments=JsonSnapshot.capture({"labels": {"important": 2}}),
                 )
             ],
         ),

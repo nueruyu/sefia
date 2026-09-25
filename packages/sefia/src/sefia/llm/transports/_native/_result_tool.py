@@ -1,4 +1,4 @@
-from ...json_schema import JsonSchemaDocument
+from ....json_schema import JsonSchemaDocument
 from ...step_decision import DecisionSpec, StepTool, ToolSchemaSource
 
 _BASE_NAME = "return_result"

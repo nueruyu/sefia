@@ -1,9 +1,7 @@
 from dataclasses import FrozenInstanceError
 
 import pytest
-
-from sefia.llm import Message, ToolCall
-from sefia.llm.structured_data import StructuredData
+from sefia.llm import JsonSnapshot, Message, ToolCall
 
 
 class _MutableValue:
@@ -80,7 +78,7 @@ def test_message_owns_tool_call_collection() -> None:
     call = ToolCall(
         id="call-1",
         name="lookup",
-        arguments=StructuredData.from_json({"query": "sefia"}),
+        arguments=JsonSnapshot.capture({"query": "sefia"}),
     )
     source = [call]
     message = Message(role="assistant", tool_calls=source)
@@ -94,12 +92,12 @@ def test_tool_call_is_immutable_and_has_structural_equality() -> None:
     first = ToolCall(
         id="call-1",
         name="lookup",
-        arguments=StructuredData.from_json({"query": "sefia"}),
+        arguments=JsonSnapshot.capture({"query": "sefia"}),
     )
     second = ToolCall(
         id="call-1",
         name="lookup",
-        arguments=StructuredData.from_json({"query": "sefia"}),
+        arguments=JsonSnapshot.capture({"query": "sefia"}),
     )
 
     assert first == second

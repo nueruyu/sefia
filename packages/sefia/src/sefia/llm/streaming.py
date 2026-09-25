@@ -5,27 +5,27 @@ from jsonweir import IncrementalJsonParser
 from jsonweir import events as js
 from typing_extensions import TypeAlias, final
 
-from .json_schema import SchemaPath
+from ._json import JsonPath
 
 
 @final
 @dataclass(frozen=True)
 class StringDelta:
-    path: SchemaPath
+    path: JsonPath
     text: str
 
 
 @final
 @dataclass(frozen=True)
 class StringEnd:
-    path: SchemaPath
+    path: JsonPath
     value: str
 
 
 @final
 @dataclass(frozen=True)
 class Scalar:
-    path: SchemaPath
+    path: JsonPath
     value: int | float | bool | None
 
 

@@ -3,8 +3,6 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 from typing import Any, Coroutine, Protocol, cast
 
-from typing_extensions import final
-
 from sefia.llm import LLMCompletion
 from sefia.llm.exceptions import LLMCompletionDecodingError
 from sefia.llm.streaming import (
@@ -12,11 +10,12 @@ from sefia.llm.streaming import (
     OutputStreamCallback,
     OutputStreamEvent,
 )
+from typing_extensions import final
 
 from ._native_tool_stream import NativeToolCallDelta, NativeToolCallStreamDecoder
 from ._response import decode_completion
 from ._schema import StructuredDecisionFormat
-from ._schema._data_format import StructuredDataFormat
+from ._schema._provider_format import ProviderJsonFormat
 
 
 class _CompletionDelta(Protocol):
@@ -33,7 +32,7 @@ async def consume_completion_stream(
     reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
     messages: list[dict[str, Any]],
     decision_format: StructuredDecisionFormat | None,
-    tool_data_formats: dict[str, StructuredDataFormat] | None = None,
+    tool_provider_formats: dict[str, ProviderJsonFormat] | None = None,
     requested_model: str,
 ) -> LLMCompletion:
     import litellm
@@ -45,7 +44,7 @@ async def consume_completion_stream(
         output_callback=output_callback,
         reasoning_callback=reasoning_callback,
         decision_format=decision_format,
-        tool_data_formats=tool_data_formats or {},
+        tool_provider_formats=tool_provider_formats or {},
     )
     async for chunk in stream:
         chunks.append(chunk)
@@ -76,7 +75,7 @@ async def consume_completion_stream(
         response,
         requested_model=requested_model,
         decision_format=decision_format,
-        tool_data_formats=tool_data_formats,
+        tool_provider_formats=tool_provider_formats,
     )
     if state.reasoning_text and completion.reasoning_content is None:
         completion.reasoning_content = state.reasoning_text
@@ -92,7 +91,7 @@ class _CompletionStreamState:
         output_callback: OutputStreamCallback | None,
         reasoning_callback: Callable[[str], Coroutine[None, None, None]] | None,
         decision_format: StructuredDecisionFormat | None,
-        tool_data_formats: dict[str, StructuredDataFormat],
+        tool_provider_formats: dict[str, ProviderJsonFormat],
     ) -> None:
         self._content_callback = content_callback
         self._output_callback = output_callback
@@ -106,8 +105,8 @@ class _CompletionStreamState:
             else None
         )
         self._native_decoder = (
-            NativeToolCallStreamDecoder(tool_data_formats)
-            if tool_data_formats and output_callback is not None
+            NativeToolCallStreamDecoder(tool_provider_formats)
+            if tool_provider_formats and output_callback is not None
             else None
         )
 

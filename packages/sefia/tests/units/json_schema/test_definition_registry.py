@@ -1,14 +1,13 @@
+from typing import Any
+
 import pytest
-from sefia.llm.json_schema import (
-    DefinitionRegistry,
-    JsonObject,
-)
+from sefia.json_schema import DefinitionRegistry
 
 
 def test_definition_registry_imports_definitions_and_rewrites_references() -> None:
-    definitions: JsonObject = {}
+    definitions: dict[str, Any] = {}
     registry = DefinitionRegistry(definitions)
-    fragment: JsonObject = {
+    fragment: dict[str, Any] = {
         "$ref": "#/$defs/Item",
         "$defs": {"Item": {"type": "string"}},
     }
@@ -24,9 +23,9 @@ def test_definition_registry_imports_definitions_and_rewrites_references() -> No
 
 
 def test_definition_registry_keeps_fragment_reference_graphs_separate() -> None:
-    definitions: JsonObject = {}
+    definitions: dict[str, Any] = {}
     registry = DefinitionRegistry(definitions)
-    first: JsonObject = {
+    first: dict[str, Any] = {
         "$ref": "#/$defs/A",
         "$defs": {
             "A": {"$ref": "#/$defs/B"},
@@ -34,7 +33,7 @@ def test_definition_registry_keeps_fragment_reference_graphs_separate() -> None:
             "C": {"type": "string"},
         },
     }
-    second: JsonObject = {
+    second: dict[str, Any] = {
         "$ref": "#/$defs/A",
         "$defs": {
             "A": {"$ref": "#/$defs/B"},
@@ -59,9 +58,9 @@ def test_definition_registry_keeps_fragment_reference_graphs_separate() -> None:
 
 
 def test_definition_registry_does_not_deduplicate_identical_definitions() -> None:
-    definitions: JsonObject = {}
+    definitions: dict[str, Any] = {}
     registry = DefinitionRegistry(definitions)
-    fragment: JsonObject = {
+    fragment: dict[str, Any] = {
         "$ref": "#/$defs/Item",
         "$defs": {"Item": {"type": "string"}},
     }
@@ -76,9 +75,9 @@ def test_definition_registry_does_not_deduplicate_identical_definitions() -> Non
 
 
 def test_definition_registry_preserves_escaped_reference_paths() -> None:
-    definitions: JsonObject = {}
+    definitions: dict[str, Any] = {}
     registry = DefinitionRegistry(definitions)
-    fragment: JsonObject = {
+    fragment: dict[str, Any] = {
         "$ref": "#/$defs/A~1B~0C/properties/x~1y",
         "$defs": {
             "A/B~C": {
@@ -100,9 +99,9 @@ def test_definition_registry_preserves_escaped_reference_paths() -> None:
 
 
 def test_definition_registry_imports_legacy_definitions() -> None:
-    definitions: JsonObject = {}
+    definitions: dict[str, Any] = {}
     registry = DefinitionRegistry(definitions)
-    fragment: JsonObject = {
+    fragment: dict[str, Any] = {
         "$ref": "#/definitions/Item",
         "definitions": {"Item": {"type": "string"}},
     }
@@ -115,7 +114,7 @@ def test_definition_registry_imports_legacy_definitions() -> None:
 
 def test_definition_registry_rejects_overlapping_definition_keywords() -> None:
     registry = DefinitionRegistry({})
-    fragment: JsonObject = {
+    fragment: dict[str, Any] = {
         "type": "object",
         "properties": {
             "modern": {"$ref": "#/$defs/Item"},
@@ -146,7 +145,7 @@ def test_definition_registry_rejects_unbundleable_references(
     reference: str, message: str
 ) -> None:
     registry = DefinitionRegistry({})
-    fragment: JsonObject = {"$ref": reference}
+    fragment: dict[str, Any] = {"$ref": reference}
 
     with pytest.raises(ValueError, match=message):
         registry.import_schema(fragment, namespace="fragment")

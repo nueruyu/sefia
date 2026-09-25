@@ -7,10 +7,9 @@ from sefia import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.exceptions import InvalidInferenceResponseError
 from sefia.inference import ResultDecision, ToolCallResult, ToolCallsDecision
-from sefia.llm import LLMCompletion, LLMInferenceStrategy, ToolCall
+from sefia.llm import JsonSnapshot, LLMCompletion, LLMInferenceStrategy, ToolCall
 from sefia.llm.events import DecisionRepairAttempt
 from sefia.llm.exceptions import DecisionDecodingError, LLMCompletionDecodingError
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import DecodedDecision
 from sefia.testing import make_function_info, make_tool_call_request
 
@@ -70,7 +69,7 @@ async def test_repairs_validation_failure_and_forwards_rejected_data(
     content = json.dumps(invalid)
     transport.request_decision.side_effect = [
         DecodedDecision(
-            StructuredData.parse_json(content), LLMCompletion(content=content)
+            JsonSnapshot.parse_json(content), LLMCompletion(content=content)
         ),
         transport.request_decision.return_value,
     ]
@@ -99,7 +98,7 @@ async def test_repair_preserves_rejected_completion_semantics(
             ToolCall(
                 id="call-1",
                 name="unknown",
-                arguments=StructuredData.from_json({"query": "lost"}),
+                arguments=JsonSnapshot.capture({"query": "lost"}),
             )
         ]
     )
@@ -210,3 +209,57 @@ def test_rejects_negative_budget(
 ) -> None:
     with pytest.raises(ValueError, match="non-negative"):
         make_strategy(max_repair_attempts=-1)
+
+
+async def test_repair_reuses_materialized_inputs(
+    transport: AsyncMock, make_strategy: Callable[..., LLMInferenceStrategy]
+) -> None:
+    from sefia.llm import JsonCompatible, JsonMaterializer
+    from sefia.llm.transports import DecisionRequest, DecisionToolResult
+    from sefia.pydantic import PydanticJsonMaterializer
+    from typing_extensions import override
+
+    class CountingMaterializer(JsonMaterializer):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        @override
+        def materialize(self, value: object) -> JsonCompatible:
+            self.calls += 1
+            return PydanticJsonMaterializer().materialize(value)
+
+    materializer = CountingMaterializer()
+    strategy = make_strategy()
+    strategy._json_materializer = materializer
+    argument = [1]
+    result = {"items": [2]}
+    requests: list[DecisionRequest] = []
+    valid = transport.request_decision.return_value
+
+    async def complete(**kwargs: object) -> DecodedDecision:
+        request = kwargs["request"]
+        assert isinstance(request, DecisionRequest)
+        requests.append(request)
+        assert materializer.calls == 2
+        assert request.arguments.to_json_compatible() == {"value": [1]}
+        item = request.history[0]
+        assert isinstance(item, DecisionToolResult)
+        assert item.result.to_json_compatible() == {"items": [2]}
+        if len(requests) == 1:
+            argument.append(9)
+            result["items"].append(9)
+            raise DecisionDecodingError(LLMCompletion(content="invalid"), "invalid")
+        return valid
+
+    transport.request_decision.side_effect = complete
+    await strategy.decide_next_step(
+        make_function_info(return_type=str, bound_arguments={"value": argument}),
+        [ToolCallResult(tool_call_id="1", result=result)],
+        ToolRegistry(),
+        AsyncMock(spec=EventPublisher),
+    )
+    first, repaired = requests
+    assert first.arguments is repaired.arguments
+    assert first.history is repaired.history
+    assert first.messages_before is repaired.messages_before
+    assert first.messages_after is repaired.messages_after

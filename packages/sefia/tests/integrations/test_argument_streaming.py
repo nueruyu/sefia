@@ -4,32 +4,36 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
-from typing_extensions import override
-
 from sefia import ToolRegistry
 from sefia.event_system import EventPublisher
 from sefia.inference import FunctionInfo, ToolCallsDecision
-from sefia.llm import LLMCompletion, LLMInferenceStrategy, Message
+from sefia.llm import JsonSnapshot, LLMCompletion, LLMInferenceStrategy, Message
 from sefia.llm._client import LLMClient
 from sefia.llm.step_decision import DecisionSpec, StepTool
 from sefia.llm.streaming import (
     OutputStreamCallback,
+)
+from sefia.llm.streaming import (
     Scalar as OutputScalar,
+)
+from sefia.llm.streaming import (
     StringDelta as OutputStringDelta,
+)
+from sefia.llm.streaming import (
     StringEnd as OutputStringEnd,
 )
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
     DecisionTransport,
     PromptedDecisionTransport,
     StructuredDecisionTransport,
 )
 from sefia.pydantic import (
+    PydanticJsonMaterializer,
     PydanticResultFormatFactory,
-    PydanticStructuredDataConverter,
 )
 from sefia.streaming import ArgStream, StringDelta, StringEnd
 from sefia.testing import make_function_info
+from typing_extensions import override
 
 
 class _Collector:
@@ -77,7 +81,7 @@ class _StreamingClient(LLMClient):
         return LLMCompletion(
             content=self.content,
             structured_output=(
-                StructuredData.parse_json(self.content)
+                JsonSnapshot.parse_json(self.content)
                 if decision_spec is not None
                 else None
             ),
@@ -116,7 +120,7 @@ async def test_arguments_stream_from_transport_through_strategy_to_tool_handler(
     strategy = LLMInferenceStrategy(
         llm_client=_StreamingClient(content),
         result_format_factory=PydanticResultFormatFactory(),
-        structured_data_converter=PydanticStructuredDataConverter(),
+        json_materializer=PydanticJsonMaterializer(),
         prompt_renderer=renderer,
         decision_transport=transport,
         stream=True,

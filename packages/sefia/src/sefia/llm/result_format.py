@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .json_schema import JsonSchemaDocument
-from .structured_data import StructuredData
+from ..json_schema import JsonSchemaDocument
+from ._json import JsonSnapshot
 
 
 class ResultFormat(ABC):
@@ -11,7 +11,7 @@ class ResultFormat(ABC):
     def schema(self) -> JsonSchemaDocument: ...
 
     @abstractmethod
-    def validate(self, data: StructuredData) -> Any: ...
+    def validate(self, data: JsonSnapshot) -> Any: ...
 
 
 class ResultFormatFactory(ABC):

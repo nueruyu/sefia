@@ -6,13 +6,13 @@ import pytest
 from sefia._tool_system import ToolRegistry
 from sefia.llm import (
     InferencePrompt,
+    JsonSnapshot,
     LLMCompletion,
     PromptRenderer,
     ToolCall,
 )
 from sefia.llm.exceptions import DecisionDecodingError
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
     DecisionRequest,
     DecisionToolCalls,
@@ -69,7 +69,7 @@ def _call(name: str, arguments: str = "{}") -> ToolCall:
     return ToolCall(
         id="provider-id",
         name=name,
-        arguments=StructuredData.parse_json(arguments),
+        arguments=JsonSnapshot.parse_json(arguments),
     )
 
 
@@ -90,7 +90,7 @@ async def test_native_transport_exposes_application_and_result_tools() -> None:
         stream=False,
     )
 
-    assert decoded.decision_data.tree == {
+    assert decoded.decision_data.to_json_compatible() == {
         "decision": "tool_calls",
         "tool_calls": [{"name": "lookup", "arguments": {"key": "item"}}],
     }
@@ -121,7 +121,7 @@ async def test_native_transport_decodes_typed_result() -> None:
         stream=False,
     )
 
-    assert decoded.decision_data.tree == {
+    assert decoded.decision_data.to_json_compatible() == {
         "decision": "result",
         "result": {"value": "done"},
     }
@@ -155,13 +155,13 @@ async def test_native_transport_forwards_history_in_tool_only_mode() -> None:
                     ToolCall(
                         id="call-1",
                         name="lookup",
-                        arguments=StructuredData.from_json({"key": "first"}),
+                        arguments=JsonSnapshot.capture({"key": "first"}),
                     ),
                 )
             ),
             DecisionToolResult(
                 tool_call_id="call-1",
-                result=StructuredData.from_scalar("found"),
+                result=JsonSnapshot.from_scalar("found"),
             ),
         ),
     )
@@ -186,7 +186,7 @@ async def test_native_transport_forwards_history_in_tool_only_mode() -> None:
     assert "Call one or more available tools." in sent["messages"][-1].content
     assert sent["messages"][1].tool_calls[0].id == "call-1"
     assert sent["messages"][2].tool_call_id == "call-1"
-    assert decoded.decision_data.tree == {
+    assert decoded.decision_data.to_json_compatible() == {
         "decision": "tool_calls",
         "tool_calls": [{"name": "lookup", "arguments": {"key": "next"}}],
     }
@@ -221,4 +221,7 @@ async def test_native_transport_uses_collision_free_name_for_prompt_and_decoding
     sent = client.complete.await_args.kwargs
     assert [tool.name for tool in sent["tools"]] == ["return_result", "return_result_2"]
     assert "return_result_2" in sent["messages"][-1].content
-    assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
+    assert decoded.decision_data.to_json_compatible() == {
+        "decision": "result",
+        "result": "done",
+    }

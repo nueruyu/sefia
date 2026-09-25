@@ -1,7 +1,8 @@
 from importlib import import_module
+from typing import Any
 
 from sefia._tool_system import SignatureToolEntry, ToolEntry
-from sefia.llm.json_schema import JsonObject, SchemaNode
+from sefia.json_schema import SchemaNode
 from sefia.llm.step_decision import DecisionSpec
 from sefia.pydantic import (
     PydanticResultFormatFactory,
@@ -23,7 +24,7 @@ def _decision_schema(output_type: object, tools: list[ToolEntry]):
     )
 
 
-def _wire_decision_schema(schema: JsonObject) -> SchemaNode:
+def _wire_decision_schema(schema: dict[str, Any]) -> SchemaNode:
     return SchemaNode(schema).properties()["payload"]
 
 

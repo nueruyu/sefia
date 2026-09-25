@@ -8,10 +8,9 @@ from sefia.inference import (
     ResultDecision,
     ToolCallsDecision,
 )
+from sefia.llm import JsonCompatible, JsonSnapshot
 from sefia.llm._tool_call_ids import ToolCallIdRegistry
-from sefia.llm.json_schema import JsonValue
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode
-from sefia.llm.structured_data import StructuredData
 from sefia.pydantic import (
     PydanticResultFormatFactory,
     PydanticToolFunctionInspector,
@@ -44,12 +43,10 @@ class _StepDecisionFixture:
 
     def validate(
         self,
-        data: StructuredData | JsonValue,
+        data: JsonSnapshot | JsonCompatible,
         tool_call_ids: ToolCallIdRegistry | None = None,
     ):
-        value = (
-            data if isinstance(data, StructuredData) else StructuredData.from_json(data)
-        )
+        value = data if isinstance(data, JsonSnapshot) else JsonSnapshot.capture(data)
         return self.decision.validate(value, tool_call_ids)
 
 
@@ -89,7 +86,7 @@ class TestToolsRequiredDecision:
     def test_process_decision_accepts_tool_calls(self):
         step = _step(Never, [_tool(chat_tool)])
 
-        data = StructuredData.from_json(
+        data = JsonSnapshot.capture(
             {
                 "decision": "tool_calls",
                 "tool_calls": [{"name": "chat_tool", "arguments": {}}],

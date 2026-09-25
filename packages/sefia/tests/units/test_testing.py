@@ -3,9 +3,8 @@ from dataclasses import FrozenInstanceError, fields
 import pytest
 from sefia import DecisionContext
 from sefia.inference import ToolCallResult
-from sefia.llm import LLMCompletion, Message, ToolCall
+from sefia.llm import JsonSnapshot, LLMCompletion, Message, ToolCall
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import DecisionToolResult
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import (
@@ -60,7 +59,7 @@ def test_test_data_factories_preserve_explicit_values() -> None:
     history = (
         DecisionToolResult(
             tool_call_id=call.id,
-            result=StructuredData.from_scalar("found"),
+            result=JsonSnapshot.from_scalar("found"),
         ),
     )
     decision_spec = DecisionSpec.for_inference(
@@ -92,9 +91,7 @@ async def test_mock_llm_client_snapshots_core_messages() -> None:
                     ToolCall(
                         id="call-1",
                         name="lookup",
-                        arguments=StructuredData.from_json(
-                            {"key": "item", "filter": None}
-                        ),
+                        arguments=JsonSnapshot.capture({"key": "item", "filter": None}),
                     )
                 ],
             )

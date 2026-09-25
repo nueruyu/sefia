@@ -1,15 +1,19 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from typing_extensions import override
-
-from sefia.llm import InferencePrompt, LLMCompletion, Message, PromptRenderer
+from sefia.llm import (
+    InferencePrompt,
+    JsonSnapshot,
+    LLMCompletion,
+    Message,
+    PromptRenderer,
+)
 from sefia.llm.exceptions import DecisionDecodingError
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.transports import DecisionRequest, StructuredDecisionTransport
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import RecordingDecisionObserver, make_decision_request
+from typing_extensions import override
 
 
 def _request() -> DecisionRequest:
@@ -30,9 +34,7 @@ def _renderer(prompt: str = "complete prompt") -> Mock:
 async def test_renders_and_delivers_one_complete_prompt() -> None:
     client = AsyncMock()
     completion = LLMCompletion(
-        structured_output=StructuredData.from_json(
-            {"decision": "result", "result": "done"}
-        )
+        structured_output=JsonSnapshot.capture({"decision": "result", "result": "done"})
     )
     client.complete.return_value = completion
     renderer = _renderer()
@@ -54,7 +56,10 @@ async def test_renders_and_delivers_one_complete_prompt() -> None:
     assert content.startswith("complete prompt\n\n## Response\n\n")
     assert sent["decision_spec"] is request.decision_spec
     assert observer.messages == tuple(sent["messages"])
-    assert decoded.decision_data.tree == {"decision": "result", "result": "done"}
+    assert decoded.decision_data.to_json_compatible() == {
+        "decision": "result",
+        "result": "done",
+    }
     assert decoded.completion is completion
     renderer.render.assert_called_once()
     assert isinstance(renderer.render.call_args.args[0], InferencePrompt)
@@ -69,7 +74,7 @@ async def test_observer_finishes_before_the_client_request() -> None:
     async def complete(**_kwargs: object) -> LLMCompletion:
         order.append("request")
         return LLMCompletion(
-            structured_output=StructuredData.from_json(
+            structured_output=JsonSnapshot.capture(
                 {"decision": "result", "result": "done"}
             )
         )
