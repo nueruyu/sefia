@@ -221,19 +221,55 @@ def test_tag_lookup_errors(manifests: Path, monkeypatch: pytest.MonkeyPatch) -> 
         validation.release_available(manifests, "0.6.0")
 
 
-def test_real_verifier_rejects_editable_workspace_sources() -> None:
-    from importlib import metadata
+@pytest.fixture
+def isolated_python(manifests: Path, tmp_path: Path) -> Path:
+    venv = tmp_path / "isolated"
+    validation.run(
+        [sys.executable, "-m", "venv", str(venv)],
+        manifests,
+        validation.clean_environment(),
+    )
+    return venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
 
-    root = Path(__file__).resolve().parents[3]
-    expected = {name: metadata.version(name) for name in dependencies.PACKAGE_ORDER}
+
+def test_real_verifier_rejects_editable_workspace_sources(
+    manifests: Path,
+    tmp_path: Path,
+    isolated_python: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "source"
+    (source / "sefia").mkdir(parents=True)
+    (source / "sefia/__init__.py").write_text('VALUE = "editable source"\n')
+    metadata = source / "sefia-0.6.0.dist-info"
+    metadata.mkdir()
+    (metadata / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: sefia\nVersion: 0.6.0\n"
+    )
+    environment = validation.clean_environment()
+    result = subprocess.run(
+        [
+            str(isolated_python),
+            "-c",
+            "import sysconfig; print(sysconfig.get_path('purelib'))",
+        ],
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    (Path(result.stdout.strip()) / "editable.pth").write_text(str(source) + "\n")
     with pytest.raises(subprocess.CalledProcessError):
         validation.verify_installation(
-            root,
-            Path(sys.executable),
-            expected,
+            manifests,
+            isolated_python,
+            {"sefia": "0.6.0"},
             strict=True,
-            environment=validation.clean_environment(),
+            environment=environment,
         )
+    assert capfd.readouterr().err.splitlines()[-1] == (
+        "sefia did not load from the isolated wheel environment"
+    )
 
 
 def test_build_only_runtime_catalog(
@@ -263,7 +299,9 @@ def test_build_only_runtime_catalog(
         validation.build_wheels(manifests, "0.6.0", output)
 
 
-def test_real_isolated_wheel_verification(manifests: Path, tmp_path: Path) -> None:
+def test_real_isolated_wheel_verification(
+    manifests: Path, tmp_path: Path, isolated_python: Path
+) -> None:
     import base64
     import hashlib
     import zipfile
@@ -287,15 +325,24 @@ def test_real_isolated_wheel_verification(manifests: Path, tmp_path: Path) -> No
         for name, content in files.items():
             archive.writestr(name, content)
     environment = validation.clean_environment()
-    venv = tmp_path / "isolated"
-    validation.run([sys.executable, "-m", "venv", str(venv)], manifests, environment)
-    python = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
     validation.run(
-        [str(python), "-m", "pip", "install", "--no-index", "--no-deps", str(wheel)],
+        [
+            str(isolated_python),
+            "-m",
+            "pip",
+            "install",
+            "--no-index",
+            "--no-deps",
+            str(wheel),
+        ],
         manifests,
         environment,
     )
     validation.verify_installation(
-        manifests, python, {"sefia": "0.6.0"}, strict=True, environment=environment
+        manifests,
+        isolated_python,
+        {"sefia": "0.6.0"},
+        strict=True,
+        environment=environment,
     )
-    validation.run([str(python), "-m", "pip", "check"], manifests, environment)
+    validation.run([str(isolated_python), "-m", "pip", "check"], manifests, environment)

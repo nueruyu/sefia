@@ -146,7 +146,7 @@ jobs:
           set -e
           case "$status" in
             0) echo "$DISTRIBUTION: minimum verified (see artifact sources in logs)." >> "$GITHUB_STEP_SUMMARY" ;;
-            2) echo "$DISTRIBUTION: unreleased minimum / not verified." >> "$GITHUB_STEP_SUMMARY" ;;
-            3) echo "$DISTRIBUTION: minimum not applicable." >> "$GITHUB_STEP_SUMMARY" ;;
+            10) echo "$DISTRIBUTION: unreleased minimum / not verified." >> "$GITHUB_STEP_SUMMARY" ;;
+            11) echo "$DISTRIBUTION: minimum not applicable." >> "$GITHUB_STEP_SUMMARY" ;;
             *) exit "$status" ;;
           esac

@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.wheels,
                 minimum=args.command == "validate-minimum",
             )
-            return {"available": 0, "unreleased": 2, "not-applicable": 3}[status]
+            return {"available": 0, "unreleased": 10, "not-applicable": 11}[status]
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         print(
             f"Package compatibility failed ({args.command}): {error}", file=sys.stderr
