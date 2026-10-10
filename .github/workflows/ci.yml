@@ -41,7 +41,7 @@ jobs:
         run: uv run ruff check .
 
       - name: Ruff format check
-        run: uv run ruff format --diff .
+        run: uv run ruff format --check .
 
       - name: Pyright
         run: uv run pyright

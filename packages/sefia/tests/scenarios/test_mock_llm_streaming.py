@@ -184,8 +184,7 @@ async def test_scripted_prompted_transport_streams_tool_arguments() -> None:
             ScriptedCompletion(
                 first,
                 events=tuple(
-                    StreamContent(content[i : i + 6])
-                    for i in range(0, len(content), 6)
+                    StreamContent(content[i : i + 6]) for i in range(0, len(content), 6)
                 ),
             ),
             result_completion("done"),
@@ -202,9 +201,14 @@ async def test_scripted_prompted_transport_streams_tool_arguments() -> None:
 
     assert result == "done"
     assert len(toolkit.preview_call_ids) == 1
-    assert "".join(
-        event.text for event in toolkit.preview_events if isinstance(event, StringDelta)
-    ) == "hello world"
+    assert (
+        "".join(
+            event.text
+            for event in toolkit.preview_events
+            if isinstance(event, StringDelta)
+        )
+        == "hello world"
+    )
     assert StringEnd(name="question", value="hello world") in toolkit.preview_events
 
 
