@@ -1,7 +1,5 @@
 from unittest.mock import AsyncMock
 
-from typing_extensions import override
-
 from sefia.inference import FunctionInfo
 from sefia.llm import (
     LLMClient,
@@ -13,17 +11,18 @@ from sefia.llm import (
 )
 from sefia.llm.transports import StructuredDecisionTransport
 from sefia.pydantic import (
+    PydanticJsonMaterializer,
     PydanticResultFormatFactory,
-    PydanticStructuredDataConverter,
 )
 from sefia.testing import make_function_info
+from typing_extensions import override
 
 
 def _strategy(*composers: MessageComposer) -> LLMInferenceStrategy:
     return LLMInferenceStrategy(
         AsyncMock(spec=LLMClient),
         PydanticResultFormatFactory(),
-        PydanticStructuredDataConverter(),
+        PydanticJsonMaterializer(),
         MarkdownPromptRenderer(),
         StructuredDecisionTransport(),
         message_composers=composers,

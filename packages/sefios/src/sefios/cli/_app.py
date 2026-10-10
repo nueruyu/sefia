@@ -115,10 +115,6 @@ class SefiaCLI:
         except UnknownSessionError as e:
             raise CLIUnknownSessionError(e.session_id) from None
 
-    def get_active_session(self) -> str | None:
-        """Return the active CLI session ID, if any."""
-        return self._session_manager.get_active_session_id()
-
     @asynccontextmanager
     async def session(
         self,

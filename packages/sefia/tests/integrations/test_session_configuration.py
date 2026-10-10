@@ -6,25 +6,22 @@ from unittest.mock import Mock
 
 import glyff
 import sefia
-
-from typing_extensions import override
-
 from sefia import ToolDefinition, ToolFunctionInspector, Tools
 from sefia.inference import FunctionInfo
 from sefia.llm import (
+    JsonCompatible,
+    JsonMaterializer,
     LLMCompletion,
     Message,
     MessageComposer,
     MessageLayout,
     PromptRenderer,
-    StructuredData,
-    StructuredDataConverter,
 )
 from sefia.llm.result_format import ResultFormat, ResultFormatFactory
 from sefia.llm.transports import PromptedDecisionTransport
 from sefia.pydantic import (
+    PydanticJsonMaterializer,
     PydanticResultFormatFactory,
-    PydanticStructuredDataConverter,
     PydanticToolFunctionInspector,
 )
 from sefia.testing import (
@@ -34,6 +31,7 @@ from sefia.testing import (
     tool_calls_completion,
 )
 from sefia.tool_collectors import DefaultToolCollector, StaticToolCollector
+from typing_extensions import override
 
 infer = sefia.Domain(
     glyff.Domain(
@@ -128,15 +126,15 @@ class _RecordingResultFormatFactory(ResultFormatFactory):
         return self._delegate.create(python_type)
 
 
-class _RecordingStructuredDataConverter(StructuredDataConverter):
+class _RecordingJsonMaterializer(JsonMaterializer):
     def __init__(self) -> None:
-        self._delegate = PydanticStructuredDataConverter()
+        self._delegate = PydanticJsonMaterializer()
         self.values: list[object] = []
 
     @override
-    def to_structured_data(self, value: object) -> StructuredData:
+    def materialize(self, value: object) -> JsonCompatible:
         self.values.append(value)
-        return self._delegate.to_structured_data(value)
+        return self._delegate.materialize(value)
 
 
 async def test_session_connects_a_custom_prompt_renderer_to_the_transport() -> None:
@@ -178,7 +176,7 @@ async def test_session_connects_a_prompted_decision_transport() -> None:
 async def test_session_wires_independent_python_llm_capabilities() -> None:
     inspector = _RecordingToolFunctionInspector()
     result_format_factory = _RecordingResultFormatFactory()
-    converter = _RecordingStructuredDataConverter()
+    converter = _RecordingJsonMaterializer()
     toolkit = _Toolkit()
     payload = _Input(value=7)
     client = MockLLMClient(
@@ -192,7 +190,7 @@ async def test_session_wires_independent_python_llm_capabilities() -> None:
         client,
         tool_collector=DefaultToolCollector(inspector=inspector),
         result_format_factory=result_format_factory,
-        structured_data_converter=converter,
+        json_materializer=converter,
     ):
         result = await _CapabilityAgent(toolkit).answer(payload)
 
@@ -208,7 +206,7 @@ async def test_session_wires_independent_python_llm_capabilities() -> None:
 
 async def test_custom_tool_collector_keeps_strategy_capabilities_independent() -> None:
     result_format_factory = _RecordingResultFormatFactory()
-    converter = _RecordingStructuredDataConverter()
+    converter = _RecordingJsonMaterializer()
     payload = _Input(value=9)
     client = MockLLMClient([result_completion("done")])
 
@@ -216,7 +214,7 @@ async def test_custom_tool_collector_keeps_strategy_capabilities_independent() -
         client,
         tool_collector=StaticToolCollector([]),
         result_format_factory=result_format_factory,
-        structured_data_converter=converter,
+        json_materializer=converter,
     ):
         result = await _answer_without_tools(payload)
 
@@ -247,13 +245,13 @@ async def test_profiles_share_session_message_composers() -> None:
     default_client = MockLLMClient([])
     profile_client = MockLLMClient([result_completion("done")])
     result_format_factory = _RecordingResultFormatFactory()
-    converter = _RecordingStructuredDataConverter()
+    converter = _RecordingJsonMaterializer()
     async with memory_session(
         default_client,
         profiles=[sefia.Profile(key="alternate", client=profile_client)],
         message_composers=(_ProfileMessage(),),
         result_format_factory=result_format_factory,
-        structured_data_converter=converter,
+        json_materializer=converter,
     ):
         assert await answer("topic") == "done"
 

@@ -18,7 +18,10 @@ def workflow(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
 
 class TestSimpleChatWorkflow:
     async def test_starts_without_queued_input(
-        self, workflow: ModuleType, monkeypatch: pytest.MonkeyPatch
+        self,
+        workflow: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         chat = AsyncMock()
         monkeypatch.setattr(workflow.agent, "chat", chat)
@@ -26,7 +29,7 @@ class TestSimpleChatWorkflow:
             message=None, interaction_id=None, model="gpt-4o-mini"
         )
         chat.assert_awaited_once()
-        assert workflow.sefia_cli.get_active_session() is not None
+        assert "No active session. Starting new session:" in capsys.readouterr().out
 
     async def test_rejects_message_without_interaction_id(
         self, workflow: ModuleType

@@ -1,7 +1,7 @@
 from typing import Any, assert_type, cast
 
 from sefia.inference import FunctionInfo
-from sefia.llm import Message, MessageComposer, MessageLayout, StructuredData
+from sefia.llm import JsonSnapshot, Message, MessageComposer, MessageLayout
 from typing_extensions import override
 
 
@@ -22,4 +22,4 @@ def check_message_composer() -> None:
     composers = cast(tuple[MessageComposer, ...], (CustomMessages(),))
     assert_type(composers, tuple[MessageComposer, ...])
     assert_type(MessageLayout(before=(), arguments={}, after=()), MessageLayout)
-    assert_type(StructuredData.from_object({}), StructuredData)
+    assert_type(JsonSnapshot.from_object({}), JsonSnapshot)

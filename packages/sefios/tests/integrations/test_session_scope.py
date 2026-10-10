@@ -5,8 +5,6 @@ from typing import Any
 import glyff
 import pytest
 import sefia
-from typing_extensions import final, override
-
 from sefia import (
     DecisionContext,
     DecisionMiddleware,
@@ -18,12 +16,11 @@ from sefia.exceptions import InferenceError
 from sefia.inference import FunctionInfo, ResultDecision, StepDecision
 from sefia.llm import LLMCompletion, Message, MessageComposer, MessageLayout
 from sefia.pydantic import (
+    PydanticJsonMaterializer,
     PydanticResultFormatFactory,
-    PydanticStructuredDataConverter,
 )
 from sefia.testing import MockLLMClient, result_completion, tool_calls_completion
 from sefia.tool_collectors import StaticToolCollector
-from sefios.middleware import Retrier
 from sefios import (
     MemoryPersistence,
     MemorySessionStorage,
@@ -33,6 +30,8 @@ from sefios import (
     domain,
     get_session_storage,
 )
+from sefios.middleware import Retrier
+from typing_extensions import final, override
 
 infer = domain("packages.sefios.tests.integrations.test_session_scope").infer
 
@@ -143,9 +142,9 @@ async def test_strategy_capabilities_inherit_and_override_independently(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     scope_result_factory = PydanticResultFormatFactory()
-    scope_converter = PydanticStructuredDataConverter()
+    scope_converter = PydanticJsonMaterializer()
     session_result_factory = PydanticResultFormatFactory()
-    session_converter = PydanticStructuredDataConverter()
+    session_converter = PydanticJsonMaterializer()
     captured: list[dict[str, Any]] = []
 
     class _RecordingSession:
@@ -167,7 +166,7 @@ async def test_strategy_capabilities_inherit_and_override_independently(
     scope = SessionScope(
         llm_client=MockLLMClient([]),
         result_format_factory=scope_result_factory,
-        structured_data_converter=scope_converter,
+        json_materializer=scope_converter,
     )
 
     async with scope.session(session_id="scope-capabilities"):
@@ -179,16 +178,16 @@ async def test_strategy_capabilities_inherit_and_override_independently(
         pass
     async with scope.session(
         session_id="converter-override",
-        structured_data_converter=session_converter,
+        json_materializer=session_converter,
     ):
         pass
 
     assert captured[0]["result_format_factory"] is scope_result_factory
-    assert captured[0]["structured_data_converter"] is scope_converter
+    assert captured[0]["json_materializer"] is scope_converter
     assert captured[1]["result_format_factory"] is session_result_factory
-    assert captured[1]["structured_data_converter"] is scope_converter
+    assert captured[1]["json_materializer"] is scope_converter
     assert captured[2]["result_format_factory"] is scope_result_factory
-    assert captured[2]["structured_data_converter"] is session_converter
+    assert captured[2]["json_materializer"] is session_converter
 
 
 async def test_memory_persistence_is_default(

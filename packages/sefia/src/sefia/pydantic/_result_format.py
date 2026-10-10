@@ -3,9 +3,9 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 from typing_extensions import final, override
 
-from ..llm.json_schema import JsonSchemaDocument
+from ..json_schema import JsonSchemaDocument
+from ..llm._json import JsonSnapshot
 from ..llm.result_format import ResultFormat, ResultFormatFactory
-from ..llm.structured_data import StructuredData
 
 
 @final
@@ -20,9 +20,9 @@ class PydanticResultFormat(ResultFormat):
         return self._schema
 
     @override
-    def validate(self, data: StructuredData) -> Any:
+    def validate(self, data: JsonSnapshot) -> Any:
         try:
-            return self._adapter.validate_python(data.tree)
+            return self._adapter.validate_python(data.to_json_compatible())
         except ValidationError as error:
             raise ValueError(str(error)) from error
 

@@ -7,7 +7,7 @@ from litellm import (
 )
 from pytest_mock import MockerFixture
 from sefia._tool_system import ToolRegistry
-from sefia.llm.json_schema import JsonSchemaDocument
+from sefia.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import (
     OutputStreamEvent,
@@ -20,7 +20,7 @@ from sefia.llm.streaming import (
 )
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._schema import StructuredDecisionFormat
-from sefia_litellm._schema._data_format import StructuredDataFormat
+from sefia_litellm._schema._provider_format import ProviderJsonFormat
 from sefia_litellm._streaming import (
     consume_completion_stream,
 )
@@ -115,7 +115,7 @@ async def test_decodes_enveloped_structured_decision_and_streams_logical_paths(
     assert OutputStringEnd(("tool_calls", 0, "name"), "lookup") in events
     assert OutputStringEnd(("tool_calls", 0, "arguments", "key"), "item") in events
     assert response.structured_output is not None
-    assert response.structured_output.tree == {
+    assert response.structured_output.to_json_compatible() == {
         "decision": "tool_calls",
         "tool_calls": [{"name": "lookup", "arguments": {"key": "item"}}],
     }
@@ -133,7 +133,7 @@ async def test_restores_translated_native_tool_arguments(
             tool_calls=[_tool_call("categorize", wire_arguments)],
         ),
     )
-    data_format = StructuredDataFormat.from_generated_schema(
+    provider_format = ProviderJsonFormat.from_generated_schema(
         JsonSchemaDocument.from_mapping(
             {
                 "type": "object",
@@ -166,7 +166,7 @@ async def test_restores_translated_native_tool_arguments(
         reasoning_callback=None,
         messages=[],
         decision_format=None,
-        tool_data_formats={"categorize": data_format},
+        tool_provider_formats={"categorize": provider_format},
         requested_model="gpt-4o",
     )
 
@@ -174,4 +174,6 @@ async def test_restores_translated_native_tool_arguments(
     assert (
         OutputScalar(("tool_calls", 0, "arguments", "labels", "important"), 2) in events
     )
-    assert response.tool_calls[0].arguments.tree == {"labels": {"important": 2}}
+    assert response.tool_calls[0].arguments.to_json_compatible() == {
+        "labels": {"important": 2}
+    }
