@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
+
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name, parse_wheel_filename
+from packaging.version import Version
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -40,22 +44,6 @@ PACKAGES = {
 PACKAGE_ORDER = tuple(PACKAGES)
 INTERNAL_DISTRIBUTIONS = frozenset(PACKAGES)
 
-AFFECTED = {
-    "sefia": set(PACKAGE_ORDER),
-    "sefia-litellm": {"sefia-litellm", "sefios"},
-    "sefia-typer": {"sefia-typer", "sefios"},
-    "sefia-fastapi": {"sefia-fastapi", "sefios"},
-    "sefios": {"sefios"},
-}
-
-CANDIDATE_GRAPH = {
-    "sefia": ("sefia",),
-    "sefia-litellm": ("sefia", "sefia-litellm"),
-    "sefia-typer": ("sefia", "sefia-typer"),
-    "sefia-fastapi": ("sefia", "sefia-fastapi"),
-    "sefios": PACKAGE_ORDER,
-}
-
 GLOBAL_COMPATIBILITY_PATHS = {
     ".github/scripts/package_compatibility.py",
     ".github/workflows/package-compatibility.yml",
@@ -63,111 +51,163 @@ GLOBAL_COMPATIBILITY_PATHS = {
 }
 
 
-def _normalize_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
-
-
-def _version_tuple(version: str) -> tuple[int, int, int]:
-    parts = version.split(".")
-    if not 2 <= len(parts) <= 3 or not all(part.isdigit() for part in parts):
-        raise ValueError(
-            "Internal package bounds must use numeric major.minor[.patch] versions; "
-            f"got {version!r}."
-        )
-    values = [int(part) for part in parts]
-    while len(values) < 3:
-        values.append(0)
-    return values[0], values[1], values[2]
-
-
-def _dependency_strings(distribution: str) -> list[str]:
+def _project(distribution: str) -> dict:
     path = ROOT / PACKAGES[distribution]["path"] / "pyproject.toml"
-    project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
-    dependencies = list(project.get("dependencies", []))
-    for requirements in project.get("optional-dependencies", {}).values():
-        dependencies.extend(requirements)
-    return dependencies
+    return tomllib.loads(path.read_text(encoding="utf-8"))["project"]
 
 
-def _internal_bounds(
-    distribution: str,
-) -> dict[str, tuple[str, str | None]]:
-    bounds: dict[str, tuple[str, str | None]] = {}
+def internal_requirements(
+    distribution: str, extras: set[str], *, conservative: bool = False
+) -> list[Requirement]:
+    project = _project(distribution)
+    optional = {
+        canonicalize_name(name): requirements
+        for name, requirements in project.get("optional-dependencies", {}).items()
+    }
+    active = set(optional) if conservative else {canonicalize_name(e) for e in extras}
+    while True:
+        previous = set(active)
+        raw = list(project.get("dependencies", []))
+        for extra in sorted(active):
+            if extra not in optional:
+                raise ValueError(f"{distribution} declares no extra {extra!r}")
+            raw.extend(optional[extra])
+        result: list[Requirement] = []
+        for text in raw:
+            requirement = Requirement(text)
+            if not conservative and requirement.marker is not None:
+                if not any(
+                    requirement.marker.evaluate({"extra": e}) for e in active | {""}
+                ):
+                    continue
+            name = canonicalize_name(requirement.name)
+            if name not in INTERNAL_DISTRIBUTIONS:
+                continue
+            if requirement.url:
+                raise ValueError(f"Unsupported internal URL requirement: {requirement}")
+            if name == distribution:
+                if requirement.specifier:
+                    raise ValueError(
+                        f"Unsupported constrained self-reference: {requirement}"
+                    )
+                active.update(canonicalize_name(e) for e in requirement.extras)
+            else:
+                result.append(requirement)
+        if previous == active:
+            return result
 
-    for requirement in _dependency_strings(distribution):
-        raw = requirement.split(";", 1)[0].strip()
-        match = re.match(
-            r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?(?P<spec>.*)$",
-            raw,
-        )
-        if match is None:
-            continue
 
-        name = _normalize_name(match.group("name"))
-        if name not in INTERNAL_DISTRIBUTIONS or name == distribution:
-            continue
-
-        spec = match.group("spec")
-        minimum_match = re.search(r"(?:^|,)\s*>=\s*([^,\s]+)", spec)
-        maximum_match = re.search(r"(?:^|,)\s*<\s*([^,\s]+)", spec)
-        if minimum_match is None:
-            raise ValueError(
-                f"{distribution} internal dependency {requirement!r} has no >= bound."
-            )
-
-        minimum = minimum_match.group(1)
-        maximum = maximum_match.group(1) if maximum_match is not None else None
-        previous = bounds.get(name)
-        if previous is None or _version_tuple(minimum) > _version_tuple(previous[0]):
-            bounds[name] = minimum, maximum
-
-    return bounds
+def selected_extras(distribution: str) -> set[str]:
+    return set(Requirement(PACKAGES[distribution]["requirement"]).extras)
 
 
-def candidate_version() -> str:
-    all_bounds = [
-        bound
-        for distribution in PACKAGE_ORDER
-        for bound in _internal_bounds(distribution).values()
+def effective_graph(targets: list[str]) -> dict[str, list[Requirement]]:
+    extras = {name: set() for name in PACKAGE_ORDER}
+    selected = set(targets)
+    for name in targets:
+        extras[name].update(selected_extras(name))
+    while True:
+        previous = (set(selected), {n: set(e) for n, e in extras.items()})
+        for name in PACKAGE_ORDER:
+            if name not in selected:
+                continue
+            for requirement in internal_requirements(name, extras[name]):
+                dependency = canonicalize_name(requirement.name)
+                selected.add(dependency)
+                extras[dependency].update(requirement.extras)
+        if previous == (selected, extras):
+            return {
+                name: internal_requirements(name, extras[name])
+                for name in PACKAGE_ORDER
+                if name in selected
+            }
+
+
+def candidate_closure(distribution: str) -> list[str]:
+    graph = effective_graph([distribution])
+    ordered: list[str] = []
+    visiting: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in visiting:
+            raise ValueError(f"Internal dependency cycle at {name}")
+        if name in ordered:
+            return
+        visiting.add(name)
+        for requirement in graph[name]:
+            visit(canonicalize_name(requirement.name))
+        visiting.remove(name)
+        ordered.append(name)
+
+    for name in PACKAGE_ORDER:
+        if name in graph:
+            visit(name)
+    return ordered
+
+
+def candidate_version(explicit: str | None = None) -> str:
+    requirements = [
+        (name, requirement)
+        for name, dependencies in effective_graph(list(PACKAGE_ORDER)).items()
+        for requirement in dependencies
     ]
-    if not all_bounds:
-        raise ValueError("No internal package bounds were found.")
-
-    minimums = [_version_tuple(minimum) for minimum, _ in all_bounds]
-    highest = max(minimums)
-    patches = [
-        patch for major, minor, patch in minimums if (major, minor) == highest[:2]
-    ]
-    candidate = highest[0], highest[1], max(patches) + 1000
-
-    for _, maximum in all_bounds:
-        if maximum is not None and candidate >= _version_tuple(maximum):
+    if explicit is not None:
+        candidate = Version(explicit)
+        if str(candidate) != explicit:
             raise ValueError(
-                f"Synthetic candidate {candidate} does not satisfy upper bound "
-                f"{maximum}."
+                f"Use canonical PEP 440 version {candidate}, got {explicit!r}"
             )
+    else:
+        minimums = [
+            Version(spec.version)
+            for _, requirement in requirements
+            for spec in requirement.specifier
+            if spec.operator in {">=", "==", "~="} and "*" not in spec.version
+        ]
+        highest = max(minimums, default=Version("0.0.0"))
+        release = highest.release + (0,) * (3 - len(highest.release))
+        candidate = Version(f"{release[0]}.{release[1]}.{release[2] + 1000}")
+    for owner, requirement in requirements:
+        if candidate not in requirement.specifier:
+            raise ValueError(
+                f"Candidate {candidate} violates {owner} dependency {requirement}; "
+                "update the intended version or deliberately revise package declarations."
+            )
+    source = (
+        "explicit manual candidate"
+        if explicit is not None
+        else "synthetic PR candidate"
+    )
+    print(f"Candidate version: {candidate} ({source})", file=sys.stderr)
+    return str(candidate)
 
-    return ".".join(str(part) for part in candidate)
+
+def affected_paths(changed: list[str]) -> list[str]:
+    if any(
+        path in GLOBAL_COMPATIBILITY_PATHS or path.startswith("tests/tooling/")
+        for path in changed
+    ):
+        return list(PACKAGE_ORDER)
+    affected = {
+        name
+        for name, package in PACKAGES.items()
+        if any(path.startswith(f"{package['path']}/") for path in changed)
+    }
+    while True:
+        previous = set(affected)
+        for name in PACKAGE_ORDER:
+            dependencies = internal_requirements(name, set(), conservative=True)
+            if any(canonicalize_name(r.name) in affected for r in dependencies):
+                affected.add(name)
+        if previous == affected:
+            return [name for name in PACKAGE_ORDER if name in affected]
 
 
 def affected_packages(base: str, head: str) -> list[str]:
     changed = subprocess.check_output(
-        ["git", "diff", "--name-only", base, head],
-        cwd=ROOT,
-        text=True,
+        ["git", "diff", "--name-only", f"{base}...{head}"], cwd=ROOT, text=True
     ).splitlines()
-
-    affected: set[str] = set()
-    for path in changed:
-        if path in GLOBAL_COMPATIBILITY_PATHS:
-            return list(PACKAGE_ORDER)
-
-        for distribution, package in PACKAGES.items():
-            if path.startswith(f"{package['path']}/"):
-                affected.update(AFFECTED[distribution])
-                break
-
-    return [name for name in PACKAGE_ORDER if name in affected]
+    return affected_paths(changed)
 
 
 def matrix(distributions: list[str]) -> dict[str, list[dict[str, str]]]:
@@ -177,55 +217,113 @@ def matrix(distributions: list[str]) -> dict[str, list[dict[str, str]]]:
                 "distribution": distribution,
                 "requirement": PACKAGES[distribution]["requirement"],
                 "tests": PACKAGES[distribution]["tests"],
-                "candidate-distributions": " ".join(CANDIDATE_GRAPH[distribution]),
+                "candidate-distributions": " ".join(candidate_closure(distribution)),
             }
             for distribution in distributions
         ]
     }
 
 
+def candidate_artifacts(distribution: str, version: str, directory: Path) -> list[Path]:
+    wheels: dict[str, list[Path]] = {}
+    for path in sorted(directory.glob("*.whl")):
+        name, wheel_version, _, _ = parse_wheel_filename(path.name)
+        if name in INTERNAL_DISTRIBUTIONS:
+            if wheel_version != Version(version):
+                raise ValueError(f"{path.name} is not candidate version {version}")
+            wheels.setdefault(name, []).append(path)
+    selected = candidate_closure(distribution)
+    for name in selected:
+        if len(wheels.get(name, [])) != 1:
+            raise ValueError(
+                f"Expected one candidate wheel for {name}; no PyPI fallback permitted"
+            )
+    return [wheels[name][0] for name in selected]
+
+
+def write_candidate_constraints(version: str, output: Path) -> None:
+    output.write_text(
+        "".join(f"{name}=={version}\n" for name in PACKAGE_ORDER), encoding="utf-8"
+    )
+
+
+def minimum_bounds(distribution: str) -> dict[str, str]:
+    grouped: dict[str, list[Requirement]] = {}
+    for requirement in internal_requirements(
+        distribution, selected_extras(distribution)
+    ):
+        grouped.setdefault(canonicalize_name(requirement.name), []).append(requirement)
+    bounds: dict[str, str] = {}
+    for name, requirements in grouped.items():
+        lower = [
+            Version(spec.version)
+            for r in requirements
+            for spec in r.specifier
+            if spec.operator in {">=", "==", "~="} and "*" not in spec.version
+        ]
+        if not lower:
+            raise ValueError(
+                f"{distribution} dependency {name} has no exact lower bound"
+            )
+        minimum = max(lower)
+        if any(minimum not in r.specifier for r in requirements):
+            raise ValueError(
+                f"{distribution} has conflicting minimum constraints for {name}"
+            )
+        bounds[name] = str(minimum)
+    return bounds
+
+
 def write_minimum_constraints(distribution: str, output: Path) -> None:
-    bounds = _internal_bounds(distribution)
-    lines = [f"{name}=={minimum}" for name, (minimum, _) in sorted(bounds.items())]
+    lines = [
+        f"{name}=={version}"
+        for name, version in sorted(minimum_bounds(distribution).items())
+    ]
     output.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
 
-def check_minimum_released(distribution: str) -> bool:
-    bounds = _internal_bounds(distribution)
+def minimum_status(distribution: str) -> str:
+    bounds = minimum_bounds(distribution)
     if not bounds:
-        print(f"{distribution} has no internal lower bounds to test.")
-        return False
-
-    versions = {minimum for minimum, _ in bounds.values()}
-    missing = [
-        version
-        for version in sorted(versions)
-        if subprocess.run(
+        print(f"{distribution}: no applicable internal dependencies")
+        return "not-applicable"
+    missing = []
+    for version in sorted(set(bounds.values())):
+        status = subprocess.run(
             ["git", "show-ref", "--verify", "--quiet", f"refs/tags/v{version}"],
             cwd=ROOT,
             check=False,
         ).returncode
-        != 0
-    ]
-
+        if status not in {0, 1}:
+            raise ValueError(
+                f"Cannot inspect release tag v{version}: git exited {status}"
+            )
+        if status:
+            missing.append(f"v{version}")
     if missing:
-        tags = ", ".join(f"v{version}" for version in missing)
-        print(f"Minimum compatibility is waiting for release tag(s): {tags}")
-        return False
-
-    return True
+        print(f"{distribution}: unreleased minimum; missing tags: {', '.join(missing)}")
+        return "unreleased"
+    print(f"{distribution}: minimum available; installation and tests required")
+    return "available"
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("candidate-version")
+    version = subparsers.add_parser("candidate-version")
+    version.add_argument("--version")
 
     selected = subparsers.add_parser("matrix")
     selected.add_argument("--base")
     selected.add_argument("--head")
     selected.add_argument("--all", action="store_true")
+
+    artifacts = subparsers.add_parser("candidate-artifacts")
+    artifacts.add_argument("--distribution", required=True, choices=PACKAGE_ORDER)
+    artifacts.add_argument("--version", required=True)
+    artifacts.add_argument("--directory", type=Path, required=True)
+    artifacts.add_argument("--constraints", type=Path, required=True)
 
     minimum = subparsers.add_parser("minimum-constraints")
     minimum.add_argument("--distribution", required=True)
@@ -249,13 +347,18 @@ def main() -> None:
     args = _parser().parse_args()
 
     if args.command == "candidate-version":
-        print(candidate_version())
+        print(candidate_version(args.version))
     elif args.command == "matrix":
         print(json.dumps(matrix(_selected_packages(args)), separators=(",", ":")))
+    elif args.command == "candidate-artifacts":
+        wheels = candidate_artifacts(args.distribution, args.version, args.directory)
+        write_candidate_constraints(args.version, args.constraints)
+        print("\n".join(str(path) for path in wheels))
     elif args.command == "minimum-constraints":
         write_minimum_constraints(args.distribution, args.output)
     elif args.command == "check-minimum-released":
-        raise SystemExit(0 if check_minimum_released(args.distribution) else 2)
+        status = minimum_status(args.distribution)
+        raise SystemExit({"available": 0, "unreleased": 2, "not-applicable": 3}[status])
     else:
         raise AssertionError(f"Unsupported command: {args.command}")
 

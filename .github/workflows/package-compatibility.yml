@@ -3,6 +3,11 @@ name: Package compatibility
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      candidate_version:
+        description: Intended release version (for example 0.6.1)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -22,26 +27,37 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install metadata parser
+        run: python -m pip install packaging
+
       - name: Resolve compatibility matrix
         id: selection
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE_VERSION: ${{ inputs.candidate_version }}
         shell: bash
         run: |
           set -euo pipefail
 
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             selection_args=(--all)
+            version_args=(--version "$RELEASE_VERSION")
           else
             selection_args=(--base "$BASE_SHA" --head "$HEAD_SHA")
+            version_args=()
           fi
 
           matrix="$(
             python .github/scripts/package_compatibility.py matrix "${selection_args[@]}"
           )"
           candidate_version="$(
-            python .github/scripts/package_compatibility.py candidate-version
+            python .github/scripts/package_compatibility.py candidate-version "${version_args[@]}"
           )"
 
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
@@ -124,45 +140,65 @@ jobs:
       - name: Create isolated environment
         run: python -m venv .compat-venv
 
+      - name: Install metadata parser
+        run: python -m pip install packaging
+
       - name: Install candidate package graph
         env:
           CANDIDATE_VERSION: ${{ needs.prepare.outputs.candidate-version }}
           CANDIDATE_DISTRIBUTIONS: ${{ matrix.candidate-distributions }}
           TARGET_REQUIREMENT: ${{ matrix.requirement }}
+          DISTRIBUTION: ${{ matrix.distribution }}
         shell: bash
         run: |
           set -euo pipefail
           python_bin="$GITHUB_WORKSPACE/.compat-venv/bin/python"
           "$python_bin" -m pip install --upgrade pip
 
-          for distribution in $CANDIDATE_DISTRIBUTIONS; do
-            prefix="${distribution//-/_}"
-            wheels=(candidate-dist/"${prefix}"-*.whl)
-            if [[ "${#wheels[@]}" -ne 1 ]]; then
-              echo "Expected one candidate wheel for $distribution." >&2
-              exit 1
-            fi
-            "$python_bin" -m pip install "${wheels[0]}"
-          done
+          wheels="$(
+            python .github/scripts/package_compatibility.py candidate-artifacts \
+              --distribution "$DISTRIBUTION" \
+              --version "$CANDIDATE_VERSION" \
+              --directory candidate-dist \
+              --constraints candidate-constraints.txt
+          )"
+          mapfile -t candidate_wheels <<< "$wheels"
 
-          "$python_bin" -m pip install             "$TARGET_REQUIREMENT==$CANDIDATE_VERSION"             "pytest>=8.0"             "pytest-asyncio>=0.23"             "pytest-mock>=3.12.0"
+          "$python_bin" -m pip install \
+            --constraint candidate-constraints.txt \
+            --no-index --no-deps "${candidate_wheels[@]}"
+          "$python_bin" -m pip install \
+            --constraint candidate-constraints.txt \
+            "$TARGET_REQUIREMENT==$CANDIDATE_VERSION" \
+            "pytest>=8.0" "pytest-asyncio>=0.23" "pytest-mock>=3.12.0"
 
       - name: Verify candidate versions
         env:
           CANDIDATE_VERSION: ${{ needs.prepare.outputs.candidate-version }}
           CANDIDATE_DISTRIBUTIONS: ${{ matrix.candidate-distributions }}
+          VIRTUAL_ENV: ${{ github.workspace }}/.compat-venv
         run: |
           .compat-venv/bin/python - <<'PY'
           import os
-          from importlib import metadata
+          from importlib import metadata, util
+          from pathlib import Path
 
           expected = os.environ["CANDIDATE_VERSION"]
-          for distribution in os.environ["CANDIDATE_DISTRIBUTIONS"].split():
+          selected = set(os.environ["CANDIDATE_DISTRIBUTIONS"].split())
+          internal = {"sefia", "sefia-litellm", "sefia-typer", "sefia-fastapi", "sefios"}
+          installed = {d.metadata["Name"].lower().replace("_", "-") for d in metadata.distributions()}
+          if installed & internal != selected:
+              raise SystemExit(f"Unexpected internal distributions: {installed & internal}; expected {selected}")
+          for distribution in selected:
               actual = metadata.version(distribution)
               if actual != expected:
                   raise SystemExit(
                       f"{distribution} is {actual}, expected candidate {expected}."
                   )
+              module = util.find_spec(distribution.replace("-", "_"))
+              site = Path(os.environ["VIRTUAL_ENV"]) / "lib"
+              if module is None or module.origin is None or not Path(module.origin).is_relative_to(site):
+                  raise SystemExit(f"{distribution} did not load from the wheel environment")
           PY
 
       - name: Check installed dependency graph
@@ -207,6 +243,9 @@ jobs:
           name: package-compatibility-candidates
           path: candidate-dist
 
+      - name: Install metadata parser
+        run: python -m pip install packaging
+
       - name: Resolve declared minimum constraints
         run: >
           python .github/scripts/package_compatibility.py minimum-constraints
@@ -217,6 +256,7 @@ jobs:
         id: minimum
         shell: bash
         run: |
+          set -uo pipefail
           set +e
           python .github/scripts/package_compatibility.py check-minimum-released --distribution "${{ matrix.distribution }}"
           status=$?
@@ -226,7 +266,10 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [[ "$status" -eq 2 ]]; then
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping until every declared lower bound has a release tag."
+            echo "Minimum mode skipped: unreleased lower bound." >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$status" -eq 3 ]]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Minimum mode not applicable: no internal dependencies." >> "$GITHUB_STEP_SUMMARY"
           else
             exit "$status"
           fi
@@ -248,6 +291,7 @@ jobs:
           "$python_bin" -m pip install --upgrade pip
 
           prefix="${DISTRIBUTION//-/_}"
+          shopt -s nullglob
           wheels=(candidate-dist/"${prefix}"-*.whl)
           if [[ "${#wheels[@]}" -ne 1 ]]; then
             echo "Expected one candidate wheel for $DISTRIBUTION." >&2
@@ -255,10 +299,15 @@ jobs:
           fi
 
           wheel_uri="$(
-            "$python_bin" -c               'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve().as_uri())'               "${wheels[0]}"
+            "$python_bin" -c \
+              'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve().as_uri())' \
+              "${wheels[0]}"
           )"
 
-          "$python_bin" -m pip install             --constraint minimum-constraints.txt             "$TARGET_REQUIREMENT @ $wheel_uri"             "pytest>=8.0"             "pytest-asyncio>=0.23"             "pytest-mock>=3.12.0"
+          "$python_bin" -m pip install \
+            --constraint minimum-constraints.txt \
+            "$TARGET_REQUIREMENT @ $wheel_uri" \
+            "pytest>=8.0" "pytest-asyncio>=0.23" "pytest-mock>=3.12.0"
 
       - name: Verify declared minimum versions
         if: steps.minimum.outputs.run == 'true'
