@@ -7,7 +7,7 @@ from .._history import StepHistory
 from .._interfaces.middleware import DecisionContext, StepContext
 from .._tool_system import ToolRegistry
 from ..inference import FunctionInfo, ToolCallRequest
-from ..llm import Message, StructuredData
+from ..llm import JsonSnapshot, Message
 from ..llm.step_decision import DecisionSpec
 from ..llm.transports import (
     DecisionHistoryItem,
@@ -49,7 +49,7 @@ def make_decision_request(
     decision_spec: DecisionSpec,
     *,
     function: FunctionInfo | None = None,
-    arguments: StructuredData | None = None,
+    arguments: JsonSnapshot | None = None,
     messages_before: tuple[Message, ...] = (),
     messages_after: tuple[Message, ...] = (),
     history: tuple[DecisionHistoryItem, ...] = (),
@@ -60,7 +60,7 @@ def make_decision_request(
     return DecisionRequest(
         messages_before=messages_before,
         function=function,
-        arguments=(StructuredData.from_object({}) if arguments is None else arguments),
+        arguments=(JsonSnapshot.from_object({}) if arguments is None else arguments),
         messages_after=messages_after,
         decision_spec=decision_spec,
         history=history,

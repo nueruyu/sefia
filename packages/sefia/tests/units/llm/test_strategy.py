@@ -15,14 +15,13 @@ from sefia.inference import (
     ToolCallResult,
     ToolCallsDecision,
 )
-from sefia.llm import LLMCompletion, LLMInferenceStrategy, Message
+from sefia.llm import JsonSnapshot, LLMCompletion, LLMInferenceStrategy, Message
 from sefia.llm.events import (
     AfterLLMCall,
     BeforeLLMCall,
     LLMReasoningTokenReceived,
     LLMTokenReceived,
 )
-from sefia.llm.structured_data import StructuredData
 from sefia.llm.transports import (
     DecisionObserver,
     DecisionToolCalls,
@@ -103,7 +102,7 @@ async def test_strategy_materializes_arguments_and_history_before_transport(
     )
 
     request = transport.request_decision.await_args.kwargs["request"]
-    assert request.arguments.tree == {
+    assert request.arguments.to_json_compatible() == {
         "model": {"value": 3},
         "record": {
             "identifier": str(identifier),
@@ -112,14 +111,14 @@ async def test_strategy_materializes_arguments_and_history_before_transport(
     }
     tool_calls, tool_result = request.history
     assert isinstance(tool_calls, DecisionToolCalls)
-    assert tool_calls.calls[0].arguments.tree == {
+    assert tool_calls.calls[0].arguments.to_json_compatible() == {
         "record": {
             "identifier": str(identifier),
             "created_at": "2026-09-23T10:30:00",
         }
     }
     assert isinstance(tool_result, DecisionToolResult)
-    assert tool_result.result.tree == {"value": 3}
+    assert tool_result.result.to_json_compatible() == {"value": 3}
 
 
 async def test_strategy_assigns_ids_to_validated_tool_calls(
@@ -131,7 +130,7 @@ async def test_strategy_assigns_ids_to_validated_tool_calls(
         return param
 
     registry.add(my_tool, name="my_tool")
-    data = StructuredData.from_json(
+    data = JsonSnapshot.capture(
         {
             "decision": "tool_calls",
             "tool_calls": [{"name": "my_tool", "arguments": {"param": 1}}],
@@ -157,7 +156,7 @@ async def test_unknown_tool_preserves_specific_cause(
 ) -> None:
     registry = ToolRegistry()
     registry.add(lambda: None, name="known")
-    data = StructuredData.from_json(
+    data = JsonSnapshot.capture(
         {"decision": "tool_calls", "tool_calls": [{"name": "unknown", "arguments": {}}]}
     )
     transport.request_decision.return_value = DecodedDecision(

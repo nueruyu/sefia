@@ -3,14 +3,19 @@ from dataclasses import FrozenInstanceError, fields
 import pytest
 from sefia import DecisionContext
 from sefia.inference import ToolCallResult
-from sefia.llm import LLMCompletion, Message, ToolCall
+from sefia.llm import JsonSnapshot, LLMCompletion, Message, ToolCall
 from sefia.llm.step_decision import DecisionSpec
-from sefia.llm.structured_data import StructuredData
+from sefia.llm.streaming import OutputStreamEvent
+from sefia.llm.streaming import StringDelta as OutputStringDelta
 from sefia.llm.transports import DecisionToolResult
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia.testing import (
     LLMClientCase,
     MockLLMClient,
+    ScriptedCompletion,
+    StreamContent,
+    StreamOutput,
+    StreamReasoning,
     make_decision_context,
     make_decision_request,
     make_function_info,
@@ -60,7 +65,7 @@ def test_test_data_factories_preserve_explicit_values() -> None:
     history = (
         DecisionToolResult(
             tool_call_id=call.id,
-            result=StructuredData.from_scalar("found"),
+            result=JsonSnapshot.from_scalar("found"),
         ),
     )
     decision_spec = DecisionSpec.for_inference(
@@ -81,6 +86,85 @@ def test_test_data_factories_preserve_explicit_values() -> None:
     assert call.name == "lookup"
 
 
+async def test_mock_llm_client_replays_callbacks_in_event_order() -> None:
+    completion = LLMCompletion(content="done")
+    output_event = OutputStringDelta(("result",), "d")
+    client = MockLLMClient(
+        [
+            ScriptedCompletion(
+                completion,
+                events=(
+                    StreamReasoning("thinking"),
+                    StreamContent("do"),
+                    StreamOutput(output_event),
+                    StreamContent("ne"),
+                ),
+            )
+        ]
+    )
+    observed: list[tuple[str, str | OutputStreamEvent]] = []
+
+    async def on_content(text: str) -> None:
+        observed.append(("content", text))
+
+    async def on_reasoning(text: str) -> None:
+        observed.append(("reasoning", text))
+
+    async def on_output(event: OutputStreamEvent) -> None:
+        observed.append(("output", event))
+
+    returned = await client.complete(
+        [Message(role="user", content="hello")],
+        stream_callback=on_content,
+        reasoning_callback=on_reasoning,
+        output_callback=on_output,
+    )
+
+    assert returned is completion
+    assert observed == [
+        ("reasoning", "thinking"),
+        ("content", "do"),
+        ("output", output_event),
+        ("content", "ne"),
+    ]
+
+
+async def test_mock_llm_client_ignores_events_without_matching_callbacks() -> None:
+    completion = LLMCompletion(content="done")
+    client = MockLLMClient(
+        [
+            ScriptedCompletion(
+                completion,
+                events=(
+                    StreamReasoning("thinking"),
+                    StreamContent("done"),
+                    StreamOutput(OutputStringDelta(("result",), "d")),
+                ),
+            )
+        ]
+    )
+    content_chunks: list[str] = []
+
+    async def on_content(text: str) -> None:
+        content_chunks.append(text)
+
+    returned = await client.complete(
+        [Message(role="user", content="hello")],
+        stream_callback=on_content,
+    )
+
+    assert returned is completion
+    assert content_chunks == ["done"]
+
+
+def test_scripted_completion_snapshots_event_sequence() -> None:
+    events = [StreamContent("first")]
+    scripted = ScriptedCompletion(LLMCompletion(), events=events)
+    events.append(StreamContent("second"))
+
+    assert scripted.events == (StreamContent("first"),)
+
+
 async def test_mock_llm_client_snapshots_core_messages() -> None:
     client = MockLLMClient([LLMCompletion(content="done")])
 
@@ -92,9 +176,7 @@ async def test_mock_llm_client_snapshots_core_messages() -> None:
                     ToolCall(
                         id="call-1",
                         name="lookup",
-                        arguments=StructuredData.from_json(
-                            {"key": "item", "filter": None}
-                        ),
+                        arguments=JsonSnapshot.capture({"key": "item", "filter": None}),
                     )
                 ],
             )

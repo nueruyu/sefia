@@ -87,7 +87,7 @@ composition and decision validation:
 layout = MessageLayout.default(function_info)
 for composer in message_composers:
     layout = composer.compose(function_info, layout)
-request = materialize(layout, history, structured_data_converter)
+request = materialize(layout, history, json_materializer)
 transport.request_decision(request, prompt_renderer, ...)
 ```
 
@@ -96,7 +96,7 @@ transport.request_decision(request, prompt_renderer, ...)
    application conventions while treating `FunctionInfo` as read-only metadata.
 2. `DecisionSpec` describes which next decisions are valid using the configured
    `ResultFormatFactory`. Independently, the strategy calls
-   `StructuredDataConverter.to_structured_data()` for retained arguments, tool-call
+   `JsonMaterializer.materialize()` for retained arguments, tool-call
    arguments, and tool results.
 3. The `DecisionRequest` carries the function, materialized arguments, application
    messages, semantic history, decision contract, and rejection facts.
@@ -124,7 +124,7 @@ collaborators, not execution middleware.
 
 `llm/step_decision.py` owns this logical shape. It retains tools and the result's
 `ResultFormat` as separate components and validates decoded values as
-`StepDecision`s. `llm/json_schema` imports `$defs`, resolves name collisions, and
+`StepDecision`s. `json_schema` imports `$defs`, resolves name collisions, and
 rewrites local references without knowing about tools or Pydantic. Recursive JSON
 value types and `SchemaNode` accessors keep schema traversal out of `dict[str, Any]`.
 Every transport returns the same logical decision:
@@ -137,25 +137,27 @@ completed output and stream paths.
 Sefia keeps three Python/LLM capabilities independent. `ToolFunctionInspector`
 interprets callables for tool schemas and binding. `ResultFormatFactory` produces a
 result schema and restores a decoded result to its declared Python type.
-`StructuredDataConverter` normalizes runtime Python values into `StructuredData`.
+`JsonMaterializer` turns borrowed application values into detached `JsonCompatible`
+structures. The strategy transfers ownership to `JsonSnapshot` before constructing
+the `DecisionRequest`; repair attempts reuse those snapshots.
 `Session` directly configures the latter two strategy capabilities. Custom tool
 inspection is configured through `DefaultToolCollector(inspector=...)`. Sefia supplies
 separate Pydantic-backed defaults from
 `pydantic/_tool_function_inspector.py`, `_result_format.py`, and
-`_structured_data.py`. `StructuredData` is Sefia's single provider-neutral structured
-tree for both values supplied to an LLM and values decoded from one. Its explicit JSON
-projection converts scalar mapping keys and detects collisions. None of these three
-capabilities knows JSON text, Markdown, provider wire payloads, or message ordering.
+`_json_materializer.py`. `JsonSnapshot` holds the owned JSON representation for
+inputs and decoded outputs. Object keys must be strings and floating-point numbers must be finite. Shape access and snapshot
+composition share owned subtrees; `to_json_compatible()` explicitly returns a
+detached mutable projection.
 
 `DecisionSpec.for_inference()` composes these leaves. It exposes the decision mode,
 result format, and tools, and validates a returned value as the corresponding
 `StepDecision`. Step-decision specifications live in `sefia.llm.step_decision`;
 result schema interfaces and decoded values live in `sefia.llm.result_format` and
-`sefia.llm.structured_data`.
-`sefia.llm.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
+`sefia.llm`.
+`sefia.json_schema` contains only JSON, JSON Schema, and JSON Pointer concepts.
 
 `MarkdownPromptRenderer` renders only the standard inference prompt from an
-`InferencePrompt` whose arguments are already `StructuredData`. Private Markdown
+`InferencePrompt` whose arguments are already `JsonSnapshot`. Private Markdown
 helpers format code blocks without interpreting Python objects. Shared transport
 framing builds the complete final message sequence:
 application messages before the prompt, the prompt, application messages after it,

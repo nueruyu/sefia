@@ -1,9 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from typing_extensions import final
-
-from sefia.llm.structured_data import StructuredData
+from sefia.llm import JsonCompatible, JsonSnapshot
 from sefia.llm.streaming import (
     JsonOutputStreamDecoder,
     OutputStreamEvent,
@@ -11,8 +9,9 @@ from sefia.llm.streaming import (
     StringDelta,
     StringEnd,
 )
+from typing_extensions import final
 
-from ._schema._data_format import StructuredDataFormat
+from ._schema._provider_format import ProviderJsonFormat
 
 
 class _FunctionCallDelta(Protocol):
@@ -43,8 +42,8 @@ class _ToolCallState:
 class NativeToolCallStreamDecoder:
     """Decodes LiteLLM tool-call fragments into logical decision events."""
 
-    def __init__(self, tool_data_formats: dict[str, StructuredDataFormat]) -> None:
-        self._tool_data_formats = tool_data_formats
+    def __init__(self, tool_provider_formats: dict[str, ProviderJsonFormat]) -> None:
+        self._tool_provider_formats = tool_provider_formats
         self._calls: dict[int, _ToolCallState] = {}
 
     def feed(self, calls: list[NativeToolCallDelta]) -> list[OutputStreamEvent]:
@@ -63,22 +62,24 @@ class NativeToolCallStreamDecoder:
     def finish(self) -> list[OutputStreamEvent]:
         events: list[OutputStreamEvent] = []
         for index, state in self._calls.items():
-            data_format = (
-                self._tool_data_formats.get(state.name)
+            provider_format = (
+                self._tool_provider_formats.get(state.name)
                 if state.name is not None
                 else None
             )
-            if data_format is None or not data_format.transforms_data:
+            if provider_format is None or not provider_format.transforms_data:
                 events.extend(self._decode_available(index, state))
                 continue
             try:
-                data = data_format.decode(
-                    StructuredData.parse_json(state.arguments_json)
+                data = provider_format.decode(
+                    JsonSnapshot.parse_json(state.arguments_json)
                 )
             except ValueError:
                 continue
             events.extend(
-                _structured_data_events(data, ("tool_calls", index, "arguments"))
+                _json_events(
+                    data.to_json_compatible(), ("tool_calls", index, "arguments")
+                )
             )
         return events
 
@@ -87,8 +88,8 @@ class NativeToolCallStreamDecoder:
     ) -> list[OutputStreamEvent]:
         if state.name is None:
             return []
-        data_format = self._tool_data_formats.get(state.name)
-        if data_format is not None and data_format.transforms_data:
+        provider_format = self._tool_provider_formats.get(state.name)
+        if provider_format is not None and provider_format.transforms_data:
             return []
 
         fragment = state.arguments_json[state.decoded_length :]
@@ -100,11 +101,10 @@ class NativeToolCallStreamDecoder:
         ]
 
 
-def _structured_data_events(
-    data: StructuredData,
+def _json_events(
+    tree: JsonCompatible,
     path: tuple[str | int, ...],
 ) -> list[OutputStreamEvent]:
-    tree = data.tree
     if isinstance(tree, str):
         return [StringEnd(path, tree)]
     if tree is None or isinstance(tree, int | float | bool):
@@ -113,16 +113,14 @@ def _structured_data_events(
         return [
             event
             for index, item in enumerate(tree)
-            for event in _structured_data_events(
-                StructuredData.from_tree(item), (*path, index)
-            )
+            for event in _json_events(item, (*path, index))
         ]
     return [
         event
         for name, item in tree.items()
-        for event in _structured_data_events(
-            StructuredData.from_tree(item),
-            (*path, name if isinstance(name, str | int) else str(name)),
+        for event in _json_events(
+            item,
+            (*path, name),
         )
     ]
 

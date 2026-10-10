@@ -189,7 +189,7 @@ async def test_complete_uses_streaming_when_callback_is_provided(
         reasoning_callback=None,
         messages=[{"role": "user", "content": "Hello"}],
         decision_format=None,
-        tool_data_formats={},
+        tool_provider_formats={},
         requested_model="gpt-4o",
     )
 
@@ -219,7 +219,7 @@ async def test_complete_streams_when_only_reasoning_callback_is_provided(
         reasoning_callback=reasoning_callback,
         messages=[{"role": "user", "content": "Hello"}],
         decision_format=None,
-        tool_data_formats={},
+        tool_provider_formats={},
         requested_model="gpt-4o",
     )
 
@@ -249,7 +249,7 @@ async def test_complete_streams_when_only_output_callback_is_provided(
         reasoning_callback=None,
         messages=[{"role": "user", "content": "Hello"}],
         decision_format=None,
-        tool_data_formats={},
+        tool_provider_formats={},
         requested_model="gpt-4o",
     )
 

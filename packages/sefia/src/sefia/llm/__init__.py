@@ -1,14 +1,14 @@
 from ._client import LLMClient
+from ._json import JsonCompatible, JsonMaterializer, JsonSnapshot
 from ._markdown_prompt_renderer import MarkdownPromptRenderer
-from ._messages import LLMCompletion, Message, ToolCall
 from ._message_composer import MessageComposer
 from ._message_layout import MessageLayout
+from ._messages import LLMCompletion, Message, ToolCall
 from ._prompt_renderer import (
     InferencePrompt,
     PromptRenderer,
 )
 from ._strategy import LLMInferenceStrategy
-from .structured_data import StructuredData, StructuredDataConverter
 
 __all__ = [
     "LLMClient",
@@ -21,6 +21,7 @@ __all__ = [
     "InferencePrompt",
     "PromptRenderer",
     "MarkdownPromptRenderer",
-    "StructuredData",
-    "StructuredDataConverter",
+    "JsonCompatible",
+    "JsonSnapshot",
+    "JsonMaterializer",
 ]

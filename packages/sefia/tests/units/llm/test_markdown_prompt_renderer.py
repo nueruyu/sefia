@@ -2,10 +2,10 @@ import json
 
 from sefia.llm import (
     InferencePrompt,
+    JsonCompatible,
+    JsonSnapshot,
     MarkdownPromptRenderer,
-    StructuredData,
 )
-from sefia.llm.json_schema import JsonValue
 from sefia.testing import make_function_info
 
 
@@ -13,7 +13,7 @@ def _renderer() -> MarkdownPromptRenderer:
     return MarkdownPromptRenderer()
 
 
-def _task_content(arguments: StructuredData) -> str:
+def _task_content(arguments: JsonSnapshot) -> str:
     return _renderer().render(
         InferencePrompt(
             function=make_function_info(),
@@ -32,32 +32,32 @@ def _json_content(prompt: str) -> object:
 
 
 def test_render_only_contains_inference_prompt():
-    content = _task_content(StructuredData.from_object({}))
+    content = _task_content(JsonSnapshot.from_object({}))
 
     assert content.startswith("# Task\n\ninstructions")
     assert "## Response" not in content
 
 
 def test_render_invocation_explains_when_there_are_no_direct_arguments():
-    content = _task_content(StructuredData.from_object({}))
+    content = _task_content(JsonSnapshot.from_object({}))
 
     assert "## Task arguments\n\nNone." in content
 
 
 def test_render_renders_json_in_markdown():
-    arguments: JsonValue = {
+    arguments: JsonCompatible = {
         "text": "日本語\nwith <markup> & symbols",
         "nested": {"enabled": True, "values": [1, None]},
     }
 
-    prompt = _task_content(StructuredData.from_json(arguments))
+    prompt = _task_content(JsonSnapshot.capture(arguments))
 
     assert _json_content(prompt) == arguments
     assert "日本語" in prompt
 
 
 def test_render_uses_a_fence_longer_than_content():
-    prompt = _task_content(StructuredData.from_json({"source": "before ``` after"}))
+    prompt = _task_content(JsonSnapshot.capture({"source": "before ``` after"}))
 
     arguments = prompt.split("## Task arguments\n\n", 1)[1]
     assert arguments.splitlines()[0] == "````json"

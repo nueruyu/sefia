@@ -82,7 +82,7 @@ submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 | `_executor.py` | The step loop, middleware composition. | `InferenceExecutor` |
 | `_tool_execution.py` | Executes a decision's tool-call batch (serial by default, `@concurrent` calls overlap). | `call_tools` |
 | `inference.py` | Plain data: the decision/history types and the call descriptor, including the receiver/prompt-data split. | `FunctionInfo`, `Capability`, `ToolCallsDecision`, `ResultDecision` |
-| `_session.py` | Composition root: wraps a `glyff.Session`, selects the default tool collector plus independent result-format and structured-data-conversion defaults, builds strategies, and installs the context. | `Session` |
+| `_session.py` | Composition root: wraps a `glyff.Session`, selects the default tool collector plus independent result-format and JSON-materialization defaults, builds strategies, and installs the context. | `Session` |
 | `_context.py` | The contextvar-scoped run state. | `SessionContext`, `get_context` |
 | `_history.py` | The run's conversation history as pure in-memory state (loading/persistence/step-count live on the executor). | `StepHistory` |
 | `history_storages/` | `HistoryStorage` implementations (default: history in the run's glyff metadata). | `GlyffHistoryStorage` |
@@ -93,9 +93,10 @@ submodules such as `sefia.llm.exceptions` and `sefia.llm.transports`.
 | `tool_collectors/` | Collector implementations: default discovery (`Tools[...]`-granted fields of the call's receiver, declared-only; surface protocols on `self`), fixed pre-built tools, and composition. | `DefaultToolCollector`, `StaticToolCollector`, `CompositeToolCollector` |
 | `event_system.py` / `events.py` | Observation seam: publisher + event types. | `EventPublisher` |
 | `streaming.py` | The tool-arg streaming side channel (`preview`). | `ArgStream`, `StringDelta` |
-| `llm/` | The **default** `InferenceStrategy`: message composition retains raw application values, the strategy materializes them and execution history into provider-neutral LLM values, and transports create `InferencePrompt` plus final history, repair, and response protocol framing from the semantic `DecisionRequest`. | `LLMInferenceStrategy`, `MessageComposer`, `MessageLayout`, `Message`, `ToolCall`, `StructuredData`, `StructuredDataConverter`, `ResultFormatFactory`, `InferencePrompt`, `LLMClient`, `DecisionTransport`, `PromptRenderer` |
+| `llm/` | The **default** `InferenceStrategy`: message composition retains raw application values, the strategy materializes them and execution history into provider-neutral LLM values, and transports create `InferencePrompt` plus final history, repair, and response protocol framing from the semantic `DecisionRequest`. | `LLMInferenceStrategy`, `MessageComposer`, `MessageLayout`, `Message`, `ToolCall`, `JsonSnapshot`, `JsonMaterializer`, `ResultFormatFactory`, `InferencePrompt`, `LLMClient`, `DecisionTransport`, `PromptRenderer` |
+| `json_schema/` | JSON Schema documents, traversal, and local definition references; independent of the LLM layer. | `JsonSchemaDocument`, `SchemaNode`, `DefinitionRegistry` |
 | `llm/transports/` | Transport contract and structured, prompted, and native protocols. The private `_native/` package separates native orchestration, prompt/history conversion, result-tool construction, and decoding. | `DecisionTransport`, `StructuredDecisionTransport`, `PromptedDecisionTransport`, `NativeDecisionTransport` |
-| `pydantic/` | Independent Pydantic-backed implementations for tool callable inspection, result schema generation/restoration, and Python-value conversion to `StructuredData`. | `PydanticToolFunctionInspector`, `PydanticResultFormatFactory`, `PydanticStructuredDataConverter` |
+| `pydantic/` | Independent Pydantic-backed implementations for tool callable inspection, result schema generation/restoration, and Python-value materialization to `JsonCompatible`. | `PydanticToolFunctionInspector`, `PydanticResultFormatFactory`, `PydanticJsonMaterializer` |
 | `testing/` | Public test doubles, stable test-data factories, and reusable conformance contracts for applications and extension implementations. | `MockLLMClient`, `MemoryHistoryStorage`, `make_decision_request`, `make_step_context`, `make_decision_context`, `LLMClientContract`, `HistoryStorageContract`, `DecisionTransportContract`, `ToolCollectorContract` |
 
 ### The seams (`_interfaces/`) — the extension ports
@@ -106,12 +107,12 @@ implementation noted in parentheses.
 | Interface | Swap to… | Default |
 | --- | --- | --- |
 | `InferenceStrategy` | replace the "brain" (a different prompting scheme, or non-LLM) | `llm/LLMInferenceStrategy` |
-| `PromptRenderer` | render the standard inference prompt from function instructions, normalized structured arguments, and textual tool definitions | `llm/MarkdownPromptRenderer` |
+| `PromptRenderer` | render the standard inference prompt from function instructions, materialized JSON-compatible arguments, and textual tool definitions | `llm/MarkdownPromptRenderer` |
 | `DecisionTransport` | change how a decision request is prompted, sent, and decoded; raise `sefia.llm.exceptions.DecisionDecodingError` when a completion cannot be decoded as a decision | `llm/transports/` |
 | `LLMClient` (in `llm/_client.py`) | add an LLM provider; raise `sefia.llm.exceptions.LLMCompletionDecodingError` for received responses that cannot be represented safely | `sefia_litellm.LiteLLMClient` |
 | `ToolFunctionInspector` | interpret Python callables for tool names, schemas, and argument binding | `pydantic/PydanticToolFunctionInspector` |
 | `ResultFormatFactory` | create result schemas and restore validated structured results to Python values | `pydantic/PydanticResultFormatFactory` |
-| `StructuredDataConverter` | convert runtime Python values into provider-neutral `StructuredData` before transport | `pydantic/PydanticStructuredDataConverter` |
+| `JsonMaterializer` | materialize runtime Python values into detached `JsonCompatible` before transport | `pydantic/PydanticJsonMaterializer` |
 | `ToolCollector` | a different tool-discovery rule | `DefaultToolCollector` |
 | `Policy` + `MiddlewareSet` | group inference, step, and decision middleware by lifecycle location; build one-offs with `Policy(handlers=..., middleware=...)` or subclass | `sefios` middleware/policies |
 | `MessageComposer` | transform an LLM `MessageLayout` using application-defined conventions; configure through `Session` or `SessionScope` | none |
@@ -153,7 +154,7 @@ implementation noted in parentheses.
 | `_schema/_structured_decision.py` | Builds the provider-compatible decision schema inside a uniform object-root payload envelope, and restores completed output and stream paths to the logical `DecisionSpec` shape. |
 | `_schema/_policy.py` | Declares independent generated/user-defined schema policies, applies permitted corrections, and validates the shared strict-output constraints. |
 | `_schema/_uniform_dictionary.py` | Defines uniform-dictionary entry-array encoding and decoding. |
-| `_schema/_data_format.py` | Translates provider-neutral structured data to and from one prepared wire schema; it has no tool knowledge. |
+| `_schema/_provider_format.py` | Translates provider-neutral structured data to and from one prepared wire schema; it has no tool knowledge. |
 
 ## Where to change what
 
@@ -161,9 +162,9 @@ implementation noted in parentheses.
 | --- | --- |
 | Add an LLM provider | implement `LLMClient`; mirror `packages/sefia_litellm/src/sefia_litellm/_client.py` |
 | Change the logical step-decision shape or validation | `llm/step_decision.py` |
-| Change Pydantic value normalization | `pydantic/_structured_data.py` |
+| Change Pydantic value normalization | `pydantic/_json_materializer.py` |
 | Change Pydantic result schema generation or restoration | `pydantic/_result_format.py` |
-| Change generic `$defs` import or `$ref` rewriting | `llm/json_schema/_composition.py` |
+| Change generic `$defs` import or `$ref` rewriting | `json_schema/_composition.py` |
 | Change LiteLLM's structured decision format | `packages/sefia_litellm/src/sefia_litellm/_schema/` |
 | Add a built-in tool | `packages/sefios/src/sefios/tools/` |
 | Add retry / step-cap / a guard | a `Policy` + `StepMiddleware`/`InferenceMiddleware` in `sefios/middleware/` |
@@ -179,7 +180,7 @@ implementation noted in parentheses.
 | Per-call model/policy switch | `Profile` + the `@profile` decorator |
 | Change Python callable inspection or binding | implement `ToolFunctionInspector` and pass it to `DefaultToolCollector`; reference `pydantic/_tool_function_inspector.py` |
 | Support another result type system | implement `ResultFormatFactory`; reference `pydantic/_result_format.py` |
-| Convert another family of runtime values | implement `StructuredDataConverter`; reference `pydantic/_structured_data.py` |
+| Convert another family of runtime values | implement `JsonMaterializer`; reference `pydantic/_json_materializer.py` |
 | Register a tool from a raw JSON Schema (no signature) | `JsonSchemaToolEntry` / `ToolRegistry.add_json_tool` in `_tool_system/` |
 | Read the serving call's id inside a tool body | `current_tool_call_id` / `current_tool_call_id_for` in `_tool_context.py` |
 | Install a whole tool-discovery rule for a run (e.g. client-defined tools) | pass `tool_collector=` to `SessionScope`/`SessionScope.session()`/`Session` (seam: `ToolCollector`) |

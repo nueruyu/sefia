@@ -13,7 +13,7 @@ from sefia.llm.streaming import (
     StringEnd as OutputStringEnd,
 )
 from sefia_litellm._schema import StructuredDecisionFormat
-from sefia_litellm._schema._data_format import StructuredDataFormat
+from sefia_litellm._schema._provider_format import ProviderJsonFormat
 from sefia_litellm._streaming import (
     consume_completion_stream,
 )
@@ -130,8 +130,8 @@ async def test_stream_dispatches_decoder_events_and_forwards_formats(
     native.finish.return_value = [final_event]
     decision_format = Mock(spec=StructuredDecisionFormat)
     decision_format.decode_stream_event.return_value = logical
-    tool_formats: dict[str, StructuredDataFormat] = {
-        "lookup": Mock(spec=StructuredDataFormat)
+    tool_provider_formats: dict[str, ProviderJsonFormat] = {
+        "lookup": Mock(spec=ProviderJsonFormat)
     }
     callback = AsyncMock()
     wire_response = make_litellm_response(content="done")
@@ -150,7 +150,7 @@ async def test_stream_dispatches_decoder_events_and_forwards_formats(
         reasoning_callback=None,
         messages=messages,
         decision_format=decision_format,
-        tool_data_formats=tool_formats,
+        tool_provider_formats=tool_provider_formats,
         requested_model="gpt-4o",
     )
 
@@ -165,5 +165,5 @@ async def test_stream_dispatches_decoder_events_and_forwards_formats(
         wire_response,
         requested_model="gpt-4o",
         decision_format=decision_format,
-        tool_data_formats=tool_formats,
+        tool_provider_formats=tool_provider_formats,
     )

@@ -1,11 +1,10 @@
 import json
 
+from .._json import JsonSnapshot
 from .._markdown import json_block, text_block
 from .._messages import LLMCompletion, Message
 from .._prompt_renderer import InferencePrompt, PromptRenderer
-from ..json_schema import JsonValue
 from ..step_decision import StepTool
-from ..structured_data import StructuredData
 from ._base import (
     DecisionHistoryItem,
     DecisionRequest,
@@ -58,16 +57,16 @@ def _text_history_messages(
     if not history:
         return []
 
-    records: list[StructuredData] = []
+    records: list[JsonSnapshot] = []
     for item in history:
         if isinstance(item, DecisionToolCalls):
             records.extend(
-                StructuredData.from_object(
+                JsonSnapshot.from_object(
                     {
-                        "tool_call": StructuredData.from_object(
+                        "tool_call": JsonSnapshot.from_object(
                             {
-                                "id": StructuredData.from_scalar(call.id),
-                                "name": StructuredData.from_scalar(call.name),
+                                "id": JsonSnapshot.from_scalar(call.id),
+                                "name": JsonSnapshot.from_scalar(call.name),
                                 "arguments": call.arguments,
                             }
                         )
@@ -77,11 +76,11 @@ def _text_history_messages(
             )
         else:
             records.append(
-                StructuredData.from_object(
+                JsonSnapshot.from_object(
                     {
-                        "tool_result": StructuredData.from_object(
+                        "tool_result": JsonSnapshot.from_object(
                             {
-                                "id": StructuredData.from_scalar(item.tool_call_id),
+                                "id": JsonSnapshot.from_scalar(item.tool_call_id),
                                 "result": item.result,
                             }
                         )
@@ -89,12 +88,13 @@ def _text_history_messages(
                 )
             )
 
-    data = StructuredData.from_array(records)
+    data = JsonSnapshot.from_array(records)
     return [
         Message(
             role="user",
             content=(
-                "## Previous tool interactions\n\n" + json_block(data.to_json_value())
+                "## Previous tool interactions\n\n"
+                + json_block(data.to_json_compatible())
             ),
         )
     ]
@@ -161,18 +161,24 @@ def _rejected_completion_content(completion: LLMCompletion) -> str | None:
     ):
         return None
 
-    response: dict[str, JsonValue] = {}
+    response: dict[str, JsonSnapshot] = {}
     if completion.content is not None:
-        response["content"] = completion.content
+        response["content"] = JsonSnapshot.from_scalar(completion.content)
     if completion.tool_calls:
-        response["tool_calls"] = [
-            {
-                "id": call.id,
-                "name": call.name,
-                "arguments": call.arguments.to_json_value(),
-            }
+        response["tool_calls"] = JsonSnapshot.from_array(
+            JsonSnapshot.from_object(
+                {
+                    "id": JsonSnapshot.from_scalar(call.id),
+                    "name": JsonSnapshot.from_scalar(call.name),
+                    "arguments": call.arguments,
+                }
+            )
             for call in completion.tool_calls
-        ]
+        )
     if completion.structured_output is not None:
-        response["structured_output"] = completion.structured_output.to_json_value()
-    return json.dumps(response, ensure_ascii=False, separators=(",", ":"))
+        response["structured_output"] = completion.structured_output
+    return json.dumps(
+        JsonSnapshot.from_object(response).to_json_compatible(),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )

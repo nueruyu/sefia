@@ -40,7 +40,7 @@ def native_history_messages(
                 Message(
                     role="tool",
                     content=json.dumps(
-                        item.result.to_json_value(),
+                        item.result.to_json_compatible(),
                         ensure_ascii=False,
                         separators=(",", ":"),
                     ),

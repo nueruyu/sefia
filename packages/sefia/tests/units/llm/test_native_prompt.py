@@ -1,24 +1,23 @@
 from unittest.mock import Mock
 
-from sefia.llm import ToolCall
+from sefia.llm import JsonSnapshot, ToolCall
 from sefia.llm.step_decision import DecisionSpec, StepDecisionMode, StepTool
-from sefia.llm.structured_data import StructuredData
+from sefia.llm.transports import DecisionToolCalls, DecisionToolResult
 from sefia.llm.transports._native._prompt import (
     native_history_messages,
     native_response_instructions,
 )
-from sefia.llm.transports import DecisionToolCalls, DecisionToolResult
 
 
 def test_native_history_messages() -> None:
     call = ToolCall(
         id="call-1",
         name="lookup",
-        arguments=StructuredData.from_json({"key": "first"}),
+        arguments=JsonSnapshot.capture({"key": "first"}),
     )
     result = DecisionToolResult(
         tool_call_id=call.id,
-        result=StructuredData.from_json({"value": "found"}),
+        result=JsonSnapshot.capture({"value": "found"}),
     )
     messages = native_history_messages((DecisionToolCalls((call,)), result))
 
@@ -27,7 +26,7 @@ def test_native_history_messages() -> None:
         ToolCall(
             id=call.id,
             name=call.name,
-            arguments=StructuredData.from_json({"key": "first"}),
+            arguments=JsonSnapshot.capture({"key": "first"}),
         ),
     )
     assert messages[0].tool_calls is not None

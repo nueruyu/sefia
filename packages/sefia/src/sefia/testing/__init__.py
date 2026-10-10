@@ -20,9 +20,11 @@ conformance contracts in their own pytest suites.
 
 from __future__ import annotations
 
+import asyncio
 import json
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
-from dataclasses import fields, is_dataclass, replace
+from dataclasses import dataclass, fields, is_dataclass, replace
 from typing import Any, AsyncGenerator, Callable, Coroutine, cast
 
 import glyff
@@ -39,11 +41,11 @@ from typing_extensions import final, override
 from .._interfaces.history_storage import HistorySnapshot, HistoryStorage
 from .._session import Session
 from ..llm import LLMClient, LLMCompletion, Message
+from ..llm._json import JsonSnapshot
 from ..llm.step_decision import DecisionSpec, StepTool
-from ..llm.structured_data import StructuredData
 from ..llm.streaming import OutputStreamCallback, OutputStreamEvent
 from ..llm.transports import DecisionObserver
-from ..pydantic import PydanticStructuredDataConverter
+from ..pydantic import PydanticJsonMaterializer
 from ._decision_transport_contract import (
     DecisionTransportCase,
     DecisionTransportContract,
@@ -66,8 +68,8 @@ from ._tool_collector_contract import ToolCollectorCase, ToolCollectorContract
 
 
 def _snapshot_value(value: Any) -> Any:
-    if isinstance(value, StructuredData):
-        return _snapshot_value(value.tree)
+    if isinstance(value, JsonSnapshot):
+        return _snapshot_value(value.to_json_compatible())
     if isinstance(value, Message):
         result: dict[str, Any] = {"role": value.role}
         content = value.content
@@ -96,13 +98,58 @@ def _snapshot_value(value: Any) -> Any:
 
 
 @final
+@dataclass(frozen=True)
+class StreamContent:
+    """One chunk sent to the response-text callback."""
+
+    text: str
+
+
+@final
+@dataclass(frozen=True)
+class StreamReasoning:
+    """One chunk sent to the reasoning-text callback."""
+
+    text: str
+
+
+@final
+@dataclass(frozen=True)
+class StreamOutput:
+    """One logical structured-output event sent to the output callback."""
+
+    event: OutputStreamEvent
+
+
+ScriptedStreamEvent = StreamContent | StreamReasoning | StreamOutput
+
+
+@final
+@dataclass(frozen=True)
+class ScriptedCompletion:
+    """A final LLM completion with an ordered stream of callback events.
+
+    Events are dispatched in their scripted order, only to callbacks provided
+    by the caller. The final completion remains the authoritative response.
+    """
+
+    completion: LLMCompletion
+    events: Sequence[ScriptedStreamEvent] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "events", tuple(self.events))
+
+
+@final
 class MockLLMClient(LLMClient):
     """An ``LLMClient`` that replays scripted ``completions`` and records every
     request it receives in ``requests`` (messages as plain dicts, plus the
     tools, output schema, and callbacks)."""
 
-    def __init__(self, completions: list[LLMCompletion]):
-        self.completions = list(completions)
+    def __init__(
+        self, completions: Sequence[LLMCompletion | ScriptedCompletion]
+    ) -> None:
+        self.completions: list[LLMCompletion | ScriptedCompletion] = list(completions)
         self.requests: list[dict[str, Any]] = []
 
     @override
@@ -129,7 +176,23 @@ class MockLLMClient(LLMClient):
         )
         if not self.completions:
             raise AssertionError("MockLLMClient has no more completions.")
-        completion = self.completions.pop(0)
+        scripted = self.completions.pop(0)
+        if isinstance(scripted, ScriptedCompletion):
+            completion = scripted.completion
+            for event in scripted.events:
+                if isinstance(event, StreamReasoning):
+                    if reasoning_callback is not None:
+                        await reasoning_callback(event.text)
+                elif isinstance(event, StreamContent):
+                    if stream_callback is not None:
+                        await stream_callback(event.text)
+                else:
+                    if output_callback is not None:
+                        await output_callback(event.event)
+                # Streaming consumers (such as tool previews) run between chunks.
+                await asyncio.sleep(0)
+        else:
+            completion = scripted
         if (
             decision_spec is not None
             and completion.structured_output is None
@@ -138,7 +201,7 @@ class MockLLMClient(LLMClient):
             try:
                 completion = replace(
                     completion,
-                    structured_output=StructuredData.parse_json(completion.content),
+                    structured_output=JsonSnapshot.parse_json(completion.content),
                 )
             except json.JSONDecodeError:
                 pass
@@ -206,15 +269,15 @@ def result_completion(result: Any) -> LLMCompletion:
     including dataclasses and Pydantic models, which serialize to the object
     shape the step-decision schema validates.
     """
-    data = PydanticStructuredDataConverter().to_structured_data(
+    data = PydanticJsonMaterializer().materialize(
         {"decision": "result", "result": result}
     )
-    return LLMCompletion(content=json.dumps(data.to_json_value()))
+    return LLMCompletion(content=json.dumps(data))
 
 
 def tool_calls_completion(*calls: tuple[str, dict[str, Any]]) -> LLMCompletion:
     """A scripted "tool_calls" decision from ``(tool_name, arguments)`` pairs."""
-    data = PydanticStructuredDataConverter().to_structured_data(
+    data = PydanticJsonMaterializer().materialize(
         {
             "decision": "tool_calls",
             "tool_calls": [
@@ -222,7 +285,7 @@ def tool_calls_completion(*calls: tuple[str, dict[str, Any]]) -> LLMCompletion:
             ],
         }
     )
-    return LLMCompletion(content=json.dumps(data.to_json_value()))
+    return LLMCompletion(content=json.dumps(data))
 
 
 @asynccontextmanager
@@ -259,6 +322,10 @@ __all__ = [
     "MemoryHistoryStorage",
     "MockLLMClient",
     "RecordingDecisionObserver",
+    "ScriptedCompletion",
+    "StreamContent",
+    "StreamOutput",
+    "StreamReasoning",
     "StreamingLLMClientCase",
     "StreamingLLMClientContract",
     "ToolCollectorCase",

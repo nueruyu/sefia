@@ -3,10 +3,10 @@ from unittest.mock import AsyncMock
 
 from litellm import ChatCompletionMessageToolCall, ModelResponse
 from sefia._tool_system import ToolRegistry
+from sefia.json_schema import JsonSchemaDocument
 from sefia.llm import (
     Message,
 )
-from sefia.llm.json_schema import JsonSchemaDocument
 from sefia.llm.step_decision import DecisionSpec, StepTool, ToolSchemaSource
 from sefia.pydantic import PydanticResultFormatFactory
 from sefia_litellm._client import (
@@ -49,7 +49,7 @@ async def test_complete_envelopes_tool_or_result_union(
     assert "anyOf" not in schema
     assert "anyOf" in schema["properties"]["payload"]
     assert response.structured_output is not None
-    assert response.structured_output.tree == {
+    assert response.structured_output.to_json_compatible() == {
         "decision": "tool_calls",
         "tool_calls": [{"name": "lookup", "arguments": {"key": "item"}}],
     }
@@ -100,4 +100,6 @@ async def test_complete_translates_native_tool_schema_and_arguments(
         "parameters"
     ]
     assert sent_schema["properties"]["labels"]["type"] == "array"
-    assert response.tool_calls[0].arguments.tree == {"labels": {"important": 2}}
+    assert response.tool_calls[0].arguments.to_json_compatible() == {
+        "labels": {"important": 2}
+    }

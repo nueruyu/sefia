@@ -8,7 +8,7 @@ from sefia._tool_system import (
     SignatureToolEntry,
     ToolEntry,
 )
-from sefia.llm.json_schema import SchemaNode
+from sefia.json_schema import SchemaNode
 from sefia.llm.step_decision import DecisionSpec
 from sefia.llm.streaming import OutputStreamEvent, Scalar, StringDelta, StringEnd
 from sefia.pydantic import (
@@ -39,7 +39,7 @@ def test_structured_decision_format_returns_defensive_schema_copies() -> None:
     assert decision_format.schema.to_dict()
 
 
-def test_tool_description_is_part_of_the_wire_schema() -> None:
+def test_tool_description_is_part_of_the_provider_schema() -> None:
     schema = _prepare(_decision_model(Never, [_tool()])).schema.to_dict()
 
     assert _tool_call_item(schema)["description"] == (
@@ -47,7 +47,7 @@ def test_tool_description_is_part_of_the_wire_schema() -> None:
     )
 
 
-def test_tool_without_description_omits_wire_schema_description() -> None:
+def test_tool_without_description_omits_provider_schema_description() -> None:
     tool = _raw_tool(
         {
             "type": "object",
@@ -62,7 +62,9 @@ def test_tool_without_description_omits_wire_schema_description() -> None:
     assert "description" not in _tool_call_item(schema)
 
 
-def test_wire_schema_omits_openapi_discriminator_for_provider_compatibility() -> None:
+def test_provider_schema_omits_openapi_discriminator_for_provider_compatibility() -> (
+    None
+):
     schema = _prepare(
         _decision_model(
             str,
