@@ -1,6 +1,5 @@
 from pathlib import Path
 import json
-import subprocess
 
 import pytest
 from packaging.version import InvalidVersion, Version
@@ -47,57 +46,6 @@ def test_impossible_and_conflicting_bounds(manifests: Path) -> None:
         dependencies.minimum_bounds(manifests, "sefia-litellm")
 
 
-@pytest.mark.parametrize(
-    ("path", "expected"),
-    [
-        (
-            "packages/sefia/src/change.py",
-            ["sefia", "sefia-litellm", "sefia-typer", "sefia-fastapi", "sefios"],
-        ),
-        ("packages/sefia_litellm/pyproject.toml", ["sefia-litellm", "sefios"]),
-        ("packages/sefios/src/change.py", ["sefios"]),
-        ("docs/tutorial.md", []),
-        ("uv.lock", list(dependencies.PACKAGE_ORDER)),
-        (
-            ".github/workflows/package-compatibility.yml",
-            list(dependencies.PACKAGE_ORDER),
-        ),
-        (
-            "tools/package_compatibility/pyproject.toml",
-            list(dependencies.PACKAGE_ORDER),
-        ),
-        (
-            "tools/package_compatibility/tests/test_cli.py",
-            list(dependencies.PACKAGE_ORDER),
-        ),
-        (
-            "pyproject.toml",
-            ["sefia", "sefia-litellm", "sefia-typer", "sefia-fastapi", "sefios"],
-        ),
-        (
-            "tools/package_compatibility/src/package_compatibility/validation.py",
-            ["sefia", "sefia-litellm", "sefia-typer", "sefia-fastapi", "sefios"],
-        ),
-    ],
-)
-def test_impact(manifests: Path, path: str, expected: list[str]) -> None:
-    assert dependencies.affected_paths(manifests, [path]) == expected
-
-
-def test_new_normalized_transitive_edge(manifests: Path) -> None:
-    add_dependency(manifests, "sefia_typer", "Sefia_LiteLLM [extra] >=0.6.0, <0.7.0")
-    assert dependencies.affected_paths(
-        manifests, ["packages/sefia_litellm/pyproject.toml"]
-    ) == [
-        "sefia-litellm",
-        "sefia-typer",
-        "sefios",
-    ]
-    # The incoming extra is validated rather than silently dropped.
-    with pytest.raises(ValueError, match="no extra"):
-        dependencies.candidate_closure(manifests, "sefia-typer")
-
-
 def test_extra_expansion_and_candidate_closure(manifests: Path) -> None:
     assert dependencies.candidate_closure(manifests, "sefios") == list(
         dependencies.PACKAGE_ORDER
@@ -131,35 +79,12 @@ def test_new_edge_closure_and_cycle(manifests: Path) -> None:
 def test_markers(manifests: Path) -> None:
     add_dependency(manifests, "sefia", 'sefia-typer>=0.6.0; python_version < "2"')
     assert dependencies.candidate_closure(manifests, "sefia") == ["sefia"]
-    assert "sefia" in dependencies.affected_paths(
-        manifests, ["packages/sefia_typer/src/change.py"]
-    )
 
 
 def test_unsupported_requirements(manifests: Path) -> None:
     add_dependency(manifests, "sefia", "sefia-typer @ https://example.com/wheel.whl")
     with pytest.raises(ValueError, match="Unsupported internal URL"):
         dependencies.candidate_closure(manifests, "sefia")
-
-
-def test_merge_base_selection(manifests: Path) -> None:
-    def git(*args: str) -> str:
-        return subprocess.check_output(["git", *args], cwd=manifests, text=True).strip()
-
-    git("init", "-b", "main")
-    git("config", "user.email", "fixture@example.com")
-    git("config", "user.name", "Fixture")
-    git("add", ".")
-    git("commit", "-m", "initial")
-    git("switch", "-c", "feature")
-    (manifests / "README.md").write_text("documentation only")
-    git("add", ".")
-    git("commit", "-m", "docs")
-    git("switch", "main")
-    add_dependency(manifests, "sefia", "typing-extensions>=4.6")
-    git("add", ".")
-    git("commit", "-m", "base-only change")
-    assert dependencies.affected_packages(manifests, "main", "feature") == []
 
 
 def test_inherited_extra_version_validation(manifests: Path) -> None:

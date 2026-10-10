@@ -81,7 +81,7 @@ def test_candidate_orchestration(
     }
 
 
-def test_minimum_candidate_executes(
+def test_unreleased_minimum_does_not_use_exact_candidate(
     manifests: Path,
     wheels: Path,
     commands: list[list[str]],
@@ -90,16 +90,9 @@ def test_minimum_candidate_executes(
     unpublished(monkeypatch)
     assert (
         validation.validate(manifests, "sefios", "0.6.0", wheels, minimum=True)
-        == "available"
+        == "unreleased"
     )
-    install = commands[1]
-    assert any(arg.startswith("sefios[all] @ file:") for arg in install)
-    assert len([arg for arg in install if arg.endswith(".whl")]) == 5
-    assert commands[-2][1:] == ["-m", "pip", "check"]
-    assert commands[-1][1:3] == ["-m", "pytest"]
-    assert json.loads(commands[-3][-3]) == {
-        name: "0.6.0" for name in dependencies.PACKAGE_ORDER
-    }
+    assert not commands
 
 
 def test_unavailable_and_not_applicable(
@@ -138,7 +131,7 @@ def test_published_minimum_takes_priority(
     assert len([arg for arg in commands[1] if arg.endswith(".whl")]) == 1
 
 
-def test_mixed_minima(
+def test_mixed_published_and_unreleased_minima_are_not_verified(
     manifests: Path,
     wheels: Path,
     commands: list[list[str]],
@@ -146,8 +139,6 @@ def test_mixed_minima(
 ) -> None:
     path = manifests / "packages/sefios/pyproject.toml"
     path.write_text(path.read_text().replace("sefia>=0.6.0", "sefia>=0.6.1"))
-    for wheel in wheels.iterdir():
-        wheel.rename(wheel.with_name(wheel.name.replace("0.6.0", "0.6.1")))
 
     def published(root: Path, version: str) -> bool:
         assert root.is_dir()
@@ -156,17 +147,14 @@ def test_mixed_minima(
     monkeypatch.setattr(validation, "release_available", published)
     assert (
         validation.validate(manifests, "sefios", "0.6.1", wheels, minimum=True)
-        == "available"
+        == "unreleased"
     )
-    assert len([arg for arg in commands[1] if arg.endswith(".whl")]) == 2
-    expected = json.loads(commands[-3][-3])
-    assert expected["sefia"] == "0.6.1"
-    assert expected["sefia-litellm"] == "0.6.0"
+    assert not commands
 
 
 @pytest.mark.parametrize("stage", ["install", "verify", "check", "tests"])
 @pytest.mark.parametrize(
-    "mode", ["candidate", "minimum-candidate", "minimum-published"]
+    "mode", ["candidate", "minimum-published"]
 )
 def test_failure_propagation_and_cleanup(
     manifests: Path,

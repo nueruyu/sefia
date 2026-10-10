@@ -91,19 +91,6 @@ def release_available(root: Path, version: str) -> bool:
     return status == 0
 
 
-def minimum_sources(root: Path, distribution: str, candidate: str) -> dict[str, str]:
-    sources: dict[str, str] = {}
-    for name, version in minimum_bounds(root, distribution).items():
-        if release_available(root, version):
-            sources[name] = "published"
-        elif Version(version) == Version(candidate):
-            sources[name] = "candidate"
-        else:
-            sources[name] = "unreleased"
-        print(f"{distribution}: {name}=={version}: {sources[name]}", file=sys.stderr)
-    return sources
-
-
 # Executed by the validation interpreter, which deliberately has no tooling installed.
 VERIFY_INSTALLATION = """
 import json
@@ -170,14 +157,16 @@ def validate(
         if not expected:
             print(f"{distribution}: minimum not-applicable (no internal dependencies)")
             return "not-applicable"
-        sources = minimum_sources(root, distribution, version)
-        if "unreleased" in sources.values():
-            print(f"{distribution}: minimum unreleased / not verified")
+        missing = {
+            bound for bound in expected.values()
+            if not release_available(root, bound)
+        }
+        if missing:
+            tags = ", ".join(f"v{v}" for v in sorted(missing))
+            print(f"{distribution}: minimum unreleased / not verified: {tags}")
             return "unreleased"
-        local_names = [
-            name for name, source in sources.items() if source == "candidate"
-        ]
-        artifacts = wheel_artifacts([distribution, *local_names], version, wheels)
+        print(f"{distribution}: testing published minimum dependencies")
+        artifacts = wheel_artifacts([distribution], version, wheels)
     else:
         expected = {name: version for name in candidate_closure(root, distribution)}
         artifacts = wheel_artifacts(list(expected), version, wheels)
@@ -198,16 +187,7 @@ def validate(
         target = PACKAGES[distribution]["requirement"]
         if minimum:
             requirement = f"{target} @ {artifacts[0].as_uri()}"
-            run(
-                [
-                    *pip,
-                    requirement,
-                    *(str(path) for path in artifacts[1:]),
-                    *TEST_REQUIREMENTS,
-                ],
-                root,
-                environment,
-            )
+            run([*pip, requirement, *TEST_REQUIREMENTS], root, environment)
         else:
             run(
                 [*pip, "--no-index", "--no-deps", *(str(path) for path in artifacts)],

@@ -69,9 +69,9 @@ prompt/decision schema, or before a release.
 The development tool in `tools/package_compatibility` tests built wheels in isolated
 environments; CI uses the same CLI, independently of tag-triggered publishing.
 Run `uv run --package sefia-package-compatibility package-compatibility --help`
-for local planning, builds, and validation. PRs check affected packages; manual CI
-requires the intended release version. Minimum checks use published releases first,
-or exact-version candidate wheels before release, and report unavailable minima.
+for local planning, builds, and validation. PRs check all five runtime packages; manual CI requires the intended release
+version. Minimum checks test previously published lower-bound versions, and
+report unreleased minima as not yet verified.
 
 ## Where to make a change
 

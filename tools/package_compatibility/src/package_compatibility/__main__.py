@@ -15,9 +15,6 @@ def parser() -> argparse.ArgumentParser:
     )
     commands = result.add_subparsers(dest="command", required=True)
     plan = commands.add_parser("plan")
-    plan.add_argument("--all", action="store_true")
-    plan.add_argument("--base")
-    plan.add_argument("--head")
     plan.add_argument("--version")
     build = commands.add_parser("build")
     build.add_argument("--output", type=Path, required=True)
@@ -39,13 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         root = dependencies.repository_root(args.root)
         if args.command == "plan":
-            if args.all:
-                selected = list(dependencies.PACKAGE_ORDER)
-            elif args.base and args.head:
-                selected = dependencies.affected_packages(root, args.base, args.head)
-            else:
-                raise ValueError("--base and --head are required without --all")
-            for name in selected:
+            for name in dependencies.PACKAGE_ORDER:
                 dependencies.candidate_closure(root, name)
             version = dependencies.candidate_version(root, args.version)
             source = (
@@ -54,8 +45,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Candidate version: {version} ({source})", file=sys.stderr)
             plan = {
                 "candidate_version": version,
-                "matrix": {"include": [{"distribution": name} for name in selected]},
-                "has_packages": bool(selected),
+                "matrix": {
+                    "include": [
+                        {"distribution": name} for name in dependencies.PACKAGE_ORDER
+                    ]
+                },
             }
             print(json.dumps(plan, separators=(",", ":")))
         elif args.command == "build":

@@ -14,12 +14,11 @@ permissions:
 
 jobs:
   prepare:
-    name: Resolve affected packages
+    name: Plan package checks
     runs-on: ubuntu-latest
     outputs:
       candidate-version: ${{ steps.selection.outputs.candidate-version }}
       matrix: ${{ steps.selection.outputs.matrix }}
-      has-packages: ${{ steps.selection.outputs.has-packages }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,16 +29,14 @@ jobs:
       - name: Plan compatibility checks
         id: selection
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RELEASE_VERSION: ${{ inputs.candidate_version }}
         shell: bash
         run: |
           set -euo pipefail
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            args=(--all --version "$RELEASE_VERSION")
+            args=(--version "$RELEASE_VERSION")
           else
-            args=(--base "$BASE_SHA" --head "$HEAD_SHA")
+            args=()
           fi
           uv run --locked --package sefia-package-compatibility \
             package-compatibility plan --root . "${args[@]}" > compatibility-plan.json
@@ -52,13 +49,11 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               print(f"candidate-version={plan['candidate_version']}", file=output)
               print(f"matrix={json.dumps(plan['matrix'], separators=(',', ':'))}", file=output)
-              print(f"has-packages={str(plan['has_packages']).lower()}", file=output)
           print(json.dumps(plan))
           PY
 
   build:
     name: Build candidate wheels
-    if: needs.prepare.outputs.has-packages == 'true'
     needs: prepare
     runs-on: ubuntu-latest
     steps:
@@ -84,7 +79,6 @@ jobs:
 
   validate-candidate:
     name: Candidate / ${{ matrix.distribution }}
-    if: needs.prepare.outputs.has-packages == 'true'
     needs: [prepare, build]
     runs-on: ubuntu-latest
     strategy:
@@ -113,7 +107,6 @@ jobs:
 
   validate-minimum:
     name: Minimum bounds / ${{ matrix.distribution }}
-    if: needs.prepare.outputs.has-packages == 'true'
     needs: [prepare, build]
     runs-on: ubuntu-latest
     strategy:

@@ -13,12 +13,11 @@ from package_compatibility.__main__ import main
 
 
 def test_json_plan(manifests: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["plan", "--root", str(manifests), "--all", "--version", "0.6.1"]) == 0
+    assert main(["plan", "--root", str(manifests), "--version", "0.6.1"]) == 0
     captured = capsys.readouterr()
     plan = json.loads(captured.out)
     assert plan["candidate_version"] == "0.6.1"
     assert len(plan["matrix"]["include"]) == 5
-    assert plan["has_packages"] is True
     assert "explicit intended release" in captured.err
 
 
@@ -45,9 +44,9 @@ def test_invalid_version_fails_before_build(
     assert "failed" in capsys.readouterr().err
 
 
-def test_missing_root_and_selection(tmp_path: Path, manifests: Path) -> None:
-    assert main(["plan", "--root", str(tmp_path / "missing"), "--all"]) == 1
-    assert main(["plan", "--root", str(manifests)]) == 1
+def test_missing_root_and_default_plan(tmp_path: Path, manifests: Path) -> None:
+    assert main(["plan", "--root", str(tmp_path / "missing")]) == 1
+    assert main(["plan", "--root", str(manifests)]) == 0
 
 
 def test_installed_entrypoints_outside_checkout(manifests: Path) -> None:
@@ -66,14 +65,14 @@ def test_installed_entrypoints_outside_checkout(manifests: Path) -> None:
             capture_output=True,
         )
         result = subprocess.run(
-            [*entrypoint, "plan", "--root", str(manifests), "--all"],
+            [*entrypoint, "plan", "--root", str(manifests)],
             env=environment,
             cwd=manifests,
             check=True,
             capture_output=True,
             text=True,
         )
-        assert json.loads(result.stdout)["has_packages"] is True
+        assert len(json.loads(result.stdout)["matrix"]["include"]) == 5
 
 
 def test_test_exit_two_is_failure_not_unreleased(

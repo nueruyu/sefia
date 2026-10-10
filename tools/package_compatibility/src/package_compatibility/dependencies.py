@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import subprocess
 import tomllib
 from pathlib import Path
 from typing import TypedDict, cast
@@ -57,13 +56,6 @@ PACKAGES: dict[str, Package] = {
 
 PACKAGE_ORDER = tuple(PACKAGES)
 INTERNAL_DISTRIBUTIONS = frozenset(PACKAGES)
-
-GLOBAL_COMPATIBILITY_PATHS = {
-    ".github/workflows/package-compatibility.yml",
-    "pyproject.toml",
-    "uv.lock",
-}
-
 
 def _project(root: Path, distribution: str) -> Project:
     path = root / PACKAGES[distribution]["path"] / "pyproject.toml"
@@ -186,35 +178,6 @@ def candidate_version(root: Path, explicit: str | None = None) -> str:
                 "update the intended version or deliberately revise package declarations."
             )
     return str(candidate)
-
-
-def affected_paths(root: Path, changed: list[str]) -> list[str]:
-    if any(
-        path in GLOBAL_COMPATIBILITY_PATHS
-        or path.startswith("tools/package_compatibility/")
-        for path in changed
-    ):
-        return list(PACKAGE_ORDER)
-    affected = {
-        name
-        for name, package in PACKAGES.items()
-        if any(path.startswith(f"{package['path']}/") for path in changed)
-    }
-    while True:
-        previous = set(affected)
-        for name in PACKAGE_ORDER:
-            dependencies = internal_requirements(root, name, set(), conservative=True)
-            if any(canonicalize_name(r.name) in affected for r in dependencies):
-                affected.add(name)
-        if previous == affected:
-            return [name for name in PACKAGE_ORDER if name in affected]
-
-
-def affected_packages(root: Path, base: str, head: str) -> list[str]:
-    changed = subprocess.check_output(
-        ["git", "diff", "--name-only", f"{base}...{head}"], cwd=root, text=True
-    ).splitlines()
-    return affected_paths(root, changed)
 
 
 def minimum_bounds(root: Path, distribution: str) -> dict[str, str]:
