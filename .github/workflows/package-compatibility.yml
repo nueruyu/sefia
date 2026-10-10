@@ -1,0 +1,145 @@
+name: Package compatibility
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      candidate_version:
+        description: Intended release version (for example 0.7.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Plan package checks
+    runs-on: ubuntu-latest
+    outputs:
+      candidate-version: ${{ steps.selection.outputs.candidate-version }}
+      matrix: ${{ steps.selection.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Plan compatibility checks
+        id: selection
+        env:
+          RELEASE_VERSION: ${{ inputs.candidate_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            args=(--version "$RELEASE_VERSION")
+          else
+            args=()
+          fi
+          uv run --locked --package sefia-package-compatibility \
+            package-compatibility plan --root . "${args[@]}" > compatibility-plan.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          plan = json.loads(Path("compatibility-plan.json").read_text())
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"candidate-version={plan['candidate_version']}", file=output)
+              print(f"matrix={json.dumps(plan['matrix'], separators=(',', ':'))}", file=output)
+          print(json.dumps(plan))
+          PY
+
+  build:
+    name: Build candidate wheels
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Build runtime wheels
+        env:
+          CANDIDATE_VERSION: ${{ needs.prepare.outputs.candidate-version }}
+        run: |
+          uv run --locked --package sefia-package-compatibility \
+            package-compatibility build --root . \
+            --version "$CANDIDATE_VERSION" --output candidate-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-compatibility-candidates
+          path: candidate-dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  validate-candidate:
+    name: Candidate / ${{ matrix.distribution }}
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-compatibility-candidates
+          path: candidate-dist
+      - name: Validate candidate graph
+        env:
+          CANDIDATE_VERSION: ${{ needs.prepare.outputs.candidate-version }}
+          DISTRIBUTION: ${{ matrix.distribution }}
+        run: |
+          uv run --locked --package sefia-package-compatibility \
+            package-compatibility validate-candidate --root . \
+            --distribution "$DISTRIBUTION" --version "$CANDIDATE_VERSION" \
+            --wheels candidate-dist
+
+  validate-minimum:
+    name: Minimum bounds / ${{ matrix.distribution }}
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-compatibility-candidates
+          path: candidate-dist
+      - name: Validate minimum dependencies
+        env:
+          CANDIDATE_VERSION: ${{ needs.prepare.outputs.candidate-version }}
+          DISTRIBUTION: ${{ matrix.distribution }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          uv run --locked --package sefia-package-compatibility \
+            package-compatibility validate-minimum --root . \
+            --distribution "$DISTRIBUTION" --version "$CANDIDATE_VERSION" \
+            --wheels candidate-dist
+          status=$?
+          set -e
+          case "$status" in
+            0) echo "$DISTRIBUTION: minimum verified (see artifact sources in logs)." >> "$GITHUB_STEP_SUMMARY" ;;
+            10) echo "$DISTRIBUTION: unreleased minimum / not verified." >> "$GITHUB_STEP_SUMMARY" ;;
+            11) echo "$DISTRIBUTION: minimum not applicable." >> "$GITHUB_STEP_SUMMARY" ;;
+            *) exit "$status" ;;
+          esac

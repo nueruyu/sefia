@@ -15,6 +15,7 @@ A `uv` workspace (`pyproject.toml` → `[tool.uv.workspace]`) of small packages:
 | **sefia_litellm** | `packages/sefia_litellm` | Provider adapter — an `LLMClient` implemented over LiteLLM. |
 | **sefia_typer** | `packages/sefia_typer` | Typer (CLI) building blocks: CLI reporter types and exceptions; input routing lives in `sefios`. |
 | **sefia_fastapi** | `packages/sefia_fastapi` | FastAPI (HTTP) building blocks: SSE streams (`sefia_fastapi.events.SessionEvents`) with the SSE event names as the single source of truth (`SSEEvent`), and HTTP-facing exceptions in `sefia_fastapi.exceptions`. |
+| **package_compatibility** | `tools/package_compatibility` | Development-only wheel compatibility CLI, metadata policy, and isolated validation tests. |
 | **examples** | `examples` | Runnable end-to-end workflows. |
 | **glyff** | *(separate repo)* | Content-addressed durable execution. A dependency, not vendored. |
 | **jsonweir** | *(separate repo / PyPI)* | Standalone incremental JSON parser used for streaming tool args. |
