@@ -20,9 +20,11 @@ conformance contracts in their own pytest suites.
 
 from __future__ import annotations
 
+import asyncio
 import json
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
-from dataclasses import fields, is_dataclass, replace
+from dataclasses import dataclass, fields, is_dataclass, replace
 from typing import Any, AsyncGenerator, Callable, Coroutine, cast
 
 import glyff
@@ -96,13 +98,58 @@ def _snapshot_value(value: Any) -> Any:
 
 
 @final
+@dataclass(frozen=True)
+class StreamContent:
+    """One chunk sent to the response-text callback."""
+
+    text: str
+
+
+@final
+@dataclass(frozen=True)
+class StreamReasoning:
+    """One chunk sent to the reasoning-text callback."""
+
+    text: str
+
+
+@final
+@dataclass(frozen=True)
+class StreamOutput:
+    """One logical structured-output event sent to the output callback."""
+
+    event: OutputStreamEvent
+
+
+ScriptedStreamEvent = StreamContent | StreamReasoning | StreamOutput
+
+
+@final
+@dataclass(frozen=True)
+class ScriptedCompletion:
+    """A final LLM completion with an ordered stream of callback events.
+
+    Events are dispatched in their scripted order, only to callbacks provided
+    by the caller. The final completion remains the authoritative response.
+    """
+
+    completion: LLMCompletion
+    events: Sequence[ScriptedStreamEvent] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "events", tuple(self.events))
+
+
+@final
 class MockLLMClient(LLMClient):
     """An ``LLMClient`` that replays scripted ``completions`` and records every
     request it receives in ``requests`` (messages as plain dicts, plus the
     tools, output schema, and callbacks)."""
 
-    def __init__(self, completions: list[LLMCompletion]):
-        self.completions = list(completions)
+    def __init__(
+        self, completions: Sequence[LLMCompletion | ScriptedCompletion]
+    ) -> None:
+        self.completions: list[LLMCompletion | ScriptedCompletion] = list(completions)
         self.requests: list[dict[str, Any]] = []
 
     @override
@@ -129,7 +176,23 @@ class MockLLMClient(LLMClient):
         )
         if not self.completions:
             raise AssertionError("MockLLMClient has no more completions.")
-        completion = self.completions.pop(0)
+        scripted = self.completions.pop(0)
+        if isinstance(scripted, ScriptedCompletion):
+            completion = scripted.completion
+            for event in scripted.events:
+                if isinstance(event, StreamReasoning):
+                    if reasoning_callback is not None:
+                        await reasoning_callback(event.text)
+                elif isinstance(event, StreamContent):
+                    if stream_callback is not None:
+                        await stream_callback(event.text)
+                else:
+                    if output_callback is not None:
+                        await output_callback(event.event)
+                # Streaming consumers (such as tool previews) run between chunks.
+                await asyncio.sleep(0)
+        else:
+            completion = scripted
         if (
             decision_spec is not None
             and completion.structured_output is None
@@ -259,6 +322,10 @@ __all__ = [
     "MemoryHistoryStorage",
     "MockLLMClient",
     "RecordingDecisionObserver",
+    "ScriptedCompletion",
+    "StreamContent",
+    "StreamOutput",
+    "StreamReasoning",
     "StreamingLLMClientCase",
     "StreamingLLMClientContract",
     "ToolCollectorCase",
