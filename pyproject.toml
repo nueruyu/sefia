@@ -5,7 +5,8 @@ members = [
     "packages/sefia_typer",
     "packages/sefia_fastapi",
     "packages/sefios",
-    "examples"
+    "examples",
+    "tools/package_compatibility",
 ]
 
 [tool.uv.sources]
@@ -38,6 +39,7 @@ source = [
     "sefia_typer",
     "sefia_fastapi",
     "sefios",
+    "package_compatibility",
 ]
 
 [tool.coverage.report]
@@ -67,6 +69,8 @@ include = [
     "packages/sefios/src",
     "packages/sefios/tests",
     "examples",
+    "tools/package_compatibility/src",
+    "tools/package_compatibility/tests",
 ]
 exclude = [".venv", ".uv-cache", "**/__pycache__"]
 venvPath = "."
@@ -83,6 +87,7 @@ executionEnvironments = [
     { root = "packages/sefia_typer/tests", reportPrivateUsage = false },
     { root = "packages/sefia_fastapi/tests", reportPrivateUsage = false },
     { root = "packages/sefios/tests", reportPrivateUsage = false },
+    { root = "tools/package_compatibility/tests" },
     { root = "examples/tests", extraPaths = ["."], reportPrivateUsage = false },
     { root = "examples", reportUnknownMemberType = false, reportUnusedFunction = false },
     { root = "." },

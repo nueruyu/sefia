@@ -1,0 +1,20 @@
+[project]
+name = "sefia-package-compatibility"
+version = "0.1.0"
+description = "Internal development tool for Sefia package compatibility checks."
+requires-python = ">=3.11"
+classifiers = ["Private :: Do Not Upload"]
+dependencies = ["packaging>=24", "build>=1.2"]
+
+[project.scripts]
+package-compatibility = "package_compatibility.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/package_compatibility"]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]

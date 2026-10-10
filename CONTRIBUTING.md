@@ -66,12 +66,12 @@ prompt/decision schema, or before a release.
 
 ## Package compatibility checks
 
-The `Package compatibility` CI workflow tests built wheels in isolated environments,
-independently of the existing tag-triggered publishing workflows. Pull requests
-validate affected packages and their dependents. Run it manually with the intended
-release version to check all packages before a release. Checks against declared
-minimum internal dependency versions use matching candidate wheels before release,
-or published versions afterward. Checks skip only when neither is available.
+The development tool in `tools/package_compatibility` tests built wheels in isolated
+environments; CI uses the same CLI, independently of tag-triggered publishing.
+Run `uv run --package sefia-package-compatibility package-compatibility --help`
+for local planning, builds, and validation. PRs check affected packages; manual CI
+requires the intended release version. Minimum checks use published releases first,
+or exact-version candidate wheels before release, and report unavailable minima.
 
 ## Where to make a change
 
