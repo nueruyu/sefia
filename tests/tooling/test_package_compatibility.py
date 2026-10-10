@@ -23,15 +23,36 @@ def helper() -> ModuleType:
     return module
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def manifests(
     helper: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Path:
-    for package in helper.PACKAGES.values():
-        relative = Path(package["path"]) / "pyproject.toml"
-        destination = tmp_path / relative
+    dependency = "sefia>=0.6.0,<0.7.0"
+    extras = {
+        "sefia": {"testing": ["pytest>=8.0"]},
+        "sefios": {
+            "litellm": ["sefia-litellm>=0.6.0,<0.7.0"],
+            "cli": ["sefia-typer>=0.6.0,<0.7.0"],
+            "fastapi": ["sefia-fastapi>=0.6.0,<0.7.0"],
+            "all": ["sefios[litellm]", "sefios[cli]", "sefios[fastapi]"],
+        },
+    }
+    for name, package in helper.PACKAGES.items():
+        destination = tmp_path / package["path"] / "pyproject.toml"
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text((helper.ROOT / relative).read_text())
+        dependencies = [] if name == "sefia" else [dependency]
+        lines = [
+            "[project]",
+            f"name = {json.dumps(name)}",
+            f"dependencies = {json.dumps(dependencies)}",
+        ]
+        if name in extras:
+            lines.append("[project.optional-dependencies]")
+            lines.extend(
+                f"{extra} = {json.dumps(requirements)}"
+                for extra, requirements in extras[name].items()
+            )
+        destination.write_text("\n".join(lines) + "\n")
     monkeypatch.setattr(helper, "ROOT", tmp_path)
     return tmp_path
 
@@ -188,11 +209,15 @@ def test_merge_base_selection(helper: ModuleType, manifests: Path) -> None:
     assert helper.affected_packages("main", "feature") == []
 
 
-def test_cli(helper: ModuleType) -> None:
+def test_cli(helper: ModuleType, manifests: Path) -> None:
     import sys
 
+    script = manifests / ".github/scripts/package_compatibility.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(SCRIPT.read_text())
+
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), "candidate-version", "--version", "0.6.1"],
+        [sys.executable, str(script), "candidate-version", "--version", "0.6.1"],
         capture_output=True,
         text=True,
     )
@@ -200,14 +225,14 @@ def test_cli(helper: ModuleType) -> None:
     assert result.stdout.strip() == "0.6.1"
     assert "explicit manual" in result.stderr
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), "candidate-version", "--version", "0.7.0"],
+        [sys.executable, str(script), "candidate-version", "--version", "0.7.0"],
         capture_output=True,
         text=True,
     )
     assert result.returncode != 0
     assert "violates" in result.stderr
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), "matrix", "--all"],
+        [sys.executable, str(script), "matrix", "--all"],
         capture_output=True,
         text=True,
         check=True,
@@ -246,3 +271,26 @@ def test_inherited_extra_version_validation(
     add_dependency(manifests, "sefia_litellm", "sefia-typer[future]>=0.6.0,<0.7.0")
     with pytest.raises(ValueError, match="sefia-typer dependency sefia>=0.7.0"):
         helper.candidate_version("0.6.1")
+
+
+def test_fixture_release_range_can_advance(helper: ModuleType, manifests: Path) -> None:
+    for path in manifests.glob("packages/*/pyproject.toml"):
+        path.write_text(path.read_text().replace(">=0.6.0,<0.7.0", ">=0.7.0,<0.8.0"))
+    assert helper.candidate_version("0.7.1") == "0.7.1"
+    with pytest.raises(ValueError, match="violates"):
+        helper.candidate_version("0.8.0")
+    assert helper.minimum_bounds("sefia-litellm") == {"sefia": "0.7.0"}
+    assert Version("0.7.0") <= Version(helper.candidate_version()) < Version("0.8.0")
+
+
+def test_checkout_metadata_smoke(
+    helper: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(helper, "ROOT", SCRIPT.parents[2])
+    version = Version(helper.candidate_version())
+    graph = helper.effective_graph(list(helper.PACKAGE_ORDER))
+    assert set(graph) == set(helper.PACKAGE_ORDER)
+    for dependencies in graph.values():
+        assert all(version in requirement.specifier for requirement in dependencies)
+    for name in helper.PACKAGE_ORDER:
+        assert set(helper.candidate_closure(name)) <= set(helper.PACKAGE_ORDER)
