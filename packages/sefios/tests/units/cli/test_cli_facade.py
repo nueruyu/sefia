@@ -1,10 +1,46 @@
 import pytest
+from sefia.exceptions import InferenceError
+from sefia_typer import (
+    CLIReporter,
+    InteractionRequest as CLIInteractionRequest,
+    OutputMessage as CLIOutputMessage,
+    ResolvedSession as CLIResolvedSession,
+)
 from sefia_typer.exceptions import UnknownSessionError as CLIUnknownSessionError
 from sefios import MemoryPersistence
 from sefios.cli import SefiaCLI, SefiaCLISession
 from sefios.interactions import InteractionChannel, InteractionResult
 from sefios.storage import MemorySessionStorage
 from sefios.tools import Input, Output
+
+
+class _RecordingCLIReporter(CLIReporter):
+    def __init__(self) -> None:
+        self.resolved_sessions: list[tuple[str, str]] = []
+
+    def on_session_resolved(self, session: CLIResolvedSession) -> None:
+        self.resolved_sessions.append((session.session_id, session.source))
+
+    def on_interaction_request(self, request: CLIInteractionRequest) -> None:
+        pass
+
+    def on_input_prompt_delta(self, interaction_id: str, text: str) -> None:
+        pass
+
+    def on_output(self, message: CLIOutputMessage) -> None:
+        pass
+
+    def on_output_message_delta(self, interaction_id: str, text: str) -> None:
+        pass
+
+    def on_interrupted(self, session: CLIResolvedSession) -> None:
+        pass
+
+    def on_inference_error(self, error: InferenceError) -> None:
+        pass
+
+    def on_session_finished(self) -> None:
+        pass
 
 
 async def test_cli_generic_resolution(
@@ -23,8 +59,12 @@ async def test_cli_generic_resolution(
 
 class TestSefiaCLISessionManagement:
     @pytest.fixture
-    def cli(self) -> SefiaCLI:
-        return SefiaCLI(model="gpt-4o")
+    def reporter(self) -> _RecordingCLIReporter:
+        return _RecordingCLIReporter()
+
+    @pytest.fixture
+    def cli(self, reporter: _RecordingCLIReporter) -> SefiaCLI:
+        return SefiaCLI(model="gpt-4o", reporter=reporter)
 
     def test_input_tool_is_exposed(self, cli: SefiaCLI):
         assert isinstance(cli.input_tool, Input)
@@ -32,20 +72,28 @@ class TestSefiaCLISessionManagement:
     def test_output_tool_is_exposed(self, cli: SefiaCLI):
         assert isinstance(cli.output_tool, Output)
 
-    def test_create_session_becomes_active(self, cli: SefiaCLI):
+    async def test_create_session_becomes_active(
+        self, cli: SefiaCLI, reporter: _RecordingCLIReporter
+    ) -> None:
         session_id = cli.create_session()
 
-        assert cli.get_active_session() == session_id
+        async with cli.session():
+            pass
 
-    def test_switch_session(self, cli: SefiaCLI):
+        assert reporter.resolved_sessions == [(session_id, "active")]
+
+    async def test_switch_session(
+        self, cli: SefiaCLI, reporter: _RecordingCLIReporter
+    ) -> None:
         first = cli.create_session()
-        second = cli.create_session()
-        assert cli.get_active_session() == second
+        cli.create_session()
 
         switched = cli.switch_session(first)
+        async with cli.session():
+            pass
 
         assert switched == first
-        assert cli.get_active_session() == first
+        assert reporter.resolved_sessions == [(first, "active")]
 
     def test_switch_to_unknown_session_raises_cli_error(self, cli: SefiaCLI):
         # The facade translates the sefios-internal exception into the
@@ -55,38 +103,52 @@ class TestSefiaCLISessionManagement:
 
         assert exc_info.value.session_id == "ghost"
 
-    def test_no_active_session_initially(self, cli: SefiaCLI):
-        assert cli.get_active_session() is None
-
-    def test_default_active_selection_is_process_local(self) -> None:
-        first = SefiaCLI(model="gpt-4o")
-        session_id = first.create_session()
-
-        second = SefiaCLI(model="gpt-4o")
-
-        assert first.get_active_session() == session_id
-        assert second.get_active_session() is None
-
-    def test_explicit_memory_persistence_keeps_active_selection_in_memory(
-        self,
+    async def test_session_without_active_session_creates_and_reuses_one(
+        self, cli: SefiaCLI, reporter: _RecordingCLIReporter
     ) -> None:
-        first = SefiaCLI(model="gpt-4o", persistence=MemoryPersistence())
-        session_id = first.create_session()
+        async with cli.session():
+            pass
 
-        second = SefiaCLI(model="gpt-4o", persistence=MemoryPersistence())
+        created_session_id, source = reporter.resolved_sessions[-1]
+        assert source == "created"
 
-        assert first.get_active_session() == session_id
-        assert second.get_active_session() is None
+        async with cli.session():
+            pass
 
-    def test_registry_is_shared_but_active_selection_is_local(self) -> None:
+        assert reporter.resolved_sessions[-1] == (created_session_id, "active")
+
+    async def test_registry_is_shared_but_active_selection_is_local(self) -> None:
         persistence = MemoryPersistence()
-        first = SefiaCLI(model="gpt-4o", persistence=persistence)
-        second = SefiaCLI(model="gpt-4o", persistence=persistence)
+        first_reporter = _RecordingCLIReporter()
+        second_reporter = _RecordingCLIReporter()
+        first = SefiaCLI(
+            model="gpt-4o",
+            persistence=persistence,
+            reporter=first_reporter,
+        )
+        second = SefiaCLI(
+            model="gpt-4o",
+            persistence=persistence,
+            reporter=second_reporter,
+        )
 
-        session_id = first.create_session()
+        first_session_id = first.create_session()
 
-        assert second.get_active_session() is None
-        assert second.switch_session(session_id) == session_id
+        async with second.session():
+            pass
+
+        second_session_id, source = second_reporter.resolved_sessions[-1]
+        assert source == "created"
+        assert second_session_id != first_session_id
+
+        assert second.switch_session(first_session_id) == first_session_id
+        async with second.session():
+            pass
+
+        assert second_reporter.resolved_sessions[-1] == (
+            first_session_id,
+            "active",
+        )
 
 
 async def test_non_interaction_pause_uses_generic_wording(
