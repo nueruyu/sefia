@@ -57,6 +57,7 @@ PACKAGES: dict[str, Package] = {
 PACKAGE_ORDER = tuple(PACKAGES)
 INTERNAL_DISTRIBUTIONS = frozenset(PACKAGES)
 
+
 def _project(root: Path, distribution: str) -> Project:
     path = root / PACKAGES[distribution]["path"] / "pyproject.toml"
     return cast(Project, tomllib.loads(path.read_text(encoding="utf-8"))["project"])

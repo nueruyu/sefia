@@ -153,9 +153,7 @@ def test_mixed_published_and_unreleased_minima_are_not_verified(
 
 
 @pytest.mark.parametrize("stage", ["install", "verify", "check", "tests"])
-@pytest.mark.parametrize(
-    "mode", ["candidate", "minimum-published"]
-)
+@pytest.mark.parametrize("mode", ["candidate", "minimum-published"])
 def test_failure_propagation_and_cleanup(
     manifests: Path,
     wheels: Path,

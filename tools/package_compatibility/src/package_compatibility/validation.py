@@ -157,10 +157,10 @@ def validate(
         if not expected:
             print(f"{distribution}: minimum not-applicable (no internal dependencies)")
             return "not-applicable"
-        missing = {
-            bound for bound in expected.values()
-            if not release_available(root, bound)
-        }
+        missing: set[str] = set()
+        for bound in set(expected.values()):
+            if not release_available(root, bound):
+                missing.add(bound)
         if missing:
             tags = ", ".join(f"v{v}" for v in sorted(missing))
             print(f"{distribution}: minimum unreleased / not verified: {tags}")
