@@ -70,8 +70,8 @@ The `Package compatibility` CI workflow tests built wheels in isolated environme
 independently of the existing tag-triggered publishing workflows. Pull requests
 validate affected packages and their dependents. Run it manually with the intended
 release version to check all packages before a release. Checks against declared
-minimum internal dependency versions skip while those versions remain unreleased;
-candidate-wheel checks still run.
+minimum internal dependency versions use matching candidate wheels before release,
+or published versions afterward. Checks skip only when neither is available.
 
 ## Where to make a change
 

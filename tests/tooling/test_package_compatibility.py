@@ -294,3 +294,63 @@ def test_checkout_metadata_smoke(
         assert all(version in requirement.specifier for requirement in dependencies)
     for name in helper.PACKAGE_ORDER:
         assert set(helper.candidate_closure(name)) <= set(helper.PACKAGE_ORDER)
+
+
+def test_unreleased_minimum_uses_exact_candidate(
+    helper: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        helper.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=1)
+    )
+    assert helper.minimum_status("sefios", "0.6.0") == "available"
+    for name in helper.PACKAGE_ORDER:
+        (tmp_path / f"{name.replace('-', '_')}-0.6.0-py3-none-any.whl").touch()
+    wheels = helper.minimum_artifacts("sefios", "0.6.0", tmp_path)
+    assert {path.name.split("-")[0] for path in wheels} == {
+        "sefia",
+        "sefia_litellm",
+        "sefia_typer",
+        "sefia_fastapi",
+    }
+    (tmp_path / "sefia-0.6.0-py3-none-any.whl").unlink()
+    with pytest.raises(ValueError, match="no PyPI fallback"):
+        helper.minimum_artifacts("sefios", "0.6.0", tmp_path)
+
+
+def test_higher_candidate_does_not_substitute_for_minimum(
+    helper: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        helper.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=1)
+    )
+    assert helper.minimum_status("sefios", "0.6.1") == "unreleased"
+    assert helper.minimum_artifacts("sefios", "0.6.1", tmp_path) == []
+
+
+def test_minimum_can_mix_candidate_and_released_artifacts(
+    helper: ModuleType, manifests: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    path = manifests / "packages/sefios/pyproject.toml"
+    path.write_text(path.read_text().replace("sefia>=0.6.0", "sefia>=0.6.1"))
+    checked = []
+
+    def released_tag(command: list[str], **kwargs: object) -> SimpleNamespace:
+        checked.append(command[-1])
+        return SimpleNamespace(returncode=0 if command[-1] == "refs/tags/v0.6.0" else 1)
+
+    monkeypatch.setattr(helper.subprocess, "run", released_tag)
+    assert helper.minimum_status("sefios", "0.6.1") == "available"
+    assert checked == ["refs/tags/v0.6.0", "refs/tags/v0.6.1"]
+    wheel = tmp_path / "sefia-0.6.1-py3-none-any.whl"
+    wheel.touch()
+    assert helper.minimum_artifacts("sefios", "0.6.1", tmp_path) == [wheel]
+
+
+def test_published_minimum_is_not_replaced_by_candidate(
+    helper: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        helper.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0)
+    )
+    assert helper.minimum_status("sefios", "0.6.0") == "available"
+    assert helper.minimum_artifacts("sefios", "0.6.0", tmp_path) == []

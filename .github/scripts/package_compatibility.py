@@ -164,9 +164,7 @@ def candidate_version(explicit: str | None = None) -> str:
             for spec in requirement.specifier
             if spec.operator in {">=", "==", "~="} and "*" not in spec.version
         ]
-        highest = max(minimums, default=Version("0.0.0"))
-        release = highest.release + (0,) * (3 - len(highest.release))
-        candidate = Version(f"{release[0]}.{release[1]}.{release[2] + 1000}")
+        candidate = max(minimums, default=Version("0.0.0"))
     for owner, requirement in requirements:
         if candidate not in requirement.specifier:
             raise ValueError(
@@ -224,7 +222,7 @@ def matrix(distributions: list[str]) -> dict[str, list[dict[str, str]]]:
     }
 
 
-def candidate_artifacts(distribution: str, version: str, directory: Path) -> list[Path]:
+def wheel_artifacts(names: list[str], version: str, directory: Path) -> list[Path]:
     wheels: dict[str, list[Path]] = {}
     for path in sorted(directory.glob("*.whl")):
         name, wheel_version, _, _ = parse_wheel_filename(path.name)
@@ -232,13 +230,16 @@ def candidate_artifacts(distribution: str, version: str, directory: Path) -> lis
             if wheel_version != Version(version):
                 raise ValueError(f"{path.name} is not candidate version {version}")
             wheels.setdefault(name, []).append(path)
-    selected = candidate_closure(distribution)
-    for name in selected:
+    for name in names:
         if len(wheels.get(name, [])) != 1:
             raise ValueError(
                 f"Expected one candidate wheel for {name}; no PyPI fallback permitted"
             )
-    return [wheels[name][0] for name in selected]
+    return [wheels[name][0] for name in names]
+
+
+def candidate_artifacts(distribution: str, version: str, directory: Path) -> list[Path]:
+    return wheel_artifacts(candidate_closure(distribution), version, directory)
 
 
 def write_candidate_constraints(version: str, output: Path) -> None:
@@ -282,29 +283,44 @@ def write_minimum_constraints(distribution: str, output: Path) -> None:
     output.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
 
-def minimum_status(distribution: str) -> str:
+def release_available(version: str) -> bool:
+    status = subprocess.run(
+        ["git", "show-ref", "--verify", "--quiet", f"refs/tags/v{version}"],
+        cwd=ROOT,
+        check=False,
+    ).returncode
+    if status not in {0, 1}:
+        raise ValueError(f"Cannot inspect release tag v{version}: git exited {status}")
+    return status == 0
+
+
+def minimum_status(distribution: str, candidate: str | None = None) -> str:
     bounds = minimum_bounds(distribution)
     if not bounds:
         print(f"{distribution}: no applicable internal dependencies")
         return "not-applicable"
     missing = []
     for version in sorted(set(bounds.values())):
-        status = subprocess.run(
-            ["git", "show-ref", "--verify", "--quiet", f"refs/tags/v{version}"],
-            cwd=ROOT,
-            check=False,
-        ).returncode
-        if status not in {0, 1}:
-            raise ValueError(
-                f"Cannot inspect release tag v{version}: git exited {status}"
-            )
-        if status:
+        if release_available(version):
+            print(f"{distribution}: minimum {version} supplied by published release")
+        elif candidate is not None and Version(version) == Version(candidate):
+            print(f"{distribution}: minimum {version} supplied by candidate wheels")
+        else:
             missing.append(f"v{version}")
     if missing:
         print(f"{distribution}: unreleased minimum; missing tags: {', '.join(missing)}")
         return "unreleased"
     print(f"{distribution}: minimum available; installation and tests required")
     return "available"
+
+
+def minimum_artifacts(distribution: str, candidate: str, directory: Path) -> list[Path]:
+    names = [
+        name
+        for name, version in minimum_bounds(distribution).items()
+        if Version(version) == Version(candidate) and not release_available(version)
+    ]
+    return wheel_artifacts(names, candidate, directory)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -329,8 +345,14 @@ def _parser() -> argparse.ArgumentParser:
     minimum.add_argument("--distribution", required=True)
     minimum.add_argument("--output", type=Path, required=True)
 
-    released = subparsers.add_parser("check-minimum-released")
+    local_minimum = subparsers.add_parser("minimum-artifacts")
+    local_minimum.add_argument("--distribution", required=True, choices=PACKAGE_ORDER)
+    local_minimum.add_argument("--version", required=True)
+    local_minimum.add_argument("--directory", type=Path, required=True)
+
+    released = subparsers.add_parser("check-minimum-available")
     released.add_argument("--distribution", required=True)
+    released.add_argument("--candidate-version")
 
     return parser
 
@@ -356,8 +378,17 @@ def main() -> None:
         print("\n".join(str(path) for path in wheels))
     elif args.command == "minimum-constraints":
         write_minimum_constraints(args.distribution, args.output)
-    elif args.command == "check-minimum-released":
-        status = minimum_status(args.distribution)
+    elif args.command == "minimum-artifacts":
+        print(
+            "\n".join(
+                str(path)
+                for path in minimum_artifacts(
+                    args.distribution, args.version, args.directory
+                )
+            )
+        )
+    elif args.command == "check-minimum-available":
+        status = minimum_status(args.distribution, args.candidate_version)
         raise SystemExit({"available": 0, "unreleased": 2, "not-applicable": 3}[status])
     else:
         raise AssertionError(f"Unsupported command: {args.command}")
