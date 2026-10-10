@@ -89,9 +89,7 @@ class PreviewProgressRecorder(EventHandler[LLMTokenReceived]):
 
 def _ask_output_events() -> tuple[StreamOutput, ...]:
     return (
-        StreamOutput(
-            OutputStringEnd(("tool_calls", 0, "name"), "PreviewToolkit_ask")
-        ),
+        StreamOutput(OutputStringEnd(("tool_calls", 0, "name"), "PreviewToolkit_ask")),
         StreamOutput(
             OutputStringDelta(("tool_calls", 0, "arguments", "question"), "hello ")
         ),
@@ -179,14 +177,15 @@ async def test_scripted_output_events_run_preview_during_stream() -> None:
 async def test_scripted_prompted_transport_streams_tool_arguments() -> None:
     toolkit = PreviewToolkit()
     first = tool_calls_completion(("PreviewToolkit_ask", {"question": "hello world"}))
-    assert first.content is not None
+    content = first.content
+    assert content is not None
     client = MockLLMClient(
         [
             ScriptedCompletion(
                 first,
                 events=tuple(
-                    StreamContent(first.content[i : i + 6])
-                    for i in range(0, len(first.content), 6)
+                    StreamContent(content[i : i + 6])
+                    for i in range(0, len(content), 6)
                 ),
             ),
             result_completion("done"),
