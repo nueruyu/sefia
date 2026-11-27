@@ -128,7 +128,14 @@ def test_published_minimum_takes_priority(
         validation.validate(manifests, "sefios", "0.6.0", wheels, minimum=True)
         == "available"
     )
-    assert len([arg for arg in commands[1] if arg.endswith(".whl")]) == 1
+    assert any(arg.endswith(".whl") for arg in commands[1])
+    upgrades = [command for command in commands if command[1:5] == ["-m", "pip", "install", "--upgrade"]]
+    assert {command[-1] for command in upgrades} == {
+        "sefia==0.6.0",
+        "sefia-litellm==0.6.0",
+        "sefia-typer==0.6.0",
+        "sefia-fastapi==0.6.0",
+    }
 
 
 def test_mixed_published_and_unreleased_minima_are_not_verified(
@@ -150,6 +157,30 @@ def test_mixed_published_and_unreleased_minima_are_not_verified(
         == "unreleased"
     )
     assert not commands
+
+
+def test_minimum_verification_uses_published_internal_versions(
+    manifests: Path,
+    wheels: Path,
+    commands: list[list[str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def published(root: Path, version: str) -> bool:
+        assert root.is_dir() and version
+        return True
+
+    monkeypatch.setattr(validation, "release_available", published)
+    assert (
+        validation.validate(manifests, "sefia-litellm", "0.6.0", wheels, minimum=True)
+        == "available"
+    )
+    assert commands[1][1:4] == ["-m", "pip", "install"]
+    assert any(arg.endswith(".whl") for arg in commands[1])
+    upgrades = [command for command in commands if command[1:5] == ["-m", "pip", "install", "--upgrade"]]
+    assert [command[-1] for command in upgrades] == ["sefia==0.6.0"]
+    verification = commands[-3]
+    assert verification[-1] == "minimum"
+    assert json.loads(verification[-3]) == {"sefia-litellm": "0.6.0", "sefia": "0.6.0"}
 
 
 @pytest.mark.parametrize("stage", ["install", "verify", "check", "tests"])
