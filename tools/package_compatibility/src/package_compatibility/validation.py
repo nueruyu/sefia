@@ -143,6 +143,38 @@ def verify_installation(
     )
 
 
+def install_minimum_candidate(
+    root: Path,
+    python: Path,
+    distribution: str,
+    version: str,
+    artifact: Path,
+    expected: dict[str, str],
+    environment: dict[str, str],
+) -> None:
+    requirement = PACKAGES[distribution]["requirement"]
+    run(
+        [
+            str(python),
+            "-m",
+            "pip",
+            "install",
+            f"{requirement} @ {artifact.as_uri()}",
+            *TEST_REQUIREMENTS,
+        ],
+        root,
+        environment,
+    )
+    for name, minimum in expected.items():
+        if name == distribution:
+            continue
+        run(
+            [str(python), "-m", "pip", "install", "--upgrade", f"{name}=={minimum}"],
+            root,
+            environment,
+        )
+
+
 def validate(
     root: Path,
     distribution: str,
@@ -167,10 +199,10 @@ def validate(
             return "unreleased"
         print(f"{distribution}: testing published minimum dependencies")
         artifacts = wheel_artifacts([distribution], version, wheels)
+        expected = {distribution: version, **expected}
     else:
         expected = {name: version for name in candidate_closure(root, distribution)}
         artifacts = wheel_artifacts(list(expected), version, wheels)
-    expected[distribution] = version
     environment = clean_environment()
     with tempfile.TemporaryDirectory(prefix="sefia-compat-") as temporary:
         directory = Path(temporary)
@@ -180,21 +212,37 @@ def validate(
             / "venv"
             / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         )
-        constraints = directory / "constraints.txt"
-        pins = expected if minimum else {name: version for name in PACKAGE_ORDER}
-        constraints.write_text("".join(f"{name}=={v}\n" for name, v in pins.items()))
-        pip = [str(python), "-m", "pip", "install", "--constraint", str(constraints)]
-        target = PACKAGES[distribution]["requirement"]
         if minimum:
-            requirement = f"{target} @ {artifacts[0].as_uri()}"
-            run([*pip, requirement, *TEST_REQUIREMENTS], root, environment)
+            install_minimum_candidate(
+                root, python, distribution, version, artifacts[0], expected, environment
+            )
         else:
+            constraints = directory / "constraints.txt"
+            constraints.write_text(
+                "".join(f"{name}=={version}\n" for name in PACKAGE_ORDER)
+            )
+            pip = [
+                str(python),
+                "-m",
+                "pip",
+                "install",
+                "--constraint",
+                str(constraints),
+            ]
             run(
                 [*pip, "--no-index", "--no-deps", *(str(path) for path in artifacts)],
                 root,
                 environment,
             )
-            run([*pip, f"{target}=={version}", *TEST_REQUIREMENTS], root, environment)
+            run(
+                [
+                    *pip,
+                    f"{PACKAGES[distribution]['requirement']}=={version}",
+                    *TEST_REQUIREMENTS,
+                ],
+                root,
+                environment,
+            )
         verify_installation(
             root, python, expected, strict=not minimum, environment=environment
         )
